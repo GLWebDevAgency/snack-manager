@@ -8,6 +8,9 @@ import {
   DeliveryProofRequestSchema,
   parseDeliveryHandoffQr,
   PublicOrderRecoveryResultSchema,
+  CustomerAccountBrowserRefSchema,
+  CustomerAccountPublicationSchema,
+  type CustomerAccountPublication,
   type CreatePublicOrder,
   type OrderStatus,
   type OrderType,
@@ -17,6 +20,13 @@ import {
 import { DELIVERY_PROOF_ACCESS_RETENTION_MS } from "./delivery-proof-access";
 
 export type CheckoutBusinessPayload = Omit<CreatePublicOrder, "clientId" | "turnstileToken" | "recoveryProof">;
+/** Public correlation, never an account credential or proof of ownership. */
+export type CheckoutAccountAccess = Readonly<{
+  selection: Readonly<{ browserRef: string; publication: CustomerAccountPublication }>;
+  expiresAt: number;
+  privacyEpoch: number;
+}>;
+export type CheckoutProvenance = Readonly<{ kind: "guest" }> | (CheckoutAccountAccess & Readonly<{ kind: "account" }>);
 export type CheckoutReceipt = Readonly<{
   orderId: string;
   trackingToken: string;
@@ -30,7 +40,9 @@ export type CheckoutReceipt = Readonly<{
   payment?: Readonly<{ method: PaymentMethod; status: PaymentStatus }>;
 }>;
 type AttemptIdentity = Readonly<{
-  v: 1;
+  v: 1 | 2;
+  /** Absent only on legacy v1, which always remains a guest attempt. */
+  provenance?: CheckoutProvenance;
   tenant: string;
   origin: string;
   clientId: string;
@@ -47,6 +59,8 @@ export type PendingCheckoutAttempt = AttemptIdentity & Readonly<{
 export type ReceivedCheckoutAttempt = AttemptIdentity & Readonly<{
   state: "received";
   receipt: CheckoutReceipt;
+  /** Non-capability digest retained when account access is removed. */
+  receiptFingerprint?: string;
 }>;
 export type CheckoutRejection = Readonly<{
   reason: "unavailable" | "slot_unavailable" | "invalid_order" | "abandoned";
@@ -56,7 +70,13 @@ export type RejectedCheckoutAttempt = AttemptIdentity & Readonly<{
   state: "rejected";
   rejection: CheckoutRejection;
 }>;
-export type CheckoutAttempt = PendingCheckoutAttempt | ReceivedCheckoutAttempt | RejectedCheckoutAttempt;
+export type PrivateSettledCheckoutAttempt = AttemptIdentity & Readonly<{
+  state: "private-settled";
+  outcome: "received";
+  receiptFingerprint: string;
+}>;
+export type CheckoutAttempt = PendingCheckoutAttempt | ReceivedCheckoutAttempt | RejectedCheckoutAttempt | PrivateSettledCheckoutAttempt;
+export type VisibleCheckoutAttempt = Exclude<CheckoutAttempt, PrivateSettledCheckoutAttempt>;
 /** A capability verified on this origin, not a synthetic checkout attempt. */
 export type ImportedDeliveryReceipt = Readonly<{
   v: 1; state: "imported"; tenant: string; origin: string; clientId: string; updatedAt: number;
@@ -65,13 +85,16 @@ export type ImportedDeliveryReceipt = Readonly<{
 export type DeliveryCheckoutReceipt = ReceivedCheckoutAttempt | ImportedDeliveryReceipt;
 
 const DATABASE = "sm.checkout-attempts";
-const VERSION = 1;
-const DATABASE_VERSION = 3;
+const VERSION = 2;
+const DATABASE_VERSION = 4;
 const ACTIVE = "active";
 const RECEIPTS = "last-receipt";
 const DELIVERY_RECEIPTS = "delivery-receipts";
 const DELIVERY_RECEIPT_LIMIT = 128;
 const DEVICE_RECEIPTS = "device-receipts";
+const PRIVACY = "privacy";
+const STORES = [ACTIVE, RECEIPTS, DELIVERY_RECEIPTS, DEVICE_RECEIPTS, PRIVACY];
+type Privacy = Readonly<{ epoch: number; present: boolean }>;
 const DEVICE_RECEIPT_LIMIT = 128;
 const DEVICE_RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const DEADLINE_MS = 5_000;
@@ -121,6 +144,54 @@ function scope(tenant: string): { tenant: string; origin: string } {
     if (origin === "null") throw unavailable();
     return { tenant, origin };
   } catch (error) { throw storageError(error); }
+}
+
+function accountAccess(value: unknown): CheckoutAccountAccess {
+  if (!object(value) || !onlyKeys(value, ["selection", "expiresAt", "privacyEpoch"])
+    || !object(value.selection) || !onlyKeys(value.selection, ["browserRef", "publication"])
+    || !CustomerAccountBrowserRefSchema.safeParse(value.selection.browserRef).success
+    || !CustomerAccountPublicationSchema.safeParse(value.selection.publication).success
+    || !Number.isSafeInteger(value.expiresAt) || (value.expiresAt as number) <= 0
+    || !Number.isSafeInteger(value.privacyEpoch) || (value.privacyEpoch as number) < 0) invalid();
+  return structuredClone(value) as CheckoutAccountAccess;
+}
+function provenanceValue(value: unknown): CheckoutProvenance {
+  if (!object(value)) invalid();
+  if (value.kind === "guest" && onlyKeys(value, ["kind"])) return { kind: "guest" };
+  if (value.kind !== "account" || !onlyKeys(value, ["kind", "selection", "expiresAt", "privacyEpoch"])) invalid();
+  return { kind: "account", ...accountAccess({ selection: value.selection, expiresAt: value.expiresAt, privacyEpoch: value.privacyEpoch }) };
+}
+function provenance(attempt: AttemptIdentity): CheckoutProvenance {
+  return attempt.v === 1 ? { kind: "guest" } : attempt.provenance!;
+}
+function identity(attempt: AttemptIdentity): AttemptIdentity {
+  return { v: attempt.v, tenant: attempt.tenant, origin: attempt.origin, clientId: attempt.clientId,
+    cartFingerprint: attempt.cartFingerprint, createdAt: attempt.createdAt, updatedAt: attempt.updatedAt,
+    ...(attempt.v === 2 ? { provenance: attempt.provenance } : {}) };
+}
+function sameProvenance(a: CheckoutProvenance, b: CheckoutProvenance): boolean { return canonical(a) === canonical(b); }
+function accountLive(attempt: AttemptIdentity, privacy: Privacy): boolean {
+  const owner = provenance(attempt);
+  if (owner.kind === "guest") return true;
+  if (!privacy.present) corrupt();
+  return owner.privacyEpoch === privacy.epoch && owner.expiresAt > Date.now();
+}
+function visible(attempt: CheckoutAttempt, privacy: Privacy, access?: CheckoutAccountAccess | null): boolean {
+  if (attempt.state === "private-settled") return false;
+  const owner = provenance(attempt);
+  return owner.kind === "guest" || (!!access && accountLive(attempt, privacy)
+    && sameProvenance(owner, { kind: "account", ...access }));
+}
+function conflict(): never {
+  throw new CheckoutAttemptStorageError("conflict", "Une autre tentative de commande est active ou cet accès a changé. Vérifiez la demande précédente avant de continuer.");
+}
+function validateAdmission(owner: CheckoutProvenance, privacy: Privacy) {
+  if (owner.kind === "account" && (owner.privacyEpoch !== privacy.epoch || owner.expiresAt <= Date.now()
+    || owner.expiresAt > Date.now() + DEVICE_RECEIPT_RETENTION_MS)) conflict();
+}
+function privateSettled(attempt: ReceivedCheckoutAttempt): PrivateSettledCheckoutAttempt {
+  if (provenance(attempt).kind !== "account" || !attempt.receiptFingerprint) corrupt();
+  return { ...identity(attempt), state: "private-settled", outcome: "received", receiptFingerprint: attempt.receiptFingerprint };
 }
 
 /** Sorting object keys makes the digest stable across independently restored tabs. */
@@ -177,16 +248,22 @@ function freeze<T>(value: T): T {
 }
 function parseAttempt(raw: unknown, tenant: string, origin: string): CheckoutAttempt | null {
   if (raw === undefined) return null;
-  if (!object(raw) || raw.v !== VERSION || raw.tenant !== tenant || raw.origin !== origin || typeof raw.clientId !== "string" || !UUID_V4.test(raw.clientId) || typeof raw.cartFingerprint !== "string" || !HEX_256.test(raw.cartFingerprint) || !Number.isSafeInteger(raw.createdAt) || !Number.isSafeInteger(raw.updatedAt) || (raw.createdAt as number) < 0 || (raw.updatedAt as number) < (raw.createdAt as number)) corrupt();
+  if (!object(raw) || (raw.v !== 1 && raw.v !== 2) || raw.tenant !== tenant || raw.origin !== origin || typeof raw.clientId !== "string" || !UUID_V4.test(raw.clientId) || typeof raw.cartFingerprint !== "string" || !HEX_256.test(raw.cartFingerprint) || !Number.isSafeInteger(raw.createdAt) || !Number.isSafeInteger(raw.updatedAt) || (raw.createdAt as number) < 0 || (raw.updatedAt as number) < (raw.createdAt as number)) corrupt();
   try {
+    const keys = raw.v === 2 ? [...IDENTITY_KEYS, "provenance"] : IDENTITY_KEYS;
+    const owner = raw.v === 2 ? provenanceValue(raw.provenance) : { kind: "guest" };
     if (raw.state === "received") {
-      if (!onlyKeys(raw, [...IDENTITY_KEYS, "receipt"])) corrupt();
+      if (!onlyKeys(raw, [...keys, "receipt", ...(owner.kind === "account" ? ["receiptFingerprint"] : [])])) corrupt();
+      if (owner.kind === "account" && (typeof raw.receiptFingerprint !== "string" || !HEX_256.test(raw.receiptFingerprint))) corrupt();
       receiptValue(raw.receipt, true);
+    } else if (raw.state === "private-settled") {
+      if (owner.kind !== "account" || !onlyKeys(raw, [...keys, "outcome", "receiptFingerprint"])
+        || raw.outcome !== "received" || typeof raw.receiptFingerprint !== "string" || !HEX_256.test(raw.receiptFingerprint)) corrupt();
     } else if (raw.state === "rejected") {
-      if (!onlyKeys(raw, [...IDENTITY_KEYS, "rejection"])) corrupt();
+      if (!onlyKeys(raw, [...keys, "rejection"])) corrupt();
       rejectionValue(raw.rejection);
     } else if (raw.state === "prepared" || raw.state === "uncertain") {
-      if (!onlyKeys(raw, [...IDENTITY_KEYS, "payload", "recoveryProof"]) || typeof raw.recoveryProof !== "string" || !HEX_256.test(raw.recoveryProof)) corrupt();
+      if (!onlyKeys(raw, [...keys, "payload", "recoveryProof"]) || typeof raw.recoveryProof !== "string" || !HEX_256.test(raw.recoveryProof)) corrupt();
       if (canonical(businessPayload(raw.payload)) !== canonical(raw.payload)) corrupt();
     } else corrupt();
   } catch { corrupt(); }
@@ -259,14 +336,17 @@ function openDatabase(): Promise<IDBDatabase> {
       request.onerror = fail;
       request.onupgradeneeded = (event) => {
         // Add stores without rewriting an active attempt or its private capability.
-        if (settled || ![0, 1, 2].includes(event.oldVersion)) { request.transaction?.abort(); fail(); return; }
+        if (settled || ![0, 1, 2, 3].includes(event.oldVersion)) { request.transaction?.abort(); fail(); return; }
         if (event.oldVersion === 0) {
           request.result.createObjectStore(ACTIVE, { keyPath: "tenant" });
           request.result.createObjectStore(RECEIPTS, { keyPath: "tenant" });
         }
         if (event.oldVersion < 2) request.result.createObjectStore(DELIVERY_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
-        request.result.createObjectStore(DEVICE_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
-        if (event.oldVersion > 0 && request.transaction) migrateDeviceReceipts(request.transaction);
+        if (event.oldVersion < 3) {
+          request.result.createObjectStore(DEVICE_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
+          if (event.oldVersion > 0 && request.transaction) migrateDeviceReceipts(request.transaction);
+        }
+        request.result.createObjectStore(PRIVACY, { keyPath: "tenant" });
       };
       request.onsuccess = () => {
         const db = request.result;
@@ -274,7 +354,7 @@ function openDatabase(): Promise<IDBDatabase> {
         settled = true;
         clearTimeout(timer);
         db.onversionchange = () => db.close();
-        if (db.objectStoreNames.length !== 4 || ![ACTIVE, RECEIPTS, DELIVERY_RECEIPTS, DEVICE_RECEIPTS].every(name => db.objectStoreNames.contains(name))) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
+        if (db.objectStoreNames.length !== STORES.length || !STORES.every(name => db.objectStoreNames.contains(name))) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
         resolve(db);
       };
     } catch { fail(); }
@@ -286,7 +366,7 @@ async function transaction<T, C = CheckoutAttempt>(
   tenant: string,
   storeName: typeof ACTIVE | typeof RECEIPTS | typeof DELIVERY_RECEIPTS | typeof DEVICE_RECEIPTS,
   write: boolean,
-  action: (current: C | null, tx: IDBTransaction, fail: (error: unknown) => void) => T,
+  action: (current: C | null, tx: IDBTransaction, fail: (error: unknown) => void, privacy: Privacy) => T,
   key?: IDBValidKey,
   parser?: (raw: unknown, tenant: string, origin: string) => C | null,
   notifyWrite = true,
@@ -311,7 +391,7 @@ async function transaction<T, C = CheckoutAttempt>(
       if (error) reject(error); else resolve(freeze(result));
     }
     try {
-      tx = db.transaction(write ? [ACTIVE, RECEIPTS, DELIVERY_RECEIPTS, DEVICE_RECEIPTS] : [storeName], write ? "readwrite" : "readonly", { durability: "strict" });
+      tx = db.transaction(STORES, write ? "readwrite" : "readonly", { durability: "strict" });
       tx.oncomplete = () => { finish(); if (write && notifyWrite) notify(tenant); };
       tx.onabort = () => finish(failure ?? unavailable());
       tx.onerror = () => { failure ??= unavailable(); };
@@ -321,14 +401,22 @@ async function transaction<T, C = CheckoutAttempt>(
         const expectedKeyPath = name === DELIVERY_RECEIPTS || name === DEVICE_RECEIPTS ? JSON.stringify(["tenant", "receipt.orderId"]) : JSON.stringify("tenant");
         if (JSON.stringify(candidate.keyPath) !== expectedKeyPath || candidate.autoIncrement || candidate.indexNames.length !== 0) corrupt();
       }
-      const store = tx.objectStore(storeName);
-      const request = store.get(key ?? tenant);
-      request.onsuccess = () => {
+      const privateGet = tx.objectStore(PRIVACY).get(tenant);
+      privateGet.onsuccess = () => {
         try {
-          const current = parser ? parser(request.result, tenant, origin) : parseAttempt(request.result, tenant, origin) as C | null;
-          const persisted: unknown = current;
-          if (storeName === RECEIPTS && persisted && (!object(persisted) || persisted.state !== "received")) corrupt();
-          result = action(current, tx!, error => { failure = storageError(error); tx!.abort(); });
+          const raw: unknown = privateGet.result;
+          if (raw !== undefined && (!object(raw) || !onlyKeys(raw, ["tenant", "origin", "epoch"])
+            || raw.tenant !== tenant || raw.origin !== origin || !Number.isSafeInteger(raw.epoch) || (raw.epoch as number) < 0)) corrupt();
+          const privacy: Privacy = { epoch: raw === undefined ? 0 : (raw as { epoch: number }).epoch, present: raw !== undefined };
+          const request = tx!.objectStore(storeName).get(key ?? tenant);
+          request.onsuccess = () => {
+            try {
+              const current = parser ? parser(request.result, tenant, origin) : parseAttempt(request.result, tenant, origin) as C | null;
+              const persisted: unknown = current;
+              if (storeName === RECEIPTS && persisted && (!object(persisted) || persisted.state !== "received")) corrupt();
+              result = action(current, tx!, error => { failure = storageError(error); tx!.abort(); }, privacy);
+            } catch (error) { failure = storageError(error); tx!.abort(); }
+          };
         } catch (error) { failure = storageError(error); tx!.abort(); }
       };
     } catch (error) {
@@ -339,20 +427,87 @@ async function transaction<T, C = CheckoutAttempt>(
   });
 }
 
-export function readCheckoutAttempt(tenant: string): Promise<CheckoutAttempt | null> {
-  return transaction(tenant, ACTIVE, false, (current) => current);
+export function readCheckoutPrivacyEpoch(tenant: string): Promise<number> {
+  return transaction(tenant, ACTIVE, false, (_current, _tx, _fail, privacy) => privacy.epoch);
 }
-export function readLastCheckoutReceipt(tenant: string): Promise<ReceivedCheckoutAttempt | null> {
-  return transaction(tenant, RECEIPTS, false, (current) => current as ReceivedCheckoutAttempt | null);
+/** Commit before logout/network work. Notifications are only hints: the epoch
+ * and all alias removals share the same durable IndexedDB transaction. */
+export function invalidateAccountCheckoutAccess(tenant: string): Promise<void> {
+  const { origin } = scope(tenant);
+  return transaction(tenant, ACTIVE, true, (current, tx, fail, privacy) => {
+    if (privacy.epoch === Number.MAX_SAFE_INTEGER) throw unavailable();
+    if (current && provenance(current).kind === "account") {
+      if (!privacy.present) corrupt();
+      if (current.state === "received") tx.objectStore(ACTIVE).put(privateSettled(current));
+    }
+    tx.objectStore(PRIVACY).put({ tenant, origin, epoch: privacy.epoch + 1 });
+    for (const name of [RECEIPTS, DEVICE_RECEIPTS, DELIVERY_RECEIPTS]) {
+      const cursor = tx.objectStore(name).openCursor(name === RECEIPTS ? IDBKeyRange.only(tenant)
+        : IDBKeyRange.bound([tenant, ""], [tenant, "\uffff"]));
+      cursor.onsuccess = () => {
+        try {
+          const row = cursor.result; if (!row) return;
+          const value = name === DELIVERY_RECEIPTS ? parseDeliveryReceipt(row.value, tenant, origin)
+            : parseAttempt(row.value, tenant, origin);
+          if (!value || (value.state !== "received" && value.state !== "imported")) corrupt();
+          if (value.state !== "imported" && provenance(value).kind === "account") {
+            if (!privacy.present) corrupt();
+            row.delete();
+          }
+          row.continue();
+        } catch (error) { fail(error); }
+      };
+    }
+  });
+}
+export function readCheckoutAttempt(tenant: string, access?: CheckoutAccountAccess | null): Promise<VisibleCheckoutAttempt | null> {
+  const selected = access ? accountAccess(access) : null;
+  return transaction(tenant, ACTIVE, false, (current, _tx, _fail, privacy) => current && current.state !== "private-settled" && visible(current, privacy, selected) ? current : null);
+}
+/** Internal reconciliation only. Never feed this result to a component or
+ * retry hidden POSTs: the controller uses the original C01 proof to resolve. */
+export function readCheckoutAttemptForReconciliation(tenant: string, clientId: string): Promise<CheckoutAttempt | null> {
+  if (!UUID_V4.test(clientId)) invalid();
+  return transaction(tenant, ACTIVE, false, current => current?.clientId === clientId ? current : null);
+}
+export function readLastCheckoutReceipt(tenant: string, access?: CheckoutAccountAccess | null): Promise<ReceivedCheckoutAttempt | null> {
+  const selected = access ? accountAccess(access) : null;
+  return transaction(tenant, RECEIPTS, false, (current, _tx, _fail, privacy) => current && visible(current, privacy, selected) ? current as ReceivedCheckoutAttempt : null);
+}
+export type CheckoutRecoveryProjection = {
+  active: VisibleCheckoutAttempt | null;
+  last: ReceivedCheckoutAttempt | null;
+  hidden: { clientId: string; pending: boolean } | null;
+};
+export function readCheckoutRecovery(tenant: string, access?: CheckoutAccountAccess | null): Promise<CheckoutRecoveryProjection> {
+  const selected = access ? accountAccess(access) : null;
+  const { origin } = scope(tenant);
+  return transaction(tenant, ACTIVE, false, (current, tx, fail, privacy) => {
+    const result: CheckoutRecoveryProjection = { active: null, last: null, hidden: null };
+    const get = tx.objectStore(RECEIPTS).get(tenant);
+    get.onsuccess = () => {
+      try {
+        if (current) {
+          if (current.state !== "private-settled" && visible(current, privacy, selected)) result.active = current;
+          else result.hidden = { clientId: current.clientId, pending: current.state === "prepared" || current.state === "uncertain" };
+        }
+        const last = parseAttempt(get.result, tenant, origin);
+        if (last && last.state !== "received") corrupt();
+        if (last && visible(last, privacy, selected)) result.last = last;
+      } catch (error) { fail(error); }
+    };
+    return result;
+  });
 }
 
 /** Local tracking links only, not a verified customer account or server history.
  * Expired shortcuts are removed opportunistically, without notification loops.
  * This never expires active/last reconciliation receipts or private handoff access.
  */
-export function readDeviceCheckoutReceipts(tenant: string): Promise<ReceivedCheckoutAttempt[]> {
+export function readDeviceCheckoutReceipts(tenant: string, access?: CheckoutAccountAccess | null): Promise<ReceivedCheckoutAttempt[]> {
   const { origin } = scope(tenant);
-  return transaction<ReceivedCheckoutAttempt[]>(tenant, DEVICE_RECEIPTS, true, (_current, tx, fail) => {
+  const selected = access ? accountAccess(access) : null;
+  return transaction<ReceivedCheckoutAttempt[]>(tenant, DEVICE_RECEIPTS, true, (_current, tx, fail, privacy) => {
     const now = Date.now();
     const rows: ReceivedCheckoutAttempt[] = [];
     const cursor = tx.objectStore(DEVICE_RECEIPTS).openCursor(IDBKeyRange.bound([tenant, ""], [tenant, "\uffff"]));
@@ -363,7 +518,7 @@ export function readDeviceCheckoutReceipts(tenant: string): Promise<ReceivedChec
         const value = parseDeviceReceipt(row.value, tenant, origin);
         if (!value) corrupt();
         if (deviceReceiptExpired(value, now)) row.delete();
-        else rows.push(value);
+        else if (visible(value, privacy, selected)) rows.push(value);
         if (rows.length > DEVICE_RECEIPT_LIMIT) corrupt();
         row.continue();
       } catch (error) { fail(error); }
@@ -428,9 +583,10 @@ function parseDeliveryReceipt(raw: unknown, tenant: string, origin: string): Del
   if (!attempt || attempt.state !== "received" || !attempt.receipt.recoveryProof) corrupt();
   return attempt;
 }
-export function readDeliveryCheckoutReceipt(tenant: string, orderId: string, preserveExpired = false): Promise<DeliveryCheckoutReceipt | null> {
+export function readDeliveryCheckoutReceipt(tenant: string, orderId: string, preserveExpired = false, access?: CheckoutAccountAccess | null): Promise<DeliveryCheckoutReceipt | null> {
   if (!nonempty(orderId, 128)) invalid();
-  return transaction<DeliveryCheckoutReceipt | null, DeliveryCheckoutReceipt>(tenant, DELIVERY_RECEIPTS, true, (current, tx, fail) => {
+  const selected = access ? accountAccess(access) : null;
+  return transaction<DeliveryCheckoutReceipt | null, DeliveryCheckoutReceipt>(tenant, DELIVERY_RECEIPTS, true, (current, tx, fail, privacy) => {
     if (!current) return null;
     if (current.receipt.orderId !== orderId || !current.receipt.recoveryProof) corrupt();
     if (current.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) {
@@ -440,8 +596,8 @@ export function readDeliveryCheckoutReceipt(tenant: string, orderId: string, pre
       }
       return null;
     }
-    return current;
-  }, [tenant, orderId], parseDeliveryReceipt);
+    return current.state === "imported" || visible(current, privacy, selected) ? current : null;
+  }, [tenant, orderId], parseDeliveryReceipt, false);
 }
 
 /** Call only after this exact order's proof endpoint accepted the private
@@ -541,21 +697,28 @@ function reserveDeviceReceipt(tx: IDBTransaction, attempt: PendingCheckoutAttemp
 }
 export async function acquireCheckoutAttempt(
   tenant: string,
-  input: Readonly<{ payload: CheckoutBusinessPayload; cartFingerprint: string }>,
+  input: Readonly<{ payload: CheckoutBusinessPayload; cartFingerprint: string; provenance?: CheckoutProvenance }>,
 ): Promise<{ attempt: CheckoutAttempt; acquired: boolean }> {
   const { origin } = scope(tenant);
   const cartFingerprint = input.cartFingerprint;
   if (!HEX_256.test(cartFingerprint)) invalid();
   const payload = businessPayload(input.payload);
-  return transaction(tenant, ACTIVE, true, (current, tx, fail) => {
-    if (current) return { attempt: current, acquired: false };
+  const owner = provenanceValue(input.provenance ?? { kind: "guest" });
+  return transaction(tenant, ACTIVE, true, (current, tx, fail, privacy) => {
+    validateAdmission(owner, privacy);
+    if (current) {
+      if (!sameProvenance(provenance(current), owner) || current.state === "private-settled") conflict();
+      if (owner.kind === "account" && !privacy.present) corrupt();
+      return { attempt: current, acquired: false };
+    }
     const bytes = window.crypto.getRandomValues(new Uint8Array(32));
     const now = Date.now();
     const attempt: PendingCheckoutAttempt = {
-      v: VERSION, tenant, origin, clientId: window.crypto.randomUUID(),
+      v: VERSION, provenance: owner, tenant, origin, clientId: window.crypto.randomUUID(),
       recoveryProof: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
       cartFingerprint, createdAt: now, updatedAt: now, state: "prepared", payload,
     };
+    if (owner.kind === "account" && !privacy.present) tx.objectStore(PRIVACY).add({ tenant, origin, epoch: privacy.epoch });
     reserveDeviceReceipt(tx, attempt, fail);
     return { attempt, acquired: true };
   });
@@ -564,9 +727,14 @@ function matching(current: CheckoutAttempt | null, clientId: string): CheckoutAt
   if (!current || current.clientId !== clientId) throw new CheckoutAttemptStorageError("conflict", "Une autre tentative de commande est active. Vérifiez son état avant de continuer.");
   return current;
 }
-export function markCheckoutAttemptUncertain(tenant: string, clientId: string): Promise<CheckoutAttempt> {
-  return transaction(tenant, ACTIVE, true, (current, tx) => {
+export function markCheckoutAttemptUncertain(tenant: string, clientId: string, expectedProvenance?: CheckoutProvenance): Promise<CheckoutAttempt> {
+  const expected = provenanceValue(expectedProvenance ?? { kind: "guest" });
+  return transaction(tenant, ACTIVE, true, (current, tx, _fail, privacy) => {
     const attempt = matching(current, clientId);
+    if (!sameProvenance(provenance(attempt), expected)) conflict();
+    validateAdmission(expected, privacy);
+    if (expected.kind === "account" && !privacy.present) corrupt();
+    if (attempt.state === "private-settled") conflict();
     if (attempt.state !== "prepared") return attempt;
     const next: PendingCheckoutAttempt = { ...attempt, state: "uncertain", updatedAt: Math.max(attempt.updatedAt, Date.now()) };
     tx.objectStore(ACTIVE).put(next);
@@ -574,24 +742,35 @@ export function markCheckoutAttemptUncertain(tenant: string, clientId: string): 
   });
 }
 /** Call only with an authoritative POST/recovery response, before clearing the matching cart. */
-export function recordCheckoutReceipt(tenant: string, clientId: string, input: Omit<CheckoutReceipt, "recoveryProof">): Promise<ReceivedCheckoutAttempt> {
+export async function recordCheckoutReceipt(tenant: string, clientId: string, input: Omit<CheckoutReceipt, "recoveryProof">): Promise<ReceivedCheckoutAttempt | PrivateSettledCheckoutAttempt> {
   const receipt = receiptValue(input);
-  return transaction(tenant, ACTIVE, true, (current, tx) => {
+  const receiptFingerprint = await checkoutCartFingerprint(["checkout-receipt-v1", receipt.orderId, receipt.trackingToken]);
+  return transaction(tenant, ACTIVE, true, (current, tx, _fail, privacy) => {
     const attempt = matching(current, clientId);
     if (attempt.state === "rejected") throw new CheckoutAttemptStorageError("conflict", "Cette tentative a déjà un rejet confirmé. Vérifiez la commande auprès du restaurant.");
+    if (attempt.state === "private-settled") {
+      if (attempt.receiptFingerprint !== receiptFingerprint) conflict();
+      return attempt;
+    }
     if (attempt.state === "received") {
       if (attempt.receipt.orderId !== receipt.orderId || attempt.receipt.trackingToken !== receipt.trackingToken) throw new CheckoutAttemptStorageError("conflict", "Le reçu correspond à une autre commande. Vérifiez la commande auprès du restaurant.");
+      if (!accountLive(attempt, privacy)) {
+        const hidden = privateSettled(attempt); tx.objectStore(ACTIVE).put(hidden); return hidden;
+      }
       return attempt;
     }
     const next: ReceivedCheckoutAttempt = {
-      v: VERSION, tenant: attempt.tenant, origin: attempt.origin, clientId: attempt.clientId,
-      cartFingerprint: attempt.cartFingerprint, createdAt: attempt.createdAt,
+      ...identity(attempt),
       updatedAt: Math.max(attempt.updatedAt, Date.now()), state: "received",
       receipt: attempt.payload.fulfillment === "delivery" ? { ...receipt, recoveryProof: attempt.recoveryProof } : receipt,
+      ...(provenance(attempt).kind === "account" ? { receiptFingerprint } : {}),
     };
     // Remove the customer, address and note. Only a delivery keeps its original
     // capability in the receipt so a same-origin payment return can restore it.
     // Historical receipts without this optional field remain readable, not upgraded.
+    if (!accountLive(attempt, privacy)) {
+      const hidden = privateSettled(next); tx.objectStore(ACTIVE).put(hidden); return hidden;
+    }
     tx.objectStore(ACTIVE).put(next);
     tx.objectStore(DEVICE_RECEIPTS).add(deviceReceipt(next));
     if (next.receipt.recoveryProof) tx.objectStore(DELIVERY_RECEIPTS).add(next);
@@ -603,11 +782,10 @@ export function recordCheckoutRejection(tenant: string, clientId: string, input:
   const rejection = rejectionValue(input);
   return transaction(tenant, ACTIVE, true, (current, tx) => {
     const attempt = matching(current, clientId);
-    if (attempt.state === "received") throw new CheckoutAttemptStorageError("conflict", "Cette tentative possède déjà un reçu. Vérifiez la commande auprès du restaurant.");
+    if (attempt.state === "received" || attempt.state === "private-settled") throw new CheckoutAttemptStorageError("conflict", "Cette tentative possède déjà un reçu. Vérifiez la commande auprès du restaurant.");
     if (attempt.state === "rejected") return attempt;
     const next: RejectedCheckoutAttempt = {
-      v: VERSION, tenant: attempt.tenant, origin: attempt.origin, clientId: attempt.clientId,
-      cartFingerprint: attempt.cartFingerprint, createdAt: attempt.createdAt,
+      ...identity(attempt),
       updatedAt: Math.max(attempt.updatedAt, Date.now()), state: "rejected", rejection,
     };
     tx.objectStore(ACTIVE).put(next);
@@ -623,10 +801,10 @@ export function releaseRejectedCheckoutAttempt(tenant: string, clientId: string)
 }
 /** Explicit "new order" only. A timeout, 404 or closing a dialog is never reconciliation. */
 export function archiveCheckoutAttempt(tenant: string, clientId: string): Promise<void> {
-  return transaction(tenant, ACTIVE, true, (current, tx) => {
+  return transaction(tenant, ACTIVE, true, (current, tx, _fail, privacy) => {
     const attempt = matching(current, clientId);
-    if (attempt.state !== "received") throw new CheckoutAttemptStorageError("conflict", "La tentative doit être réconciliée avant de commencer une autre commande.");
-    tx.objectStore(RECEIPTS).put(attempt);
+    if (attempt.state !== "received" && attempt.state !== "private-settled") throw new CheckoutAttemptStorageError("conflict", "La tentative doit être réconciliée avant de commencer une autre commande.");
+    if (attempt.state === "received" && accountLive(attempt, privacy)) tx.objectStore(RECEIPTS).put(attempt);
     tx.objectStore(ACTIVE).delete(tenant);
   });
 }

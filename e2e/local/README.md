@@ -27,6 +27,14 @@ paiement simulé finit en `processing`, **jamais en encaissement réel**.
 Ce harnais autonome ne lance pas `pnpm e2e`, ne lit pas les identifiants du parc
 réel et ne vise ni staging ni production. Il n'est pas branché sur la CI.
 
+Les trois recettes invitées `checkout-payment`, `checkout-recovery` et
+`counter-payment` simulent uniquement le GET exact `/r/<tenant-local>/compte/capacites`
+sur leur origine loopback : `200 {"available":false}`, sans cache. Toute autre
+route compte (autre tenant, méthode, query ou route privée) est refusée et fait
+échouer la recette. Aucun cookie ni compte client n'est injecté ; le vrai BFF reste
+fermé sur HTTP local et son exigence HTTPS n'est pas assouplie. Le nombre de
+lectures de cette fixture est conservé dans les preuves ; aucun `403` n'est ignoré.
+
 ## Prérequis et lancement
 
 Depuis un checkout déjà installé : Node >=24.12.0, dépendance Playwright et Chromium

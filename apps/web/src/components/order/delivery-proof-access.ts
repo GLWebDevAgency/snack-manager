@@ -46,12 +46,13 @@ export function deliveryProofAccessForReceipt(attempt: DeliveryCheckoutReceipt |
   } catch { return null; }
 }
 
-/** Only customer navigation receives a fragment; Stripe returnUrl must remain
- * the ordinary same-origin tracking URL and restore this access from IDB.
+/** Guest navigation may carry its independent fragment. Account navigation
+ * restores the handoff proof through the session-filtered journal instead of
+ * exporting it automatically into the URL. Stripe returns also omit fragments.
  */
 export function customerTrackingHref(orderId: string, trackingToken: string, receipt: ReceivedCheckoutAttempt | null, now: number): string {
   const base = `/t/${encodeURIComponent(orderId)}?t=${encodeURIComponent(trackingToken)}`;
-  if (receipt?.receipt.trackingToken !== trackingToken) return base;
+  if (receipt?.receipt.trackingToken !== trackingToken || receipt.provenance?.kind === 'account') return base;
   const access = deliveryProofAccessForReceipt(receipt, orderId, now);
   return base + (access ? deliveryProofAccessFragment(access) : "");
 }

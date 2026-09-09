@@ -51,6 +51,8 @@ const errors = [];
 const consoleMessages = [];
 const remote = [];
 const unexpectedHttp = [];
+const forbiddenAccountRequests = [];
+let closedAccountCapabilityReads = 0;
 const requests = [];
 const expectedFailures = new Set();
 let fixture;
@@ -192,6 +194,15 @@ async function context(options = {}) {
   });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
+    // Guest recipe only: do not weaken the real HTTPS-only account BFF.
+    if (route.request().method() === 'GET' && url.href === `${web}/r/qa/compte/capacites`) {
+      closedAccountCapabilityReads++;
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body: '{"available":false}' });
+    }
+    if (/^\/r\/[^/]+\/compte(?:\/|$)/.test(url.pathname)) {
+      forbiddenAccountRequests.push(`${route.request().method()} ${url.origin}${url.pathname}`);
+      return route.abort('blockedbyclient');
+    }
     if (url.origin === web || url.origin === apiOrigin) return route.continue();
     if (url.hostname === 'challenges.cloudflare.com') return route.fulfill({ contentType: 'text/javascript', body:
       "window.__challengeCount=0;window.turnstile={render:(_,o)=>{queueMicrotask(()=>o.callback('fixture-'+crypto.randomUUID()+'-'+(++window.__challengeCount)));return 'fixture'},remove(){}}" });
@@ -620,12 +631,13 @@ try {
     await run();
   }
   assert.deepEqual(errors, []); assert.deepEqual(remote, []); assert.deepEqual(unexpectedHttp, []);
+  assert.deepEqual(forbiddenAccountRequests, [], 'Aucune autre route compte ne fait partie de cette recette invitée.');
   const expectedConsole = message => /Failed to load resource: the server responded with a status of (404|409|503)/.test(message)
     || /^The resource http:\/\/127\.0\.0\.1:\d+\/_next\/static\/.* was preloaded using link preload but not used/.test(message);
   const unexpectedConsole = consoleMessages.filter(message => !expectedConsole(message));
   assert.deepEqual(unexpectedConsole, [], 'Toute erreur console hors panne HTTP simulée doit être expliquée.');
   const result = { result: 'PASS', scenarios, browser: 'Chromium / Playwright (Browser plugin not available)',
-    fixtures: ['API admission/recovery', 'Stripe.js', 'Turnstile'], real: ['Next UI', 'IndexedDB',
+    fixtures: ['API admission/recovery', 'Stripe.js', 'Turnstile', 'GET capacités compte fermées'], closedAccountCapabilityReads, real: ['Next UI', 'IndexedDB',
       ...(selection === 'device-orders-memory' || selection === 'all' ? ['Coordonnées opt-in localStorage', 'Route démo séparée', 'Navigation privée vers deux suivis'] : []),
       ...(selection === 'two-tabs-frozen-payload-and-new-cart' || selection === 'all' ? ['cross-tab browser context'] : [])],
     expectedConsoleWarnings: ['Échecs HTTP injectés vérifiés par route/statut', 'Preloads Next dev inutilisés'],
@@ -654,7 +666,7 @@ try {
   // Only non-sensitive fixture routes are recorded. Logs stay outside the repo.
   await writeFile(join(directory, 'server.log'), nextLog.replace(/\?t=[^\s)]+/g, '?t=[redacted]'));
   await writeFile(join(directory, 'requests.json'), JSON.stringify(requests, null, 2));
-  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, remote, unexpectedHttp }, null, 2));
+  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, remote, unexpectedHttp, forbiddenAccountRequests, closedAccountCapabilityReads }, null, 2));
 }
 
 function port(name, fallback) {

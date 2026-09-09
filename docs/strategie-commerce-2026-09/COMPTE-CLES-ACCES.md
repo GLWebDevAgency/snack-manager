@@ -213,13 +213,57 @@ Les preuves UI natives sont distinctes : HTTP local simulé, vraie interface,
 session sélectionnée, verrou/journal/lecteur client ; elles ne remplacent pas
 une recette BFF→Nest→PostgreSQL→Mongo sur staging.
 
-**Le tunnel Checkout n'appelle pas encore cette nouvelle route.** Le choix de
-conservation des raccourcis de suivi après déconnexion reste à valider avant ce
-raccord ; les journaux invités existants ne sont pas effacés ni convertis. Le
-préremplissage par le nouveau compte, le lien fidélité et « recommander » restent
-à recevoir ensuite. Aucun pilote public, SMS payant ou déploiement production
-n'est ouvert par ce lot. La réception staging se rapporte séparément au SHA
-réellement servi, pas au seul statut de fusion.
+### Raccord Checkout et confidentialité locale
+
+**Choix confirmé : après déconnexion, masquer les commandes du compte et
+conserver les suivis invités.** Le tunnel fixe la provenance avant toute attente
+(empreinte panier, verrou, stockage ou HTTP). Une tentative invitée, y compris
+un journal historique v1, ne devient jamais une commande du compte après
+connexion. Une tentative du compte utilise la route privée avec sa publication
+exacte et ne bascule jamais en invité sur erreur. Le mode intégré en iframe
+reste invité et ne consulte pas les accès privés du compte.
+
+La déconnexion enregistre une barrière locale durable et purge les raccourcis
+du compte avant d’envoyer la révocation réseau. Si cette écriture échoue, aucune
+déconnexion réseau n’est envoyée ; l’interface masque les informations privées
+et explique que la déconnexion n’a pas pu être envoyée. Les demandes incertaines
+restent réconciliables sans exposer leur contenu ni leurs capacités. Un reçu
+tardif après cette barrière termine la réconciliation sans republier son suivi,
+relancer son paiement ou vider un nouveau panier. Le changement de publication,
+l’expiration et le hors-ligne masquent aussi les projections privées, sans
+prétendre avoir purgé les données. L’autorisation est relue dans le verrou du
+panier avant son éventuel vidage ; une réponse tardive ne suffit pas.
+
+Une demande masquée qui n’a jamais atteint le serveur ne doit pas bloquer
+indéfiniment le panier : l’utilisateur peut demander **explicitement**, après
+confirmation, la fermeture de cette seule tentative avec sa preuve C01 déjà
+présente. Le serveur pose un rejet terminal si elle n’a pas été acceptée ; une
+commande déjà acceptée n’est jamais annulée et son reçu reste masqué. Une
+réponse de fermeture perdue conserve le journal : la lecture suivante vérifie
+le résultat sans nouvel envoi de commande ni paiement. L’interface ne propose
+le retour au panier qu’après un état terminal confirmé.
+
+Ce masquage **ne révoque pas les liens de suivi déjà obtenus**, ni les fragments
+privés explicitement copiés. Un lien compte ordinaire n’exporte plus
+automatiquement la preuve de remise ; celle-ci est relue dans le journal filtré
+par l’accès courant. Un fragment explicitement copié reste présent tant qu’un
+import durable indépendant du compte n’est pas confirmé. Les anciens reçus sans
+provenance restent invités, sans adoption implicite par téléphone.
+
+Le préremplissage existant respecte les champs déjà saisis et retire les valeurs
+du compte lorsque son accès change. Le lien fidélité unifié et « recommander »
+restent à recevoir ensuite. Ce raccord est en réception : aucun pilote public,
+SMS payant ou déploiement production n’est ouvert. Les recettes Chromium locales
+utilisent de vrais verrous et IndexedDB mais une autorité HTTP simulée ; elles
+ne remplacent pas une recette authentifiée complète sur staging. La réception
+staging se rapporte séparément au SHA réellement servi, pas au seul statut de
+fusion.
+
+Le journal navigateur passe d’IndexedDB v3 à v4 par ajout du magasin de barrière,
+sans réécriture des tentatives v1. Un retour arrière doit **conserver le lecteur
+v4 et la confidentialité** : l’ancien code v3 ne sait pas ouvrir une base déjà
+mise à niveau. Effacer cette base pour contourner le problème ferait perdre la
+réconciliation des demandes incertaines et n’est pas une procédure de rollback.
 
 ## Parcours complet à recevoir avant ouverture
 

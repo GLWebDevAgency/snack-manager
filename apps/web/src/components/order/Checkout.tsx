@@ -96,9 +96,14 @@ import {
   acquireCheckoutAttempt, archiveCheckoutAttempt, checkoutCartFingerprint,
   markCheckoutAttemptUncertain, recordCheckoutReceipt, recordCheckoutRejection,
   releaseRejectedCheckoutAttempt,
-  type CheckoutAttempt, type PendingCheckoutAttempt,
+  readCheckoutAttemptForReconciliation,
+  type CheckoutAttempt, type PendingCheckoutAttempt, type CheckoutProvenance,
 } from "./checkout-attempt";
 import { CheckoutRecoveryStep } from "./CheckoutRecoveryStep";
+import { captureCheckoutProvenance, checkoutAccessMatches, createCheckoutAttemptOrder } from "./checkout-account";
+import { customerAccountRequest } from "../customer-account/client";
+
+type CheckoutAuthority = { provenance: CheckoutProvenance; generation: number };
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done" | "recovery";
 
@@ -264,6 +269,19 @@ export function Checkout({
   onEditLine: (line: CartLine) => void;
 }) {
   const [step, setStep] = useState<Step>("cart");
+  const accountRequest = useMemo(() => customerAccountRequest(slug), [slug]);
+  const [authority, setAuthority] = useState<CheckoutAuthority | null>(null);
+  const authorityRef = useRef<CheckoutAuthority | null>(null);
+  const generation = useRef(0);
+  const [privatePaused, setPrivatePaused] = useState(false);
+  const [privateCloseFor, setPrivateCloseFor] = useState<string | null>(null);
+  const privateHidden = authority?.provenance.kind === "account" && (privatePaused
+    || !checkoutAccessMatches(authority.provenance, recovery.currentCheckoutAccess()));
+  // A fresh read of the same session may make the journal row visible again,
+  // but never revives this paused payment. Keep only its public C01 selector.
+  const privateRecovery = recovery.hidden ?? (privateHidden && recovery.active?.provenance?.kind === "account"
+    ? { clientId: recovery.active.clientId, pending: recovery.active.state === "prepared" || recovery.active.state === "uncertain" } : null);
+  const visibleStep: Step = privateHidden || recovery.hidden ? "recovery" : step;
   const customerDetails = useCustomerDetails(slug, demo, open, customerAccountEnabled);
   const customer = customerDetails.customer;
   const [touched, setTouched] = useState(false);
@@ -318,16 +336,49 @@ export function Checkout({
   const liveCartRef = useRef(cart);
   useEffect(() => { liveCartRef.current = cart; }, [cart]);
 
+  // Derivation above hides the very first render; invalidation also fences
+  // callbacks already handed to Stripe and promises from the old publication.
+  useEffect(() => {
+    const pause = () => {
+      if (authorityRef.current?.provenance.kind !== "account") return;
+      generation.current++; setPrivatePaused(true); setIntent(null); setOrder(null);
+    };
+    if (privateHidden && !privatePaused) pause();
+    const visibility = () => { if (document.visibilityState === "hidden") pause(); };
+    window.addEventListener("offline", pause); window.addEventListener("pagehide", pause);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("offline", pause); window.removeEventListener("pagehide", pause);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [privateHidden, privatePaused]);
+  useEffect(() => () => { generation.current++; }, []);
+
+  function currentAuthority(value: CheckoutAuthority | null): boolean {
+    return !value || (generation.current === value.generation && (value.provenance.kind === "guest"
+      || (document.visibilityState !== "hidden" && navigator.onLine !== false
+        && checkoutAccessMatches(value.provenance, recovery.currentCheckoutAccess()))));
+  }
+  function pinAuthority(provenance: CheckoutProvenance): CheckoutAuthority {
+    const value = { provenance, generation: ++generation.current };
+    authorityRef.current = value; setAuthority(value); setPrivatePaused(false); return value;
+  }
+  async function accountLock<T>(provenance: CheckoutProvenance, action: () => Promise<T>): Promise<T> {
+    if (provenance.kind === "guest") return action();
+    if (!navigator.locks?.request) return Promise.reject(new Error("Protection du navigateur indisponible"));
+    return await navigator.locks.request(`sm:customer:${slug}`, { mode: "exclusive", signal: AbortSignal.timeout(15_000) }, action);
+  }
+
   useEffect(() => {
     if (!open || demo || busy || !recovery.ready) return;
     // A browser receipt only restores navigation, never a stale "paid" claim
     // or a Stripe secret. The tracking page reloads the authoritative state.
-    if (recovery.error || (recovery.active &&
+    if (recovery.error || recovery.hidden || (recovery.active &&
       (recovery.active.state !== "received" || order?._id !== recovery.active.receipt.orderId))) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- restore durable browser state after hydration, and after cross-tab journal notifications.
       setStep("recovery");
     }
-  }, [open, demo, busy, recovery.ready, recovery.error, recovery.active, order?._id]);
+  }, [open, demo, busy, recovery.ready, recovery.error, recovery.hidden, recovery.active, order?._id]);
 
   useEffect(() => () => {
     if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
@@ -424,29 +475,35 @@ export function Checkout({
     setTurnstileReset((value) => value + 1);
     dispatchQuote({ type: "invalidate" });
     clientIdRef.current = null;
+    generation.current++; authorityRef.current = null; setAuthority(null); setPrivatePaused(false);
+    setPrivateCloseFor(null);
   }
 
-  async function clearMatchingCart(attempt: CheckoutAttempt) {
+  async function clearMatchingCart(attempt: CheckoutAttempt, selected: CheckoutAuthority | null) {
     const current = liveCartRef.current;
     const fingerprint = await checkoutCartFingerprint({ lines: current.lines, note: current.note });
     // A cart modified while awaiting the network/IDB is a different draft.
-    if (liveCartRef.current === current && fingerprint === attempt.cartFingerprint) await current.clearIfUnchanged();
+    if (currentAuthority(selected) && liveCartRef.current === current && fingerprint === attempt.cartFingerprint) await current.clearIfUnchanged(() => currentAuthority(selected));
   }
 
-  async function rememberCreated(attempt: PendingCheckoutAttempt, created: CreatedOrder) {
-    await recordCheckoutReceipt(slug, attempt.clientId, {
-      orderId: created._id, trackingToken: created.trackingToken, number: created.number,
-    });
-    await clearMatchingCart(attempt);
-    await recovery.refresh();
-  }
-
-  async function acceptRecoveryResult(attempt: PendingCheckoutAttempt, result: PublicOrderRecoveryResult) {
-    if (result.state === "created") {
-      await recordCheckoutReceipt(slug, attempt.clientId, {
-        orderId: result.order._id, trackingToken: result.order.trackingToken, number: result.order.number,
+  async function rememberCreated(attempt: PendingCheckoutAttempt, created: Pick<CreatedOrder, "_id" | "trackingToken" | "number">,
+    selected: CheckoutAuthority | null, display = true) {
+    const visible = await accountLock(attempt.provenance ?? { kind: "guest" }, async () => {
+      const receipt = await recordCheckoutReceipt(slug, attempt.clientId, {
+        orderId: created._id, trackingToken: created.trackingToken, number: created.number,
       });
-      await clearMatchingCart(attempt);
+      if (!display || receipt.state !== "received" || !currentAuthority(selected)) return false;
+      await clearMatchingCart(attempt, selected);
+      return currentAuthority(selected);
+    });
+    await recovery.refresh();
+    return visible && currentAuthority(selected);
+  }
+
+  async function acceptRecoveryResult(attempt: PendingCheckoutAttempt, result: PublicOrderRecoveryResult,
+    selected: CheckoutAuthority | null, display = true) {
+    if (result.state === "created") {
+      await rememberCreated(attempt, result.order, selected, display);
       setError(null);
     } else if (result.state === "rejected") {
       await recordCheckoutRejection(slug, attempt.clientId, { reason: result.reason, message: result.message });
@@ -457,33 +514,46 @@ export function Checkout({
     await recovery.refresh();
   }
 
-  async function recoverAttempt(abandon = false) {
-    const attempt = recovery.active;
-    if (!attempt || (attempt.state !== "prepared" && attempt.state !== "uncertain") || requestInFlightRef.current) return;
+  async function recoverAttempt(abandon = false, confirmedClientId?: string) {
+    if (requestInFlightRef.current) return;
+    const hidden = privateRecovery;
+    // Explicit closure uses only this attempt's existing capability. It never
+    // adopts a new account, recreates an order or cancels an accepted order.
+    if (abandon && (hidden || privateHidden) && (!hidden || confirmedClientId !== hidden.clientId)) return;
+    const selected = authorityRef.current;
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
     setError(null);
     try {
+      const attempt = hidden ? await readCheckoutAttemptForReconciliation(slug, hidden.clientId) : recovery.active;
+      if (!attempt || (attempt.state !== "prepared" && attempt.state !== "uncertain")) { await recovery.refresh(); return; }
+      const receiptAuthority = hidden ? selected : pinAuthority(attempt.provenance ?? { kind: "guest" });
+      if (abandon && !hidden && !currentAuthority(receiptAuthority)) { await recovery.refresh(); return; }
       const identity = { clientId: attempt.clientId, recoveryProof: attempt.recoveryProof };
       const result = abandon
         ? await api.abandonOrderAttempt(slug, { ...attempt.payload, ...identity })
         : await api.recoverOrder(slug, identity);
-      await acceptRecoveryResult(attempt, result);
+      await acceptRecoveryResult(attempt, result, receiptAuthority, !hidden && !privateHidden);
     } catch {
       setError("La vérification n’a pas abouti. Votre demande est conservée : réessayez sa récupération ou le même envoi, sans recréer de commande.");
-    } finally { requestInFlightRef.current = false; setBusy(false); }
+    } finally { requestInFlightRef.current = false; setBusy(false); if (hidden) setPrivateCloseFor(null); }
   }
 
   async function startNewAttempt() {
-    const attempt = recovery.active;
-    if (!attempt || requestInFlightRef.current || recovery.error) return;
+    if (requestInFlightRef.current || recovery.error) return;
+    const hidden = privateRecovery;
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
     try {
-      if (attempt.state === "received") {
-        await clearMatchingCart(attempt);
+      const attempt = hidden ? await readCheckoutAttemptForReconciliation(slug, hidden.clientId) : recovery.active;
+      if (!attempt) { requestInFlightRef.current = false; resetTunnel(); return; }
+      if (attempt.state === "received" || attempt.state === "private-settled") {
+        if (!hidden && attempt.state === "received") {
+          const selected = pinAuthority(attempt.provenance ?? { kind: "guest" });
+          await accountLock(selected.provenance, () => clearMatchingCart(attempt, selected));
+        }
         await archiveCheckoutAttempt(slug, attempt.clientId);
       } else if (attempt.state === "rejected") {
         await releaseRejectedCheckoutAttempt(slug, attempt.clientId);
@@ -525,28 +595,31 @@ export function Checkout({
   }
 
   async function retryPayment() {
-    if (!order || bankProcessingRef.current || requestInFlightRef.current || checkoutPaymentDecision(order, "online") === "verify") return;
+    const selected = authorityRef.current;
+    if (!currentAuthority(selected) || !order || bankProcessingRef.current || requestInFlightRef.current || checkoutPaymentDecision(order, "online") === "verify") return;
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
     setError(null);
     try {
       const next = await requestExistingOrderPayment(api, order);
+      if (!currentAuthority(selected)) return;
       setIntent(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
     } finally { requestInFlightRef.current = false; setBusy(false); }
   }
 
-  function startCardConfirmation() {
-    if (requestInFlightRef.current || bankProcessingRef.current) return false;
+  function startCardConfirmation(selected: CheckoutAuthority | null) {
+    if (!currentAuthority(selected) || requestInFlightRef.current || bankProcessingRef.current) return false;
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
     return true;
   }
 
-  function finishCardConfirmation(outcome: StripePaymentOutcome) {
+  function finishCardConfirmation(outcome: StripePaymentOutcome, selected: CheckoutAuthority | null) {
+    if (!currentAuthority(selected)) { requestInFlightRef.current = false; setBusy(false); return; }
     bankProcessingRef.current = outcome !== "idle";
     requestInFlightRef.current = false;
     setBusy(false);
@@ -554,7 +627,8 @@ export function Checkout({
   }
 
   async function switchCounterPayment() {
-    if (!order || requestInFlightRef.current || bankProcessingRef.current
+    const selected = authorityRef.current;
+    if (!currentAuthority(selected) || !order || requestInFlightRef.current || bankProcessingRef.current
       || !canRequestCounterPayment(order, order.type === "pickup" ? "pickup" : undefined)) return;
     requestInFlightRef.current = true;
     clearScheduledReset();
@@ -563,17 +637,20 @@ export function Checkout({
     setError(null);
     try {
       const next = await requestCounterPayment(api, order);
+      if (!currentAuthority(selected)) return;
       setOrder({ ...order, payment: next.payment });
       setIntent(null);
       setPaidOnline(false);
       setStep("done");
     } catch (cause) {
+      if (!currentAuthority(selected)) return;
       setError(cause instanceof PublicApiError ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
       if (cause instanceof PublicApiError && cause.status === 409) { bankProcessingRef.current = true; setBankProcessing(true); }
       // Un refus ou une réponse perdue ne permet aucune supposition locale.
       // Le GET relit aussi un éventuel succès déjà persisté par le serveur.
       try {
         const next = await api.loadTracking(order._id, order.trackingToken);
+        if (!currentAuthority(selected)) return;
         if (next._id === order._id) {
           setOrder({ ...order, status: next.status, ...(next.payment ? { payment: next.payment } : {}) });
           setStatus(next.status);
@@ -649,6 +726,15 @@ export function Checkout({
       setError("La vérification de sécurité doit se terminer avant l’envoi.");
       return;
     }
+    // Capture the gesture before any lock, digest or IDB await. Replays keep
+    // their original provenance (including legacy guest), never today's user.
+    let selected: CheckoutAuthority;
+    const cartSnapshot = structuredClone({ lines: cart.lines, note: cart.note });
+    try {
+      selected = pinAuthority(previous?.provenance ?? (previous ? { kind: "guest" }
+        : captureCheckoutProvenance(recovery.accountStatus, recovery.currentCheckoutAccess(), !demo && customerAccountEnabled)));
+      if (!currentAuthority(selected)) throw new Error("Accès modifié");
+    } catch { setError("Votre accès a changé. Retrouvez votre compte ou attendez la confirmation du mode invité avant d’envoyer."); return; }
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
@@ -662,7 +748,7 @@ export function Checkout({
     let attempt: PendingCheckoutAttempt | undefined = previous;
     try {
       const payload = previous?.payload ?? {
-        lines: toOrderLines(cart.lines),
+        lines: toOrderLines(cartSnapshot.lines),
         payment: { method: chosenMethod },
         ...(isDelivery ? { fulfillment: "delivery" as const, delivery: { address, instructions: deliveryInstructions.trim() } } : {}),
         pickup: {
@@ -670,46 +756,57 @@ export function Checkout({
           customerName: customer.name.trim(),
           customerPhone: customer.phone.trim(),
         },
-        ...(cart.note.trim() ? { note: cart.note.trim() } : {}),
+        ...(cartSnapshot.note.trim() ? { note: cartSnapshot.note.trim() } : {}),
         ...(normalizedPromoCode ? { promoCode: normalizedPromoCode } : {}),
       };
-      if (!demo && !attempt) {
+      const admitted = demo || await accountLock(selected.provenance, async () => {
+        if (!currentAuthority(selected)) return false;
+        if (!attempt) {
+        const cartFingerprint = await checkoutCartFingerprint(cartSnapshot);
+        if (!currentAuthority(selected)) return false;
         const acquired = await acquireCheckoutAttempt(slug, {
           payload,
-          cartFingerprint: await checkoutCartFingerprint({ lines: cart.lines, note: cart.note }),
+          cartFingerprint,
+          provenance: selected.provenance,
         });
         if (!acquired.acquired || acquired.attempt.state !== "prepared") {
-          await recovery.refresh();
-          setStep("recovery");
-          return;
+          return false;
         }
         attempt = acquired.attempt;
-      }
-      if (attempt) {
+        }
+        if (!currentAuthority(selected)) return false;
         // Wait for transaction completion, not just IDB put success. A crash
         // from this point onwards is uncertain, even before fetch resolves.
-        const current = await markCheckoutAttemptUncertain(slug, attempt.clientId);
+        const current = await markCheckoutAttemptUncertain(slug, attempt.clientId, selected.provenance);
         if (current.state !== "prepared" && current.state !== "uncertain") {
-          await recovery.refresh();
-          setStep("recovery");
-          return;
+          return false;
         }
         attempt = current;
-      }
+        return currentAuthority(selected);
+      });
+      if (!admitted) { await recovery.refresh(); setStep("recovery"); return; }
       clientIdRef.current ??= uid(); // demo only; real identity belongs to IDB
-      const created = await api.createOrder(slug, attempt ? {
-        ...attempt.payload, clientId: attempt.clientId, recoveryProof: attempt.recoveryProof, turnstileToken: proof,
-      } : { ...payload, clientId: clientIdRef.current, turnstileToken: proof });
+      // No network request is held under the account lock: logout may commit
+      // its privacy fence while this exact, immutable request is in flight.
+      const outcome = attempt ? await createCheckoutAttemptOrder({ slug, currentAccess: recovery.currentCheckoutAccess,
+        accountRequest, guestCreate: api.createOrder }, attempt, proof)
+        : await api.createOrder(slug, { ...payload, clientId: clientIdRef.current, turnstileToken: proof });
 
-      if (isPaused(created)) {
+      if (!("state" in outcome) && isPaused(outcome)) {
         setError(
-          created.message ??
+          outcome.message ??
             "La commande en ligne vient d’être suspendue par le restaurant.",
         );
         return;
       }
+      if ("state" in outcome && outcome.state === "rejected") {
+        if (attempt) await recordCheckoutRejection(slug, attempt.clientId, { reason: outcome.reason, message: outcome.message });
+        await recovery.refresh(); setStep("recovery"); return;
+      }
+      const created = "state" in outcome ? outcome.order : outcome;
 
-      if (attempt) await rememberCreated(attempt, created);
+      if (attempt && !await rememberCreated(attempt, created, selected)) { setStep("recovery"); return; }
+      if (!currentAuthority(selected)) { setStep("recovery"); return; }
       setOrder(created);
       jalonFunnel("commande");
       if (demo) cart.clear();
@@ -746,11 +843,12 @@ export function Checkout({
       }
       try {
         const res = await requestExistingOrderPayment(api, created);
+        if (!currentAuthority(selected)) return;
         writePayProbe(slug, "ready");
         setProbe("ready");
         setIntent(res);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
+        if (currentAuthority(selected)) setError(cause instanceof Error ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
       }
     } catch (err) {
       setError(
@@ -764,7 +862,7 @@ export function Checkout({
         try {
           await acceptRecoveryResult(attempt, await api.recoverOrder(slug, {
             clientId: attempt.clientId, recoveryProof: attempt.recoveryProof,
-          }));
+          }), selected, currentAuthority(selected));
         } catch { await recovery.refresh(); }
         setStep("recovery");
       }
@@ -776,9 +874,9 @@ export function Checkout({
 
   const stepIndex = Math.max(
     0,
-    STEPS.findIndex((s) => s.id === step),
+    STEPS.findIndex((s) => s.id === visibleStep),
   );
-  const finished = step === "done" || step === "card" || step === "recovery";
+  const finished = visibleStep === "done" || visibleStep === "card" || visibleStep === "recovery";
 
   const titles: Record<Step, string> = {
     cart: "Votre commande",
@@ -795,7 +893,7 @@ export function Checkout({
     slot: "customer",
     pay: "slot",
   };
-  const backTo = back[step];
+  const backTo = back[visibleStep];
 
   return (
     <Sheet
@@ -804,16 +902,16 @@ export function Checkout({
       navigationLocked={busy}
       maxHeight="100%"
       fill
-      title={titles[step]}
+      title={privateHidden || recovery.hidden ? "Votre demande" : titles[visibleStep]}
       onBack={backTo ? () => navigateStep(backTo) : null}
       headerExtra={
         !finished ? (
-          <Progress index={stepIndex} onJump={navigateStep} step={step} delivery={isDelivery} disabled={busy} />
+          <Progress index={stepIndex} onJump={navigateStep} step={visibleStep} delivery={isDelivery} disabled={busy} />
         ) : null
       }
       footer={
         <Footer
-          step={step}
+          step={visibleStep}
           busy={busy}
           cart={cart}
           fulfillment={fulfillment}
@@ -823,8 +921,8 @@ export function Checkout({
           slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
           blocked={blockedByPause || !recovery.ready || Boolean(recovery.error) || ((step === "slot" || step === "pay") && !slotsReady)}
           method={method}
-          order={order}
-          trackingHref={trackingHref}
+          order={privateHidden ? null : order}
+          trackingHref={privateHidden ? "" : trackingHref}
           embed={embed}
           demo={demo}
           verified={demo || Boolean(turnstileToken)}
@@ -839,11 +937,11 @@ export function Checkout({
         />
       }
     >
-      <div className={step === "done" ? "" : "px-4 pb-8 pt-4"}>
+      <div className={visibleStep === "done" ? "" : "px-4 pb-8 pt-4"}>
         {cart.persistenceError && <div className="mb-4">
           <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
         </div>}
-        {blockedByPause && step !== "done" && (
+        {blockedByPause && visibleStep !== "done" && (
           <div className="mb-4">
             <Banner tone="prep" icon="clock" title="Commande en ligne suspendue">
               {pauseMessage ??
@@ -852,7 +950,7 @@ export function Checkout({
           </div>
         )}
 
-        {error && step !== "done" && step !== "card" && (
+        {error && !privateHidden && !recovery.hidden && visibleStep !== "done" && visibleStep !== "card" && (
           <div className="mb-4">
             <Banner tone="alert" icon="bell" title={order ? "Paiement à vérifier" : "Commande à vérifier"}>
               {error}
@@ -860,7 +958,7 @@ export function Checkout({
           </div>
         )}
 
-        {step === "cart" && (
+        {visibleStep === "cart" && (
           <>
           {recovery.last && <div className="mb-4"><CheckoutRecoveryStep
             attempt={recovery.last} busy={busy} embed={embed} archived
@@ -885,7 +983,7 @@ export function Checkout({
           </>
         )}
 
-        {step === "customer" && (
+        {visibleStep === "customer" && (
           <>
           <CustomerStep
             customer={customer}
@@ -900,7 +998,7 @@ export function Checkout({
           </>
         )}
 
-        {step === "slot" && (
+        {visibleStep === "slot" && (
           <SlotStep
             slots={slots}
             state={slotsState}
@@ -914,7 +1012,7 @@ export function Checkout({
           />
         )}
 
-        {step === "pay" && (
+        {visibleStep === "pay" && (
           <div className="flex flex-col gap-6">
             <PayStep
               cart={cart}
@@ -943,9 +1041,25 @@ export function Checkout({
           </div>
         )}
 
-        {step === "recovery" && (
+        {visibleStep === "recovery" && (
           <div className="flex flex-col gap-4">
-            {recovery.error ? (
+            {privateHidden || recovery.hidden ? <section className="flex flex-col gap-4 rounded-card border border-ink/10 bg-card p-5">
+              <h2 className="text-xl font-extrabold text-ink">Demande privée masquée</h2>
+              <p className="text-sm leading-relaxed text-mut">Cette demande appartient à un accès compte qui n’est plus disponible. Ses informations et son suivi ne sont pas affichés. Les liens déjà copiés restent utilisables.</p>
+              {recovery.error ? <ErrorState title="Sauvegarde indisponible" message={recovery.error} onRetry={() => { void recovery.refresh(); }} />
+                : privateRecovery?.pending ? <>
+                  <p className="text-sm leading-relaxed text-mut">Vérifiez si la demande a été reçue avant de préparer une autre commande. Aucune nouvelle commande ni paiement ne sera envoyé.</p>
+                  {error && <p role="status" className="text-sm leading-relaxed text-mut">La réponse reste à vérifier. Votre demande est conservée ; aucune nouvelle commande n’a été envoyée.</p>}
+                  {privateCloseFor === privateRecovery.clientId ? <>
+                    <p className="text-sm leading-relaxed text-mut">Le serveur fermera uniquement une tentative non acceptée. Une commande déjà acceptée ne sera pas annulée et ses informations resteront masquées.</p>
+                    <PrimaryAction disabled={busy} loading={busy} onClick={() => { void recoverAttempt(true, privateCloseFor); }}>Confirmer la fermeture</PrimaryAction>
+                    <GhostAction disabled={busy} onClick={() => setPrivateCloseFor(null)}>Conserver la demande</GhostAction>
+                  </> : <>
+                    <PrimaryAction disabled={busy} loading={busy} onClick={() => { void recoverAttempt(); }}>Vérifier la demande</PrimaryAction>
+                    <GhostAction disabled={busy} onClick={() => setPrivateCloseFor(privateRecovery.clientId)}>Fermer cette tentative</GhostAction>
+                  </>}
+                </> : <PrimaryAction disabled={busy || !recovery.ready} loading={busy} onClick={() => { void startNewAttempt(); }}>Revenir à mon panier</PrimaryAction>}
+            </section> : recovery.error ? (
               <ErrorState title="Sauvegarde indisponible" message={recovery.error} onRetry={() => { void recovery.refresh(); }} />
             ) : recovery.active ? <CheckoutRecoveryStep
               attempt={recovery.active} busy={busy} embed={embed}
@@ -958,14 +1072,14 @@ export function Checkout({
               onAbandon={() => { void recoverAttempt(true); }}
               onNew={() => { void startNewAttempt(); }}
             /> : <ErrorState title="Demande actualisée" message="L’état a changé dans un autre onglet. Revenez à votre panier pour continuer." onRetry={() => { setStep("cart"); }} />}
-            {recovery.active && ["prepared", "uncertain"].includes(recovery.active.state) && !recovery.error && <TurnstileCheck
+            {!privateHidden && !recovery.hidden && recovery.active && ["prepared", "uncertain"].includes(recovery.active.state) && !recovery.error && <TurnstileCheck
               siteKey={TURNSTILE_SITE_KEY} tenantSlug={slug} mode={mode}
               resetKey={turnstileReset} onToken={setTurnstileToken}
             />}
           </div>
         )}
 
-        {step === "card" && intent && !intent.unavailable && intent.publishableKey && (
+        {visibleStep === "card" && intent && !intent.unavailable && intent.publishableKey && (
           <StripeCard
             publishableKey={intent.publishableKey}
             clientSecret={intent.clientSecret}
@@ -974,20 +1088,21 @@ export function Checkout({
             apparence={stripeApparence}
             prixMono={prixMono}
             disabled={switchingCounter}
-            onConfirmStart={startCardConfirmation}
-            onConfirmEnd={finishCardConfirmation}
+            onConfirmStart={() => startCardConfirmation(authority)}
+            onConfirmEnd={(outcome) => finishCardConfirmation(outcome, authority)}
             returnUrl={
               typeof window === "undefined" || !order
                 ? ""
                 : `${window.location.origin}/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`
             }
             onPaid={() => {
+              if (!currentAuthority(authority)) return;
               setPaidOnline(true);
               setStep("done");
             }}
           />
         )}
-        {step === "card" && (!intent || intent.unavailable || !intent.publishableKey) && (
+        {visibleStep === "card" && (!intent || intent.unavailable || !intent.publishableKey) && (
           <div className="flex flex-col gap-3">
             <ErrorState title={busy ? "Vérification du paiement" : "Paiement à vérifier"} message={busy ? "Vérification sécurisée en cours…" : error ?? "Votre commande est enregistrée. Réessayez le paiement ou consultez son suivi. Un changement de moyen doit d’abord être confirmé."} onRetry={busy || bankProcessing || !order || checkoutPaymentDecision(order, "online") === "verify" ? undefined : retryPayment} />
             {order && <Link
@@ -999,11 +1114,11 @@ export function Checkout({
           </div>
         )}
 
-        {step === "card" && order && !bankProcessing && canRequestCounterPayment(order, order.type === "pickup" ? "pickup" : undefined) && (
+        {visibleStep === "card" && order && !bankProcessing && canRequestCounterPayment(order, order.type === "pickup" ? "pickup" : undefined) && (
           <CounterPaymentAction disabled={busy} busy={switchingCounter} onConfirm={switchCounterPayment} />
         )}
 
-        {step === "done" && order && (
+        {visibleStep === "done" && order && (
           <DoneStep
             order={order}
             status={status}
@@ -1975,12 +2090,12 @@ function DoneStep({
             AUCUN SMS NE PART. Le port `Notifier.notifyCustomer` est déclaré
             dans le domaine et n'a jamais eu d'adaptateur : le client lisait une
             promesse que rien ne tenait, et attendait un message qui ne
-            viendrait pas. Ce qui existe VRAIMENT, c'est cette page — elle suit
-            l'avancement en temps réel. On promet donc ce qu'on fait.
+            viendrait pas. Le suivi réel s’ouvre via « Suivre ma commande » ;
+            seule la démonstration actualise la préparation sur cet écran.
           */}
           {demo
             ? "Suivez la préparation juste en dessous, comme le ferait votre client."
-            : "Suivez la préparation ici même — la page se met à jour toute seule."}
+            : "Ouvrez « Suivre ma commande » pour consulter l’avancement."}
         </p>
       </div>
 

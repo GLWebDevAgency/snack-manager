@@ -61,6 +61,9 @@ beforeAll(async () => {
       res.end(JSON.stringify(body)); return;
     }
     if (path === "/api/public/funnel" || path === "/favicon.ico") { res.end("{}"); return; }
+    // Storefront recovery may check the closed account capability. This fixture
+    // has no account publication and must never issue a private session/write.
+    if (path === "/r/recette/compte/capacites" && req.method === "GET") { res.writeHead(503).end('{"code":"CUSTOMER_UNAVAILABLE"}'); return; }
     // No customer account, payment or external resources are supplied here.
     if (path.includes("loyalty")) { res.writeHead(401).end("{}"); return; }
     faults.push(`Unexpected fixture route ${path}`); res.writeHead(404).end("{}");

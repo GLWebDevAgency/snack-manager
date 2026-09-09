@@ -401,17 +401,44 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
     await page.getByText('Sur cet appareil : aucun suivi enregistré').waitFor(); expect(calls).toHaveLength(3);
   });
   it('loads the selected detail, lines and totals without a tracking URL or secret storage', async () => {
+    const assertNoPersistedOrders = async () => {
+      expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+      expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
+      expect(await page.evaluate(async () => (await indexedDB.databases()).map(database => database.name).sort()))
+        .toEqual(['sm-customer-preparation-v1', 'sm.checkout-attempts']);
+      const checkout = await page.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open('sm.checkout-attempts');
+          request.onupgradeneeded = () => { request.transaction?.abort(); reject(new Error('Checkout fixture database must already exist')); };
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Checkout fixture database unavailable'));
+        });
+        try {
+          const counts: Record<string, number> = {};
+          await new Promise<void>((resolve, reject) => {
+            const names = Array.from(db.objectStoreNames), tx = db.transaction(names, 'readonly');
+            tx.oncomplete = () => resolve(); tx.onabort = () => reject(new Error('Checkout fixture read failed'));
+            for (const name of names) {
+              const request = tx.objectStore(name).count(); request.onsuccess = () => { counts[name] = request.result; };
+            }
+          });
+          return { version: db.version, counts };
+        } finally { db.close(); }
+      });
+      // The session's privacy-epoch read creates the schema, not a checkout,
+      // receipt, proof, profile, history cache, or even a privacy counter row.
+      expect(checkout).toEqual({ version: 4, counts: { active: 0, 'last-receipt': 0, 'delivery-receipts': 0, 'device-receipts': 0, privacy: 0 } });
+    };
     await openOrders(); await page.getByRole('button', { name: 'Voir la commande n° 120' }).click();
     await page.getByText('1 × Menu burger du Comptoir · Classique', { exact: true }).waitFor();
     await markUI(paths.detail, calls.at(-1)?.responseId);
     expect(calls.at(-1)?.body).toEqual({ orderId: rows[0]!._id }); expect(await page.url()).toBe(`${origin}/`);
     expect(await page.getByText('En route', { exact: true }).count()).toBe(0); // Pending delivery payment, even with a dispatchedAt fixture.
     expect(await page.getByText('Paiement à confirmer', { exact: true }).count()).toBe(1);
-    expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('order')))).toEqual([]);
-    expect(await page.evaluate(async () => (await indexedDB.databases()).map(database => database.name))).toEqual(['sm-customer-preparation-v1']);
+    await assertNoPersistedOrders();
     await page.getByRole('button', { name: 'Revenir à mes commandes' }).click(); await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Voir la commande n° 118' }).click(); await page.getByText('En route', { exact: true }).waitFor();
     await markUI(paths.detail, calls.at(-1)?.responseId);
+    await assertNoPersistedOrders();
   });
   it.each([401, 404, 503])('explains HTTP %s without displaying an empty list or stale detail', async status => {
     await openOrders(); await page.getByRole('button', { name: 'Voir la commande n° 120' }).waitFor(); responseStatus = status;

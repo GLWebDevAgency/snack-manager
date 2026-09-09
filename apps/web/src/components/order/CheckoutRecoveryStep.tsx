@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui";
-import type { CheckoutAttempt } from "./checkout-attempt";
+import type { VisibleCheckoutAttempt } from "./checkout-attempt";
 import { GhostAction, PrimaryAction } from "./primitives";
 import { hhmm } from "./helpers";
 import { customerTrackingHref } from "./delivery-proof-access";
@@ -13,7 +13,7 @@ export function CheckoutRecoveryStep({
   attempt, busy, embed, archived = false, resendReady = false,
   onRecover, onResend, onAbandon, onNew,
 }: {
-  attempt: CheckoutAttempt;
+  attempt: VisibleCheckoutAttempt;
   busy: boolean;
   embed: boolean;
   archived?: boolean;

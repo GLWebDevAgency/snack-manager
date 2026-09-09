@@ -221,6 +221,12 @@ describe("remise livraison rendue, navigateur et stockage natifs", () => {
       else { Object.defineProperty(navigator, "onLine", { configurable: true, value: false }); window.dispatchEvent(new Event("offline")); }
     }, mode);
     held!.response.end(JSON.stringify(held!.result)); held = null;
+    // Losing visibility/connectivity now also clears the capability in memory.
+    // A fresh visible read may restore the button, never the old response/PIN.
+    await page.evaluate(mode => {
+      if (mode === "hidden") { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); }
+      else { Object.defineProperty(navigator, "onLine", { configurable: true, value: true }); window.dispatchEvent(new Event("online")); }
+    }, mode);
     await expect.poll(() => page.getByRole("button", { name: "Afficher mon code de remise" }).isDisabled()).toBe(false);
     expect(await page.getByAltText("QR privé à présenter au livreur").count()).toBe(0); expect(await page.evaluate(() => Boolean(location.hash))).toBe(true);
   });

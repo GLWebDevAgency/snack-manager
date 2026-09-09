@@ -103,23 +103,26 @@ describe('customer entry placement — real Storefront and loyalty components', 
   const catalog = { restaurant: { slug: 'recette', name: 'Le Comptoir', brand: marqueDeRepli(null, null), brandColor: '#c9a15a' },
     program: { name: 'La carte du Comptoir', mechanism: 'points', unitLabelSingular: 'point', unitLabelPlural: 'points', termsSummary: 'Récompenses à demander au comptoir.' } };
   async function navigationFixture(card: boolean) {
-    let personalReads = 0; const mutations: string[] = [];
+    const accountRequests: string[] = [], mutations: string[] = [];
     await context.route(`${origin}/r/recette/**`, async route => {
       const request = route.request(); const path = new URL(request.url()).pathname;
       if (request.method() !== 'GET') { mutations.push(request.method()); return route.abort(); }
       if (path.endsWith('/fidelite/card-session')) return card
         ? route.fulfill({ json: { ...catalog, member: { alias: 'Camille recette', balanceUnits: 12 }, rewards: [], activity: [] } })
         : route.fulfill({ status: 204 });
-      if (path.endsWith('/compte/capacites')) { personalReads++; return route.fulfill({ json: { available: false } }); }
-      if (path.endsWith('/compte/session')) { personalReads++; return route.fulfill({ status: 401 }); }
+      if (path === '/r/recette/compte/capacites') { accountRequests.push(`${request.method()} ${path}`); return route.fulfill({ json: { available: false } }); }
+      if (path === '/r/recette/compte/session') { accountRequests.push(`${request.method()} ${path}`); return route.fulfill({ status: 401 }); }
       faults.push('Unexpected navigation request'); return route.abort();
     });
-    return { reads: () => personalReads, mutations };
+    return { reads: () => accountRequests.length, accountRequests, mutations };
   }
   it('keeps ordering primary and opens local orders from the account panel without competing dialogs', async () => {
     const requests = await navigationFixture(false); await page.goto(`${origin}/storefront`);
     await page.getByRole('button', { name: 'Commander maintenant', exact: true }).waitFor();
-    expect(requests.reads()).toBe(0);
+    // Storefront recovery now checks account capability while restoring C01.
+    // With no selected browser/publication, it must not request a private
+    // session, orders, or establish any browser/identity capability.
+    await expect.poll(() => requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
     for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
@@ -142,6 +145,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await page.getByRole('dialog', { name: 'Mes commandes', exact: true }).waitFor();
     await expect.poll(() => page.getByRole('dialog').count()).toBe(1);
     await page.keyboard.press('Escape'); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
+    expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
     expect(requests.mutations).toEqual([]);
   });
   it('isolates the reflow counterexample in one browser turn and rejects a displaced sibling', async () => {

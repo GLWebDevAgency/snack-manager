@@ -66,13 +66,18 @@ const acquire = (target = page, tenant = "classfood") => target.evaluate(
 );
 const acquireDelivery = () => page.evaluate(({ payload, fingerprint }) => window.checkoutJournal.acquireCheckoutAttempt("classfood", { payload, cartFingerprint: fingerprint }), { payload: deliveryPayload, fingerprint });
 
+function visibleReceipt(value: Journal.ReceivedCheckoutAttempt | Journal.PrivateSettledCheckoutAttempt): Journal.ReceivedCheckoutAttempt {
+  if (value.state !== "received") throw new Error("Expected the guest receipt to remain visible");
+  return value;
+}
+
 describe("suivis de commandes sur cet appareil, IndexedDB natif", () => {
   const read = (target = page, tenant = "classfood") => target.evaluate(tenant => window.checkoutJournal.readDeviceCheckoutReceipts(tenant), tenant);
   const receive = async (delivery = false, orderId = receipt.orderId) => {
     const { attempt } = await (delivery ? acquireDelivery() : acquire());
-    return page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+    return visibleReceipt(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
       id: attempt.clientId, receipt: { ...receipt, orderId, type: delivery ? "delivery" as const : "pickup" as const },
-    });
+    }));
   };
   const archive = (received: Journal.ReceivedCheckoutAttempt) => page.evaluate(id => window.checkoutJournal.archiveCheckoutAttempt("classfood", id), received.clientId);
 
@@ -210,9 +215,9 @@ describe("suivis de commandes sur cet appareil, IndexedDB natif", () => {
     const attempts = await Promise.all([acquire(), acquire(second)]);
     expect(attempts.filter(item => item.acquired)).toHaveLength(1);
     expect(attempts[0].attempt.clientId).toBe(attempts[1].attempt.clientId);
-    const received = await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+    const received = visibleReceipt(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
       id: attempts[0].attempt.clientId, receipt: { ...receipt, orderId: "f".repeat(24) },
-    });
+    }));
     await archive(received);
     const before = await read(); expect(before).toHaveLength(128);
     const denied = await Promise.allSettled([acquire(), acquire(second)]);
@@ -228,12 +233,13 @@ describe("suivis de commandes sur cet appareil, IndexedDB natif", () => {
     const previous = await receive(true); await archive(previous);
     const next = await acquire();
     const second = await context.newPage(); await second.goto(origin); await second.waitForFunction(() => !!window.checkoutJournal);
-    const [, current] = await Promise.all([
+    const [, recorded] = await Promise.all([
       second.evaluate(id => window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id), previous.receipt.orderId),
       page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
         id: next.attempt.clientId, receipt: { ...receipt, orderId: "f".repeat(24) },
       }),
     ]);
+    const current = visibleReceipt(recorded);
     expect((await read(second)).map(row => row.receipt.orderId)).toEqual([current.receipt.orderId]);
     expect(await page.evaluate(id => window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", id), previous.receipt.orderId)).toEqual(previous);
     await archive(current); await second.reload(); await second.waitForFunction(() => !!window.checkoutJournal);
@@ -400,7 +406,7 @@ describe("journal de checkout durable, IndexedDB natif", () => {
     expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toBeNull();
     const created = await acquire();
     expect(created.acquired).toBe(true);
-    expect(created.attempt).toMatchObject({ state: "prepared", payload, cartFingerprint: fingerprint, tenant: "classfood", origin, v: 1 });
+    expect(created.attempt).toMatchObject({ state: "prepared", payload, cartFingerprint: fingerprint, tenant: "classfood", origin, v: 2, provenance: { kind: "guest" } });
     expect(created.attempt.clientId).toMatch(/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/);
     expect("recoveryProof" in created.attempt && created.attempt.recoveryProof).toMatch(/^[a-f\d]{64}$/);
     expect(await page.evaluate(async () => {
@@ -448,7 +454,7 @@ describe("journal de checkout durable, IndexedDB natif", () => {
 
   it("enregistre le reçu puis supprime le corps et la preuve ; archive explicitement sans perdre le suivi", async () => {
     const { attempt } = await acquire();
-    const received = await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt });
+    const received = visibleReceipt(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt }));
     expect(received).toMatchObject({ clientId: attempt.clientId, state: "received", receipt, cartFingerprint: fingerprint });
     expect(received).not.toHaveProperty("payload");
     expect(received).not.toHaveProperty("recoveryProof");
@@ -500,7 +506,7 @@ describe("journal de checkout durable, IndexedDB natif", () => {
     for (let index = 1; index <= 3; index++) {
       const { attempt } = await acquireDelivery();
       const nextReceipt = { ...receipt, orderId: index.toString(16).padStart(24, "0") };
-      saved.push(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt: nextReceipt }));
+      saved.push(visibleReceipt(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt: nextReceipt })));
       await page.evaluate((id) => window.checkoutJournal.archiveCheckoutAttempt("classfood", id), attempt.clientId);
     }
     await page.reload(); await page.waitForFunction(() => !!window.checkoutJournal);
@@ -513,7 +519,7 @@ describe("journal de checkout durable, IndexedDB natif", () => {
 
   it("refuse une nouvelle livraison avant POST à 128 reçus privés puis purge seulement les reçus anciens", async () => {
     const { attempt } = await acquireDelivery();
-    const received = await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt });
+    const received = visibleReceipt(await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), { id: attempt.clientId, receipt }));
     await page.evaluate((id) => window.checkoutJournal.archiveCheckoutAttempt("classfood", id), attempt.clientId);
     await page.evaluate(({ dbName, received }) => new Promise<void>((resolve, reject) => {
       const open = indexedDB.open(dbName);

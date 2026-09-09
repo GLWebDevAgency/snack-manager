@@ -11,6 +11,7 @@ declare global {
     savedClear: () => Promise<boolean>;
     releaseCartLock: () => void;
     holdingCartLock: boolean;
+    checkoutCanClear: boolean;
   }
 }
 
@@ -168,6 +169,30 @@ describe("panier réel React et verrou inter-onglets", () => {
     expect(await clearing).toBe(true);
     await second.waitForFunction(() => window.testCart.count === 2);
     expect(await second.evaluate(() => JSON.parse(localStorage.getItem("sm.cart.classfood")!).lines[0].qty)).toBe(2);
+  });
+
+  it("réévalue l’autorisation du reçu dans le verrou avant de vider le panier", async () => {
+    await addBurger();
+    const raw = await page.evaluate(() => localStorage.getItem("sm.cart.classfood"));
+    const second = await secondTab();
+    await second.evaluate(() => {
+      void navigator.locks.request("sm.cart.write.classfood", () => new Promise<void>(resolve => {
+        window.releaseCartLock = resolve;
+        window.holdingCartLock = true;
+      }));
+    });
+    await second.waitForFunction(() => window.holdingCartLock);
+    await page.evaluate(() => { window.checkoutCanClear = true; });
+    const clearing = page.evaluate(() => window.testCart.clearIfUnchanged(() => window.checkoutCanClear));
+    await page.waitForFunction(async () => (await navigator.locks.query()).pending!.some(lock => lock.name === "sm.cart.write.classfood"));
+    await page.evaluate(() => { window.checkoutCanClear = false; });
+    await second.evaluate(() => window.releaseCartLock());
+    expect(await clearing).toBe(false);
+    expect(await page.getByTestId("count").textContent()).toBe("1");
+    expect(await page.evaluate(() => localStorage.getItem("sm.cart.classfood"))).toBe(raw);
+    expect(await page.getByTestId("error").textContent()).toBe("");
+    expect(await page.evaluate(() => window.testCart.clearIfUnchanged(() => true))).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem("sm.cart.classfood"))).toBeNull();
   });
 
   it("sans Web Locks, ne vide ni modifie le panier et retourne false", async () => {

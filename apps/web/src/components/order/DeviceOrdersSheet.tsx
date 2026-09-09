@@ -76,7 +76,9 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }:
     const current = () => active.current && run === generation.current && !abort.signal.aborted;
     setLoading(true); setError(null);
     try {
-      const saved = await readDeviceCheckoutReceipts(slug);
+      // This sheet is intentionally the guest-only device list. Account orders
+      // are read from the authenticated history, never via a tracking alias.
+      const saved = await readDeviceCheckoutReceipts(slug, null);
       if (!current()) return;
       const visible = saved.slice(0, limit);
       setTotal(saved.length); setLoaded(true);
@@ -149,7 +151,7 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }:
   ];
   return <Sheet open={open} onClose={() => { setConfirmId(null); setActionError(null); setMessage(null); onClose(); }} navigationLocked={forgetting} title="Mes commandes" maxHeight="92%" headerExtra={<p className="mt-1 truncate text-xs text-mut">Sur cet appareil · {tenantName}</p>}>
     {open && <div className="space-y-5 px-4 py-5">
-      <p className="text-sm leading-6 text-mut">Retrouvez les commandes passées ici depuis ce navigateur, pendant sept jours. Ce n’est pas un compte client : elles ne sont pas synchronisées avec vos autres appareils.</p>
+      <p className="text-sm leading-6 text-mut">Retrouvez les commandes passées en invité depuis ce navigateur, pendant sept jours. Les commandes liées à votre compte se consultent dans Mon compte ; ces raccourcis invités ne sont pas synchronisés avec vos autres appareils.</p>
       {error && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{error}</p>}
       {actionError && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{actionError}</p>}
       {message && <p role="status" className="text-sm leading-6 text-okt">{message}</p>}
