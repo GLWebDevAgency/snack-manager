@@ -32,6 +32,7 @@ const verificationIntentsMigration = 1_788_901_200_000;
 const sessionPublicationsMigration = 1_788_908_400_000;
 const protectedEnrollmentMigration = 1_788_915_600_000;
 const protectedAccessMigration = 1_788_922_800_000;
+const loyaltyMembershipsMigration = 1_788_930_000_000;
 const protectedEnrollmentObjects = [
   ['table', 'registration_enrollments'],
   ['table', 'passkey_credentials'],
@@ -703,20 +704,21 @@ describe('manifeste PostgreSQL versionné', () => {
     const customerTask = turbo.tasks['@sm/customer#test'];
     expect(customerTask?.dependsOn).toEqual(['^build']);
     expect(customerTask?.inputs).toEqual(expect.arrayContaining([
+      '$TURBO_ROOT$/packages/loyalty/drizzle/**',
       '$TURBO_ROOT$/apps/api/src/modules/customer-identity/customer-identity.service.ts',
       '$TURBO_ROOT$/apps/api/src/modules/customer-identity/trial-verification-policy.ts',
       '$TURBO_ROOT$/apps/api/src/modules/customer-identity/phone-verification.port.ts',
     ]));
   });
 
-  it('énumère exactement les 95 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(95);
+  it('énumère exactement les 96 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(96);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(49);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(50);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(19);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(95);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(96);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -854,6 +856,19 @@ describe('manifeste PostgreSQL versionné', () => {
     expect(objects.every((object) => object.journal === 'customer')).toBe(true);
   });
 
+  it('rattache la seule table de liaison fidélité à la migration customer 0008', () => {
+    const objects = POSTGRES_MANAGED_OBJECTS.filter((object) =>
+      object.introducedAt === loyaltyMembershipsMigration,
+    );
+    expect(objects.map(managedObjectKey)).toEqual(['table:customer.loyalty_memberships']);
+    expect(objects[0]).toMatchObject({ journal: 'customer' });
+    // Reusing the historical trigger function introduces no fourth journal or
+    // second ownership entry for customer.reject_immutable_record().
+    expect(POSTGRES_MANAGED_OBJECTS.filter(object =>
+      managedObjectKey(object) === 'function:customer.reject_immutable_record()',
+    )).toEqual([expect.objectContaining({ introducedAt: CUSTOMER_INITIAL_MIGRATION })]);
+  });
+
   it('reprend les horodatages exacts des journaux Drizzle', () => {
     const supply = JSON.parse(
       readFileSync(resolve(__dirname, '../../supply/drizzle/meta/_journal.json'), 'utf8'),
@@ -889,6 +904,8 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(protectedEnrollmentMigration);
     expect(customer.entries.find((entry) => entry.tag === '0007_customer_protected_access')?.when)
       .toBe(protectedAccessMigration);
+    expect(customer.entries.find((entry) => entry.tag === '0008_customer_loyalty_memberships')?.when)
+      .toBe(loyaltyMembershipsMigration);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -1112,6 +1129,7 @@ describe('préflight PostgreSQL', () => {
     ['customer', verificationIntentsMigration, 'customer.preserve_verification_intent()'],
     ['customer', sessionPublicationsMigration, 'customer.session_publications'],
     ['customer', sessionPublicationsMigration, 'customer.preserve_session_publication()'],
+    ['customer', loyaltyMembershipsMigration, 'customer.loyalty_memberships'],
     ...protectedEnrollmentObjects.map(([kind, name]) => [
       'customer', protectedEnrollmentMigration, `customer.${name}${kind === 'function' ? '()' : ''}`,
     ] as const),
@@ -1150,6 +1168,7 @@ describe('préflight PostgreSQL', () => {
     ['function', 'preserve_verification_intent', 'customer.preserve_verification_intent()'],
     ['table', 'session_publications', 'customer.session_publications'],
     ['function', 'preserve_session_publication', 'customer.preserve_session_publication()'],
+    ['table', 'loyalty_memberships', 'customer.loyalty_memberships'],
     ...protectedEnrollmentObjects.map(([kind, name]) => [
       kind, name, `customer.${name}${kind === 'function' ? '()' : ''}`,
     ] as const),

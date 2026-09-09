@@ -197,7 +197,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationsTable: '__drizzle_customer_migrations',
       };
       const customerMigrations = readMigrationFiles(customerMigrationConfig);
-      expect(customerMigrations).toHaveLength(8);
+      expect(customerMigrations).toHaveLength(9);
       const customerDialect = new PgDialect();
       const customerDriver = new NodePgDriver(freshMigrationPool, customerDialect);
       // Rejoue les trois SQL historiques inchangés avec le vrai migrateur :
@@ -391,7 +391,8 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationRole, runtimeRole,
       });
       expect(protectedReport.issues).toEqual([]);
-      expect(protectedReport.objects).toHaveLength(95);
+      // The manifest includes future objects; the 0008 bridge is still absent.
+      expect(protectedReport.objects).toHaveLength(96);
       for (const name of protectedTables) {
         await expect(freshMigrationPool.query(
           `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
@@ -453,13 +454,17 @@ integration('bootstrap PostgreSQL — base réelle', () => {
 
       // Vraie migration sous le rôle migrateur NOBYPASSRLS, sans réparation
       // administrative entre les deux versions ni modification du SQL livré.
-      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      await customerDialect.migrate(
+        customerMigrations.slice(0, 8),
+        customerDriver.createSession(undefined),
+        customerMigrationConfig,
+      );
       await grantCustomerRuntimeRole(freshMigrationPool, runtimeRole);
       const accessReport = await checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
         migrationRole, runtimeRole,
       });
       expect(accessReport.issues).toEqual([]);
-      expect(accessReport.objects).toHaveLength(95);
+      expect(accessReport.objects).toHaveLength(96);
       expect((await freshMigrationPool.query(`SELECT 1 FROM pg_catalog.pg_constraint
         WHERE conrelid='customer.passkey_credentials'::regclass
           AND conname='passkey_credentials_parent_ref_tenant_ref_account_id_key'`)).rows).toEqual([]);
@@ -494,10 +499,70 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         hash: customerMigrations[7]!.hash,
         created_at: '1788922800000',
       });
-      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      await customerDialect.migrate(
+        customerMigrations.slice(0, 8),
+        customerDriver.createSession(undefined),
+        customerMigrationConfig,
+      );
       expect((await freshMigrationPool.query(
         'SELECT hash, created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
       )).rows).toEqual(afterAccess.rows);
+
+      // 0007 remains healthy before the bridge. Only migration 0008 makes the
+      // new table mandatory; neither customer nor bootstrap runs loyalty DDL.
+      expect((await freshMigrationPool.query(
+        "SELECT pg_catalog.to_regclass('customer.loyalty_memberships') AS object",
+      )).rows).toEqual([{ object: null }]);
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+        migrationRole, runtimeRole,
+      })).resolves.toMatchObject({ issues: [] });
+      const loyaltyJournalBefore = (await freshMigrationPool.query(
+        'SELECT hash,created_at FROM drizzle.__drizzle_loyalty_migrations ORDER BY created_at',
+      )).rows;
+      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      await grantCustomerRuntimeRole(freshMigrationPool, runtimeRole);
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+        migrationRole, runtimeRole,
+      })).resolves.toMatchObject({ issues: [] });
+      expect((await freshMigrationPool.query(`SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
+        c.relrowsecurity AS rls,c.relforcerowsecurity AS forced_rls
+        FROM pg_catalog.pg_class c WHERE c.oid='customer.loyalty_memberships'::regclass`)).rows)
+        .toEqual([{ owner: migrationRole, rls: true, forced_rls: true }]);
+      expect((await freshMigrationPool.query(`SELECT n.nspname AS schema,c.relname AS relation
+        FROM pg_catalog.pg_constraint f JOIN pg_catalog.pg_class c ON c.oid=f.confrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE f.conrelid='customer.loyalty_memberships'::regclass AND f.contype='f'
+        ORDER BY n.nspname,c.relname`)).rows).toEqual([
+        { schema: 'customer', relation: 'accounts' },
+        { schema: 'loyalty', relation: 'members' },
+        { schema: 'loyalty', relation: 'operations' },
+      ]);
+      const afterMemberships = (await freshMigrationPool.query(
+        'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      )).rows;
+      expect(afterMemberships).toHaveLength(9);
+      expect(afterMemberships.slice(0, 8)).toEqual(afterAccess.rows);
+      expect(afterMemberships[8]).toEqual({ hash: customerMigrations[8]!.hash, created_at: '1788930000000' });
+      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      expect((await freshMigrationPool.query(
+        'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      )).rows).toEqual(afterMemberships);
+      expect((await freshMigrationPool.query(
+        'SELECT hash,created_at FROM drizzle.__drizzle_loyalty_migrations ORDER BY created_at',
+      )).rows).toEqual(loyaltyJournalBefore);
+
+      // A committed journal must not conceal a missing bridge: controlled DDL
+      // only in this generated fixture, restored before continuing the suite.
+      await freshMigrationPool.query('ALTER TABLE customer.loyalty_memberships RENAME TO loyalty_memberships_drift_probe');
+      try {
+        await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+          migrationRole, runtimeRole,
+        })).rejects.toMatchObject({ report: { issues: expect.arrayContaining([
+          expect.objectContaining({ code: 'missing_object', target: 'customer.loyalty_memberships' }),
+        ]) } });
+      } finally {
+        await freshMigrationPool.query('ALTER TABLE customer.loyalty_memberships_drift_probe RENAME TO loyalty_memberships');
+      }
       const freshPostMigrationRepair = await repairPostgresBootstrap(
         bootstrapPool(freshAdminPool),
         { migrationRole, runtimeRole, expectedDatabase: freshDatabaseName },
@@ -635,7 +700,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       ).resolves.toMatchObject({ rows: [{ count: 0 }] });
       await expect(
         runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
-      ).resolves.toMatchObject({ rows: [{ count: 8 }] });
+      ).resolves.toMatchObject({ rows: [{ count: 9 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont

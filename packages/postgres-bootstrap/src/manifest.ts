@@ -21,6 +21,7 @@ export const CUSTOMER_VERIFICATION_INTENTS_MIGRATION = 1_788_901_200_000;
 export const CUSTOMER_SESSION_PUBLICATIONS_MIGRATION = 1_788_908_400_000;
 export const CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION = 1_788_915_600_000;
 export const CUSTOMER_PROTECTED_ACCESS_MIGRATION = 1_788_922_800_000;
+export const CUSTOMER_LOYALTY_MEMBERSHIPS_MIGRATION = 1_788_930_000_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -211,6 +212,7 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   ].map((name) =>
     introduced('function', 'customer', name, 'customer', CUSTOMER_PROTECTED_ACCESS_MIGRATION),
   ),
+  introduced('table', 'customer', 'loyalty_memberships', 'customer', CUSTOMER_LOYALTY_MEMBERSHIPS_MIGRATION),
 ] as const;
 
 export const JOURNALS: Readonly<

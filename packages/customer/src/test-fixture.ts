@@ -52,7 +52,7 @@ export function assertCustomerTestTarget(raw: unknown): string {
 
 export async function customerTestFixture(raw: unknown, options: {
   beforeUpgrade?: (admin: Pool) => Promise<void>;
-  beforeUpgradeMigrations?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  beforeUpgradeMigrations?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 } = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');
@@ -88,6 +88,12 @@ export async function customerTestFixture(raw: unknown, options: {
     base.pathname = `/${database}`;
     admin = new Pool({ connectionString: base.toString(), max: 4, connectionTimeoutMillis: 3000 });
     closeAdmin = trackCustomerTestPool(admin);
+    // The additive customer bridge references loyalty: exercise its genuine
+    // journal first, without silently changing the production customer migrator.
+    const loyaltyConfig = { migrationsFolder: resolve(__dirname, '../../loyalty/drizzle'), migrationsTable: '__drizzle_loyalty_migrations' };
+    const loyaltyDialect = new PgDialect();
+    const loyaltyDriver = new NodePgDriver(admin, loyaltyDialect);
+    await loyaltyDialect.migrate(readMigrationFiles(loyaltyConfig), loyaltyDriver.createSession(undefined), loyaltyConfig);
     if (options.beforeUpgrade) {
       // Real Drizzle migrator, original SQL/hash unchanged; seed historical rows
       // before applying the remaining migration through the production entrypoint.

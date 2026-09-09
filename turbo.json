@@ -55,6 +55,7 @@
       "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/loyalty/drizzle/**",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/customer-identity.service.ts",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/trial-verification-policy.ts",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/paid-pilot-policy.ts",

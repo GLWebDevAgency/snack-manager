@@ -13,6 +13,7 @@ const result = spawnSync(process.execPath, [require.resolve('vitest/vitest.mjs')
   'src/access-quota.integration.test.ts', 'src/access-migration.integration.test.ts',
   'src/protected-principal.integration.test.ts',
   'src/protected-session.integration.test.ts',
+  'src/loyalty-memberships.integration.test.ts',
   '--maxWorkers=1', '--no-file-parallelism'], { stdio: 'inherit', timeout: 120_000 });
 if (result.status !== 0 || result.error || result.signal) process.exitCode = 1;
 else {
