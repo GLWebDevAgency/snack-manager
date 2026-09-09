@@ -55,6 +55,8 @@ let activePage;
 const errors = [];
 const consoleMessages = [];
 const remote = [];
+const forbiddenAccountRequests = [];
+let closedAccountCapabilityReads = 0;
 let nextLog = '';
 
 function reset(nextMode = 'ok', type = 'pickup') {
@@ -124,6 +126,15 @@ async function newPage({ stripeFailure = false, desktop = false } = {}) {
     reducedMotion: 'reduce', locale: 'fr-FR', timezoneId: 'Europe/Paris', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
+    // Guest recipe only: do not weaken the real HTTPS-only account BFF.
+    if (route.request().method() === 'GET' && url.href === `${web}/r/qa/compte/capacites`) {
+      closedAccountCapabilityReads++;
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body: '{"available":false}' });
+    }
+    if (/^\/r\/[^/]+\/compte(?:\/|$)/.test(url.pathname)) {
+      forbiddenAccountRequests.push(`${route.request().method()} ${url.origin}${url.pathname}`);
+      return route.abort('blockedbyclient');
+    }
     if (url.origin === web || url.origin === apiOrigin) return route.continue();
     if (url.hostname === 'challenges.cloudflare.com') return route.fulfill({ contentType: 'text/javascript', body:
       "window.turnstile={render:(_,o)=>{queueMicrotask(()=>o.callback('proof'));return 'fixture'},remove(){}}" });
@@ -291,8 +302,9 @@ try {
   assert.equal(await deliveryPage.getByRole('button', { name: 'Payer au comptoir', exact: true }).count(), 0);
   await healthy(deliveryPage, 'delivery-no-counter');
   assert.deepEqual(errors, []); assert.deepEqual(remote, []);
+  assert.deepEqual(forbiddenAccountRequests, [], 'Aucune autre route compte ne fait partie de cette recette invitée.');
   const result = { result: 'PASS', scenarios, sameOrder: true, externalRequests: remote,
-    pageErrors: errors, evidence: directory, fixtures: ['API', 'Stripe.js', 'Turnstile'] };
+    pageErrors: errors, evidence: directory, closedAccountCapabilityReads, fixtures: ['API', 'Stripe.js', 'Turnstile', 'GET capacités compte fermées'] };
   await writeFile(join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } catch (error) {
@@ -316,7 +328,7 @@ try {
   api.closeAllConnections();
   if (api.listening) await new Promise(resolve => api.close(resolve));
   await writeFile(join(directory, 'server.log'), nextLog);
-  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, remote }, null, 2));
+  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, remote, forbiddenAccountRequests, closedAccountCapabilityReads }, null, 2));
 }
 
 function port(name, fallback) {

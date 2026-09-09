@@ -40,6 +40,8 @@ const errors = [];
 const consoleMessages = [];
 const failedResponses = [];
 const externalRequests = [];
+const forbiddenAccountRequests = [];
+let closedAccountCapabilityReads = 0;
 let intents = 0;
 let creationPosts = 0;
 let nextLog = '';
@@ -214,6 +216,15 @@ try {
   // Toute autre sortie HTTP du navigateur échoue, y compris staging/production.
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
+    // Guest recipe only: do not weaken the real HTTPS-only account BFF.
+    if (route.request().method() === 'GET' && url.href === `${webOrigin}/r/livraison-e2e/compte/capacites`) {
+      closedAccountCapabilityReads++;
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body: '{"available":false}' });
+    }
+    if (/^\/r\/[^/]+\/compte(?:\/|$)/.test(url.pathname)) {
+      forbiddenAccountRequests.push(`${route.request().method()} ${url.origin}${url.pathname}`);
+      return route.abort('blockedbyclient');
+    }
     if (url.origin === webOrigin || url.origin === apiOrigin) return route.continue();
     if (url.hostname === 'challenges.cloudflare.com') return route.fulfill({ contentType: 'text/javascript', body:
       "window.turnstile={render:(_,o)=>{queueMicrotask(()=>o.callback('e2e-proof'));return 'fixture'},remove(){}}" });
@@ -376,6 +387,7 @@ try {
   }
   assert.deepEqual(errors, [], 'Erreur JavaScript ou fixture.');
   assert.deepEqual(externalRequests, [], 'Une requête extérieure non simulée a été bloquée.');
+  assert.deepEqual(forbiddenAccountRequests, [], 'Aucune autre route compte ne fait partie de cette recette invitée.');
   assert.equal(await page.locator('nextjs-portal').filter({ hasText: /error/i }).count(), 0);
   const expectedFailures = failedResponses.filter(response =>
     (response.status === 400 && fulfillment === 'delivery' && response.path === '/public/tenants/livraison-e2e/delivery/quote') ||
@@ -392,7 +404,7 @@ try {
     deliveryPricingRechecked: pricingScenario,
     deliverySettingsConfigured: settingsScenario, freeDeliveryThresholdApplied: settingsScenario,
     noCounterFallback: true, processingNotPresentedAsPaid: true, unpaidDeliveryTrackingChecked: fulfillment === 'delivery',
-    pageErrors: errors, consoleMessages, expectedFailures, evidence: directory,
+    pageErrors: errors, consoleMessages, expectedFailures, closedAccountCapabilityReads, fixtures: ['API', 'Stripe.js', 'Turnstile', 'GET capacités compte fermées'], evidence: directory,
   };
   await writeFile(join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
@@ -417,7 +429,7 @@ try {
   if (api.listening) await new Promise((resolve, reject) => api.close(error => error ? reject(error) : resolve()));
   await writeFile(join(directory, 'server.log'), nextLog);
   await writeFile(join(directory, 'requests.json'), JSON.stringify(requests, null, 2));
-  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, failedResponses, externalRequests }, null, 2));
+  await writeFile(join(directory, 'console.json'), JSON.stringify({ errors, consoleMessages, failedResponses, externalRequests, forbiddenAccountRequests, closedAccountCapabilityReads }, null, 2));
 }
 
 function port(name, fallback) {
