@@ -1,6 +1,6 @@
 # Compte client et carte fidélité — raccordement
 
-État au 9 septembre 2026 : préparation du lot suivant #154. Le compte protégé,
+État au 9 septembre 2026 : raccordement après le socle transactionnel #155. Le compte protégé,
 l'historique et la reprise de panier ne constituent pas encore une adhésion
 fidélité en ligne. Aucun fournisseur ni pilote n'est ouvert par ce document.
 
@@ -29,8 +29,9 @@ compte ni une autorisation de lire l'historique des commandes.
 
 ## Une seule transaction métier
 
-Les deux modules utilisent déjà le même pool PostgreSQL, mais leurs wrappers
-ouvrent actuellement des transactions séparées. Appeler `createMember()` puis
+Les deux modules utilisent déjà le même pool PostgreSQL. Leurs wrappers métier
+historiques ouvrent des transactions séparées ; #155 fournit désormais une
+transaction commune à session protégée. Appeler `createMember()` puis
 enregistrer une liaison après son commit pourrait laisser une carte orpheline.
 
 La première étape est donc une frontière commune, côté serveur uniquement :
@@ -63,21 +64,37 @@ les véritables migrations fidélité, et le rôle migrateur limité recevra les
 seuls droits de référence nécessaires. Pas de suppression des contraintes,
 de réécriture du SQL historique ou de quatrième journal de migration.
 
-La remise QR existante dure **30 minutes** avec reprise, acquittement et
-expiration. Son propriétaire actuel est un poste professionnel : ce protocole
-ne doit pas être exposé directement au client en remplaçant son auteur par
-un numéro de téléphone. La nouvelle propriété de reprise devra être liée au
-compte protégé. Une tentative expirée ne libère une nouvelle adhésion qu'après
-nettoyage confirmé sous verrou ; aucun ancien acquittement ne ressuscite sa carte.
+La remise QR **en caisse** dure toujours **30 minutes** avec reprise,
+acquittement et expiration. Son propriétaire initial est un poste professionnel :
+ce protocole ne doit pas être exposé directement au client en remplaçant son
+auteur par un numéro de téléphone.
+
+**Décision après revue du parcours compte : ne pas recopier cette échéance.**
+Pour une adhésion neuve demandée sous session protégée, le compte est le
+propriétaire durable dès le commit atomique. Une réponse réseau perdue ne doit
+pas entraîner l'anonymisation d'une carte que le client peut retrouver après
+reconnexion. Le futur writer indiquera donc `enrollment_handoff_at = joined_at`
+pour exprimer la remise au compte, pas un acquittement ou affichage navigateur.
+Il ne réutilisera ni la préparation ni le propriétaire de reprise du POS.
+
+Le client ne reçoit un résultat qu'après commit et nouvelle vérification des
+capacités ; un retry authentifié retrouve l'association, sans deuxième carte,
+sans points gratuits et sans prolonger la session. Le QR courant devra tenir
+compte des rotations et vérifier génération, statut et hash du jeton actif :
+rejouer aveuglément le QR initial de l'adhésion n'est pas admis. L'ancien
+protocole de caisse, son nettoyage à expiration et ses acquittements sont inchangés.
 
 ## Réception par étapes
 
 - **Transaction commune** : tests PostgreSQL natifs d'isolation, refus avant
   callback, expiration, perte de protection, rollback et concurrence avec la
   déconnexion. Aucune nouvelle route ni capacité ouverte à cette étape.
-- **Adhésion neuve** : migration et écritures atomiques membre/profil/
-  portefeuille/audit/liaison, collision avec une caisse, retry après réponse
-  perdue, reprise et acquittement QR. Tests du migrateur limité et du bootstrap.
+- **Association durable** : migration additive, références composites,
+  unicités, preuve immuable et RLS parent/restaurant. Tests du migrateur limité
+  et du bootstrap. Aucune adoption ou migration automatique des anciennes cartes.
+- **Adhésion neuve** : écritures atomiques membre/profil/portefeuille/audit/liaison,
+  collision avec une caisse, retry après réponse perdue et lecture protégée du
+  QR courant. Aucun délai de remise POS appliqué au propriétaire compte.
 - **Parcours client** : BFF signé, conditions lisibles, états d'erreur utiles,
   solde dans Mon compte, masquage après déconnexion/changement d'identité,
   tests deux onglets et captures aux identités et formats du restaurant.
@@ -122,3 +139,39 @@ ont été respectés, pas désactivés, puis les suites ont été rejouées.
 Ce socle n'ajoute encore **ni migration de liaison, ni writer de carte, ni
 action publique, ni UI, ni appel fournisseur**. La réception PR/CI/staging
 reste distincte de cette preuve locale.
+
+## Deuxième étape — association durable en préparation
+
+`0008_customer_loyalty_memberships` ajoute uniquement une table d'association,
+sans donnée personnelle ni secret QR. Les références au compte, au membre et à
+l'opération sont contraintes dans leur périmètre ; un compte ne peut posséder
+deux associations, un membre ne peut avoir deux propriétaires et une opération
+ne peut être réattribuée. L'association est immuable, même après blocage ou
+anonymisation d'une carte ; ces états ne libèrent pas automatiquement sa propriété.
+
+La migration ne crée aucune carte, ne recherche aucun téléphone et ne rattache
+aucune carte existante. Les fixtures isolées préparent les vraies migrations
+fidélité avant celles de customer, comme le déploiement. Le runtime du module
+customer ne reçoit pas de nouveaux droits fidélité de ce seul fait. Le bootstrap
+recense un objet supplémentaire ; l'ancien code reste compatible avec ce suffixe
+de migrations. Le retour applicatif ne supprime pas cette table ni ses preuves.
+
+Cette étape ne constitue **pas encore le cas d'usage d'adhésion** : conditions du
+programme, chiffrement du profil, portefeuille, preuve joined, collision de
+téléphone et récupération du QR restent à intégrer ensemble dans le writer.
+L'API publique et le pilote restent fermés pendant cette préparation.
+
+Réception locale : **22 tests SQL d'association**, suite customer **407/407**
+sans skip, bootstrap **127/127** (dont l'intégration PostgreSQL), suites API
+ciblées **137/137** avec PG/Mongo et fournisseur simulé. La passe API générale
+compte **3355 succès / 614 skips** sans variables d'intégration. Typage/lint/build :
+**38 tâches réussies**, chargement CommonJS de l'API vérifié. Ces populations
+se recouvrent et ne s'additionnent pas. Le bootstrap a d'abord échoué sur cinq
+contre-tests unitaires sans le manifeste, puis passé avec le seul objet ajouté.
+
+Les anciens contrôles du journal ont été actualisés de huit à neuf migrations,
+sans changer les hashes ni les lignes historiques. Une reprise complète a été
+nécessaire après une veille système de 1 002 secondes ; le test concerné a
+repassé isolément puis la suite entière a passé en 56 secondes, sans augmentation
+de délai. Le nouveau worktree nécessitait également le build des dépendances
+avant la recette API ; celle-ci a été rejouée une fois ces builds terminés.
