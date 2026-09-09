@@ -13,16 +13,20 @@ import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 // Real Entry/Sheet/account hook, identity journal, private reader and brand CSS.
 // HTTP data is fixture-only. This is not a Next/BFF/Nest/database end-to-end test.
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
-let faults: string[], calls: { path: string; body: Record<string, unknown>; operation: string | undefined; responseId?: string }[], expiry: number;
+let faults: string[], calls: { path: string; body: Record<string, unknown>; operation: string | undefined; selection: Selection; responseId?: string }[], expiry: number;
 let responseStatus = 200, hold = false, release: (() => void) | null, evidence: string | undefined;
 type Failure = { id: string | null; method: string; path: string; error: string | undefined };
 type Mark = { id: string; event: string; bytes?: number; sequence: number };
 type Wire = { id: string; method: string; path: string; status: number; mime: string; length: number; failure?: { sequence: number; error: string } };
+type Selection = { browserRef: string; operationId: string; checkId: string };
+type IdentityRefusal = { id: string; requested: Selection; before: Selection; after: Selection; current: Selection; alert: string; visibleOrders: number };
+const identityAlert = 'Votre accès a changé. Revenez à votre compte et actualisez-le avant de continuer.';
 let inflight: Set<BrowserRequest>, failed: Failure[], session: CDPSession, fixtureSerial: number;
 let marks: Mark[], wires: Map<string, Wire>, uiVerified: Set<string>, expectedFailures: Set<Failure>;
+let identityRefusals: Map<string, IdentityRefusal>;
 let transportFault: 'none' | 'before-headers' | 'truncated' | 'invalid-json' | 'invalid-contract';
-let distinctRefreshes: boolean, invalidCapabilities: boolean;
-declare global { interface Window { accountReadObservation: (metadata: string) => void; validateAccountFixtureCapabilities: (raw: unknown) => boolean } }
+let distinctRefreshes: boolean, invalidCapabilities: boolean, invalidHeldList: boolean;
+declare global { interface Window { accountReadObservation: (metadata: string) => void; validateAccountFixtureCapabilities: (raw: unknown) => boolean; validateAccountFixtureOrders: (raw: unknown, query: unknown) => boolean } }
 const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte/session', list: '/r/recette/compte/commandes/recherche', detail: '/r/recette/compte/commandes/detail' };
 
 /** Chromium151 emitted loadingFailed despite exhaustive reads in both HTTP
@@ -30,16 +34,34 @@ const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte
  * CDP/Runtime delivery order and Chromium's internal cause are NOT established.
  * We classify the application's verified result for this exact response, not
  * a claimed post-EOF event. No URL/status-only ERR_ABORTED exception is allowed. */
-function completedApplicationRead(failure: Failure, wire: Wire | undefined, observed: Mark[], rendered: ReadonlySet<string>) {
+function completeJsonRead(failure: Failure, wire: Wire | undefined, observed: Mark[]) {
   if (!failure.id || !wire || wire.id !== failure.id || wire.path !== failure.path || wire.method !== failure.method
     || failure.error !== 'net::ERR_ABORTED' || wire.failure?.error !== failure.error || wire.status !== 200
     || !Object.values(paths).includes(wire.path) || !/^application\/json(?:;\s*charset=utf-8)?$/i.test(wire.mime)
-    || !Number.isSafeInteger(wire.length) || wire.length <= 0 || wire.length > 1_048_576 || !rendered.has(wire.id)) return false;
+    || !Number.isSafeInteger(wire.length) || wire.length <= 0 || wire.length > 1_048_576) return false;
   const own = observed.filter(mark => mark.id === wire.id), eof = own.filter(mark => mark.event === 'eof');
   return eof.length === 1 && eof[0]!.bytes === wire.length
     && own.some(mark => mark.event === 'json-valid')
     && (wire.path !== paths.caps || own.some(mark => mark.event === 'contract-valid'))
     && !own.some(mark => ['abort', 'cancel', 'read-rejected', 'json-invalid', 'contract-invalid'].includes(mark.event));
+}
+function completedApplicationRead(failure: Failure, wire: Wire | undefined, observed: Mark[], rendered: ReadonlySet<string>) {
+  return !!wire && rendered.has(wire.id) && completeJsonRead(failure, wire, observed);
+}
+function notificationOutcome(failure: Failure, wire: Wire | undefined, observed: Mark[], rendered: ReadonlySet<string>, refusals: ReadonlyMap<string, IdentityRefusal>): 'rendered' | 'identity-rejected' | null {
+  if (completedApplicationRead(failure, wire, observed, rendered)) return 'rendered';
+  const proof = wire ? refusals.get(wire.id) : undefined;
+  if (!wire || wire.path !== paths.list || wire.method !== 'POST' || !proof || proof.id !== wire.id
+    || !completeJsonRead(failure, wire, observed)
+    || !observed.some(mark => mark.id === wire.id && mark.event === 'contract-valid')) return null;
+  const same = (left: Selection, right: Selection) => left.browserRef === right.browserRef
+    && left.operationId === right.operationId && left.checkId === right.checkId;
+  const valid = (selection: Selection) => [selection.browserRef, selection.operationId, selection.checkId]
+    .every(value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value));
+  return [proof.requested, proof.before, proof.after, proof.current].every(valid)
+    && same(proof.requested, proof.before) && proof.before.browserRef === proof.after.browserRef
+    && !same(proof.before, proof.after) && same(proof.after, proof.current)
+    && proof.alert === identityAlert && proof.visibleOrders === 0 ? 'identity-rejected' : null;
 }
 const rows = Array.from({ length: 10 }, (_, index) => ({ _id: (1000 - index).toString(16).padStart(24, '0'), number: 120 - index,
   createdAt: '2026-09-09T12:00:00.000Z', status: index === 9 ? 'delivered' : 'ready', type: index % 2 ? 'pickup' : 'delivery',
@@ -55,8 +77,9 @@ function detail(order: typeof rows[number]) {
 beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url)), cssPath = fileURLToPath(new URL('../../app/globals.css', import.meta.url));
   const [bundle, css] = await Promise.all([build({ stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';
-      import{CustomerAccountEntry}from'./CustomerAccountEntry';import{marqueDeRepli,CustomerAccountResponses}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
+      import{CustomerAccountEntry}from'./CustomerAccountEntry';import{marqueDeRepli,CustomerAccountResponses,CustomerOrdersQuerySchema}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';import{parseCustomerOrdersPage}from'./orders-response';
       window.validateAccountFixtureCapabilities=raw=>CustomerAccountResponses.status.safeParse(raw).success;
+      window.validateAccountFixtureOrders=(raw,query)=>{try{parseCustomerOrdersPage(raw,CustomerOrdersQuerySchema.parse(query));return true}catch{return false}};
       createRoot(document.getElementById('root')).render(<React.StrictMode><main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Le Comptoir</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" onDeviceOrders={()=>document.getElementById('device').textContent='Sur cet appareil : aucun suivi enregistré'}/><p id="device"/><button>Commander en invité</button></main></React.StrictMode>);`,
       resolveDir: root, sourcefile: 'customer-orders-ui.tsx', loader: 'tsx' }, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022', outdir: '/virtual-customer-orders',
       define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"' } }),
@@ -91,7 +114,8 @@ beforeAll(async () => {
     let body = ''; request.on('data', chunk => { body += String(chunk); if (body.length > 4096) request.destroy(); });
     request.on('end', () => {
       const parsed = JSON.parse(body) as Record<string, unknown>;
-      const call: (typeof calls)[number] = { path, body: parsed, operation: request.headers['x-sm-customer-operation-id'] as string | undefined }; calls.push(call);
+      const call: (typeof calls)[number] = { path, body: parsed, operation: request.headers['x-sm-customer-operation-id'] as string | undefined,
+        selection: { browserRef: String(request.headers['x-sm-customer-browser-ref'] ?? ''), operationId: String(request.headers['x-sm-customer-operation-id'] ?? ''), checkId: String(request.headers['x-sm-customer-check-id'] ?? '') } }; calls.push(call);
       const complete = () => {
         if (transportFault === 'before-headers' && path === paths.detail) { response.destroy(); return; }
         call.responseId = String(fixtureSerial + 1);
@@ -100,7 +124,7 @@ beforeAll(async () => {
         const filtered = rows.filter(row => parsed.filter === 'all' || (parsed.filter === 'past' ? row.status === 'delivered' : row.status !== 'delivered'));
         const cursor = parsed.cursor as { id: string } | null, after = cursor ? filtered.findIndex(row => row._id === cursor.id) + 1 : 0;
         const orders = filtered.slice(after, after + Number(parsed.limit)).map((order, index) => distinctRefreshes && index === 0 ? { ...order, number: 10_000 + Number(call.responseId) } : order), last = orders.at(-1);
-        json({ expiresAt: expiry, orders, nextCursor: after + orders.length < filtered.length && last ? { id: last._id, createdAt: last.createdAt } : null });
+        json({ expiresAt: expiry, orders: invalidHeldList ? null : orders, nextCursor: after + orders.length < filtered.length && last ? { id: last._id, createdAt: last.createdAt } : null });
       };
       if (hold) release = complete; else complete();
     });
@@ -112,7 +136,7 @@ beforeAll(async () => {
 }, 30_000);
 beforeEach(async () => {
   faults = []; calls = []; expiry = Date.now() + 60_000; hold = false; release = null; responseStatus = 200;
-  inflight = new Set(); failed = []; fixtureSerial = 0; marks = []; wires = new Map(); uiVerified = new Set(); expectedFailures = new Set(); transportFault = 'none'; distinctRefreshes = false; invalidCapabilities = false;
+  inflight = new Set(); failed = []; fixtureSerial = 0; marks = []; wires = new Map(); uiVerified = new Set(); identityRefusals = new Map(); expectedFailures = new Set(); transportFault = 'none'; distinctRefreshes = false; invalidCapabilities = false; invalidHeldList = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   page = await context.newPage(); page.setDefaultTimeout(5_000);
   session = await context.newCDPSession(page);
@@ -164,6 +188,10 @@ beforeEach(async () => {
                 try {
                   if (invalid) throw new Error('Invalid fixture body'); const parsed = JSON.parse(text + decoder.decode()); observe('json-valid');
                   if (new URL(response.url).pathname === '/r/recette/compte/capacites') observe(window.validateAccountFixtureCapabilities(parsed) ? 'contract-valid' : 'contract-invalid');
+                  if (new URL(response.url).pathname === '/r/recette/compte/commandes/recherche') {
+                    const requestBody = args[1]?.body;
+                    observe(typeof requestBody === 'string' && window.validateAccountFixtureOrders(parsed, JSON.parse(requestBody)) ? 'contract-valid' : 'contract-invalid');
+                  }
                 }
                 catch { observe('json-invalid'); }
                 text = ''; // Only metadata leaves this bounded in-memory observer.
@@ -198,15 +226,19 @@ afterEach(async () => {
     await expect.poll(() => inflight.size, { timeout: 1_000 }).toBe(0);
     await session.send('Runtime.evaluate', { expression: 'void 0' }); // Flush the same observation session.
     const completedWithNotification: { fixtureId: string; bytes: number }[] = [];
+    const identityRejectedWithNotification: { fixtureId: string; bytes: number }[] = [];
     for (const failure of failed) {
       const wire = failure.id ? wires.get(failure.id) : undefined;
       if (expectedFailures.has(failure)) continue; // The counter-test already asserted rejection of this exact request.
       if (wire && wire.status === responseStatus && [401, 404, 503].includes(wire.status) && wire.path === paths.detail
         && failure.method === 'POST' && failure.error === 'net::ERR_ABORTED' && marks.some(mark => mark.id === wire.id && mark.event === 'cancel')) continue;
-      if (completedApplicationRead(failure, wire, marks, uiVerified)) completedWithNotification.push({ fixtureId: wire!.id, bytes: wire!.length });
+      const outcome = notificationOutcome(failure, wire, marks, uiVerified, identityRefusals);
+      if (outcome === 'rendered') completedWithNotification.push({ fixtureId: wire!.id, bytes: wire!.length });
+      else if (outcome === 'identity-rejected') identityRejectedWithNotification.push({ fixtureId: wire!.id, bytes: wire!.length });
       else faults.push(`Unexpected request failure ${failure.method} ${failure.path}: ${failure.error}`);
     }
     if (completedWithNotification.length) console.info('Chromium notifications despite verified JSON/UI completion', completedWithNotification);
+    if (identityRejectedWithNotification.length) console.info('Chromium notifications with complete fixture-valid JSON and confirmed identity rejection', identityRejectedWithNotification);
     if (faults.length) console.error('Account read failures', { failed, wires: [...wires.values()], marks });
     expect(faults).toEqual([]);
   } finally { await context?.close(); }
@@ -238,7 +270,49 @@ async function openOrders() {
   await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
   if (!hold) await verifyList();
 }
+async function journalSelection(): Promise<Selection> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const open = indexedDB.open('sm-customer-preparation-v1', 1);
+      open.onsuccess = () => resolve(open.result); open.onerror = () => reject(new Error('Fixture journal unavailable'));
+    });
+    try {
+      return await new Promise<Selection>((resolve, reject) => {
+        const tx = db.transaction('preparations', 'readonly'), read = tx.objectStore('preparations').get('recette');
+        tx.oncomplete = () => { const journal = read.result;
+          if (journal?.phase !== 'ready' || journal.verification?.phase !== 'completed') { reject(new Error('Fixture publication unavailable')); return; }
+          resolve({ browserRef: journal.browserRef, operationId: journal.verification.operationId, checkId: journal.verification.checkId }); };
+        tx.onabort = tx.onerror = () => reject(new Error('Fixture journal unavailable'));
+      });
+    } finally { db.close(); }
+  });
+}
 describe('private orders — actual UI/client, read-only local HTTP fixture', () => {
+  it('distinguishes the complete CI response refused for identity change from an accepted UI response', () => {
+    // CI34301302155: exact list wire3,200,2263bytes,EOF+JSON,ERR_ABORTED.
+    // These observations establish neither Chromium causality nor CDP ordering.
+    const failure: Failure = { id: '3', method: 'POST', path: paths.list, error: 'net::ERR_ABORTED' };
+    const wire: Wire = { id: '3', method: 'POST', path: paths.list, status: 200, mime: 'application/json', length: 2263,
+      failure: { sequence: 9, error: 'net::ERR_ABORTED' } };
+    const complete: Mark[] = [{ id: '3', event: 'eof', bytes: 2263, sequence: 7 }, { id: '3', event: 'json-valid', sequence: 8 },
+      { id: '3', event: 'contract-valid', sequence: 10 }];
+    const before = { browserRef: '10000000-0000-4000-8000-000000000001', operationId: '20000000-0000-4000-8000-000000000002', checkId: '30000000-0000-4000-8000-000000000003' };
+    const after = { ...before, operationId: '40000000-0000-4000-8000-000000000004', checkId: '50000000-0000-4000-8000-000000000005' };
+    const refusal: IdentityRefusal = { id: '3', requested: before, before, after, current: after, alert: identityAlert, visibleOrders: 0 };
+    const classify = (proof: IdentityRefusal, observed = complete) => notificationOutcome(failure, wire, observed, new Set(), new Map([['3', proof]]));
+    expect(completedApplicationRead(failure, wire, complete, new Set())).toBe(false);
+    expect(classify(refusal)).toBe('identity-rejected');
+    expect(notificationOutcome(failure, wire, complete, new Set(['3']), new Map())).toBe('rendered');
+    expect(notificationOutcome(failure, wire, complete, new Set(), new Map())).toBeNull();
+    for (const changed of [{ ...refusal, id: '4' }, { ...refusal, requested: after }, { ...refusal, after: before, current: before },
+      { ...refusal, current: before }, { ...refusal, before: { ...before, browserRef: '' }, requested: { ...before, browserRef: '' } },
+      { ...refusal, alert: 'Autre erreur' }, { ...refusal, visibleOrders: 1 }]) expect(classify(changed)).toBeNull();
+    expect(notificationOutcome(failure, wire, complete, new Set(), new Map([['4', { ...refusal, id: '4' }]]))).toBeNull();
+    for (const observed of [complete.filter(mark => mark.event !== 'contract-valid'), complete.filter(mark => mark.event !== 'eof'),
+      complete.map(mark => mark.event === 'eof' ? { ...mark, bytes: 8 } : mark),
+      ...['contract-invalid', 'json-invalid', 'abort', 'cancel', 'read-rejected'].map(event => [...complete, { id: '3', event, sequence: 11 }])]) expect(classify(refusal, observed)).toBeNull();
+  });
+
   it('does not treat the authenticated fallback UI as proof of a valid capabilities contract', async () => {
     invalidCapabilities = true;
     await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
@@ -345,17 +419,48 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
     expect(await page.getByText('Menu burger du Comptoir', { exact: false }).count()).toBe(0);
     expect(await page.getByText('Aucune commande liée à ce compte', { exact: true }).count()).toBe(0);
   });
-  it('drops a held A response when the public journal selects B with an identical session projection', async () => {
+  it('renders a complete held response when the selected identity has not changed', async () => {
     hold = true; await openOrders(); await page.getByText('Lecture de vos commandes…', { exact: true }).waitFor();
     await expect.poll(() => calls.length).toBe(1);
+    const before = await journalSelection(); expect(calls[0]!.selection).toEqual(before);
+    hold = false; release?.(); await verifyList(120, calls[0]!.responseId);
+    expect(await journalSelection()).toEqual(before);
+    expect(await page.getByRole('alert').count()).toBe(0);
+    expect(identityRefusals.size).toBe(0);
+  });
+  it.each([false, true])('drops a held A response when the public journal selects B with an identical session projection (invalid fixture contract: %s)', async invalidContract => {
+    hold = true; await openOrders(); await page.getByText('Lecture de vos commandes…', { exact: true }).waitFor();
+    await expect.poll(() => calls.length).toBe(1);
+    const before = await journalSelection(); expect(calls[0]!.selection).toEqual(before);
     await page.evaluate(async () => {
       const db = await new Promise<IDBDatabase>(resolve => { const open = indexedDB.open('sm-customer-preparation-v1', 1); open.onsuccess = () => resolve(open.result); });
       await new Promise<void>((resolve, reject) => { const tx = db.transaction('preparations', 'readwrite'); const store = tx.objectStore('preparations'), read = store.get('recette');
         read.onsuccess = () => { const journal = read.result; journal.verification.operationId = crypto.randomUUID(); journal.verification.checkId = crypto.randomUUID(); store.put(journal, 'recette'); };
         tx.oncomplete = () => resolve(); tx.onabort = () => reject(new Error('Fixture CAS failed')); }); db.close();
     });
-    hold = false; release?.(); await page.getByRole('alert').waitFor();
-    expect(await page.getByRole('button', { name: /^Voir la commande n°/ }).count()).toBe(0);
+    const after = await journalSelection();
+    expect(after.browserRef).toBe(before.browserRef); expect(after.operationId).not.toBe(before.operationId); expect(after.checkId).not.toBe(before.checkId);
+    invalidHeldList = invalidContract; hold = false; release?.();
+    const alert = page.getByRole('alert'); await alert.getByText(identityAlert, { exact: true }).waitFor();
+    const visibleOrders = await page.getByRole('button', { name: /^Voir la commande n°/ }).count(); expect(visibleOrders).toBe(0);
+    await expect.poll(() => inflight.size, { timeout: 1_000 }).toBe(0);
+    await session.send('Runtime.evaluate', { expression: 'void 0' });
+    const id = calls[0]!.responseId; expect(id).toBeDefined();
+    const matches = [...wires.values()].filter(wire => wire.id === id && wire.path === paths.list && wire.method === 'POST');
+    expect(matches).toHaveLength(1); const wire = matches[0]!;
+    expect(marks.some(mark => mark.id === id && mark.event === (invalidContract ? 'contract-invalid' : 'contract-valid'))).toBe(true);
+    expect(uiVerified.has(wire.id)).toBe(false); // Refusal is never reported as rendering A.
+    const current = await journalSelection(); expect(current).toEqual(after);
+    const proof: IdentityRefusal = { id: wire.id, requested: calls[0]!.selection, before, after, current, alert: (await alert.textContent())!, visibleOrders };
+    // The app checks identity before parsing the result. The real parser above
+    // independently validates the fixture body; it does NOT imply app acceptance.
+    const notification: Failure = { id: wire.id, method: wire.method, path: wire.path, error: 'net::ERR_ABORTED' };
+    const notified = { ...wire, failure: { sequence: 0, error: notification.error! } };
+    expect(notificationOutcome(notification, notified, marks, uiVerified, new Map([[wire.id, proof]]))).toBe(invalidContract ? null : 'identity-rejected');
+    if (!invalidContract) identityRefusals.set(wire.id, proof);
+    else for (const failure of failed.filter(item => item.id === wire.id)) {
+      expect(notificationOutcome(failure, wire, marks, uiVerified, new Map([[wire.id, proof]]))).toBeNull(); expectedFailures.add(failure);
+    }
   });
   it('clears rendered data immediately offline and does not restore it from a local order cache', async () => {
     await openOrders(); await page.getByRole('button', { name: 'Voir la commande n° 120' }).waitFor();
