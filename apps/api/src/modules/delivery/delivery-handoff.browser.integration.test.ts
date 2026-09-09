@@ -16,6 +16,8 @@ import { createHandoffFixture } from './delivery-handoff.test-fixtures';
  * Real React components/DS, IndexedDB, sessionStorage, HTTP Nest guards,
  * handoff crypto/domain, Mongo and AuditLog. The same-origin test bridge only
  * forwards allowlisted requests and supplies a real fixture courier bearer.
+ * Guest account availability is an exact closed-capability fixture; no other
+ * account request is admitted or forwarded by this handoff-only harness.
  * It does NOT implement or validate Next/BFF cookies, checkout creation,
  * Stripe, KDS, Redis quotas/pubsub, camera hardware or production font loading.
  * The fixture owns a UUID-suffixed loopback database; no external I/O is allowed.
@@ -41,6 +43,7 @@ type Observation = { endpoint: 'confirm' | 'resolve'; operationId: string; keys:
   const observations: Observation[] = [];
   const faults: string[] = [];
   let proofRequests = 0;
+  let closedAccountCapabilityReads = 0;
   let proofIdentityValid = true;
   let lostResponses = 0;
   const handoffReads: number[] = [];
@@ -95,6 +98,13 @@ type Observation = { endpoint: 'confirm' | 'resolve'; operationId: string; keys:
         res.end('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Recette locale remise HTTP</title><link rel="stylesheet" href="/style.css"></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>'); return;
       }
       if (path === '/favicon.ico') { res.writeHead(204).end(); return; }
+      // CustomerDeliveryProof checks account availability even for an imported
+      // guest receipt. Keep the account closed without weakening the HTTPS BFF
+      // or allowing a session, mutation, another tenant, or a query variant.
+      if (req.method === 'GET' && req.url === '/r/handoff-http/compte/capacites') {
+        closedAccountCapabilityReads++;
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"available":false}'); return;
+      }
       const publicProof = path === `/api/public/orders/${order.id}/delivery-proof` && req.method === 'POST';
       const handoff = (path === '/handoff' && req.method === 'GET')
         || (['/handoff/confirm', '/handoff/resolve'].includes(path) && req.method === 'POST');
@@ -194,6 +204,7 @@ type Observation = { endpoint: 'confirm' | 'resolve'; operationId: string; keys:
       await customer.page.getByAltText('QR privé à présenter au livreur').waitFor();
       expect((await customer.page.locator('[aria-label^="Code de remise :"]').textContent()) === pin).toBe(true);
       expect(proofRequests).toBe(2); expect(proofIdentityValid).toBe(true);
+      expect(closedAccountCapabilityReads).toBe(2);
 
       await driver.page.goto(`${origin}/driver`);
       await driver.page.getByRole('heading', { name: 'Mission du livreur' }).waitFor();
@@ -238,6 +249,7 @@ type Observation = { endpoint: 'confirm' | 'resolve'; operationId: string; keys:
       expect(JSON.stringify(audit).includes(pin!)).toBe(false);
       expect(JSON.stringify(audit).includes(order.recoveryProof)).toBe(false);
       expect(await driver.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(closedAccountCapabilityReads).toBe(2);
       expect(faults).toEqual([]);
     } finally { await customer.context.close(); await driver.context.close(); }
   }, 25_000);
