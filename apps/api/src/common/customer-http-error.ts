@@ -5,6 +5,7 @@ const errors = {
   invalid_request: [400, 'CUSTOMER_INVALID_REQUEST', 'Demande de compte invalide.'],
   unauthorized: [401, 'CUSTOMER_UNAUTHORIZED', 'Accès au compte invalide ou expiré.'],
   conflict: [409, 'CUSTOMER_CONFLICT', 'Le profil a changé. Actualisez-le avant de réessayer.'],
+  not_found: [404, 'CUSTOMER_NOT_FOUND', 'Cette commande ne peut pas être consultée depuis ce compte.'],
   limited: [429, 'CUSTOMER_RATE_LIMITED', 'Trop de demandes. Réessayez plus tard.'],
   relay: [403, 'CUSTOMER_RELAY_REFUSED', 'Accès au compte indisponible.'],
 } as const;

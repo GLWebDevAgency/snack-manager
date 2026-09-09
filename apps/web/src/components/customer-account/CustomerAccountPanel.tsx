@@ -1,13 +1,16 @@
 "use client";
 
 import Link from 'next/link';
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import type { BrandMode, CustomerAccountView } from '@sm/contracts';
 import { Icon } from '../ui/icons';
 import { Field, Input } from '../ui/fields';
 import { Sheet, Tap } from '../order/primitives';
 import type { useCustomerAccount } from './useCustomerAccount';
 import { CustomerEnrollment } from './CustomerEnrollment';
+import { CustomerOrders } from './CustomerOrders';
+import { sameOrderAccess } from './orders';
+import type { CustomerAccountAccess } from './client';
 
 type Account = ReturnType<typeof useCustomerAccount>;
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:cursor-wait disabled:opacity-40';
@@ -86,10 +89,15 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
 }) {
   const { state, refresh } = account;
   const [enrollmentActive, setEnrollmentActive] = useState(false);
+  const [ordersAccess, setOrdersAccess] = useState<CustomerAccountAccess | null>(null);
+  const ordersTrigger = useRef<HTMLButtonElement>(null);
   const activity = useCallback((active: boolean) => setEnrollmentActive(active), []);
   const loading = state.status === 'loading';
   const needsRetry = ['idle', 'error', 'offline', 'unavailable'].includes(state.status);
   const view = open ? state.view : null;
+  const readingOrders = !!view && !!slug && sameOrderAccess(ordersAccess, account.currentAccess?.() ?? null);
+  const leaveOrders = () => { setOrdersAccess(null); requestAnimationFrame(() => ordersTrigger.current?.focus()); };
+  const closePanel = () => { setOrdersAccess(null); onClose(); };
   const title = state.status === 'offline' ? 'Vous êtes hors connexion'
     : state.status === 'unavailable' ? 'Compte indisponible pour le moment'
       : state.status === 'error' ? 'Vérification interrompue'
@@ -100,14 +108,16 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
     ? state.accessAvailable ? 'Vous pouvez retrouver votre compte ou continuer votre commande en invité.' : state.registrationAvailable ? 'Vous pouvez créer un compte protégé ou continuer votre commande en invité.' : 'La création et la connexion au compte ne sont pas encore ouvertes.'
     : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
       : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
-  return <Sheet open={open} onClose={onClose} title="Mon compte" navigationLocked={state.busy}
+  return <Sheet open={open} onClose={closePanel} title="Mon compte" navigationLocked={state.busy}
     headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>}
-    footer={<Tap className={view || state.registrationAvailable || state.accessAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={state.busy} onClick={onClose}>
+    footer={<Tap className={view || state.registrationAvailable || state.accessAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={state.busy} onClick={closePanel}>
       {returnLabel}
     </Tap>}>
     <div className="space-y-4 p-4 pb-5 sm:p-5">
+      {readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} /> : <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
-      {view ? <Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} />
+      {view ? <>{slug && <Tap ref={ordersTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><Icon name="ticket" size={18} /><span className="flex-1 text-left">Commandes de mon compte</span><Icon name="arrow" size={14} /></Tap>}
+        <Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} /></>
         : enrollmentActive ? null : loading ? <div role="status" className="min-h-40 rounded-panel border border-ink/10 bg-surface2 p-5">
           <p className="text-sm font-semibold">Vérification de votre session…</p>
           {state.message && <p className="mt-3 text-sm leading-6 text-mut">{state.message}</p>}
@@ -136,6 +146,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
         {loyaltyHref && (state.busy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Fidélité du restaurant</span>
           : <Link href={loyaltyHref} prefetch={false} onClick={onClose} className={secondary + ' w-full justify-start'}><Icon name="gift" size={18} /><span className="flex-1">Fidélité du restaurant</span><Icon name="arrow" size={15} /></Link>)}
       </nav>}
+      </>}
     </div>
   </Sheet>;
 }

@@ -13,7 +13,7 @@ function setup() {
   const calls: string[] = [];
   const quota = { reserve: vi.fn(async () => { calls.push('source'); return true; }), reserveClient: vi.fn(async () => { calls.push('attempt'); return true; }) };
   const tenants = { bySlug: vi.fn(async () => { calls.push('tenant'); return { _id: tenantId, account: { status: 'active' }, onlineOrdering: true, settings: { onlineOrderingPaused: false } }; }) };
-  const admissions = { recover: vi.fn().mockResolvedValue({ state: 'pending' }), begin: vi.fn().mockResolvedValue({ state: 'pending' }), claimValidation: vi.fn().mockResolvedValue({ ...publicRecoveryBinding(tenantId, body), validationOwner: 'owner' }), reject: vi.fn().mockResolvedValue({ state: 'rejected', reason: 'abandoned', code: 'ORDER_ATTEMPT_REJECTED', message: 'Abandonnée' }), materializeSlot: vi.fn(async () => void calls.push('drain')), createdOrder: vi.fn().mockResolvedValue({ _id: 'full-document', lines: ['preserved'] }), rejectionError: vi.fn(({ rejection }) => new ConflictException({ code: 'ORDER_ATTEMPT_REJECTED', reason: rejection, message: 'Refus durable' })) };
+  const admissions = { abandon: vi.fn().mockResolvedValue({ state: 'rejected', reason: 'abandoned', code: 'ORDER_ATTEMPT_REJECTED', message: 'Abandonnée' }), recover: vi.fn().mockResolvedValue({ state: 'pending' }), begin: vi.fn().mockResolvedValue({ state: 'pending' }), claimValidation: vi.fn().mockResolvedValue({ ...publicRecoveryBinding(tenantId, body), validationOwner: 'owner' }), reject: vi.fn().mockResolvedValue({ state: 'rejected', reason: 'abandoned', code: 'ORDER_ATTEMPT_REJECTED', message: 'Abandonnée' }), materializeSlot: vi.fn(async () => void calls.push('drain')), createdOrder: vi.fn().mockResolvedValue({ _id: 'full-document', lines: ['preserved'] }), rejectionError: vi.fn(({ rejection }) => new ConflictException({ code: 'ORDER_ATTEMPT_REJECTED', reason: rejection, message: 'Refus durable' })) };
   const releaseValidation = vi.fn();
   Object.assign(admissions, { releaseValidation });
   const controller = new PublicOrderRecoveryController(admissions as never, tenants as never, quota as never);
@@ -51,12 +51,12 @@ describe('reprise publique : frontières et quotas', () => {
   it('abandon crée une tombstone prouvée et ne demande aucun paiement/Turnstile', async () => {
     const ctx = setup();
     expect(await ctx.controller.abandon('classfood', { ...body, recoveryProof: body.recoveryProof!, turnstileToken: undefined }, request)).toMatchObject({ state: 'rejected' });
-    expect(ctx.admissions.reject).toHaveBeenCalledWith(tenantId, body.clientId, publicRecoveryBinding(tenantId, body), 'abandoned');
+    expect(ctx.admissions.abandon).toHaveBeenCalledWith(tenantId, { ...body, turnstileToken: '' });
     expect(ctx.gate.authorize).not.toHaveBeenCalled();
   });
   it('une commande engagée est récupérée, jamais abandonnée', async () => {
     const ctx = setup(); const result = { state: 'created', order: { _id: 'kept' } };
-    ctx.admissions.begin.mockResolvedValue(result);
+    ctx.admissions.abandon.mockResolvedValue(result);
     expect(await ctx.controller.abandon('classfood', { ...body, recoveryProof: body.recoveryProof! }, request)).toEqual(result);
     expect(ctx.admissions.reject).not.toHaveBeenCalled();
   });

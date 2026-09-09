@@ -14,10 +14,13 @@ import { OrderCounterController } from './order-counter.controller';
 import { OrderCounterCollectionService } from './order-counter-collection.service';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { PublicOrderRecoveryController } from './public-order-recovery.controller';
+import { OnlineOrderCheckoutService } from './online-order-checkout.service';
+import { CustomerOrderHistoryService } from './customer-order-history.service';
 
 @Module({
   imports: [TenantsModule, OrderingModule, EncaissementModule],
   controllers: [OrdersController, OrderFinanceController, OrderCounterController, PublicOrderRecoveryController],
-  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService],
+  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService, OnlineOrderCheckoutService, CustomerOrderHistoryService],
+  exports: [OnlineOrderCheckoutService],
 })
 export class OrdersModule {}

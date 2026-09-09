@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { Tenant } from '@sm/db';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository } from '@sm/customer';
-import { CustomerAccountEnvelopes, CustomerAccountResponses, type CustomerAccountAction,
+import { CustomerAccountEnvelopes, CustomerAccountResponses, customerAccountResponseLimit, type CustomerAccountAction,
   type CustomerAccountEnvelope } from '@sm/contracts';
 import { CustomerIdentityError, CustomerIdentityService, type CustomerSessionView } from './customer-identity.service';
 import { customerAccessConfiguration, customerSendConfiguration, type CustomerAccessConfiguration } from './customer-account.config';
@@ -12,6 +12,8 @@ import { customerSafeError } from './customer-account.error';
 import { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
 import type { PhoneVerificationTransport } from './phone-verification.port';
+import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
+import { customerCommerce } from './customer-commerce';
 
 export const CUSTOMER_IDENTITY_REPOSITORY = Symbol('CUSTOMER_IDENTITY_REPOSITORY');
 export const CUSTOMER_VERIFICATION_TRANSPORT_FACTORY = Symbol('CUSTOMER_VERIFICATION_TRANSPORT_FACTORY');
@@ -27,7 +29,8 @@ export class CustomerAccountRuntime {
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     @Inject(CUSTOMER_IDENTITY_REPOSITORY) private readonly repository: CustomerIdentityRepository,
     @Inject(CustomerAccountHumanVerifier) private readonly human: CustomerAccountHumanVerifier,
-    @Inject(CUSTOMER_VERIFICATION_TRANSPORT_FACTORY) private readonly transportFactory: CustomerVerificationTransportFactory) {}
+    @Inject(CUSTOMER_VERIFICATION_TRANSPORT_FACTORY) private readonly transportFactory: CustomerVerificationTransportFactory,
+    @Optional() @Inject(OnlineOrderCheckoutService) private readonly checkout?: OnlineOrderCheckoutService) {}
 
   async execute(relay: CustomerRelay, raw: unknown): Promise<unknown> {
     try {
@@ -109,6 +112,20 @@ export class CustomerAccountRuntime {
           result = view(await core.session({ ...binding!, token: input.sessionToken,
             expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId })); break;
         }
+        case 'order-create': case 'orders': case 'order-detail': {
+          if (!this.checkout) throw new CustomerIdentityError('unavailable');
+          const input = this.input(relay.action, raw);
+          const authorize = async () => {
+            this.access(relay, access); await this.tenant(access);
+            return core.commercePrincipal({ ...binding!, token: input.sessionToken,
+              expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId });
+          };
+          const command = relay.action === 'order-create' ? { action: relay.action, request: this.input('order-create', raw).request }
+            : relay.action === 'orders' ? { action: relay.action, request: this.input('orders', raw).request }
+              : { action: relay.action, request: this.input('order-detail', raw).request };
+          result = await customerCommerce({ checkout: this.checkout, authorize, slug: relay.slug, client: relay.client, now: Date.now }, command);
+          break;
+        }
         case 'name': {
           const input = this.input('name', raw);
           result = view(await core.updateName({ ...binding!, token: input.sessionToken, ...input.request,
@@ -134,6 +151,9 @@ export class CustomerAccountRuntime {
         return verification;
       }
       const response = CustomerAccountResponses[relay.action].parse(result);
+      if (response !== undefined && Buffer.byteLength(JSON.stringify(response)) > customerAccountResponseLimit(relay.action)) {
+        throw new CustomerIdentityError('unavailable');
+      }
       if (relay.action === 'browser' && this.input('browser', raw).request.step === 'restore') {
         const restored = CustomerAccountResponses.browser.parse(response);
         if (restored.preparation.state !== 'confirmed' || restored.emitCookie || restored.preparation.expiresAt <= Date.now()) {

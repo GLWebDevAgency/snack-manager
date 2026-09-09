@@ -6,6 +6,7 @@ import type { CustomerIdentityRepository, CustomerSession } from '@sm/customer';
  * real PostgreSQL suites exercise those boundaries separately. */
 export function confirmedCustomerBrowserFixture(browserRef: string, expiresAt: number) {
   return {
+    authenticateProtected: vi.fn<CustomerIdentityRepository['authenticateProtected']>().mockResolvedValue(null),
     preparePasskeyLogin: vi.fn<CustomerIdentityRepository['preparePasskeyLogin']>().mockResolvedValue(null),
     claimPasskeyLogin: vi.fn<CustomerIdentityRepository['claimPasskeyLogin']>().mockResolvedValue(null),
     completePasskeyLogin: vi.fn<CustomerIdentityRepository['completePasskeyLogin']>().mockResolvedValue(null),

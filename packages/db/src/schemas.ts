@@ -1,4 +1,5 @@
 import { Schema, type InferSchemaType } from 'mongoose';
+import { customerOrderOwnerField } from './customer-order-owner.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
@@ -61,6 +62,7 @@ function hidePrivateOrderFields(
   _document: unknown,
   returned: Record<string, unknown>,
 ): Record<string, unknown> {
+  delete returned.customerOwner;
   delete returned.loyaltyMemberId;
   delete returned.loyaltyEarnOperationId;
   delete returned.loyaltyActorRef;
@@ -80,6 +82,7 @@ function hidePrivateOrderFields(
 }
 
 function hidePrivateAdmissionFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.customerOwner;
   delete returned.kind;
   delete returned.channel;
   delete returned.proofHash;
@@ -984,6 +987,7 @@ export const OrderSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     number: { type: Number, required: true }, // séquence journalière par tenant
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
+    customerOwner: customerOrderOwnerField(),
     /** Preuve de reprise publique, atomique avec la vente ; jamais adoptée après création. */
     publicRecovery: {
       type: new Schema({
@@ -1247,6 +1251,8 @@ OrderSchema.index({ tenantId: 1, status: 1 });
 OrderSchema.index({ tenantId: 1, type: 1, 'deliveryMission.assignment.operatorId': 1, _id: 1 });
 OrderSchema.index({ tenantId: 1, type: 1, _id: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
+OrderSchema.index({ tenantId: 1, 'customerOwner.parentRef': 1, 'customerOwner.accountId': 1, createdAt: -1, _id: -1 },
+  { name: 'customer_order_history', partialFilterExpression: { 'customerOwner.accountId': { $type: 'string' } } });
 OrderSchema.index(
   { tenantId: 1, loyaltyEarnOperationId: 1 },
   {
@@ -1295,6 +1301,7 @@ export const PublicOrderAdmissionSchema = new Schema({
   _id: { type: String, required: true },
   tenantId: { type: Schema.Types.ObjectId, required: true },
   clientId: { type: String, required: true },
+  customerOwner: customerOrderOwnerField(),
   version: { type: Number, enum: [1], required: true },
   // Les anciens documents C01 sans kind restent publics. Le staff ne crée
   // aucune preuve de reprise publique ; l'origine ne fait pas partie de la clé unique.

@@ -14,11 +14,12 @@ import { OrderCapacityCalendarStore } from '../ordering/order-capacity-calendar.
 import { formatDay, parisYmd } from '../ordering/paris-time';
 import { unavailable, validateControl } from '../ordering/order-capacity-control';
 import { assertOrderSlotFresh } from '../ordering/order-slot-freshness';
+import { validCustomerOrderOwner, type CustomerOrderOwner, type CustomerOrderCommitAuthority } from './customer-order-owner';
 import { PublicOrderSnapshotInvalid } from './order-admission.errors';
 export { PublicOrderSnapshotInvalid } from './order-admission.errors';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
-const PRIVATE = '+kind +channel +proofHash +payloadHash +snapshot +validationOwner';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +snapshot +validationOwner +customerOwner';
 const MESSAGES: Record<PublicOrderRejectionReason, string> = {
   unavailable: 'Le restaurant ne peut pas accepter cette nouvelle commande pour le moment.',
   slot_unavailable: 'Ce créneau ne peut plus être réservé. Choisissez un autre créneau.',
@@ -151,8 +152,8 @@ export class PublicOrderAdmissionService {
     return { state: 'created' as const, order: await this.journal.committedOrder(admission) };
   }
 
-  async begin(tenantId: string, body: CreatePublicOrder): Promise<PublicOrderRecoveryResult> {
-    const binding = publicRecoveryBinding(tenantId, body);
+  async begin(tenantId: string, body: CreatePublicOrder, customerOwner?: CustomerOrderOwner): Promise<PublicOrderRecoveryResult> {
+    const binding = publicRecoveryBinding(tenantId, body, customerOwner);
     if (!binding) throw recoveryNotFound();
     // Jamais d'adoption : une clé appartenant à un ticket historique/POS ne
     // devient pas une identité publique par présentation d'une preuve neuve.
@@ -192,11 +193,28 @@ export class PublicOrderAdmissionService {
     return this.result(admission);
   }
 
+  /** The one-order capability may close its own pending attempt after logout.
+   * It cannot choose or change the account stored by the original admission. */
+  async abandon(tenantId: string, body: CreatePublicOrder): Promise<PublicOrderRecoveryResult> {
+    const admission = await this.read(admissionId(tenantId, body.clientId));
+    if (!admission) {
+      const state = await this.begin(tenantId, body);
+      if (state.state !== 'pending') return state;
+      return this.reject(tenantId, body.clientId, publicRecoveryBinding(tenantId, body)!, 'abandoned');
+    }
+    const storedOwner = admission.customerOwner;
+    if (storedOwner != null && !validCustomerOrderOwner(storedOwner)) throw recoveryNotFound();
+    const binding = publicRecoveryBinding(tenantId, body, storedOwner ?? undefined);
+    if (!binding) throw recoveryNotFound();
+    await this.readAuthenticated(tenantId, body.clientId, binding);
+    return this.reject(tenantId, body.clientId, binding, 'abandoned');
+  }
+
   /** Rejeu de POST : garde sa réponse historique complète, après preuve et empreinte. */
-  async createdOrder(tenantId: string, body: CreatePublicOrder) {
+  async createdOrder(tenantId: string, body: CreatePublicOrder, customerOwner?: CustomerOrderOwner) {
     const order = await this.orderByClient(tenantId, body.clientId);
     if (!order) throw uncertain();
-    assertPublicRecoveryReplay(order, publicRecoveryBinding(tenantId, body));
+    assertPublicRecoveryReplay(order, publicRecoveryBinding(tenantId, body, customerOwner));
     return order;
   }
 
@@ -232,12 +250,12 @@ export class PublicOrderAdmissionService {
     return this.result(await this.readAuthenticated(tenantId, clientId, binding));
   }
 
-  async commit(tenantId: string, clientId: string, binding: PublicRecoveryBinding, candidate: Record<string, unknown>) {
+  async commit(tenantId: string, clientId: string, binding: PublicRecoveryBinding, candidate: Record<string, unknown>, beforeCommit?: CustomerOrderCommitAuthority) {
     await this.readAuthenticated(tenantId, clientId, binding);
-    return this.commitCandidate(tenantId, clientId, binding, candidate);
+    return this.commitCandidate(tenantId, clientId, binding, candidate, beforeCommit);
   }
 
-  private async commitCandidate(tenantId: string, clientId: string, binding: OrderAdmissionBinding, candidate: Record<string, unknown>) {
+  private async commitCandidate(tenantId: string, clientId: string, binding: OrderAdmissionBinding, candidate: Record<string, unknown>, beforeCommit?: CustomerOrderCommitAuthority) {
     const admission = await this.journal.authenticated(tenantId, clientId, binding);
     if (admission.state !== 'validating') return { order: await this.journal.committedOrder(admission), created: false };
     if (!binding.validationOwner) throw uncertain();
@@ -248,7 +266,7 @@ export class PublicOrderAdmissionService {
       const closed = await this.journal.reject(tenantId, clientId, binding, 'slot_unavailable');
       return { order: await this.journal.committedOrder(closed), created: false };
     }
-    const outcome = await this.capacity.commit(tenantId, clientId, binding, candidate);
+    const outcome = await this.capacity.commit(tenantId, clientId, binding, candidate, beforeCommit);
     if (outcome.state === 'stale') throw uncertain();
     const observed = outcome.state === 'full'
       ? await this.journal.reject(tenantId, clientId, binding, 'slot_unavailable')
@@ -307,7 +325,9 @@ export class PublicOrderAdmissionService {
     const admission = await this.read(admissionId(tenantId, clientId));
     if (!admission) throw uncertain();
     if (!isPublicOrderAdmission(admission) || orderAdmissionChannel(admission) !== 'online') throw recoveryNotFound();
-    assertPublicRecoveryReplay({ channel: 'online', publicRecovery: admission } as Pick<Order, 'channel' | 'publicRecovery'>, binding);
+    assertPublicRecoveryReplay({ channel: 'online', publicRecovery: {
+      version: admission.version, proofHash: admission.proofHash ?? '', payloadHash: admission.payloadHash ?? '',
+    }, customerOwner: admission.customerOwner }, binding);
     return admission;
   }
 
@@ -315,6 +335,6 @@ export class PublicOrderAdmissionService {
     return this.admissions.findById(id).select(PRIVATE).read('primary').readConcern('majority').maxTimeMS(10_000).lean();
   }
   private orderByClient(tenantId: string, clientId: string) {
-    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 }

@@ -170,6 +170,57 @@ propres ; le compte n'adopte pas un historique par correspondance de téléphone
 Le raccord métier, son préremplissage et ses droits restent un lot distinct à
 vérifier avant d'annoncer un compte client unifié.
 
+## Lot commandes privées — raccord serveur et lecture dans Mon compte
+
+Les **nouvelles** commandes créées par la route de compte protégée portent un
+propriétaire serveur immuable : parent, établissement et compte. PostgreSQL
+résout ce propriétaire depuis la session exacte affichée ; aucun téléphone,
+QR, identifiant de compte reçu du navigateur ou ancien ticket ne le choisit.
+Les sessions historiques non protégées restent exclues de cette autorité.
+
+Le checkout public et celui du compte exécutent désormais le même cas d'usage
+pour les prix, options, promotions, capacité, anti-robot et paiement. La preuve
+C01 est obligatoire pour la route de compte. Le propriétaire précède tous les
+rejeux et traverse admission, snapshot puis commande. Une réponse perdue se
+reprend sans recréer la vente ; une reprise invitée ne peut pas transformer une
+commande en commande de compte. La capacité C01 d'une tentative déjà admise
+peut encore la récupérer ou l'abandonner après déconnexion, sans modifier son
+propriétaire. Ce n'est pas une autorisation de consulter les autres commandes.
+
+La permission PostgreSQL est relue juste avant le CAS MongoDB, puis avant la
+réponse privée. **Il n'existe pas de transaction distribuée entre les bases** :
+une opération déjà admise peut croiser une révocation, mais ne peut jamais
+adopter un autre compte. Le propriétaire est masqué des réponses et événements
+existants. L'index Mongo `customer_order_history` est additif et non unique ;
+aucune reprise d'historique ou réécriture de commandes existantes n'est lancée.
+
+Dans **Mon compte**, la lecture privée propose toutes/en cours/terminées,
+pagination stable, détail des articles/options/retraits, prix, paiement et étapes
+confirmées. Les requêtes fixent la publication effectivement affichée avant et
+après lecture. Ni coordonnées, ni identifiants de paiement, ni jetons de suivi
+ne sont exposés par l'historique. Les réponses sont bornées et `no-store` ; la
+vue n'est gardée qu'en mémoire et disparaît à l'invalidation, hors connexion ou
+au changement d'accès. Elle ne promet pas de mise à jour temps réel : le client
+dispose d'une action explicite d'actualisation.
+
+Preuves locales de ce lot : 174 tests PostgreSQL et 14 HTTP Nest signés passent
+sans skip avec les services locaux ; trois de ces parcours HTTP utilisent aussi
+le vrai checkout Mongo, ses prix, admissions et CAS. Le transport SMS, Turnstile
+et les quotas HTTP externes y sont simulés. La recette Mongo dédiée comprend
+17 scénarios réels et 5 gardes de cible. La CI impose les deux services pour ces
+recettes et vérifie aussi quatre ordres de chargement CommonJS des contrats.
+Les preuves UI natives sont distinctes : HTTP local simulé, vraie interface,
+session sélectionnée, verrou/journal/lecteur client ; elles ne remplacent pas
+une recette BFF→Nest→PostgreSQL→Mongo sur staging.
+
+**Le tunnel Checkout n'appelle pas encore cette nouvelle route.** Le choix de
+conservation des raccourcis de suivi après déconnexion reste à valider avant ce
+raccord ; les journaux invités existants ne sont pas effacés ni convertis. Le
+préremplissage par le nouveau compte, le lien fidélité et « recommander » restent
+à recevoir ensuite. Aucun pilote public, SMS payant ou déploiement production
+n'est ouvert par ce lot. La réception staging se rapporte séparément au SHA
+réellement servi, pas au seul statut de fusion.
+
 ## Parcours complet à recevoir avant ouverture
 
 1. **Créer mon compte** : téléphone → code SMS → inscription provisoire bornée.

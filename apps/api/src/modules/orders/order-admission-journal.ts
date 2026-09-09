@@ -7,10 +7,11 @@ import { ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/c
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { assertOrderAdmissionBinding, isPublicOrderAdmission, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, type OrderAdmissionBinding } from './order-admission-identity';
 import { assertPublicRecoveryReplay, recoveryNotFound } from './order-recovery';
+import { assertCustomerOrderOwner } from './customer-order-owner';
 import { orderAttemptUncertain as uncertain } from './order-admission.errors';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
-const PRIVATE = '+kind +channel +proofHash +payloadHash +snapshot +validationOwner +capacity +historicalImport';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +snapshot +validationOwner +capacity +historicalImport +customerOwner';
 const MESSAGES: Record<PublicOrderRejectionReason, string> = {
   unavailable: 'Le restaurant ne peut pas accepter cette nouvelle commande pour le moment.',
   slot_unavailable: 'Ce créneau ne peut plus être réservé. Choisissez un autre créneau.',
@@ -37,7 +38,7 @@ export class OrderAdmissionJournal {
   }
 
   orderByClient(tenantId: string, clientId: string) {
-    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 
   async authenticated(tenantId: string, clientId: string, binding: OrderAdmissionBinding) {
@@ -136,9 +137,10 @@ export class OrderAdmissionJournal {
   }
 
   private assertOrderOrigin(order: Order, admission: PublicOrderAdmission) {
+    assertCustomerOrderOwner(order.customerOwner, admission.customerOwner);
     if (isPublicOrderAdmission(admission)) {
       if (!admission.proofHash || !admission.payloadHash) throw uncertain();
-      assertPublicRecoveryReplay(order, { version: 1, proofHash: admission.proofHash, payloadHash: admission.payloadHash });
+      assertPublicRecoveryReplay(order, { version: 1, proofHash: admission.proofHash, payloadHash: admission.payloadHash, ...(admission.customerOwner ? { customerOwner: admission.customerOwner } : {}) });
     } else if (order.publicRecovery) throw recoveryNotFound();
   }
 

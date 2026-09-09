@@ -63,6 +63,7 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
     try {
       const repo = new PostgresCustomerIdentityRepository(fixture.app);
       expect(await repo.authenticate(legacy!)).not.toBeNull();
+      expect(await repo.authenticateProtected(legacy!)).toBeNull();
       expect((await fixture.admin.query('SELECT enrollment_id FROM customer.accounts')).rows).toEqual([{ enrollment_id: null }]);
       for (const table of ['registration_enrollments', 'passkey_credentials', 'recovery_codes']) {
         expect((await fixture.admin.query(`SELECT 1 FROM customer.${table}`)).rowCount).toBe(0);

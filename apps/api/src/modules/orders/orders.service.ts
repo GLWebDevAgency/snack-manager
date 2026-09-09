@@ -39,6 +39,8 @@ import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
+import { type CustomerOrderCommitAuthority } from './customer-order-owner';
+import { CustomerOrderAuthorityLost } from './order-admission.errors';
 import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-recovery';
 import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
 import type { OrderAdmissionBinding } from './order-admission-identity';
@@ -124,6 +126,7 @@ export class OrdersService {
     delete payload.paymentFlow;
     delete payload.counterCollection;
     delete payload.publicRecovery;
+    delete payload.customerOwner;
     return payload;
   }
 
@@ -254,6 +257,7 @@ export class OrdersService {
     deviceRef: string | null = null,
     recovery?: PublicRecoveryBinding,
     origin: 'legacy' | 'staff' = 'legacy',
+    beforeCommit?: CustomerOrderCommitAuthority,
   ) {
     const permitted = await this.readFilter(tenantId, {});
     if (permitted.channel && dto.channel !== permitted.channel) {
@@ -270,7 +274,7 @@ export class OrdersService {
       // A body which removes its slot must not bypass a previously slotted admission.
       await this.admissions.assertLegacyKeyAvailable(tenantId, dto.clientId);
     }
-    const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery');
+    const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery +customerOwner');
     if (existing) {
       assertPublicRecoveryReplay(existing, recovery);
       return { order: await this.withTrackingToken(existing), created: false as const };
@@ -305,6 +309,7 @@ export class OrdersService {
         tenantId,
         number,
         clientId: dto.clientId,
+        customerOwner: recovery?.customerOwner ?? null,
         loyaltyMemberId: dto.loyaltyMemberId ?? null,
         loyaltyEarnOperationId: dto.loyaltyEarnOperationId ?? null,
         loyaltyActorRef: dto.loyaltyMemberId ? actor : null,
@@ -349,7 +354,7 @@ export class OrdersService {
       if (admissionBinding) {
         admissionCommitStarted = true;
         const outcome = recovery
-          ? await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate)
+          ? await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate, beforeCommit)
           : await this.admissions!.commitInternal(tenantId, dto.clientId, admissionBinding, candidate);
         if (!outcome.created) await this.rendreReservation(tenantId, promotion);
         return outcome;
@@ -393,13 +398,13 @@ export class OrdersService {
       // création de commande avalée.
       // Une réponse perdue après committing n'autorise pas à rendre la promo
       // gagnante : son snapshot reste matérialisable par la reprise publique.
-      if (!admissionBinding || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
+      if (!admissionBinding || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || err instanceof CustomerOrderAuthorityLost || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
         await this.rendreReservation(tenantId, promotion);
       }
 
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
-        const raced = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery');
+        const raced = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery +customerOwner');
         if (raced) {
           assertPublicRecoveryReplay(raced, recovery);
           return { order: await this.withTrackingToken(raced), created: false as const };
@@ -423,7 +428,7 @@ export class OrdersService {
 
   /** Ancien POST public : ne contourne jamais la preuve des commandes récentes. */
   async findPublicReplay(tenantId: string, clientId: string) {
-    const existing = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), clientId }, '+publicRecovery');
+    const existing = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), clientId }, '+publicRecovery +customerOwner');
     if (!existing) return null;
     if (existing.channel !== 'online') throw new NotFoundException('Commande introuvable');
     assertPublicRecoveryReplay(existing);

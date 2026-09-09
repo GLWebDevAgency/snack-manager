@@ -8,8 +8,10 @@ import { CustomerAccountHumanVerifier, CUSTOMER_HUMAN_FETCH } from './customer-a
 import { CustomerAccountRuntime, CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICATION_TRANSPORT_FACTORY,
   type CustomerVerificationTransportFactory } from './customer-account.runtime';
 import { TwilioVerifyTransport } from './twilio-verify.transport';
+import { OrdersModule } from '../orders/orders.module';
 
 @Module({
+  imports: [OrdersModule],
   controllers: [CustomerAccountController],
   providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier,
     { provide: CUSTOMER_HUMAN_FETCH, useValue: globalThis.fetch },

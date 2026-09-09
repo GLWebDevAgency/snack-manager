@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CreateOrder } from '@sm/contracts';
 import { recoveryNotFound, recoveryPayloadHash, sameRecoveryHash, type PublicRecoveryBinding } from './order-recovery';
+import { assertCustomerOrderOwner, customerOrderOwnerFilter } from './customer-order-owner';
 
 export type OrderAdmissionKind = 'public' | 'legacy' | 'staff';
 /** Contexte serveur uniquement, jamais un champ accepté depuis un DTO public. */
@@ -41,7 +42,8 @@ export function orderAdmissionChannel(admission: { kind?: unknown; channel?: unk
   throw recoveryNotFound();
 }
 
-export function assertOrderAdmissionBinding(admission: { kind?: unknown; channel?: unknown; proofHash?: unknown; payloadHash?: unknown }, binding: OrderAdmissionBinding): void {
+export function assertOrderAdmissionBinding(admission: { kind?: unknown; channel?: unknown; proofHash?: unknown; payloadHash?: unknown; customerOwner?: unknown }, binding: OrderAdmissionBinding): void {
+  assertCustomerOrderOwner(admission.customerOwner, binding.customerOwner);
   const kind = admission.kind === undefined ? 'public' : admission.kind;
   if (kind !== (binding.kind ?? 'public') || orderAdmissionChannel(admission) !== orderAdmissionChannel(binding)
     || !sameRecoveryHash(admission.proofHash, binding.proofHash)
@@ -56,10 +58,11 @@ export function publicRecoveryOfAdmission(binding: OrderAdmissionBinding): Publi
 
 /** Le CAS vérifie aussi l'origine lue ; rétrocompatibilité explicite C01. */
 export function orderAdmissionKindFilter(binding: OrderAdmissionBinding) {
+  const owner = customerOrderOwnerFilter(binding.customerOwner);
   return isPublicOrderAdmission(binding)
-    ? { $and: [
+    ? { ...owner, $and: [
       { $or: [{ kind: 'public' }, { kind: { $exists: false } }] },
       { $or: [{ channel: 'online' }, { channel: { $exists: false } }] },
     ] }
-    : { kind: binding.kind, channel: orderAdmissionChannel(binding) };
+    : { ...owner, kind: binding.kind, channel: orderAdmissionChannel(binding) };
 }

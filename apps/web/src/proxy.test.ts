@@ -36,16 +36,17 @@ function resolvesTo(slug: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("routes privées compte client sur domaine restaurant", () => {
-  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'protection', 'cle-acces', 'secours', 'session', 'profil'])(
+  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'protection', 'cle-acces', 'secours', 'session', 'profil', 'commandes', 'commandes/recherche', 'commandes/detail'])(
     'autorise uniquement le point d’entrée exact %s du restaurant', async action => {
       resolvesTo('classfood');
-      const response = await proxy(request(`/r/classfood/compte/${action}`, `compte-${action}.example`, { 'sec-fetch-mode': 'cors' }));
+      const response = await proxy(request(`/r/classfood/compte/${action}`, `compte-${action.replaceAll('/', '-')}.example`, { 'sec-fetch-mode': 'cors' }));
       expect(response.status).toBe(200);
       expect(isRewrite(response)).toBe(false);
       expectSameOrigin(response);
     });
   it.each(['/r/concurrent/compte/session', '/r/classfood/compte', '/r/classfood/compte/session/nested',
-    '/r/classfood/compte/admin', '/r/classfood/compte/session/', '/r/classfood/compte/SESSION', '/api/customer/session'])(
+    '/r/classfood/compte/admin', '/r/classfood/compte/session/', '/r/classfood/compte/SESSION', '/api/customer/session',
+    '/r/classfood/compte/commandes/export', '/r/classfood/compte/commandes/detail/nested', '/r/concurrent/compte/commandes/recherche'])(
     'ne crée aucune exception large : %s', async path => {
       resolvesTo('classfood');
       expect((await proxy(request(path, 'compte-denied.example', { 'sec-fetch-mode': 'cors' }))).status).toBe(404);

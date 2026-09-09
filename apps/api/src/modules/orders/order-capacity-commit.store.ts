@@ -4,11 +4,12 @@ import { ORDER_CAPACITY_INDEXES, type Order, type OrderCapacityDay, type PublicO
 import { formatDay, parisYmd } from '../ordering/paris-time';
 import { recoveryNotFound } from './order-recovery';
 import { assertOrderAdmissionBinding, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, publicRecoveryOfAdmission, type OrderAdmissionBinding } from './order-admission-identity';
-import { PublicOrderSnapshotInvalid } from './order-admission.errors';
+import { assertCustomerOrderOwner, type CustomerOrderCommitAuthority } from './customer-order-owner';
+import { CustomerOrderAuthorityLost, PublicOrderSnapshotInvalid } from './order-admission.errors';
 import { assertOrderCapacityIndexesReady } from './order-capacity-index-readiness';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
-const PRIVATE = '+kind +channel +proofHash +payloadHash +validationOwner +capacity';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +validationOwner +capacity +customerOwner';
 const MAX_CONTENTION_ATTEMPTS = 101;
 
 export type CapacityCommitResult = {
@@ -64,12 +65,14 @@ export class OrderCapacityCommitStore {
   ) {}
 
   async commit(tenantId: string, clientId: string, binding: OrderAdmissionBinding,
-    candidate: Record<string, unknown>): Promise<CapacityCommitResult> {
+    candidate: Record<string, unknown>, beforeCommit?: CustomerOrderCommitAuthority): Promise<CapacityCommitResult> {
     const id = orderAdmissionId(tenantId, clientId);
     const admission = await this.authenticated(id, binding);
     if (String(candidate.tenantId) !== tenantId || candidate.clientId !== clientId || candidate.channel !== orderAdmissionChannel(binding)) {
       throw new PublicOrderSnapshotInvalid();
     }
+    assertCustomerOrderOwner(candidate.customerOwner, binding.customerOwner);
+    if (binding.customerOwner && (!beforeCommit || binding.customerOwner.tenantRef !== tenantId)) throw new PublicOrderSnapshotInvalid();
     const now = new Date();
     const document = new this.orders({ ...candidate, publicRecovery: publicRecoveryOfAdmission(binding), createdAt: now, updatedAt: now, __v: 0 });
     try { await document.validate(); } catch { throw new PublicOrderSnapshotInvalid(); }
@@ -112,6 +115,12 @@ export class OrderCapacityCommitStore {
         // même candidat potentiellement déjà engagé par un autre helper.
         const reread = await this.authenticated(id, binding);
         return terminal(reread) ?? (reread.validationOwner === binding.validationOwner ? { state: 'full' } : { state: 'stale' });
+      }
+      if (binding.customerOwner) {
+        // Last controllable PG authorization boundary; never held across Mongo.
+        // No future account is adopted, even if the caller's cookies changed.
+        try { assertCustomerOrderOwner(await beforeCommit!(), binding.customerOwner); }
+        catch { throw new CustomerOrderAuthorityLost(); }
       }
       try {
         await this.admissions.updateOne({ _id: id, tenantId, clientId, slot, state: 'validating', ...orderAdmissionKindFilter(binding),
