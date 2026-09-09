@@ -73,7 +73,7 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
         [randomUUID(), legacy!.parentRef, legacy!.tenantRef])).rejects.toMatchObject({ code: '23514' });
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT * FROM customer.session_publications')).rows).toEqual(previous);
-      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(8);
+      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(9);
     } finally { await fixture.close(); }
   }, 20_000);
   it('backfills only exact live approvals after intent expiry; restores FORCE on success and failed migration', async () => {
@@ -113,6 +113,8 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
         await admin.query(`CREATE ROLE "${owner}" LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`);
         ownerCreated = true;
         await admin.query(`GRANT CONNECT,CREATE ON DATABASE "${database}" TO "${owner}";
+          GRANT USAGE ON SCHEMA loyalty TO "${owner}";
+          GRANT REFERENCES ON TABLE loyalty.members,loyalty.operations TO "${owner}";
           GRANT USAGE ON SCHEMA customer,drizzle TO "${runtime}";
           GRANT SELECT ON ALL TABLES IN SCHEMA customer,drizzle TO "${runtime}";
           GRANT "${runtime}" TO "${owner}"`);
@@ -165,7 +167,21 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
             WHERE n.nspname='customer' AND c.relname=ANY($1) AND c.relrowsecurity AND c.relforcerowsecurity`, [sources])).rows[0].n).toBe(8);
           expect((await admin.query("SELECT to_regclass('customer.session_publications') AS name")).rows[0].name).toBeNull();
           expect((await admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(oldJournal);
+          // 0008 needs REFERENCES, not loyalty ownership or broad data access.
+          expect((await pool.query(`SELECT has_table_privilege(current_user,'loyalty.members','SELECT') AS can_read,
+            has_table_privilege(current_user,'loyalty.members','REFERENCES') AS can_reference`)).rows)
+            .toEqual([{ can_read: false, can_reference: true }]);
+          await admin.query(`REVOKE REFERENCES ON TABLE loyalty.members FROM "${owner}"`);
+          await expect(migrateCustomer(pool)).rejects.toMatchObject({ cause: { code: '42501' } });
+          expect((await admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(oldJournal);
+          expect((await admin.query("SELECT to_regclass('customer.loyalty_memberships') AS name")).rows[0].name).toBeNull();
+          await admin.query(`GRANT REFERENCES ON TABLE loyalty.members TO "${owner}"`);
           await migrateCustomer(pool);
+          expect((await pool.query(`SELECT rolsuper,rolbypassrls,
+            has_table_privilege(current_user,'loyalty.operations','SELECT') AS can_read_operations
+            FROM pg_roles WHERE rolname=current_user`)).rows)
+            .toEqual([{ rolsuper: false, rolbypassrls: false, can_read_operations: false }]);
+          expect((await admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(9);
           expect((await admin.query(`SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             WHERE n.nspname='customer' AND c.relname=ANY($1) AND c.relrowsecurity AND c.relforcerowsecurity`, [[...sources, 'session_publications']])).rows[0].n).toBe(9);
         } finally { spy.mockRestore(); await drain(); }

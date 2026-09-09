@@ -22,7 +22,7 @@ integration('protected access migration 0006 → 0007', () => {
     const repo = new PostgresCustomerIdentityRepository(fixture.app);
     await assertCustomerMigrationsCurrent(fixture.app);
     const history = (await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-    expect(history).toHaveLength(8); expect(history.slice(0, 7)).toEqual(oldHistory);
+    expect(history).toHaveLength(9); expect(history.slice(0, 7)).toEqual(oldHistory);
     expect(await Promise.all(tables.map(async t => (await fixture!.admin.query(`SELECT * FROM customer.${t} ORDER BY 1`)).rows))).toEqual(oldData);
     expect(await repo.authenticate(account.selection)).toEqual(account.session);
     const binding = await prepareAccessTestIntent(repo, account.input);
