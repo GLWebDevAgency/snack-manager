@@ -9,7 +9,7 @@ import type { RequestHandler } from 'express';
 import type { Pool } from 'pg';
 import type { z } from 'zod';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerAccountResponses, CustomerAccountEnvelopes, type CustomerAccountAction, type CustomerAccountEnvelope,
+import { CUSTOMER_LOYALTY_NOTICE_VERSION, CustomerAccountResponses, CustomerAccountEnvelopes, type CustomerAccountAction, type CustomerAccountEnvelope,
   type CustomerProtectionRequest, type CustomerRecoveryRequest } from '@sm/contracts';
 import { PostgresCustomerIdentityRepository } from '@sm/customer';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
@@ -22,6 +22,8 @@ import type { PhoneVerificationTransport } from './phone-verification.port';
 import { customerPasskeyFixture } from './customer-passkey.test-fixture';
 import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 import type { customerOrdersMongoFixture } from '../orders/customer-orders.test-fixture';
+import { LoyaltyCryptoAdapter } from '@sm/loyalty';
+import { CustomerLoyaltyService } from './customer-loyalty.service';
 
 // Real signed HTTP -> Nest guard/controller/runtime/core -> migrated PostgreSQL
 // under a NOSUPERUSER/NOBYPASSRLS role. Only tenant lookup, HTTP rate limiting,
@@ -30,7 +32,7 @@ import type { customerOrdersMongoFixture } from '../orders/customer-orders.test-
 // Loss injection destroys the HTTP response only after the controller has the
 // real committed result. It never fabricates a business or repository result.
 const integration = process.env.CUSTOMER_TEST_DATABASE_URL ? describe : describe.skip;
-type DatabaseFixture = { app: Pool; admin: Pool; close(): Promise<void> };
+type DatabaseFixture = { app: Pool; admin: Pool; role: string; close(): Promise<void> };
 type Sign = (input: { key: Uint8Array; slug: string; action: string; origin: string; clientIp: string; body: string }) => Record<string, string>;
 type Result<A extends CustomerAccountAction> = z.output<(typeof CustomerAccountResponses)[A]>;
 const phones = ['+33612345678', '+33687654321'] as const;
@@ -44,8 +46,14 @@ const provider = {
 const human = { verify: vi.fn().mockResolvedValue(true) };
 const config = new ConfigService();
 let commerceCheckout: OnlineOrderCheckoutService | undefined;
+let loyaltyEnabled = false;
+let tenantStatus = 'trial';
+const loyaltyCrypto = new LoyaltyCryptoAdapter({ encryptionKeyBase64: Buffer.alloc(32, 17).toString('base64'),
+  phoneLookupKeyBase64: Buffer.alloc(32, 43).toString('base64'), operationFingerprintKeyBase64: Buffer.alloc(32, 91).toString('base64'),
+  qrTokenDerivationKeyBase64: Buffer.alloc(32, 127).toString('base64') });
 const query = { read: () => query, readConcern: () => query, maxTimeMS: () => query, lean: () => query,
-  exec: async () => ({ _id: env.SM_CUSTOMER_PILOT_TENANT_ID, slug: 'fixture', account: { status: 'trial' } }) };
+  exec: async () => ({ _id: env.SM_CUSTOMER_PILOT_TENANT_ID, slug: 'fixture', account: { status: tenantStatus },
+    standaloneLoyalty: loyaltyEnabled, onlineOrdering: false, onlineDelivery: false, plan: null }) };
 
 @Module({ controllers: [CustomerAccountController], providers: [CustomerAccountGuard, CustomerAccountRuntime,
   { provide: ConfigService, useValue: config },
@@ -54,6 +62,7 @@ const query = { read: () => query, readConcern: () => query, maxTimeMS: () => qu
   { provide: CustomerAccountHumanVerifier, useValue: human },
   { provide: CUSTOMER_IDENTITY_REPOSITORY, useFactory: () => new PostgresCustomerIdentityRepository(database.app) },
   { provide: CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, useValue: () => provider },
+  { provide: CustomerLoyaltyService, useFactory: () => new CustomerLoyaltyService(database.app, loyaltyCrypto) },
   { provide: OnlineOrderCheckoutService, useValue: {
     createForCustomer: (...args: Parameters<OnlineOrderCheckoutService['createForCustomer']>) => commerceCheckout!.createForCustomer(...args),
     listForCustomer: (...args: Parameters<OnlineOrderCheckoutService['listForCustomer']>) => commerceCheckout!.listForCustomer(...args),
@@ -88,6 +97,9 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     const fixture = await import(/* @vite-ignore */ fixturePath) as { customerTestFixture(raw: unknown): Promise<DatabaseFixture> };
     database = await fixture.customerTestFixture(process.env.CUSTOMER_TEST_DATABASE_URL);
     try {
+      if (!/^customer_test_[a-f0-9]{32}$/.test(database.role)) throw new Error('Disposable customer role required');
+      await database.admin.query(`GRANT USAGE ON SCHEMA loyalty TO "${database.role}";
+        GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA loyalty TO "${database.role}"`);
       const webPath = resolve(process.cwd(), '../web/src/app/r/[slug]/compte/customer-relay.ts');
       sign = (await import(/* @vite-ignore */ webPath) as { customerRelayHeaders: Sign }).customerRelayHeaders;
       vi.spyOn(config, 'get').mockImplementation(name => env[String(name)]);
@@ -110,6 +122,8 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
   beforeEach(async () => {
     dropAction = null;
     commerceCheckout = undefined;
+    loyaltyEnabled = false;
+    tenantStatus = 'trial';
     env = customerTestEnvironment();
     const parent = `AC${randomUUID().replaceAll('-', '')}`, tenant = randomBytes(12).toString('hex');
     env.SM_CUSTOMER_VERIFY_ACCOUNT_SID = parent; env.SM_CUSTOMER_PILOT_TENANT_ID = tenant;
@@ -197,6 +211,103 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     const protection = await prepareProtection(f, check.request.checkId), activated = await protection.activate();
     return { binding, f, protection, activated };
   }
+  async function loyaltyProgram() {
+    const id = randomUUID(), tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!;
+    const client = await database.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("INSERT INTO loyalty.programs(id,tenant_ref,status) VALUES($1,$2,'active')", [id, tenantRef]);
+      await client.query(`INSERT INTO loyalty.program_versions(tenant_ref,program_id,version,name,mechanism,
+        spend_step_cents,units_per_step,unit_label_singular,unit_label_plural,terms_summary)
+        VALUES($1,$2,1,'Programme de recette','points',100,1,'point','points','Un point par euro éligible.')`, [tenantRef, id]);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    return id;
+  }
+
+  it('creates one account-owned loyalty card through signed HTTP, recovers response loss and survives passkey reconnection without SMS', async () => {
+    const a = await protectedAccount(); const programId = await loyaltyProgram();
+    const access = { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token };
+    expect((await ok('loyalty', { ...access, request: { step: 'view' } })).state).toBe('unavailable');
+    // Standalone loyalty works without any ordering/delivery subscription.
+    loyaltyEnabled = true;
+    expect(await ok('loyalty', { ...access, request: { step: 'view' } })).toMatchObject({ state: 'available', profileReady: false });
+    await ok('name', { ...access, request: { name: 'Mina', expectedRevision: 0 } });
+    const visible = await ok('loyalty', { ...access, request: { step: 'view' } });
+    expect(visible).toMatchObject({ state: 'available', profileReady: true, program: { id: programId, version: 1 } });
+    const request = { step: 'join' as const, operationId: randomUUID(), programId, rulesVersion: 1,
+      termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true } as const;
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+    dropAction = 'loyalty'; await expect(http('loyalty', { ...access, request })).rejects.toBeDefined();
+    expect(dropAction).toBeNull();
+    const recovered = await ok('loyalty', { ...access, request: { step: 'view' } });
+    if (recovered.state !== 'member') throw new Error('Expected durable membership');
+    expect(recovered.member.balanceUnits).toBe(0); expect(recovered).not.toHaveProperty('qrToken');
+    expect(await ok('loyalty', { ...access, request })).toEqual(recovered);
+    await ok('name', { ...access, request: { name: 'Mina D.', expectedRevision: 1 } });
+    expect(await ok('loyalty', { ...access, request })).toEqual(recovered);
+    expect(await ok('loyalty', { ...access, request: { ...request, operationId: randomUUID() } })).toEqual(recovered);
+    const card = await ok('loyalty', { ...access, request: { step: 'card' } });
+    if (card.state !== 'card') throw new Error('Expected protected QR');
+    const counts = (await database.admin.query(`SELECT
+      (SELECT count(*)::int FROM customer.loyalty_memberships WHERE tenant_ref=$1) AS links,
+      (SELECT count(*)::int FROM loyalty.members WHERE tenant_ref=$1 AND enrollment_handoff_at=joined_at) AS handed,
+      (SELECT count(*)::int FROM loyalty.membership_events WHERE tenant_ref=$1 AND kind='joined') AS joined,
+      (SELECT count(*)::int FROM loyalty.ledger_entries WHERE tenant_ref=$1) AS gains,
+      (SELECT count(*)::int FROM loyalty.consent_events WHERE tenant_ref=$1) AS marketing`, [env.SM_CUSTOMER_PILOT_TENANT_ID])).rows[0];
+    expect(counts).toEqual({ links: 1, handed: 1, joined: 1, gains: 0, marketing: 0 });
+    await ok('logout', { ...access, request: { all: true } });
+    for (const step of ['view', 'card'] as const) {
+      const denied = await http('loyalty', { ...access, request: { step } });
+      expect(denied.status).toBe(401); const body = await denied.text();
+      expect(body).not.toContain(card.qrToken); expect(body).not.toContain(card.member.id);
+    }
+    const login = await passkeyAttempt(a.binding, a.protection.credentialId);
+    const logged = await ok('passkey', login.assertion);
+    if (logged.state !== 'authenticated') throw new Error('Expected protected reconnection');
+    expect(await ok('loyalty', { ...a.binding, ...login.publication, sessionToken: logged.token, request: { step: 'card' } }))
+      .toMatchObject({ state: 'card', member: card.member, qrToken: card.qrToken });
+    expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it('does not publish a real card after logout between service completion and the final HTTP fence', async () => {
+    const a = await protectedAccount(); const programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const access = { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token };
+    await ok('name', { ...access, request: { name: 'Mina', expectedRevision: 0 } });
+    await ok('loyalty', { ...access, request: { step: 'join', operationId: randomUUID(), programId, rulesVersion: 1,
+      termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true } });
+    const service = app!.get(CustomerLoyaltyService); const execute = service.execute.bind(service);
+    const read = vi.spyOn(service, 'execute').mockImplementationOnce(async input => {
+      const result = await execute(input); expect(result.state).toBe('card');
+      await ok('logout', { ...access, request: { all: true } }); return result;
+    });
+    try {
+      const response = await http('loyalty', { ...access, request: { step: 'card' } });
+      expect(response.status).toBe(401); expect(await response.text()).not.toMatch(/qrToken|balanceUnits|member/);
+      expect(response.headers.get('cache-control')).toContain('no-store'); expect(read).toHaveBeenCalledTimes(1);
+    } finally { read.mockRestore(); }
+  }, 30_000);
+  it('refuses the current QR when the tenant churns just before the final publication fence', async () => {
+    const a = await protectedAccount(); const programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const access = { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token };
+    await ok('name', { ...access, request: { name: 'Mina', expectedRevision: 0 } });
+    await ok('loyalty', { ...access, request: { step: 'join', operationId: randomUUID(), programId, rulesVersion: 1,
+      termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true } });
+    const service = app!.get(CustomerLoyaltyService); const execute = service.execute.bind(service);
+    let reachedFence = false;
+    const read = vi.spyOn(service, 'execute').mockImplementationOnce(input => execute({ ...input,
+      publicationFence: fence => input.publicationFence(async () => {
+        reachedFence = true; tenantStatus = 'churned'; await fence();
+      }),
+    }));
+    try {
+      const response = await http('loyalty', { ...access, request: { step: 'card' } });
+      expect(reachedFence).toBe(true); expect(response.status).toBe(503);
+      expect(await response.text()).not.toMatch(/qrToken|balanceUnits|member/);
+      expect(response.headers.get('cache-control')).toContain('no-store');
+    } finally { read.mockRestore(); }
+  }, 30_000);
   async function commerceFixture() {
     const fixturePath = resolve(process.cwd(), 'src/modules/orders/customer-orders.test-fixture.ts');
     const fixture = await import(/* @vite-ignore */ fixturePath) as { customerOrdersMongoFixture: typeof customerOrdersMongoFixture };

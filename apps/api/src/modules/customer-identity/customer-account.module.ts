@@ -9,11 +9,12 @@ import { CustomerAccountRuntime, CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICA
   type CustomerVerificationTransportFactory } from './customer-account.runtime';
 import { TwilioVerifyTransport } from './twilio-verify.transport';
 import { OrdersModule } from '../orders/orders.module';
+import { CustomerLoyaltyService } from './customer-loyalty.service';
 
 @Module({
   imports: [OrdersModule],
   controllers: [CustomerAccountController],
-  providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier,
+  providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier, CustomerLoyaltyService,
     { provide: CUSTOMER_HUMAN_FETCH, useValue: globalThis.fetch },
     { provide: CUSTOMER_IDENTITY_REPOSITORY, inject: [POSTGRES_POOL],
       useFactory: (pool: Pool) => new PostgresCustomerIdentityRepository(pool) },
