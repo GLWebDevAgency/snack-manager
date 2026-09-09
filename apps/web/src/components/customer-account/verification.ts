@@ -98,8 +98,10 @@ export function createCustomerVerification(port: Port) {
   return {
     pause() { generation++; },
     begin: () => run(async (record, version) => {
+      if (record.access && !['closed', 'expired'].includes(record.access.phase)) return { kind: 'blocked' };
       if (record.verification && !['closed', 'expired', 'failed'].includes(record.verification.phase)) return { kind: 'uncertain' };
       const next: PreparedRecord = { ...record, verification: { operationId: port.uuid(), phase: 'preparing', challengeId: null, checkId: null, expiresAt: null } };
+      delete next.access;
       await port.journal.write(next, record); port.changed?.();
       const view = CustomerVerificationIntentSchema.parse(await request(next, 'intent', { step: 'prepare', operationId: next.verification.operationId }, version));
       if (view.operationId !== next.verification.operationId || view.state !== 'open') throw new Error('Intent unconfirmed');
@@ -107,6 +109,7 @@ export function createCustomerVerification(port: Port) {
       return { kind: 'prepared' };
     }),
     start: (phone: string, turnstileToken: string) => run(async (record, version) => {
+      if (record.access) return { kind: 'blocked' };
       if (record.verification?.phase !== 'prepared') return { kind: 'blocked' };
       const body = CustomerAccountBrowserRequests.start.safeParse({ phone, turnstileToken, operationId: record.verification.operationId });
       if (!body.success) return { kind: 'invalid' };
@@ -116,6 +119,7 @@ export function createCustomerVerification(port: Port) {
       return { kind: 'code_required' };
     }),
     check: (code: string) => run(async (record, version) => {
+      if (record.access) return { kind: 'blocked' };
       const choice = record.verification;
       if (!choice || !['code', 'incorrect'].includes(choice.phase) || !choice.challengeId) return { kind: 'blocked' };
       const body = CustomerAccountBrowserRequests.check.safeParse({ operationId: choice.operationId,
@@ -126,12 +130,13 @@ export function createCustomerVerification(port: Port) {
       return result(next, version);
     }),
     resume: () => run(async (record, version) => {
+      if (record.access) return { kind: 'blocked' };
       if (!record.verification) return { kind: 'absent' };
       if (record.verification.phase === 'closing') return close(record as PreparedRecord, version);
       if (['closed', 'expired', 'failed'].includes(record.verification.phase)) return { kind: record.verification.phase as 'closed' | 'expired' | 'failed' };
       return result(record as PreparedRecord, version);
     }),
-    close: () => run(async (record, version) => record.verification ? close(record as PreparedRecord, version) : { kind: 'absent' }),
+    close: () => run(async (record, version) => record.access ? { kind: 'blocked' } : record.verification ? close(record as PreparedRecord, version) : { kind: 'absent' }),
   };
 }
 

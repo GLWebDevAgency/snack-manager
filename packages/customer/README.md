@@ -95,8 +95,8 @@ validité ne dépend pas de la courte expiration de la preuve de reprise.
 
 `0005_customer_session_publications` matérialise le reçu commun immuable
 `phone | passkey | recovery`, lié à la session, à son navigateur/génération et à
-l'intention exacte. Ce repository ne vérifie aucune passkey et ne permet encore
-aucune récupération par code secours. Toute publication écrit ce reçu dans la même transaction ;
+l'intention exacte. Le repository ne vérifie pas lui-même la cryptographie
+WebAuthn : il reçoit le résultat du vérificateur API. Toute publication écrit ce reçu dans la même transaction ;
 les lectures privées, les modifications et la clôture ne fabriquent plus de
 challenge Verify pour représenter une publication.
 
@@ -151,8 +151,55 @@ La migration ne réécrit aucun compte historique : son `enrollment_id` reste NU
 Un nouvel INSERT sans cette référence échoue, y compris celui du writer 0005.
 Déployer pilote fermé et remplacer toutes les instances avant réouverture ; un
 rollback applicatif reste fermé, sans down migration ni suppression des preuves.
-Reconnexion par clé et consommation du secours ne sont pas encore implémentées
-par ce lot PostgreSQL ; il ne constitue pas un parcours public complet.
+Le lot `0006` seul n'implémente ni reconnexion ni consommation du secours.
+Le raccord PostgreSQL `0007` ci-dessous les ajoute, sans constituer à lui seul
+un parcours navigateur public ni autoriser son activation.
+
+## Reconnexion et remise en protection — 0007
+
+`credential_access_attempts` conserve options, claims single-flight et résultats
+terminaux. La recherche de clé exige parent, tenant, RP et userHandle exacts.
+Une vérification locale rejetée devient un reçu `failed`; un code de secours
+incorrect devient `denied`. Une tentative incertaine n'autorise ni un nouvel ID
+automatique ni la réexécution du vérificateur. Les erreurs de quota n'admettent
+aucune tentative. Le journal d'intention existant et sa preuve privée restent
+obligatoires ; les UUID publics seuls ne donnent aucune autorité.
+
+`account_recovery_grants` réserve un compte exclusivement pour cette intention
+pendant ses dix minutes absolues. Le secours source reste valide et non consommé.
+Fermeture/expiration libèrent seulement la réservation lors d'une nouvelle
+demande explicite ; ni le compte, ni sa clé, ni ses sessions ne sont supprimés.
+La nouvelle demande conserve tous les essais déjà comptabilisés. La clé d'origine
+reste utilisable jusqu'au remplacement final ; ce n'est pas une révocation
+anticipée d'un appareil potentiellement compromis.
+
+La remise en protection exige une nouvelle registration, une assertion distincte
+vérifiée, puis un nouveau secours confirmé. Trois émissions relatives au maximum,
+aucun réaffichage du clair, un activationId figé et cinq confirmations incorrectes
+maximum. Le commit final consomme le secours source par CAS, révoque l'ancienne
+clé et toutes les anciennes sessions, insère la nouvelle clé et le secours à
+`sourceVersion + 1`, puis publie une session `recovery` et son reçu commun. Le
+grant activé est immuable et contrôlé à COMMIT. Toute erreur/expiration provoque
+le rollback intégral ; il ne reste ni secours brûlé ni révocation partielle.
+
+Une clé révoquée est conservée ; seul l'index des clés actives est unique par
+compte. Les compteurs de clé et versions de compte sont comparés aux snapshots
+capturés avant vérification ; un ancien login en vol ne passe plus après le
+remplacement. Un résultat exact restaure seulement sa session encore courante,
+sans prolongation. Les routes privées restent indépendantes du TTL dix minutes,
+avec leurs cookies et sélecteurs de publication exacts (attemptId pour login,
+activationId pour récupération). Aucun faux check SMS ni adoption d'un ancien
+compte par numéro de téléphone.
+
+`credential_auth_reservations` est un journal immuable de métadonnées
+pseudonymisées, RLS parent pour compter entre restaurants, écriture limitée au
+tenant courant. Sous le verrou parent, avant cryptographie : cinq admissions
+par intention, vingt par navigateur/heure, trente par source/quinze minutes,
+trois cents par restaurant/heure et mille par parent/heure. SQL est l'horloge
+autoritaire. Rejeux sans nouvelle réservation ; aucune suppression ou remise à
+zéro, aucune lecture de crédit ou consommation Twilio. Les anciens comptes et
+preuves `0006` sont préservés ; le pilote doit rester fermé pendant migration
+et remplacement des instances. Pas de down migration destructive.
 
 Plafonds conservateurs du pilote : 128 préparations et 128 intentions persistées
 par parent/restaurant ; trois preuves d'intention non expirées par navigateur,

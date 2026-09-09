@@ -4,7 +4,7 @@ import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccou
   type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
 import { selectedCustomerBrowser, selectedCustomerPublication } from './browser-journal';
 
-type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "protection" | "session" | "name" | "logout";
+type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "protection" | "passkey" | "recovery" | "session" | "name" | "logout";
 export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
 export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
   selection?: () => Promise<CustomerAccountSelection | null>;
@@ -28,8 +28,8 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
   const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
     if (!valid) throw new CustomerAccountHttpError(400);
-    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", session: "session", name: "profil", logout: "session" };
-    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
+    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", passkey: "cle-acces", recovery: "secours", session: "session", name: "profil", logout: "session" };
+    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", passkey: "POST", recovery: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
     let browserRef: string | null = null;
     let expected: CustomerAccountPublication | null = null;
     if (action !== 'status' && action !== 'browser') {
@@ -75,7 +75,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
     try {
       while (true) {
         const next = await reader.read(); if (next.done) break;
-        bytes += next.value.byteLength; if (bytes > (action === 'protection' ? 65_536 : 4_096)) throw new CustomerAccountHttpError(502);
+        bytes += next.value.byteLength; if (bytes > (['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 4_096)) throw new CustomerAccountHttpError(502);
         text += decoder.decode(next.value, { stream: true });
       }
       complete = true;

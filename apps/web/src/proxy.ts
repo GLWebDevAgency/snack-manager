@@ -388,7 +388,7 @@ function verdictPourRestaurant(pathname: string, slug: string): Verdict {
 
   // Account entry points are individually allowed. A future page or nested
   // endpoint must not inherit permission to serve another tenant's account.
-  if (["capacites", "navigateur", "intention", "verification", "confirmation", "resultat", "protection", "session", "profil"]
+  if (["capacites", "navigateur", "intention", "verification", "confirmation", "resultat", "protection", "cle-acces", "secours", "session", "profil"]
     .some(action => pathname === `/r/${slug}/compte/${action}`)) return "laisser";
 
   if (

@@ -9,7 +9,8 @@ import type { RequestHandler } from 'express';
 import type { Pool } from 'pg';
 import type { z } from 'zod';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerAccountResponses, type CustomerAccountAction, type CustomerAccountEnvelope, type CustomerProtectionRequest } from '@sm/contracts';
+import { CustomerAccountResponses, CustomerAccountEnvelopes, type CustomerAccountAction, type CustomerAccountEnvelope,
+  type CustomerProtectionRequest, type CustomerRecoveryRequest } from '@sm/contracts';
 import { PostgresCustomerIdentityRepository } from '@sm/customer';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { CustomerAccountController } from './customer-account.controller';
@@ -162,7 +163,8 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     const registrationId = randomUUID(), assertionId = randomUUID(), activationId = randomUUID();
     const registration = await call({ ...selected, step: 'registration-options', registrationId });
     if (registration.state !== 'registration-options') throw new Error('Expected options');
-    const registered = await call({ ...selected, step: 'register', registrationId, response: await keys!.register(registration.options) });
+    const credential = await keys!.register(registration.options);
+    const registered = await call({ ...selected, step: 'register', registrationId, response: credential });
     expect(registered.state).toBe('enrollment');
     const assertion = await call({ ...selected, step: 'assertion-options', assertionId });
     if (assertion.state !== 'assertion-options') throw new Error('Expected assertion');
@@ -172,12 +174,117 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     const envelope = { ...f.privateBinding, request: { ...selected, step: 'activate' as const,
       activationId, recoveryVersion: recovery.enrollment.recoveryVersion, code: recovery.code } };
     const resultEnvelope = { ...f.privateBinding, request: { ...selected, step: 'activation-result' as const, activationId } };
-    return { envelope, resultEnvelope, activationId, publication: f.publication(activationId),
+    return { envelope, resultEnvelope, activationId, credentialId: credential.id, code: recovery.code, publication: f.publication(activationId),
       activate: async () => { const result = await ok('protection', envelope);
         if (result.state !== 'authenticated') throw new Error('Expected activation'); return result; },
       recover: async () => { const result = await ok('protection', resultEnvelope);
         if (result.state !== 'authenticated') throw new Error('Expected activation receipt'); return result; } };
   }
+
+  async function protectedAccount() {
+    const binding = await browser(), f = await intent(binding), pending = await ok('start', f.start());
+    const check = f.check(pending.challengeId); expect((await ok('check', check)).state).toBe('enrollment');
+    const protection = await prepareProtection(f, check.request.checkId), activated = await protection.activate();
+    return { binding, f, protection, activated };
+  }
+  async function passkeyAttempt(binding: Awaited<ReturnType<typeof browser>>, chosenCredentialId?: string) {
+    const f = await intent(binding), attemptId = randomUUID();
+    const optionsEnvelope = { ...f.privateBinding, request: { step: 'options' as const, operationId: f.operationId, attemptId } };
+    const options = await ok('passkey', optionsEnvelope);
+    if (options.state !== 'options') throw new Error('Expected discoverable options');
+    expect(options.options.allowCredentials).toEqual([]);
+    const response = await keys!.authenticate(options.options, chosenCredentialId);
+    const assertion = CustomerAccountEnvelopes.passkey.parse({ ...f.privateBinding,
+      request: { step: 'assert', operationId: f.operationId, attemptId, response } });
+    const result = { ...f.privateBinding, request: { step: 'result' as const, operationId: f.operationId, attemptId } };
+    return { f, attemptId, optionsEnvelope, assertion, result, publication: f.publication(attemptId) };
+  }
+  async function prepareRecovery(f: Awaited<ReturnType<typeof intent>>, attemptId: string) {
+    const selected = { operationId: f.operationId, attemptId };
+    const call = (request: CustomerRecoveryRequest) => ok('recovery', { ...f.privateBinding, request });
+    const registrationId = randomUUID(), assertionId = randomUUID(), activationId = randomUUID();
+    const options = await call({ ...selected, step: 'registration-options', registrationId });
+    if (options.state !== 'registration-options') throw new Error('Expected replacement key options');
+    const credential = await keys!.register(options.options);
+    expect((await call({ ...selected, step: 'register', registrationId, response: credential })).state).toBe('recovery');
+    const assertion = await call({ ...selected, step: 'assertion-options', assertionId });
+    if (assertion.state !== 'assertion-options') throw new Error('Expected replacement assertion');
+    expect((await call({ ...selected, step: 'assert', assertionId, response: await keys!.authenticate(assertion.options) })).state).toBe('recovery');
+    const code = await call({ ...selected, step: 'recovery-code', rotationId: randomUUID(), expectedVersion: 0 });
+    if (code.state !== 'recovery-code' || !code.code) throw new Error('Expected replacement code');
+    return { credentialId: credential.id, code: code.code, publication: f.publication(activationId),
+      activate: { ...f.privateBinding, request: { ...selected, step: 'activate' as const, activationId, recoveryVersion: 1, code: code.code } },
+      result: { ...f.privateBinding, request: { ...selected, step: 'activation-result' as const, activationId } } };
+  }
+
+  it('logs in with the native saved key after logout and recovers lost HTTP publication without any SMS funding', async () => {
+    const a = await protectedAccount();
+    await ok('name', { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token,
+      request: { name: 'Mina', expectedRevision: 0 } });
+    await ok('logout', { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token, request: { all: false } });
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+    const login = await passkeyAttempt(a.binding, a.protection.credentialId);
+    dropAction = 'passkey'; await expect(http('passkey', login.assertion)).rejects.toBeDefined();
+    expect(dropAction).toBeNull();
+    const recovered = await ok('passkey', login.result);
+    if (recovered.state !== 'authenticated') throw new Error('Expected passkey session');
+    expect(await ok('passkey', login.result)).toEqual(recovered);
+    expect(recovered.view.profile).toMatchObject({ name: 'Mina', phoneE164: phones[0], revision: 1 });
+    expect(await ok('session', { ...a.binding, ...login.publication, sessionToken: recovered.token, request: {} })).toEqual(recovered.view);
+    expect(await counts()).toEqual({ sends: 1, accounts: 1, sessions: 2, checks: 1 });
+    expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+    await ok('logout', { ...a.binding, ...login.publication, sessionToken: recovered.token, request: { all: true } });
+    // The public receipt may report a terminal failure; it must never contain
+    // a token/profile or make the revoked private publication usable again.
+    expect((await ok('passkey', login.result))).toEqual({ state: 'failed', operationId: login.f.operationId,
+      attemptId: login.attemptId, expiresAt: expect.any(Number) });
+    expect((await http('session', { ...a.binding, ...login.publication, sessionToken: recovered.token, request: {} })).status).toBe(401);
+  });
+
+  it('consumes an invalid native assertion attempt without a session and never replays a new signature under that attempt', async () => {
+    const a = await protectedAccount(), login = await passkeyAttempt(await browser(), a.protection.credentialId);
+    if (login.assertion.request.step !== 'assert') throw new Error('Expected assertion command');
+    const signature = Buffer.from(login.assertion.request.response.response.signature, 'base64url'); signature[0] = signature[0]! ^ 1;
+    const invalid = { ...login.assertion, request: { ...login.assertion.request, response: { ...login.assertion.request.response,
+      response: { ...login.assertion.request.response.response, signature: signature.toString('base64url') } } } };
+    expect((await ok('passkey', invalid)).state).toBe('failed');
+    expect((await ok('passkey', login.result)).state).toBe('failed');
+    expect((await ok('passkey', login.assertion)).state).toBe('failed');
+    expect(await counts()).toEqual({ sends: 1, accounts: 1, sessions: 1, checks: 1 });
+    expect(await ok('session', { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token, request: {} })).toEqual(a.activated.view);
+  });
+
+  it('keeps the original recovery code usable after abandonment, then atomically replaces key/code and revokes every old session', async () => {
+    const a = await protectedAccount();
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const b = await intent(await browser()), firstId = randomUUID();
+    const first = await ok('recovery', { ...b.privateBinding, request: { step: 'begin', operationId: b.operationId,
+      attemptId: firstId, code: a.protection.code } });
+    expect(first.state).toBe('recovery'); expect(first).not.toHaveProperty('view'); expect(first).not.toHaveProperty('token');
+    await b.close();
+    const c = await intent(await browser()), attemptId = randomUUID();
+    expect((await ok('recovery', { ...c.privateBinding, request: { step: 'begin', operationId: c.operationId, attemptId, code: a.protection.code } })).state).toBe('recovery');
+    const replacement = await prepareRecovery(c, attemptId);
+    expect(await counts()).toEqual({ sends: 1, accounts: 1, sessions: 1, checks: 1 });
+    expect(await ok('session', { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token, request: {} })).toEqual(a.activated.view);
+    dropAction = 'recovery'; await expect(http('recovery', replacement.activate)).rejects.toBeDefined(); expect(dropAction).toBeNull();
+    const recovered = await ok('recovery', replacement.result);
+    if (recovered.state !== 'authenticated') throw new Error('Expected recovered session');
+    expect(await ok('recovery', replacement.result)).toEqual(recovered);
+    expect((await http('session', { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token, request: {} })).status).toBe(401);
+    const oldKey = await passkeyAttempt(await browser(), a.protection.credentialId);
+    expect((await ok('passkey', oldKey.assertion)).state).toBe('failed');
+    const newKey = await passkeyAttempt(await browser(), replacement.credentialId);
+    expect((await ok('passkey', newKey.assertion)).state).toBe('authenticated');
+    const d = await intent(await browser());
+    expect((await ok('recovery', { ...d.privateBinding, request: { step: 'begin', operationId: d.operationId,
+      attemptId: randomUUID(), code: a.protection.code } })).state).toBe('failed');
+    expect((await ok('recovery', { ...d.privateBinding, request: { step: 'begin', operationId: d.operationId,
+      attemptId: randomUUID(), code: replacement.code } })).state).toBe('recovery');
+    expect(await counts()).toEqual({ sends: 1, accounts: 1, sessions: 3, checks: 1 });
+    expect(provider.start).toHaveBeenCalledTimes(1); expect(provider.check).toHaveBeenCalledTimes(1);
+  });
 
   it('restores the confirmed selector after response loss without renewing it or creating a private publication', async () => {
     const binding = await browser();

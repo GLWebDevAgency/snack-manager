@@ -7,7 +7,7 @@ import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccou
   type CustomerEnrollment } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 
-type Action = 'status' | 'browser' | 'intent' | 'start' | 'check' | 'recover' | 'protection' | 'session' | 'name' | 'logout';
+type Action = 'status' | 'browser' | 'intent' | 'start' | 'check' | 'recover' | 'protection' | 'passkey' | 'recovery' | 'session' | 'name' | 'logout';
 export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -15,9 +15,9 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
 const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
-  check: 'confirmation', recover: 'resultat', protection: 'protection', session: 'session', name: 'profil', logout: 'session' };
+  check: 'confirmation', recover: 'resultat', protection: 'protection', passkey: 'cle-acces', recovery: 'secours', session: 'session', name: 'profil', logout: 'session' };
 const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', intent: 'POST', start: 'POST', check: 'POST',
-  recover: 'POST', protection: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE' };
+  recover: 'POST', protection: 'POST', passkey: 'POST', recovery: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE' };
 
 function privateResponse(response: NextResponse) {
   response.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -191,7 +191,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (browser.kind === 'invalid' || session.kind === 'invalid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Les accès enregistrés sont ambigus. Fermez les autres accès avant de réessayer.');
     }
-    if (['intent', 'start', 'check', 'recover', 'protection'].includes(action) && browser.kind !== 'valid') {
+    if (['intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery'].includes(action) && browser.kind !== 'valid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Le navigateur doit confirmer son accès avant de continuer.');
     }
     if (['session', 'name', 'logout'].includes(action)
@@ -214,7 +214,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const intentRequest = action === 'intent' ? CustomerAccountBrowserRequests.intent.parse(parsed.data) : null;
     const candidateProof = intentRequest?.step === 'prepare' ? randomBytes(32).toString('base64url') : null;
     const selectedOperation = 'operationId' in parsed.data ? parsed.data.operationId : null;
-    const proof = ['start', 'check', 'recover', 'protection'].includes(action) && selectedOperation
+    const proof = ['start', 'check', 'recover', 'protection', 'passkey', 'recovery'].includes(action) && selectedOperation
       ? readNamedCookie(request, intentCookieName(slug, selectedOperation)) : null;
     if (proof?.kind === 'absent') return unauthorized();
     if (proof?.kind === 'invalid') return failure(409, 'CUSTOMER_CONFLICT', 'La preuve de cette tentative est ambiguë.');
@@ -240,7 +240,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       ...(intentRequest ? { candidateProof } : {}),
       ...(publication?.success ? publication.data : {}),
       ...(proof?.kind === 'valid' ? { intentProof: proof.value } : {}),
-      ...(['intent', 'start', 'check', 'recover', 'protection', 'session', 'name', 'logout'].includes(action)
+      ...(['intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout'].includes(action)
         && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
       ...(action === 'check' ? { sessionToken: session.kind === 'valid' ? session.value : null }
         : ['session', 'name', 'logout'].includes(action) && session.kind === 'valid' ? { sessionToken: session.value } : {}),
@@ -277,7 +277,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       return unavailable();
     }
     if (action === 'logout') { discard(response); return unavailable(); }
-    const raw = await boundedJson(response, signal, action === 'protection' ? 65_536 : 16_384);
+    const raw = await boundedJson(response, signal, ['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 16_384);
     const output = CustomerAccountResponses[apiAction].safeParse(raw);
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
     if (action === 'browser') {
@@ -345,6 +345,30 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       const result = privateResponse(NextResponse.json({ state: 'authenticated', view }));
       result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(view.expiresAt) });
       return result;
+    }
+    if (action === 'passkey' || action === 'recovery') {
+      const result = action === 'passkey' ? CustomerAccountResponses.passkey.parse(output.data) : CustomerAccountResponses.recovery.parse(output.data);
+      const selected = action === 'passkey' ? CustomerAccountBrowserRequests.passkey.parse(parsed.data) : CustomerAccountBrowserRequests.recovery.parse(parsed.data);
+      if (result.state === 'authenticated') {
+        const publicationId = action === 'passkey' && (selected.step === 'assert' || selected.step === 'result') ? selected.attemptId
+          : (selected.step === 'activate' || selected.step === 'activation-result') ? selected.activationId : null;
+        if (!publicationId || result.operationId !== selected.operationId || result.publicationId !== publicationId) return unavailable();
+        const remaining = result.view.expiresAt - Date.now();
+        if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+        const { token, ...publicResult } = result;
+        const response = privateResponse(NextResponse.json(publicResult));
+        response.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(result.view.expiresAt) });
+        return response;
+      }
+      const metadata = 'recovery' in result ? result.recovery : result;
+      if (metadata.operationId !== selected.operationId || metadata.attemptId !== selected.attemptId
+        || metadata.expiresAt > Date.now() + 600_000 || (result.state !== 'failed' && metadata.expiresAt <= Date.now())) return unavailable();
+      if (result.state === 'options' && (action !== 'passkey' || selected.step !== 'options' || result.options.allowCredentials.length !== 0)) return unavailable();
+      if (result.state === 'registration-options' && (selected.step !== 'registration-options' || result.registrationId !== selected.registrationId)) return unavailable();
+      if (result.state === 'assertion-options' && (selected.step !== 'assertion-options' || result.assertionId !== selected.assertionId)) return unavailable();
+      if (result.state === 'recovery-code' && (selected.step !== 'recovery-code' || result.recovery.recoveryVersion !== selected.expectedVersion + 1)) return unavailable();
+      // A repair grant never authenticates or projects the existing account.
+      return privateResponse(NextResponse.json(result));
     }
     if (action === 'protection') {
       const protectedResult = CustomerAccountResponses.protection.parse(output.data);

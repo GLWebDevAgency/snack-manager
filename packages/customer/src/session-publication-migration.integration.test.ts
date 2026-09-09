@@ -72,7 +72,7 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
         [randomUUID(), legacy!.parentRef, legacy!.tenantRef])).rejects.toMatchObject({ code: '23514' });
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT * FROM customer.session_publications')).rows).toEqual(previous);
-      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(7);
+      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(8);
     } finally { await fixture.close(); }
   }, 20_000);
   it('backfills only exact live approvals after intent expiry; restores FORCE on success and failed migration', async () => {

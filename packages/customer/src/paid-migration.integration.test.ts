@@ -55,7 +55,7 @@ integration('paid migration — historical rows and old SQL writer, native Postg
       expect(await repo.settleSend({ ...input, verificationSid: `VE${randomUUID().replaceAll('-', '')}` })).toBeNull();
       expect(await repo.claimCheck({ ...input, checkId: randomUUID() })).toBeNull();
       const history = (await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-      expect(history).toHaveLength(7); expect(history[0].hash).toBe(originalHash);
+      expect(history).toHaveLength(8); expect(history[0].hash).toBe(originalHash);
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(history);
     } finally { await fixture.close(); }

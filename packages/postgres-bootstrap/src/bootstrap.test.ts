@@ -31,6 +31,7 @@ const browserPreparationMigration = 1_788_894_000_000;
 const verificationIntentsMigration = 1_788_901_200_000;
 const sessionPublicationsMigration = 1_788_908_400_000;
 const protectedEnrollmentMigration = 1_788_915_600_000;
+const protectedAccessMigration = 1_788_922_800_000;
 const protectedEnrollmentObjects = [
   ['table', 'registration_enrollments'],
   ['table', 'passkey_credentials'],
@@ -40,6 +41,14 @@ const protectedEnrollmentObjects = [
   ['function', 'preserve_passkey_credential'],
   ['function', 'preserve_recovery_code'],
   ['function', 'preserve_check_outcome'],
+] as const;
+const protectedAccessObjects = [
+  ['table', 'credential_access_attempts'],
+  ['table', 'account_recovery_grants'],
+  ['table', 'credential_auth_reservations'],
+  ['function', 'preserve_credential_access_attempt'],
+  ['function', 'preserve_account_recovery_grant'],
+  ['function', 'preserve_credential_auth_reservation'],
 ] as const;
 
 function result<T extends Record<string, unknown>>(rows: T[]): QueryResult<T> {
@@ -700,14 +709,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 89 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(89);
+  it('énumère exactement les 95 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(95);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(46);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(49);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(16);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(89);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(19);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(95);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -835,6 +844,16 @@ describe('manifeste PostgreSQL versionné', () => {
     expect(objects.every((object) => object.journal === 'customer')).toBe(true);
   });
 
+  it('rattache les six objets des accès protégés à la seule migration 0007', () => {
+    const objects = POSTGRES_MANAGED_OBJECTS.filter((object) =>
+      object.introducedAt === protectedAccessMigration,
+    );
+    expect(objects.map(managedObjectKey).sort()).toEqual(protectedAccessObjects.map(
+      ([kind, name]) => `${kind}:customer.${name}${kind === 'function' ? '()' : ''}`,
+    ).sort());
+    expect(objects.every((object) => object.journal === 'customer')).toBe(true);
+  });
+
   it('reprend les horodatages exacts des journaux Drizzle', () => {
     const supply = JSON.parse(
       readFileSync(resolve(__dirname, '../../supply/drizzle/meta/_journal.json'), 'utf8'),
@@ -868,6 +887,8 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(sessionPublicationsMigration);
     expect(customer.entries.find((entry) => entry.tag === '0006_customer_protected_enrollment')?.when)
       .toBe(protectedEnrollmentMigration);
+    expect(customer.entries.find((entry) => entry.tag === '0007_customer_protected_access')?.when)
+      .toBe(protectedAccessMigration);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -1094,6 +1115,9 @@ describe('préflight PostgreSQL', () => {
     ...protectedEnrollmentObjects.map(([kind, name]) => [
       'customer', protectedEnrollmentMigration, `customer.${name}${kind === 'function' ? '()' : ''}`,
     ] as const),
+    ...protectedAccessObjects.map(([kind, name]) => [
+      'customer', protectedAccessMigration, `customer.${name}${kind === 'function' ? '()' : ''}`,
+    ] as const),
   ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
@@ -1127,6 +1151,9 @@ describe('préflight PostgreSQL', () => {
     ['table', 'session_publications', 'customer.session_publications'],
     ['function', 'preserve_session_publication', 'customer.preserve_session_publication()'],
     ...protectedEnrollmentObjects.map(([kind, name]) => [
+      kind, name, `customer.${name}${kind === 'function' ? '()' : ''}`,
+    ] as const),
+    ...protectedAccessObjects.map(([kind, name]) => [
       kind, name, `customer.${name}${kind === 'function' ? '()' : ''}`,
     ] as const),
   ] as const)('refuse le journal navigateur %s présent avant sa migration', async (kind, name, target) => {

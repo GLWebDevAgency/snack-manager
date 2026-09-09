@@ -12,6 +12,11 @@ import { lockIntentParent } from './intent-queries';
 import { prepareIntent, closeIntent, validateIntent, resultIntent } from './verification-intents';
 import * as enrollment from './enrollment';
 import * as enrollmentValidation from './enrollment-validation';
+import * as accessValidation from './access-validation';
+import * as login from './passkey-login';
+import * as recovery from './recovery-grant';
+import * as protection from './recovery-protection';
+import * as activation from './recovery-activation';
 
 type Input<K extends keyof CustomerIdentityRepository> = Parameters<CustomerIdentityRepository[K]>[0];
 const browserRestoreSchema = browserBindingSchema.omit({ browserRef: true });
@@ -78,6 +83,66 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
   recoverEnrollmentActivation(raw: Input<'recoverEnrollmentActivation'>) {
     const input = validate(enrollmentValidation.enrollmentActivationRecoverySchema, raw);
     return this.intentLocked(input, client => enrollment.recoverEnrollmentActivation(client, input));
+  }
+  preparePasskeyLogin(raw: Input<'preparePasskeyLogin'>) {
+    const input = validate(accessValidation.preparePasskeyLogin, raw);
+    return this.intentLocked(input, client => login.preparePasskeyLogin(client, input));
+  }
+  claimPasskeyLogin(raw: Input<'claimPasskeyLogin'>) {
+    const input = validate(accessValidation.claimPasskeyLogin, raw);
+    return this.intentLocked(input, client => login.claimPasskeyLogin(client, input));
+  }
+  completePasskeyLogin(raw: Input<'completePasskeyLogin'>) {
+    const input = validate(accessValidation.completePasskeyLogin, raw);
+    return this.intentLocked(input, client => login.completePasskeyLogin(client, input));
+  }
+  resultPasskeyLogin(raw: Input<'resultPasskeyLogin'>) {
+    const input = validate(accessValidation.resultPasskeyLogin, raw);
+    return this.intentLocked(input, client => login.resultPasskeyLogin(client, input));
+  }
+  beginAccountRecovery(raw: Input<'beginAccountRecovery'>) {
+    const input = validate(accessValidation.beginAccountRecovery, raw);
+    return this.intentLocked(input, client => recovery.beginAccountRecovery(client, input));
+  }
+  readAccountRecovery(raw: Input<'readAccountRecovery'>) {
+    const input = validate(accessValidation.readAccountRecovery, raw);
+    return this.intentLocked(input, client => recovery.readAccountRecovery(client, input));
+  }
+  prepareRecoveryKey(raw: Input<'prepareRecoveryKey'>) {
+    const input = validate(accessValidation.prepareRecoveryKey, raw);
+    return this.intentLocked(input, client => protection.prepareRecoveryKey(client, input));
+  }
+  readRecoveryKey(raw: Input<'readRecoveryKey'>) {
+    const input = validate(accessValidation.readRecoveryKey, raw);
+    return this.intentLocked(input, client => protection.readRecoveryKey(client, input));
+  }
+  recordRecoveryKey(raw: Input<'recordRecoveryKey'>) {
+    const input = validate(accessValidation.recordRecoveryKey, raw);
+    return this.intentLocked(input, client => protection.recordRecoveryKey(client, input));
+  }
+  prepareRecoveryAssertion(raw: Input<'prepareRecoveryAssertion'>) {
+    const input = validate(accessValidation.prepareRecoveryAssertion, raw);
+    return this.intentLocked(input, client => protection.prepareRecoveryAssertion(client, input));
+  }
+  readRecoveryAssertion(raw: Input<'readRecoveryAssertion'>) {
+    const input = validate(accessValidation.readRecoveryAssertion, raw);
+    return this.intentLocked(input, client => protection.readRecoveryAssertion(client, input));
+  }
+  recordRecoveryAssertion(raw: Input<'recordRecoveryAssertion'>) {
+    const input = validate(accessValidation.recordRecoveryAssertion, raw);
+    return this.intentLocked(input, client => protection.recordRecoveryAssertion(client, input));
+  }
+  issueRecoveryReplacement(raw: Input<'issueRecoveryReplacement'>) {
+    const input = validate(accessValidation.issueRecoveryReplacement, raw);
+    return this.intentLocked(input, client => protection.issueRecoveryReplacement(client, input));
+  }
+  activateAccountRecovery(raw: Input<'activateAccountRecovery'>) {
+    const input = validate(accessValidation.activateAccountRecovery, raw);
+    return this.intentLocked(input, client => activation.activateAccountRecovery(client, input));
+  }
+  recoverAccountRecoveryActivation(raw: Input<'recoverAccountRecoveryActivation'>) {
+    const input = validate(accessValidation.recoverAccountRecoveryActivation, raw);
+    return this.intentLocked(input, client => activation.recoverAccountRecoveryActivation(client, input));
   }
   private intentLocked<T>(scope: CustomerScope, work: (client: PoolClient) => Promise<T>) {
     return withCustomerScope(this.pool, scope, async client => {
