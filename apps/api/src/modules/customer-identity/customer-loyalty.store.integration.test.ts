@@ -142,6 +142,10 @@ integration('customer loyalty writer — protected account and ordinary PostgreS
     expect(record.phone_lookup_hash).not.toBe(identity.hash('phone', a.principal.tenantRef, a.phone));
     expect(JSON.stringify(result)).not.toContain(a.phone);
     expect(result).not.toHaveProperty('qrToken');
+    const card = await run(a, { step: 'card' });
+    if (card?.state !== 'card') throw new Error('Current card absent');
+    expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: card.qrToken }))
+      .toMatchObject({ id: result.member.id, alias: a.name, status: 'active', balanceUnits: 0 });
     for (const table of ['ledger_entries', 'consent_events', 'consent_state']) {
       expect((await f.admin.query(`SELECT count(*)::int AS n FROM loyalty.${table} WHERE tenant_ref=$1`, [a.principal.tenantRef])).rows[0].n).toBe(0);
     }
@@ -178,6 +182,11 @@ integration('customer loyalty writer — protected account and ordinary PostgreS
       expect(current).toMatchObject({ state: 'card', qrToken: replacement.qrToken, member: { qrGeneration: generation + 1 } });
       expect(current?.state === 'card' ? current.qrToken : null).not.toBe(initial?.state === 'card' ? initial.qrToken : null);
       expect(replacement.qrToken).not.toBe(last); last = replacement.qrToken;
+      expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: replacement.qrToken }))
+        .toMatchObject({ id: created.member.id, balanceUnits: 0 });
+      if (initial?.state !== 'card') throw new Error('Initial QR absent');
+      await expect(pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: initial.qrToken }))
+        .rejects.toMatchObject({ status: 404 });
       const retried = await run(a, request); expect(retried?.state).toBe('member'); expect(retried).not.toHaveProperty('qrToken');
     }
   });
