@@ -9,6 +9,7 @@ import { Sheet, Tap } from '../order/primitives';
 import type { useCustomerAccount } from './useCustomerAccount';
 import { CustomerEnrollment } from './CustomerEnrollment';
 import { CustomerOrders } from './CustomerOrders';
+import { CustomerLoyalty } from './CustomerLoyalty';
 import { sameOrderAccess } from './orders';
 import type { CustomerAccountAccess } from './client';
 
@@ -90,14 +91,20 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   const { state, refresh } = account;
   const [enrollmentActive, setEnrollmentActive] = useState(false);
   const [ordersAccess, setOrdersAccess] = useState<CustomerAccountAccess | null>(null);
+  const [loyaltyAccess, setLoyaltyAccess] = useState<CustomerAccountAccess | null>(null);
   const ordersTrigger = useRef<HTMLButtonElement>(null);
+  const loyaltyTrigger = useRef<HTMLButtonElement>(null);
+  const profileRegion = useRef<HTMLDivElement>(null);
   const activity = useCallback((active: boolean) => setEnrollmentActive(active), []);
   const loading = state.status === 'loading';
   const needsRetry = ['idle', 'error', 'offline', 'unavailable'].includes(state.status);
   const view = open ? state.view : null;
   const readingOrders = !!view && !!slug && sameOrderAccess(ordersAccess, account.currentAccess?.() ?? null);
+  const readingLoyalty = !!view && !!slug && sameOrderAccess(loyaltyAccess, account.currentAccess?.() ?? null);
   const leaveOrders = () => { setOrdersAccess(null); requestAnimationFrame(() => ordersTrigger.current?.focus()); };
-  const closePanel = () => { setOrdersAccess(null); onClose(); };
+  const leaveLoyalty = () => { setLoyaltyAccess(null); requestAnimationFrame(() => loyaltyTrigger.current?.focus()); };
+  const completeProfile = () => { setLoyaltyAccess(null); requestAnimationFrame(() => profileRegion.current?.querySelector('input')?.focus()); };
+  const closePanel = () => { setOrdersAccess(null); setLoyaltyAccess(null); onClose(); };
   const title = state.status === 'offline' ? 'Vous êtes hors connexion'
     : state.status === 'unavailable' ? 'Compte indisponible pour le moment'
       : state.status === 'error' ? 'Vérification interrompue'
@@ -114,10 +121,13 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
       {returnLabel}
     </Tap>}>
     <div className="space-y-4 p-4 pb-5 sm:p-5">
-      {readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} /> : <>
+      {readingLoyalty && loyaltyAccess && slug && view ? <CustomerLoyalty slug={slug} access={loyaltyAccess} currentAccess={account.currentAccess}
+        restaurantName={restaurantName} profileName={view.profile.name} onBack={leaveLoyalty} onProfile={completeProfile} />
+        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} /> : <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
       {view ? <>{slug && <Tap ref={ordersTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><Icon name="ticket" size={18} /><span className="flex-1 text-left">Commandes de mon compte</span><Icon name="arrow" size={14} /></Tap>}
-        <Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} /></>
+        {slug && <Tap ref={loyaltyTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setLoyaltyAccess(access); }}><Icon name="gift" size={18} /><span className="flex-1 text-left">Fidélité de mon compte</span><Icon name="arrow" size={14} /></Tap>}
+        <div ref={profileRegion}><Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} /></div></>
         : enrollmentActive ? null : loading ? <div role="status" className="min-h-40 rounded-panel border border-ink/10 bg-surface2 p-5">
           <p className="text-sm font-semibold">Vérification de votre session…</p>
           {state.message && <p className="mt-3 text-sm leading-6 text-mut">{state.message}</p>}
