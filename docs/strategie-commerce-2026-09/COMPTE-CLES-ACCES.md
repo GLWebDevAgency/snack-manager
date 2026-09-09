@@ -305,14 +305,14 @@ le serveur recalcule encore les prix lors de la création effective. Le compte
 reste derrière le pilote fermé. La réception CI/staging de ce lot est distincte
 de son implémentation ; le rattachement fidélité et les gains restent à livrer.
 
-Preuves locales du lot : **2435 tests web** sur 156 fichiers ; **195 tests API
+Preuves locales du lot : **2437 tests web** sur 156 fichiers ; **195 tests API
 ciblés** sur cinq fichiers, sans skip, comprenant 30 scénarios Mongo et 15 HTTP
 Nest→PostgreSQL dont quatre avec Mongo. Contrats : 557 tests. La passe API
 générale compte 3355 succès et 614 skips faute de services dédiés ; ceux-ci ne
 sont pas des intégrations exécutées. Build/typage/lint : 38 tâches réussies.
 Ces chiffres se recouvrent et ne s'additionnent pas.
 
-La recette Chromium de reprise joue dix scénarios avec HTTP local explicite,
+La recette Chromium de reprise joue douze scénarios avec HTTP local explicite,
 vrais composants, IndexedDB et Web Locks : prix/options, panier conservé,
 identité changée, déconnexion pendant HTTP, expiration, hors-ligne et demande
 C01 non résolue. Captures 320/390/1440 inspectées, montant non coupé et clavier
@@ -320,6 +320,14 @@ vérifiés. Ce harnais n'exécute pas Next→BFF→base ni Stripe. Les notificat
 Chromium `ERR_ABORTED` ne sont acceptées qu'avec preuve de cette réponse exacte
 entièrement lue et validée, ou de l'acquittement 204 de la déconnexion confirmée ;
 aucune exception générale d'URL ou de statut n'a été ajoutée.
+
+La première CI #154 a échoué sur le contrôle réseau du scénario d'expiration :
+un signal d'abandon tardif remettait en échec une réponse dont les 342 octets,
+l'EOF et le contrat étaient déjà validés. Le défaut du harnais a été reproduit
+avant correction avec un vrai `fetch` puis un abandon explicite après lecture.
+Deux contre-tests natifs distinguent désormais ce cas d'un abandon avant EOF,
+qui doit toujours rejeter la lecture. Aucun timeout ni garde produit n'a été
+relâché. La réception CI/staging doit encore valider le commit corrigé.
 
 Incidents de validation conservés : un ancien test HTTP a dépassé 5 secondes,
 puis passe inchangé isolé et dans les 195 tests ; une fermeture Chromium de la

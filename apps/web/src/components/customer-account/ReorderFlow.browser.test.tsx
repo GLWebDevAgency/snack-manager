@@ -23,7 +23,7 @@ declare global { interface Window { reorderBrowserFixture: {
 }; reorderReadObservation(id: string, proof: ReadProof): Promise<void>;
   validateReorderBrowserResponse(raw: unknown, path: string): boolean;
 } }
-type ReadProof = { bytes: number; eof: boolean; valid: boolean; failed: boolean; empty: boolean; noContent: boolean };
+type ReadProof = { bytes: number; eof: boolean; valid: boolean; failed: boolean; empty: boolean; noContent: boolean; abortedAfterComplete: boolean };
 type Call = { method: string; path: string; body: Record<string, unknown>; operation?: string };
 let server: Server, browser: Browser, context: BrowserContext, page: Page, lockPage: Page, origin: string, captures: string;
 let faults: string[], calls: Call[], expiresAt: number, sourceExpiresAt: number, price: number, authenticated: boolean;
@@ -32,6 +32,7 @@ let serial: number, failed: { request: BrowserRequest; error: string | undefined
 let wires: WeakMap<BrowserRequest, { id: string; length: number; status: number; mime: string }>;
 let proofs: Record<string, ReadProof>, inflight: Set<BrowserRequest>;
 let confirmedLogoutIds: Set<string>;
+let expectedInterruptedReadIds: Set<string>;
 const orderId = 'a'.repeat(24), productId = 'b'.repeat(24), drinkId = 'c'.repeat(24);
 const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte/session',
   source: '/r/recette/compte/commandes/recommander', site: '/api/public/tenants/recette/site' };
@@ -116,7 +117,7 @@ beforeAll(async () => {
 }, 30_000);
 beforeEach(async () => {
   faults = []; calls = []; price = 850; expiresAt = Date.now() + 300_000; sourceExpiresAt = expiresAt;
-  authenticated = true; hold = false; held = null; serial = 0; failed = []; wires = new WeakMap(); proofs = {}; inflight = new Set(); confirmedLogoutIds = new Set();
+  authenticated = true; hold = false; held = null; serial = 0; failed = []; wires = new WeakMap(); proofs = {}; inflight = new Set(); confirmedLogoutIds = new Set(); expectedInterruptedReadIds = new Set();
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   lockPage = await context.newPage(); await lockPage.goto(origin + '/empty');
   page = await context.newPage(); page.setDefaultTimeout(5_000);
@@ -127,7 +128,7 @@ beforeEach(async () => {
       const response = await fetch(...args), id = response.headers.get('x-sm-reorder-fixture');
       const path = new URL(response.url).pathname;
       if (id && [ '/r/recette/compte/capacites', '/r/recette/compte/session', '/r/recette/compte/commandes/recommander' ].includes(path)) {
-        const proof: ReadProof = { bytes: 0, eof: false, valid: false, failed: false, empty: response.body === null, noContent: response.status === 204 };
+        const proof: ReadProof = { bytes: 0, eof: false, valid: false, failed: false, empty: response.body === null, noContent: response.status === 204, abortedAfterComplete: false };
         const observe = () => { void window.reorderReadObservation(id, { ...proof }); };
         if (response.status === 204) observe();
         if (!response.body) { proof.eof = true; proof.valid = response.status === 204; observe(); return response; }
@@ -151,7 +152,18 @@ beforeEach(async () => {
           reader.cancel = reason => { proof.failed = true; observe(); return cancel(reason); };
           return reader;
         } });
-        args[1]?.signal?.addEventListener('abort', () => { proof.failed = true; observe(); }, { once: true });
+        const signal = args[1]?.signal, length = Number(response.headers.get('content-length'));
+        const aborted = () => {
+          // A timeout after consumption cannot undo native EOF. Conversely,
+          // an earlier interruption remains a failure even if EOF arrives later.
+          const complete = proof.eof && proof.valid && !proof.failed && !proof.empty
+            && Number.isSafeInteger(length) && length > 0 && length <= 1_048_576 && proof.bytes === length;
+          if (complete) proof.abortedAfterComplete = true;
+          else proof.failed = true;
+          observe();
+        };
+        signal?.addEventListener('abort', aborted, { once: true });
+        if (signal?.aborted) aborted();
       }
       return response;
     };
@@ -185,6 +197,14 @@ afterEach(async () => {
     // observed by fetch AND accepted by logout(), with the private UI masked.
     const logoutAccepted = method === 'DELETE' && path === paths.session && wire?.status === 204
       && proof?.noContent && confirmedLogoutIds.has(wire.id) && proof.bytes === 0;
+    // The negative observer counter-test intentionally aborts one exact native
+    // reader. It must remain a failure, never qualify as a completed response.
+    if (wire && expectedInterruptedReadIds.has(wire.id)) {
+      expect({ method, path, error: failure.error }).toEqual({ method: 'POST', path: paths.source, error: 'net::ERR_ABORTED' });
+      expect(wire).toMatchObject({ status: 200, mime: 'application/json' });
+      expect(proof).toMatchObject({ bytes: 0, eof: false, valid: false, failed: true, abortedAfterComplete: false });
+      continue;
+    }
     const completed = failure.error === 'net::ERR_ABORTED' && proof && !proof.failed && (jsonComplete || logoutAccepted);
     if (!completed) { process.stdout.write(`Unclassified fixture notification ${JSON.stringify({ method, path, wire, proof })}\n`); faults.push(`Failed ${failure.request.method()} ${new URL(failure.request.url()).pathname}: ${failure.error}`); }
     else process.stdout.write(`Reorder fixture: verified ${logoutAccepted ? 'logout acknowledgement' : 'JSON'} despite Chromium notification (response ${wire!.id})\n`);
@@ -214,6 +234,33 @@ async function holdCart() {
   return async () => holder.evaluate(() => window.reorderBrowserFixture.releaseLock!());
 }
 describe('reprise privée — vraie interface Chromium et stockage natif', () => {
+  it('préserve la preuve complète quand le signal est abandonné après la lecture native', async () => {
+    const id = await page.evaluate(async path => {
+      const controller = new AbortController();
+      const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: 'a'.repeat(24) }), signal: controller.signal });
+      const reader = response.body!.getReader();
+      while (!(await reader.read()).done) { /* Consume the actual bounded fixture body to native EOF. */ }
+      reader.releaseLock(); controller.abort();
+      return response.headers.get('x-sm-reorder-fixture')!;
+    }, paths.source);
+    await expect.poll(() => proofs[id]).toMatchObject({ eof: true, valid: true, failed: false, abortedAfterComplete: true });
+    expect(proofs[id]!.bytes).toBe(Buffer.byteLength(JSON.stringify(source())));
+  });
+  it('conserve un vrai abandon avant EOF comme échec de lecture', async () => {
+    const result = await page.evaluate(async path => {
+      const controller = new AbortController();
+      const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: 'a'.repeat(24) }), signal: controller.signal });
+      const reader = response.body!.getReader(); controller.abort();
+      let rejected = false; try { await reader.read(); } catch { rejected = true; }
+      reader.releaseLock();
+      return { id: response.headers.get('x-sm-reorder-fixture')!, rejected };
+    }, paths.source);
+    expect(result.rejected).toBe(true);
+    await expect.poll(() => proofs[result.id]).toMatchObject({ bytes: 0, eof: false, valid: false, failed: true, abortedAfterComplete: false });
+    expectedInterruptedReadIds.add(result.id); // This exact deliberate negative probe, not a product request.
+  });
   it.each([320, 390, 1440])('prévisualise puis ajoute sans écraser le panier, au clavier en %d px', async width => {
     await page.setViewportSize({ width, height: 844 }); await prepared();
     expect(await page.title()).toBe('Reorder browser fixture'); expect(page.url()).toBe(origin + '/');
@@ -305,8 +352,14 @@ describe('reprise privée — vraie interface Chromium et stockage natif', () =>
     expect((await cart()).lines).toEqual([existing]);
   });
   it('retire un aperçu dont l’autorisation serveur expire avant la session affichée', async () => {
-    await page.clock.install(); sourceExpiresAt = Date.now() + 20_000; await prepared(); await page.clock.fastForward(20_001);
+    await page.clock.install(); sourceExpiresAt = Date.now() + 20_000;
+    const reading = page.waitForResponse(response => new URL(response.url()).pathname === paths.source);
+    await prepared();
+    const id = (await reading).headers()['x-sm-reorder-fixture']!;
+    await expect.poll(() => proofs[id]).toMatchObject({ eof: true, valid: true, failed: false });
+    await page.clock.fastForward(20_001);
     await page.getByRole('button', { name: 'Réessayer la vérification', exact: true }).waitFor();
+    expect(proofs[id]).toMatchObject({ eof: true, valid: true, failed: false });
     expect(await adding().count()).toBe(0); expect(await page.getByText('Burger du Comptoir', { exact: false }).count()).toBe(0);
     expect((await cart()).lines).toEqual([existing]);
   });
