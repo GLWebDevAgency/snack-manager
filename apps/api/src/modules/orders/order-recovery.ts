@@ -2,8 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { PublicOrderRecoveryReceiptSchema, type CreatePublicOrder, type PublicOrderRecoveryReceipt } from '@sm/contracts';
 import type { Order } from '@sm/db';
+import { assertCustomerOrderOwner, type CustomerOrderOwner } from './customer-order-owner';
 
-export type PublicRecoveryBinding = Readonly<{ version: 1; proofHash: string; payloadHash: string; validationOwner?: string }>;
+export type PublicRecoveryBinding = Readonly<{ version: 1; proofHash: string; payloadHash: string; validationOwner?: string; customerOwner?: CustomerOrderOwner }>;
 
 export function recoveryNotFound(): NotFoundException {
   return new NotFoundException({ code: 'ORDER_RECOVERY_NOT_FOUND', message: 'Commande introuvable' });
@@ -13,7 +14,7 @@ export function recoveryProofHash(tenantId: string, clientId: string, proof: str
   return createHash('sha256').update(JSON.stringify(['sm.public-order-recovery.v1', tenantId, clientId, proof])).digest('hex');
 }
 
-export function publicRecoveryBinding(tenantId: string, body: CreatePublicOrder): PublicRecoveryBinding | undefined {
+export function publicRecoveryBinding(tenantId: string, body: CreatePublicOrder, customerOwner?: CustomerOrderOwner): PublicRecoveryBinding | undefined {
   if (!body.recoveryProof) return undefined;
   const { recoveryProof, turnstileToken: _transient, ...business } = body;
   const normalized = { ...business, fulfillment: body.fulfillment ?? 'pickup' };
@@ -21,6 +22,7 @@ export function publicRecoveryBinding(tenantId: string, body: CreatePublicOrder)
     version: 1,
     proofHash: recoveryProofHash(tenantId, body.clientId, recoveryProof),
     payloadHash: recoveryPayloadHash(normalized),
+    ...(customerOwner ? { customerOwner: { ...customerOwner } } : {}),
   };
 }
 
@@ -43,7 +45,8 @@ export function sameRecoveryHash(left: unknown, right: string): boolean {
 }
 
 /** Utilisé avant CHAQUE retour idempotent, y compris une collision Mongo 11000. */
-export function assertPublicRecoveryReplay(order: Pick<Order, 'channel' | 'publicRecovery'>, binding?: PublicRecoveryBinding): void {
+export function assertPublicRecoveryReplay(order: Pick<Order, 'channel' | 'publicRecovery'> & { customerOwner?: unknown }, binding?: PublicRecoveryBinding): void {
+  assertCustomerOrderOwner(order.customerOwner, binding?.customerOwner);
   const stored = order.publicRecovery;
   if (!stored && !binding) return; // comportement historique, aucune adoption
   if (order.channel !== 'online' || !stored || !binding || !sameRecoveryHash(stored.proofHash, binding.proofHash)) throw recoveryNotFound();

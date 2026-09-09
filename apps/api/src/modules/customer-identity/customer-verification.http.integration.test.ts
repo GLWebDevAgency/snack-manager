@@ -20,6 +20,8 @@ import { CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, 
 import { customerTestEnvironment } from './customer-account.test-fixture';
 import type { PhoneVerificationTransport } from './phone-verification.port';
 import { customerPasskeyFixture } from './customer-passkey.test-fixture';
+import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
+import type { customerOrdersMongoFixture } from '../orders/customer-orders.test-fixture';
 
 // Real signed HTTP -> Nest guard/controller/runtime/core -> migrated PostgreSQL
 // under a NOSUPERUSER/NOBYPASSRLS role. Only tenant lookup, HTTP rate limiting,
@@ -41,6 +43,7 @@ const provider = {
 };
 const human = { verify: vi.fn().mockResolvedValue(true) };
 const config = new ConfigService();
+let commerceCheckout: OnlineOrderCheckoutService | undefined;
 const query = { read: () => query, readConcern: () => query, maxTimeMS: () => query, lean: () => query,
   exec: async () => ({ _id: env.SM_CUSTOMER_PILOT_TENANT_ID, slug: 'fixture', account: { status: 'trial' } }) };
 
@@ -51,6 +54,11 @@ const query = { read: () => query, readConcern: () => query, maxTimeMS: () => qu
   { provide: CustomerAccountHumanVerifier, useValue: human },
   { provide: CUSTOMER_IDENTITY_REPOSITORY, useFactory: () => new PostgresCustomerIdentityRepository(database.app) },
   { provide: CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, useValue: () => provider },
+  { provide: OnlineOrderCheckoutService, useValue: {
+    createForCustomer: (...args: Parameters<OnlineOrderCheckoutService['createForCustomer']>) => commerceCheckout!.createForCustomer(...args),
+    listForCustomer: (...args: Parameters<OnlineOrderCheckoutService['listForCustomer']>) => commerceCheckout!.listForCustomer(...args),
+    detailForCustomer: (...args: Parameters<OnlineOrderCheckoutService['detailForCustomer']>) => commerceCheckout!.detailForCustomer(...args),
+  } },
 ] })
 class VerificationHttpModule {}
 
@@ -100,6 +108,7 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
   afterAll(close);
   beforeEach(async () => {
     dropAction = null;
+    commerceCheckout = undefined;
     env = customerTestEnvironment();
     const parent = `AC${randomUUID().replaceAll('-', '')}`, tenant = randomBytes(12).toString('hex');
     env.SM_CUSTOMER_VERIFY_ACCOUNT_SID = parent; env.SM_CUSTOMER_PILOT_TENANT_ID = tenant;
@@ -181,12 +190,96 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
         if (result.state !== 'authenticated') throw new Error('Expected activation receipt'); return result; } };
   }
 
-  async function protectedAccount() {
-    const binding = await browser(), f = await intent(binding), pending = await ok('start', f.start());
+  async function protectedAccount(phone: string = phones[0]) {
+    const binding = await browser(), f = await intent(binding), pending = await ok('start', f.start(phone));
     const check = f.check(pending.challengeId); expect((await ok('check', check)).state).toBe('enrollment');
     const protection = await prepareProtection(f, check.request.checkId), activated = await protection.activate();
     return { binding, f, protection, activated };
   }
+  async function commerceFixture() {
+    const fixturePath = resolve(process.cwd(), 'src/modules/orders/customer-orders.test-fixture.ts');
+    const fixture = await import(/* @vite-ignore */ fixturePath) as { customerOrdersMongoFixture: typeof customerOrdersMongoFixture };
+    // A real future half-hour slot, without faking PostgreSQL or WebAuthn time.
+    const slot = new Date(Math.ceil((Date.now() + 90 * 60_000) / 1_800_000) * 1_800_000).toISOString();
+    const mongo = await fixture.customerOrdersMongoFixture(process.env.CUSTOMER_ORDERS_TEST_MONGO_URL!, {
+      tenantId: env.SM_CUSTOMER_PILOT_TENANT_ID!, slot,
+    });
+    try {
+      await mongo.models.tenants.updateOne({ slug: 'isolated-capacity' }, { $set: { slug: 'fixture' } });
+      const replica = mongo.replica(); commerceCheckout = replica.checkout;
+      return { ...mongo, replica };
+    } catch (error) { await mongo.close(); throw error; }
+  }
+  function access(a: Awaited<ReturnType<typeof protectedAccount>>) {
+    return { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token };
+  }
+
+  it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('owns a real Mongo order after a lost signed HTTP result, replays once, and isolates history without SMS', async () => {
+    const a = await protectedAccount(), b = await protectedAccount(phones[1]);
+    const mongo = await commerceFixture();
+    try {
+      delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+      provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+      const request = mongo.request();
+      dropAction = 'order-create';
+      await expect(http('order-create', { ...access(a), request })).rejects.toBeDefined();
+      expect(dropAction).toBeNull();
+      const created = await ok('order-create', { ...access(a), request });
+      if (created.state !== 'created') throw new Error('Expected real creation');
+      expect(created.order).toMatchObject({ totals: { total: 1250 }, payment: { method: 'counter', status: 'pending' } });
+      expect(await mongo.models.orders.countDocuments()).toBe(1);
+      expect(await mongo.models.admissions.countDocuments({ 'capacity.kitchenSeat': { $type: 'number' } })).toBe(1);
+      expect(mongo.replica.gate.authorize).toHaveBeenCalledTimes(1);
+      const list = await ok('orders', { ...access(a), request: { filter: 'active', limit: 20, cursor: null } });
+      expect(list.orders.map(row => row._id)).toEqual([created.order._id]);
+      const detail = await ok('order-detail', { ...access(a), request: { orderId: created.order._id } });
+      expect(detail.order).toMatchObject({ totals: { total: 1250 }, lines: [{ name: 'Article de recette', qty: 1, unitPrice: 1250 }] });
+      const privateJson = JSON.stringify({ list, detail });
+      for (const forbidden of ['customerOwner', 'accountId', 'trackingToken', 'customerPhone', 'customerName', 'address', 'sessionToken']) {
+        expect(privateJson).not.toContain(`"${forbidden}"`);
+      }
+      expect(privateJson).not.toContain(created.order.trackingToken);
+      expect((await ok('orders', { ...access(b), request: { filter: 'all', limit: 20, cursor: null } })).orders).toEqual([]);
+      expect((await http('order-detail', { ...access(b), request: { orderId: created.order._id } })).status).toBe(404);
+      expect((await http('order-create', { ...access(b), request })).status).toBe(404);
+      expect(await mongo.models.orders.countDocuments()).toBe(1);
+      await ok('logout', { ...access(a), request: { all: true } });
+      expect((await http('orders', { ...access(a), request: { filter: 'all', limit: 20, cursor: null } })).status).toBe(401);
+      expect((await http('order-detail', { ...access(a), request: { orderId: created.order._id } })).status).toBe(401);
+      expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+    } finally { commerceCheckout = undefined; await mongo.close(); }
+  }, 30_000);
+
+  it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('a real PG logout during checkout prevents Mongo commitment without transferring its admission', async () => {
+    const a = await protectedAccount(); const mongo = await commerceFixture();
+    try {
+      mongo.replica.gate.authorize.mockImplementationOnce(async () => {
+        await ok('logout', { ...access(a), request: { all: true } });
+        return { provider: 'turnstile', quotaReservation: { tenantId: env.SM_CUSTOMER_PILOT_TENANT_ID!, id: 'fixture' } };
+      });
+      expect((await http('order-create', { ...access(a), request: mongo.request() })).status).toBe(401);
+      expect(await mongo.models.orders.countDocuments()).toBe(0);
+      const admission = await mongo.models.admissions.findOne().select('+customerOwner +snapshot').lean();
+      const owner = (await database.admin.query('SELECT id FROM customer.accounts WHERE parent_ref=$1 AND tenant_ref=$2',
+        [env.SM_CUSTOMER_VERIFY_ACCOUNT_SID, env.SM_CUSTOMER_PILOT_TENANT_ID])).rows[0];
+      expect(admission).toMatchObject({ state: 'rejected', snapshot: null, customerOwner: {
+        accountId: owner.id, parentRef: env.SM_CUSTOMER_VERIFY_ACCOUNT_SID, tenantRef: env.SM_CUSTOMER_PILOT_TENANT_ID,
+      } });
+      expect(admission?.capacity).toBeUndefined();
+      expect(mongo.replica.gate.release).toHaveBeenCalledTimes(1);
+    } finally { commerceCheckout = undefined; await mongo.close(); }
+  }, 30_000);
+
+  it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('a protected HTTP session cannot adopt an existing guest order even with its exact recovery proof', async () => {
+    const a = await protectedAccount(); const mongo = await commerceFixture();
+    try {
+      const request = mongo.request(); await mongo.replica.checkout.createPublic('fixture', request);
+      expect((await http('order-create', { ...access(a), request })).status).toBe(404);
+      expect((await ok('orders', { ...access(a), request: { filter: 'all', limit: 20, cursor: null } })).orders).toEqual([]);
+      expect(await mongo.models.orders.countDocuments()).toBe(1);
+      expect(await mongo.models.orders.countDocuments({ customerOwner: null })).toBe(1);
+    } finally { commerceCheckout = undefined; await mongo.close(); }
+  }, 30_000);
   async function passkeyAttempt(binding: Awaited<ReturnType<typeof browser>>, chosenCredentialId?: string) {
     const f = await intent(binding), attemptId = randomUUID();
     const optionsEnvelope = { ...f.privateBinding, request: { step: 'options' as const, operationId: f.operationId, attemptId } };

@@ -7,7 +7,7 @@ import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { trustedClientIp } from '../../common/trusted-client-ip';
 import { TenantsService } from '../tenants/tenants.service';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
-import { publicRecoveryBinding, recoveryNotFound } from './order-recovery';
+import { recoveryNotFound } from './order-recovery';
 
 @Public()
 @Controller('public/tenants/:slug/orders')
@@ -31,9 +31,7 @@ export class PublicOrderRecoveryController {
     const tenant = await this.tenant(slug);
     const tenantId = String(tenant._id);
     const original = { ...body, turnstileToken: body.turnstileToken ?? '' };
-    const state = await this.admissions.begin(tenantId, original);
-    if (state.state !== 'pending') return state;
-    return this.admissions.reject(tenantId, body.clientId, publicRecoveryBinding(tenantId, original)!, 'abandoned');
+    return this.admissions.abandon(tenantId, original);
   }
 
   private async tenant(slug: string) {
@@ -45,9 +43,14 @@ export class PublicOrderRecoveryController {
 
 /** Même quota partagé AVANT toute admission, y compris le POST de création. */
 export async function enforceOrderRecoveryQuota(quota: SharedPublicQuota, slug: string, clientId: string, request: Pick<Request, 'headers' | 'socket'>): Promise<void> {
+  return enforceOrderRecoverySourceQuota(quota, slug, clientId, trustedClientIp(request));
+}
+
+/** The account route supplies only its authenticated opaque relay source. */
+export async function enforceOrderRecoverySourceQuota(quota: SharedPublicQuota, slug: string, clientId: string, sourceKey: string): Promise<void> {
     let allowed: boolean;
     try {
-      allowed = await quota.reserve({ scope: 'order-recovery-source', clientKey: trustedClientIp(request), windowMs: 60_000, clientLimit: 60, globalLimit: 2_000 });
+      allowed = await quota.reserve({ scope: 'order-recovery-source', clientKey: sourceKey, windowMs: 60_000, clientLimit: 60, globalLimit: 2_000 });
       if (allowed) allowed = await quota.reserveClient({ scope: 'order-recovery-attempt', clientKey: `${slug}\0${clientId}`, windowMs: 60_000, clientLimit: 30 });
     } catch {
       throw new ServiceUnavailableException({ code: 'ORDER_ATTEMPT_UNCERTAIN', message: 'La reprise est momentanément indisponible. Conservez cette tentative.' });

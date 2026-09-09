@@ -76,7 +76,7 @@ export type CustomerSessionView = {
   profile: { name: string | null; phoneE164: string; phoneVerifiedAt: number; revision: number };
 };
 export class CustomerIdentityError extends Error {
-  constructor(readonly reason: 'unavailable' | 'invalid_request' | 'unauthorized' | 'conflict') {
+  constructor(readonly reason: 'unavailable' | 'invalid_request' | 'unauthorized' | 'conflict' | 'not_found') {
     super(reason === 'unavailable' ? 'Service de compte momentanément indisponible.'
       : reason === 'conflict' ? 'Le profil a changé. Actualisez-le avant de réessayer.'
         : 'Accès au compte invalide ou expiré.');
@@ -409,6 +409,24 @@ export class CustomerIdentityService {
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
       return this.boundView(input, scope, session);
+    });
+  }
+
+  /** No PII leaves this port. Authorization is sampled in PostgreSQL, not a
+   * cross-store transaction; the checkout rechecks before its Mongo commit. */
+  async commercePrincipal(raw: unknown) {
+    return this.protect(async () => {
+      const input = this.parse(sessionSchema, raw);
+      await this.requireBrowser(this.binding(input));
+      const scope = this.scope(input.tenantRef, this.configuration());
+      const principal = await this.repository.authenticateProtected({ ...scope, browserRef: input.browserRef,
+        expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId,
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
+        sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
+      if (!principal || principal.expiresAt <= this.now()) throw new CustomerIdentityError('unauthorized');
+      if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) throw new CustomerIdentityError('unavailable');
+      await this.requireBrowser(this.binding(input));
+      return { ...scope, ...principal };
     });
   }
 

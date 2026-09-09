@@ -147,6 +147,10 @@ export interface CustomerIdentityRepository extends CustomerEnrollmentRepository
     existingSessionHash: string | null;
   }): Promise<CustomerCheckCompletion | null>;
   authenticate(input: CustomerBrowserBinding & CustomerSessionSelection & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
+  /** Internal principal only; historical phone-only sessions do not qualify. */
+  authenticateProtected(input: CustomerBrowserBinding & CustomerSessionSelection & { sessionHash: string; now: number }): Promise<{
+    accountId: string; sessionId: string; expiresAt: number;
+  } | null>;
   updateName(input: CustomerScope & CustomerSessionSelection & {
     browserRef: string;
     sessionHash: string;

@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { CustomerCreateOrderRequestSchema, CustomerOrdersQuerySchema, CustomerOrderDetailRequestSchema,
+  CustomerOrderCreateResponseSchema, CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema } from './customer-orders';
 
-export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout']);
+export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout', 'order-create', 'orders', 'order-detail']);
 export type CustomerAccountAction = z.infer<typeof CustomerAccountActionSchema>;
 export const CUSTOMER_ACCOUNT_TURNSTILE_ACTION = 'customer-account-start';
 export const customerAccountTurnstileData = (slug: string, operationId: string) => `${slug}_${operationId}`;
@@ -106,7 +108,9 @@ export const CustomerRecoveryRequestSchema = z.discriminatedUnion('step', [
   z.strictObject({ step: z.literal('activation-result'), ...accessBinding, activationId: uuid }),
 ]);
 export type CustomerRecoveryRequest = z.infer<typeof CustomerRecoveryRequestSchema>;
-export const customerAccountRequestLimit = (action: CustomerAccountAction) => ['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 4096;
+export const customerAccountRequestLimit = (action: CustomerAccountAction) => ['protection', 'passkey', 'recovery', 'order-create'].includes(action) ? 65_536 : 4096;
+export const customerAccountResponseLimit = (action: CustomerAccountAction) => action === 'order-detail' ? 1_048_576
+  : ['protection', 'passkey', 'recovery', 'order-create', 'orders'].includes(action) ? 65_536 : 16_384;
 
 /** Browser DTOs never carry the HttpOnly identities or server attestations. */
 export const CustomerAccountBrowserRequests = {
@@ -126,6 +130,9 @@ export const CustomerAccountBrowserRequests = {
   session: empty,
   name: z.strictObject({ name, expectedRevision: revision }),
   logout: z.strictObject({ all: z.boolean() }),
+  'order-create': CustomerCreateOrderRequestSchema,
+  orders: CustomerOrdersQuerySchema,
+  'order-detail': CustomerOrderDetailRequestSchema,
 } as const;
 
 /** Server-to-server only; the relay signature authenticates the entire envelope. */
@@ -148,6 +155,9 @@ export const CustomerAccountEnvelopes = {
   session: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.session }),
   name: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.name }),
   logout: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
+  'order-create': z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests['order-create'] }),
+  orders: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.orders }),
+  'order-detail': z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests['order-detail'] }),
 } as const;
 export type CustomerAccountEnvelope<A extends CustomerAccountAction> = z.infer<(typeof CustomerAccountEnvelopes)[A]>;
 export const CustomerAccountViewSchema = z.strictObject({
@@ -236,6 +246,9 @@ export const CustomerAccountResponses = {
   session: CustomerAccountViewSchema,
   name: CustomerAccountViewSchema,
   logout: z.undefined(),
+  'order-create': CustomerOrderCreateResponseSchema,
+  orders: CustomerOrdersPageSchema,
+  'order-detail': CustomerOrderDetailResponseSchema,
 } as const;
 export const CustomerAccountErrorSchema = z.strictObject({
   code: z.enum(['CUSTOMER_UNAVAILABLE', 'CUSTOMER_INVALID_REQUEST', 'CUSTOMER_UNAUTHORIZED',

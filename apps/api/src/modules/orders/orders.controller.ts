@@ -1,7 +1,5 @@
 import {
   Body,
-  BadRequestException,
-  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -15,7 +13,6 @@ import {
   Query,
   Req,
   UseGuards,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   type CreatePublicOrder,
@@ -31,8 +28,6 @@ import {
   type JwtPayload,
   ORDER_READ_ROLES,
   type OrderStatus,
-  publicOrderingState,
-  aLaCapacite,
   TrackingTokenQuerySchema,
   type TrackingTokenQuery,
   UpdateOrderStatusSchema,
@@ -47,11 +42,9 @@ import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from '../ordering/slots.service';
 import { PublicOrderGate } from './public-order-gate';
 import { Fonction } from '../../common/capacites';
-import { publicDeliverySettingsOf } from '../delivery/delivery-order';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
-import { publicRecoveryBinding } from './order-recovery';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
-import { enforceOrderRecoveryQuota } from './public-order-recovery.controller';
+import { executeOnlineCheckout } from './online-order-checkout.service';
 
 @Controller()
 @Fonction('orders')
@@ -250,180 +243,8 @@ export class OrdersController {
     @Body(zod(CreatePublicOrderSchema)) body: CreatePublicOrder,
     @Req() request?: Request,
   ) {
-    if (body.recoveryProof) {
-      if (!this.recoveryQuota) throw new ServiceUnavailableException('La reprise de commande est indisponible');
-      await enforceOrderRecoveryQuota(this.recoveryQuota, slug, body.clientId, request ?? { headers: {}, socket: {} } as Request);
-    }
-    const tenant = await this.tenants.bySlug(slug);
-    const tenantId = String(tenant._id);
-    const fulfillment = body.fulfillment ?? 'pickup';
-    // Identité métier identique à l'écriture, sans les preuves anti-robot.
-    const { turnstileToken: _proof, recoveryProof: _recoveryProof, fulfillment: _fulfillment, ...trusted } = body;
-    const trustedOrder: CreateOrder = {
-      ...trusted,
-      payment: { method: fulfillment === 'delivery' ? 'online' : body.payment.method },
-      channel: 'online', type: fulfillment,
-    };
-    const legacyReplay = async () => {
-      if (!this.admissions) return this.orders.findPublicReplay(tenantId, body.clientId);
-      const observed = await this.admissions.observeInternal(tenantId, trustedOrder, 'legacy');
-      if (observed.state === 'created') return observed.order;
-      if (observed.state === 'rejected') throw this.admissions.rejectionError({ rejection: observed.reason });
-      return null;
-    };
-    let binding = publicRecoveryBinding(tenantId, body);
-    if (binding) {
-      if (!this.admissions) throw new ServiceUnavailableException('La reprise de commande est indisponible');
-      const observed = await this.admissions.begin(tenantId, body);
-      if (observed.state === 'created') return this.admissions.createdOrder(tenantId, body);
-      if (observed.state === 'rejected') throw this.admissions.rejectionError({ rejection: observed.reason });
-      const owned = await this.admissions.claimValidation(tenantId, body.clientId, binding);
-      if (!owned) throw new ServiceUnavailableException({ code: 'ORDER_ATTEMPT_UNCERTAIN', message: 'Cette tentative reste à vérifier. Consultez sa reprise avant un nouvel envoi.' });
-      binding = owned;
-    }
-    // Un snapshot committing possède déjà sa place. Sa reprise précède toute
-    // nouvelle vérification de pause, quota, Turnstile ou capacité complète.
-    if (!binding) {
-      const existing = await legacyReplay();
-      if (existing) return existing;
-    }
-    // Pause volontaire du gérant, suspension du compte par Snack Manager, ou
-    // commande en ligne non souscrite : même fermeture propre côté client,
-    // messages distincts (le consommateur ne doit jamais lire « impayé » ni
-    // « abonnement » — ni le litige ni le contrat ne le concernent).
-    //
-    // Une capacité manquante passe donc par la MÊME porte que la pause, et pas
-    // par un 403 de garde : le client qui valide son panier à 12h15 doit lire
-    // une phrase qui lui parle, pas recevoir une erreur.
-    const gate = publicOrderingState(
-      tenant.account,
-      {
-        paused: tenant.settings?.onlineOrderingPaused ?? false,
-        message: tenant.settings?.pauseMessage ?? null,
-      },
-      aLaCapacite(tenant, 'online'),
-    );
-    if (gate.paused) {
-      if (binding) {
-        const observed = await this.admissions!.reject(tenantId, body.clientId, binding, 'unavailable');
-        if (observed.state === 'created') return this.admissions!.createdOrder(tenantId, body);
-        throw this.admissions!.rejectionError({ rejection: 'unavailable' });
-      }
-      return gate;
-    }
-
-    // Un POST dont la reponse s'est perdue garde la meme cle. La commande
-    // existe deja : ne pas redemander une preuve Turnstile a usage unique, ni
-    // recompter le quota ou la capacite du creneau.
-    if (fulfillment === 'delivery' && !publicDeliverySettingsOf(tenant).available) {
-      if (binding) {
-        const observed = await this.admissions!.reject(tenantId, body.clientId, binding, 'unavailable');
-        if (observed.state === 'created') return this.admissions!.createdOrder(tenantId, body);
-        throw this.admissions!.rejectionError({ rejection: 'unavailable' });
-      }
-      throw new ConflictException('La livraison est momentanément indisponible. Vous pouvez choisir le retrait au restaurant.');
-    }
-
-    // LE CRÉNEAU EST VÉRIFIÉ ICI, PAS SEULEMENT PROPOSÉ.
-    //
-    // `SlotsService.compute` calculait déjà la capacité restante, les
-    // fermetures exceptionnelles et le délai de préparation — et rien ne les
-    // relisait à l'écriture. Le tunnel grisait les créneaux pleins, ce qui
-    // arrête un client honnête et personne d'autre : un appel direct posait
-    // vingt commandes à la minute sur un créneau affiché « complet », ou un
-    // jour de fermeture. La cuisine recevait des commandes qu'elle avait
-    // explicitement déclaré ne pas pouvoir honorer.
-    //
-    // Le cas du client resté dix minutes sur l'étape paiement se referme du
-    // même coup : son créneau est revérifié au moment où il valide, pas au
-    // moment où il l'a choisi.
-    try {
-      await this.slots.exigerDisponible(tenant, body.pickup.slot, fulfillment);
-    } catch (error) {
-      if (binding && (error instanceof BadRequestException || error instanceof ConflictException)) {
-        const observed = await this.admissions!.reject(tenantId, body.clientId, binding, 'slot_unavailable');
-        if (observed.state === 'created') return this.admissions!.createdOrder(tenantId, body);
-        throw this.admissions!.rejectionError({ rejection: 'slot_unavailable' });
-      }
-      if (binding) await this.admissions!.releaseValidation(tenantId, body.clientId, binding);
-      throw error;
-    }
-
-    let proof;
-    try {
-      proof = await this.publicOrderGate.authorize({
-        tenantId,
-        tenantSlug: slug,
-        turnstileToken: body.turnstileToken,
-      });
-    } catch (error) {
-      // Siteverify/quota a échoué AVANT toute création : ce validateur ne
-      // continuera jamais. Un nouveau jeton peut reprendre la même tentative.
-      if (binding) await this.admissions!.releaseValidation(tenantId, body.clientId, binding);
-      throw error;
-    }
-
-    // Le jeton anti-robot n'entre jamais dans le document. Canal et type sont
-    // des faits de route, impossibles a choisir dans le corps public strict.
-    let admissionStage: 'slot_unavailable' | 'invalid_order' = 'slot_unavailable';
-    let creationStarted = false;
-    try {
-      return await this.publicOrderGate.serializeSlot(
-        { tenantId, slot: body.pickup.slot },
-        async () => {
-          // Siteverify peut prendre plusieurs secondes. Une autre replique a
-          // pu prendre la derniere place entre-temps : seconde lecture SOUS
-          // verrou distribue, juste avant l'ecriture.
-          if (this.admissions) await this.admissions.materializeSlot(tenantId, body.pickup.slot);
-          if (binding) {
-            const observed = await this.admissions!.begin(tenantId, body);
-            if (observed.state === 'created') { await this.publicOrderGate.release(proof); return this.admissions!.createdOrder(tenantId, body); }
-            if (observed.state === 'rejected') throw this.admissions!.rejectionError({ rejection: observed.reason });
-          }
-          const raced = binding ? null : await legacyReplay();
-          if (raced) {
-            await this.publicOrderGate.release(proof);
-            return raced;
-          }
-          await this.slots.exigerDisponible(tenant, body.pickup.slot, fulfillment);
-          admissionStage = 'invalid_order';
-          creationStarted = true;
-
-          const outcome = await this.orders.createWithOutcome(
-            tenantId,
-            trustedOrder,
-            'online:turnstile',
-            null,
-            binding,
-          );
-          if (!outcome.created) await this.publicOrderGate.release(proof);
-          return outcome.order;
-        },
-      );
-    } catch (err) {
-      if (binding) {
-        if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof NotFoundException || err instanceof ForbiddenException) {
-          const observed = await this.admissions!.reject(tenantId, body.clientId, binding, err instanceof ForbiddenException ? 'unavailable' : admissionStage);
-          if (observed.state === 'created') return this.admissions!.createdOrder(tenantId, body);
-          if (observed.state === 'rejected') {
-            await this.publicOrderGate.release(proof);
-            throw this.admissions!.rejectionError({ rejection: observed.reason });
-          }
-        }
-        if (!creationStarted) {
-          await this.admissions!.releaseValidation(tenantId, body.clientId, binding);
-          await this.publicOrderGate.release(proof);
-        }
-        // Erreur I/O : aucune compensation de quota gagnant sur une supposition.
-        throw err;
-      }
-      // Un timeout du writer legacy peut avoir gagné son CAS durable. Ne
-      // restituer le quota qu'avant l'écriture ou après un rejet prouvé.
-      const terminal = err instanceof ConflictException && typeof err.getResponse() === 'object'
-        && (err.getResponse() as { code?: unknown }).code === 'ORDER_ATTEMPT_REJECTED';
-      if (!creationStarted || terminal) await this.publicOrderGate.release(proof);
-      throw err;
-    }
+    return executeOnlineCheckout({ orders: this.orders, tenants: this.tenants, slots: this.slots,
+      publicOrderGate: this.publicOrderGate, admissions: this.admissions, recoveryQuota: this.recoveryQuota }, slug, body, request);
   }
 
   /**

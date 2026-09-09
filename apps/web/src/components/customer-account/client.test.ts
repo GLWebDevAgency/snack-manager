@@ -28,6 +28,14 @@ function setup() {
 }
 
 describe("Compte client — vues privées et mutations sérialisées", () => {
+  it('expose seulement la publication publique de la vue affichée, puis la retire à invalidation', async () => {
+    const f = setup(); expect(f.client.currentAccess()).toBeNull(); await f.client.refresh();
+    const snapshot = f.client.currentAccess()!;
+    expect(snapshot).toEqual({ selection: await f.request.selection(), expiresAt: now + 60_000 });
+    f.changePublication(); expect(f.client.currentAccess()).toEqual(snapshot); // Never adopt B from a late journal read.
+    snapshot.selection.publication.expectedCheckId = randomUUID(); expect(f.client.currentAccess()).not.toEqual(snapshot);
+    f.client.invalidate(); expect(f.client.currentAccess()).toBeNull();
+  });
   it.each(['name', 'logout'] as const)('refuse %s préparé sur A si la publication devient B pendant le verrou, même avec une vue identique', async action => {
     const f = setup(); await f.client.refresh(); const displayed = f.client.getSnapshot().view;
     const release = deferred<void>();

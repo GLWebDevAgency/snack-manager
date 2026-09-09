@@ -65,11 +65,12 @@ const noopSubscribe = () => () => undefined;
 const emptySnapshot = () => EMPTY_ACCOUNT;
 const noRefresh = async () => undefined;
 const noMutation = async () => false;
+const noAccess = () => null;
 
 export function useCustomerAccount(slug: string, enabled: boolean) {
   const shared = useMemo(() => enabled && typeof window !== "undefined" ? getRuntime(slug) : null, [enabled, slug]);
   const state = useSyncExternalStore(shared?.client.subscribe ?? noopSubscribe, shared?.client.getSnapshot ?? emptySnapshot, emptySnapshot);
   useEffect(() => shared?.retain(), [shared]);
   return { state, refresh: shared?.client.refresh ?? noRefresh, saveName: shared?.client.saveName ?? noMutation,
-    logout: shared?.client.logout ?? noMutation };
+    logout: shared?.client.logout ?? noMutation, currentAccess: shared?.client.currentAccess ?? noAccess };
 }

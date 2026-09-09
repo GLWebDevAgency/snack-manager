@@ -194,7 +194,13 @@ jobs:
           # Base de connexion déjà créée par le service PostgreSQL ; la fixture
           # dérive sa propre base customer UUID. Aucun appel Verify réel.
           CUSTOMER_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer
         run: pnpm --filter @sm/customer test:integration
+
+      - name: Tests MongoDB réels — commandes privées et isolation des comptes
+        env:
+          CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer
+        run: pnpm --filter @sm/api exec vitest run src/modules/orders/customer-orders.integration.test.ts
 
       - name: Tests MongoDB réels — émission durable des factures
         env:
@@ -298,3 +304,6 @@ jobs:
           }
           console.log('✓ graphe API CommonJS chargé sans démarrage des services');
           NODE
+
+      - name: Chargement des contrats client compilés sans cycle
+        run: node scripts/verify-customer-contracts-built.mjs

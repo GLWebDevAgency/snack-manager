@@ -1,11 +1,13 @@
 import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
   CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema,
   CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER,
-  type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
+  customerAccountResponseLimit, type CustomerAccountAction, type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
 import { selectedCustomerBrowser, selectedCustomerPublication } from './browser-journal';
 
-type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "protection" | "passkey" | "recovery" | "session" | "name" | "logout";
+type Action = CustomerAccountAction;
+const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create'];
 export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
+export type CustomerAccountAccess = { selection: CustomerAccountSelection; expiresAt: number };
 export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
   selection?: () => Promise<CustomerAccountSelection | null>;
 };
@@ -28,8 +30,9 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
   const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
     if (!valid) throw new CustomerAccountHttpError(400);
-    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", passkey: "cle-acces", recovery: "secours", session: "session", name: "profil", logout: "session" };
-    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", passkey: "POST", recovery: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
+    if (['orders', 'order-detail', 'order-create'].includes(action) && !expectedSelection) throw new CustomerAccountHttpError(409);
+    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", passkey: "cle-acces", recovery: "secours", session: "session", name: "profil", logout: "session", orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes' };
+    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", passkey: "POST", recovery: "POST", session: "GET", name: "PATCH", logout: "DELETE", orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST' };
     let browserRef: string | null = null;
     let expected: CustomerAccountPublication | null = null;
     if (action !== 'status' && action !== 'browser') {
@@ -37,7 +40,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
       if (browserRef === null) throw new CustomerAccountHttpError(401);
       if (!CustomerAccountBrowserRefSchema.safeParse(browserRef).success) throw new CustomerAccountHttpError(409);
     }
-    if (['session', 'name', 'logout'].includes(action)) {
+    if (PRIVATE_ACTIONS.includes(action)) {
       try { expected = await publication(); } catch { throw new CustomerAccountHttpError(409); }
       if (expected === null) throw new CustomerAccountHttpError(401);
       if (!CustomerAccountPublicationSchema.safeParse(expected).success) throw new CustomerAccountHttpError(409);
@@ -75,7 +78,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
     try {
       while (true) {
         const next = await reader.read(); if (next.done) break;
-        bytes += next.value.byteLength; if (bytes > (['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 4_096)) throw new CustomerAccountHttpError(502);
+        bytes += next.value.byteLength; if (bytes > (['orders', 'order-detail', 'order-create'].includes(action) ? customerAccountResponseLimit(action) : ['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 4_096)) throw new CustomerAccountHttpError(502);
         text += decoder.decode(next.value, { stream: true });
       }
       complete = true;
@@ -226,6 +229,11 @@ export function createCustomerAccountClient(port: Port) {
     return confirmed && current(run);
   }
   return { refresh, invalidate,
+    // Public correlation only, captured from the session which actually
+    // produced this view. Consumers must still revalidate it before/after I/O.
+    currentAccess: (): CustomerAccountAccess | null => active() && !mutating && state.status === 'authenticated'
+      && state.view && state.view.expiresAt > now() && viewedSelection
+      ? { selection: structuredClone(viewedSelection), expiresAt: state.view.expiresAt } : null,
     saveName: (name: string | null) => mutate("name", { name, expectedRevision: state.view?.profile.revision ?? -1 }),
     logout: (all = false) => mutate("logout", { all }),
     getSnapshot: () => state, getServerSnapshot: () => EMPTY_ACCOUNT,
