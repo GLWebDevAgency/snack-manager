@@ -22,6 +22,7 @@ let expiresAt: number, browserExpires: number, verifiedAt: number, stage: string
 let credential: Credential, mutations: number, assertions: number, closed: number, loseLogin: boolean, loseActivation: boolean, available: boolean, failed: boolean;
 let heldCode: Promise<void> | null, releaseCode: (() => void) | null;
 let heldLogin: Promise<void> | null, releaseLogin: (() => void) | null, logouts: number;
+let heldLogout: Promise<void> | null, releaseLogout: (() => void) | null;
 const profile = () => ({ expiresAt: browserExpires, profile: { name: null, phoneE164: '+33600000000', phoneVerifiedAt: verifiedAt, revision: 0 } });
 const recovery = () => ({ operationId, attemptId, expiresAt, stage, recoveryVersion: version });
 const auth = () => ({ state: 'authenticated', operationId, publicationId, view: profile() });
@@ -46,6 +47,7 @@ beforeEach(async () => {
   mutations = 0; assertions = 0; closed = 0; loseLogin = false; loseActivation = false; available = true; failed = false;
   heldCode = null; releaseCode = null;
   heldLogin = null; releaseLogin = null; logouts = 0;
+  heldLogout = null; releaseLogout = null;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
@@ -58,7 +60,7 @@ beforeEach(async () => {
     const reply = (json: unknown) => route.fulfill({ json, headers: { 'cache-control': 'private, no-store' } });
     if (action === 'capacites') return reply({ available: false, registrationAvailable: false, accessAvailable: available });
     if (action === 'session') {
-      if (req.method() === 'DELETE') { publicationId = null; logouts++; return route.fulfill({ status: 204 }); }
+      if (req.method() === 'DELETE') { publicationId = null; logouts++; if (heldLogout) await heldLogout; return route.fulfill({ status: 204 }); }
       return publicationId && req.headers()['x-sm-customer-check-id'] === publicationId && req.headers()['x-sm-customer-operation-id'] === operationId
         ? reply(profile()) : route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
     }
@@ -221,16 +223,53 @@ describe('customer credential access — native rendered browser', () => {
     expect(await page.locator('body').textContent()).not.toContain(code);
     expect(mutations).toBe(0);
   }, 25_000);
-  it('offers a genuine new login after logout without erasing or adopting the old receipt', async () => {
+  it('offers a genuine new login after logout without erasing or adopting the old receipt', async ({ onTestFailed }) => {
+    const startedAt = performance.now();
+    let phase = 'first login';
+    onTestFailed(() => {
+      // Only fixed stage names and counters: no credential, code, ID or profile.
+      console.error('Customer login round trip did not complete', {
+        phase, elapsedMs: Math.round(performance.now() - startedAt), assertions, logouts,
+      });
+    });
     await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
     await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor(); const prior = publicationId;
+    phase = 'logout confirmation';
     await page.getByRole('button', { name: 'Déconnecter cet appareil', exact: true }).click();
     await page.getByRole('button', { name: 'Confirmer la déconnexion', exact: true }).click();
+    phase = 'login control available within 1500ms';
+    await expect.poll(() => page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).isEnabled(), { timeout: 1_500 }).toBe(true);
+    phase = 'second login';
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    phase = 'new publication and exact operation counts';
+    expect(publicationId).not.toBe(prior); expect(assertions).toBe(2); expect(logouts).toBe(1);
+  });
+  it('keeps credential entry closed until the pending logout has finished', async () => {
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    const prior = publicationId, savedJournal = await journal(), sent = [...steps];
+    heldLogout = new Promise(resolve => { releaseLogout = resolve; });
+    await page.getByRole('button', { name: 'Déconnecter cet appareil', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirmer la déconnexion', exact: true }).click();
+    try {
+      // The real client still owns its Web Lock: DELETE reached the fixture,
+      // but its response and final cross-tab invalidation have not completed.
+      await expect.poll(() => logouts).toBe(1);
+      await page.getByText('Vérification de votre session…', { exact: true }).waitFor();
+      expect(await page.getByRole('heading', { name: 'Votre profil', exact: true }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Revenir au menu', exact: true }).isDisabled()).toBe(true);
+      expect(await journal()).toEqual(savedJournal); expect(steps).toEqual(sent); expect(assertions).toBe(1);
+      if (capture) await page.screenshot({ path: join(capture, 'logout-pending-390.png') });
+    } finally { releaseLogout!(); }
     await expect.poll(() => page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).isEnabled(), { timeout: 1_500 }).toBe(true);
     await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
     await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
     expect(publicationId).not.toBe(prior); expect(assertions).toBe(2); expect(logouts).toBe(1);
-  });
+    if (capture) await page.screenshot({ path: join(capture, 'login-after-logout-390.png') });
+  }, 25_000);
   it('shares the real Web Lock between tabs; a pending assertion cannot be bypassed by another result action', async () => {
     heldLogin = new Promise(resolve => { releaseLogin = resolve; });
     await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
