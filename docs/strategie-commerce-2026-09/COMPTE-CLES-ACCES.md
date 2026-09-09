@@ -234,6 +234,15 @@ l’expiration et le hors-ligne masquent aussi les projections privées, sans
 prétendre avoir purgé les données. L’autorisation est relue dans le verrou du
 panier avant son éventuel vidage ; une réponse tardive ne suffit pas.
 
+Une demande masquée qui n’a jamais atteint le serveur ne doit pas bloquer
+indéfiniment le panier : l’utilisateur peut demander **explicitement**, après
+confirmation, la fermeture de cette seule tentative avec sa preuve C01 déjà
+présente. Le serveur pose un rejet terminal si elle n’a pas été acceptée ; une
+commande déjà acceptée n’est jamais annulée et son reçu reste masqué. Une
+réponse de fermeture perdue conserve le journal : la lecture suivante vérifie
+le résultat sans nouvel envoi de commande ni paiement. L’interface ne propose
+le retour au panier qu’après un état terminal confirmé.
+
 Ce masquage **ne révoque pas les liens de suivi déjà obtenus**, ni les fragments
 privés explicitement copiés. Un lien compte ordinaire n’exporte plus
 automatiquement la preuve de remise ; celle-ci est relue dans le journal filtré

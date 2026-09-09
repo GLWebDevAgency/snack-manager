@@ -22,6 +22,7 @@ let faults: string[], calls: { path: string; body: Record<string, unknown>; head
 let authenticated: boolean, expiresAt: number, verifiedAt: number, holdCreate: boolean, holdPayment: boolean;
 let heldCreate: { res: ServerResponse; body: unknown } | null, heldPayment: ServerResponse | null;
 let holdRecovery: boolean, heldRecovery: ServerResponse | null, accountReads: number;
+let heldAbandon: ServerResponse | null;
 const orderId = 'b'.repeat(24), iso = '2030-09-09T16:00:00.000Z';
 const slots = { date: '2030-09-09', timezone: 'Europe/Paris', intervalMin: 10, capacity: 4, leadTimeMin: 30,
   slots: [{ iso, label: '18:00', service: 'dinner', remaining: 4, full: false, load: 'calm' }], closedToday: false, nextOpenDate: null, closureReason: null, paused: false };
@@ -100,6 +101,7 @@ beforeAll(async () => {
       if (holdCreate) { heldCreate = { res, body: response }; return; } json(res, response); return;
     }
     if (path === '/api/public/tenants/recette/orders/recovery') { if (holdRecovery) { heldRecovery = res; return; } json(res, { state: 'created', order: recovered() }); return; }
+    if (path === '/api/public/tenants/recette/orders/abandon') { heldAbandon = res; return; }
     if (path === `/api/public/orders/${orderId}/payment-intent`) { if (holdPayment) { heldPayment = res; return; } json(res, payment); return; }
     faults.push(`Unexpected ${req.method} ${path}`); json(res, {}, 404);
   });
@@ -109,14 +111,14 @@ beforeAll(async () => {
 }, 30_000);
 beforeEach(async () => {
   faults = []; calls = []; authenticated = true; expiresAt = Date.now() + 300_000; verifiedAt = Date.now() - 1_000; holdCreate = false; holdPayment = false; heldCreate = null; heldPayment = null;
-  holdRecovery = false; heldRecovery = null; accountReads = 0;
+  holdRecovery = false; heldRecovery = null; heldAbandon = null; accountReads = 0;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', route => { if (new URL(route.request().url()).origin === origin) return route.continue(); faults.push('External request refused'); return route.abort(); });
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
   await page.goto(origin + '/empty'); await seedCustomerBrowserFixture(page, 'recette'); await page.goto(origin);
   await page.waitForFunction(() => !!window.checkoutAccountFixture?.access());
 });
-afterEach(async () => { heldCreate?.res.destroy(); heldPayment?.destroy(); heldRecovery?.destroy(); await context.close(); expect(faults).toEqual([]); });
+afterEach(async () => { heldCreate?.res.destroy(); heldPayment?.destroy(); heldRecovery?.destroy(); heldAbandon?.destroy(); await context.close(); expect(faults).toEqual([]); });
 afterAll(async () => { await browser?.close(); if (server) await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }); process.stdout.write(`Checkout fixture captures: ${captures}\n`); });
 async function activate(target: Locator) { await expect.poll(() => target.isEnabled()).toBe(true); await target.focus(); await target.press('Enter'); }
 async function checkout(method: 'counter' | 'online' = 'counter', submit = true) {
@@ -257,6 +259,48 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
     expect(await page.evaluate(() => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', '00000000-0000-4000-8000-000000000099'))).toBeNull();
     expect(payments()).toHaveLength(0);
   });
+  it.each(['rejected', 'created', 'lost'] as const)('explicitly closes only a masked pending attempt after confirmation (%s)', async outcome => {
+    const id = await seedAttempt('account');
+    const original = await page.evaluate(id => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', id), id);
+    if (!original || original.state !== 'prepared') throw Error('Fixture pending attempt required');
+    expect(await page.evaluate(() => window.checkoutAccountFixture.logout())).toBe(true);
+    await page.reload(); await assertMasked();
+    holdRecovery = true; await activate(page.getByRole('button', { name: 'Vérifier la demande', exact: true }));
+    await expect.poll(() => !!heldRecovery).toBe(true);
+    json(heldRecovery!, { message: 'Demande non trouvée' }, 404); heldRecovery = null;
+    expect(await page.getByRole('button', { name: 'Fermer cette tentative', exact: true }).count()).toBe(1);
+    await activate(page.getByRole('button', { name: 'Fermer cette tentative', exact: true }));
+    expect(calls.filter(call => call.path.endsWith('/abandon'))).toHaveLength(0);
+    await activate(page.getByRole('button', { name: 'Conserver la demande', exact: true }));
+    expect(calls.filter(call => call.path.endsWith('/abandon'))).toHaveLength(0);
+    await activate(page.getByRole('button', { name: 'Fermer cette tentative', exact: true }));
+    await activate(page.getByRole('button', { name: 'Confirmer la fermeture', exact: true }));
+    await expect.poll(() => !!heldAbandon).toBe(true);
+    await assertMasked();
+    const abandon = calls.filter(call => call.path.endsWith('/abandon'));
+    expect(abandon).toHaveLength(1);
+    expect(abandon[0]!.body).toEqual({ ...original.payload, clientId: id, recoveryProof: original.recoveryProof });
+    expect(await page.getByRole('button', { name: 'Confirmer la fermeture', exact: true }).isEnabled()).toBe(false);
+    json(heldAbandon!, outcome === 'created' ? { state: 'created', order: recovered() }
+      : outcome === 'rejected' ? { state: 'rejected', code: 'ORDER_ATTEMPT_REJECTED', reason: 'abandoned', message: 'Tentative fermée' }
+      : { message: 'Réponse perdue' }, outcome === 'lost' ? 503 : 200); heldAbandon = null;
+    if (outcome === 'lost') {
+      await page.getByText('La réponse reste à vérifier. Votre demande est conservée ; aucune nouvelle commande n’a été envoyée.', { exact: true }).waitFor();
+      expect(await page.getByRole('button', { name: 'Revenir à mon panier', exact: true }).count()).toBe(0);
+      expect(calls.filter(call => call.path.endsWith('/abandon'))).toHaveLength(1);
+      await activate(page.getByRole('button', { name: 'Vérifier la demande', exact: true }));
+      await expect.poll(() => !!heldRecovery).toBe(true);
+      json(heldRecovery!, { state: 'rejected', code: 'ORDER_ATTEMPT_REJECTED', reason: 'abandoned', message: 'Tentative fermée' }); heldRecovery = null;
+    }
+    await page.getByRole('button', { name: 'Revenir à mon panier', exact: true }).waitFor();
+    await assertMasked();
+    await activate(page.getByRole('button', { name: 'Revenir à mon panier', exact: true }));
+    await page.getByRole('dialog', { name: 'Votre commande', exact: true }).waitFor();
+    expect(await page.evaluate(id => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', id), id)).toBeNull();
+    expect(posts()).toHaveLength(0); expect(payments()).toHaveLength(0);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.clears)).toBe(0);
+  });
+
   it('does not mount a held payment response or resurrect its cached callback after logout', async () => {
     holdPayment = true; await checkout('online'); await expect.poll(() => !!heldPayment).toBe(true);
     expect(await page.evaluate(() => window.checkoutAccountFixture.logout())).toBe(true);

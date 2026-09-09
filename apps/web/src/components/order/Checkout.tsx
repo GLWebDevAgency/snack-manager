@@ -274,6 +274,7 @@ export function Checkout({
   const authorityRef = useRef<CheckoutAuthority | null>(null);
   const generation = useRef(0);
   const [privatePaused, setPrivatePaused] = useState(false);
+  const [privateCloseFor, setPrivateCloseFor] = useState<string | null>(null);
   const privateHidden = authority?.provenance.kind === "account" && (privatePaused
     || !checkoutAccessMatches(authority.provenance, recovery.currentCheckoutAccess()));
   // A fresh read of the same session may make the journal row visible again,
@@ -475,6 +476,7 @@ export function Checkout({
     dispatchQuote({ type: "invalidate" });
     clientIdRef.current = null;
     generation.current++; authorityRef.current = null; setAuthority(null); setPrivatePaused(false);
+    setPrivateCloseFor(null);
   }
 
   async function clearMatchingCart(attempt: CheckoutAttempt, selected: CheckoutAuthority | null) {
@@ -512,9 +514,12 @@ export function Checkout({
     await recovery.refresh();
   }
 
-  async function recoverAttempt(abandon = false) {
-    if (requestInFlightRef.current || (abandon && (privateRecovery || privateHidden))) return;
+  async function recoverAttempt(abandon = false, confirmedClientId?: string) {
+    if (requestInFlightRef.current) return;
     const hidden = privateRecovery;
+    // Explicit closure uses only this attempt's existing capability. It never
+    // adopts a new account, recreates an order or cancels an accepted order.
+    if (abandon && (hidden || privateHidden) && (!hidden || confirmedClientId !== hidden.clientId)) return;
     const selected = authorityRef.current;
     requestInFlightRef.current = true;
     clearScheduledReset();
@@ -524,7 +529,7 @@ export function Checkout({
       const attempt = hidden ? await readCheckoutAttemptForReconciliation(slug, hidden.clientId) : recovery.active;
       if (!attempt || (attempt.state !== "prepared" && attempt.state !== "uncertain")) { await recovery.refresh(); return; }
       const receiptAuthority = hidden ? selected : pinAuthority(attempt.provenance ?? { kind: "guest" });
-      if (abandon && !currentAuthority(receiptAuthority)) { await recovery.refresh(); return; }
+      if (abandon && !hidden && !currentAuthority(receiptAuthority)) { await recovery.refresh(); return; }
       const identity = { clientId: attempt.clientId, recoveryProof: attempt.recoveryProof };
       const result = abandon
         ? await api.abandonOrderAttempt(slug, { ...attempt.payload, ...identity })
@@ -532,7 +537,7 @@ export function Checkout({
       await acceptRecoveryResult(attempt, result, receiptAuthority, !hidden && !privateHidden);
     } catch {
       setError("La vérification n’a pas abouti. Votre demande est conservée : réessayez sa récupération ou le même envoi, sans recréer de commande.");
-    } finally { requestInFlightRef.current = false; setBusy(false); }
+    } finally { requestInFlightRef.current = false; setBusy(false); if (hidden) setPrivateCloseFor(null); }
   }
 
   async function startNewAttempt() {
@@ -1043,9 +1048,16 @@ export function Checkout({
               <p className="text-sm leading-relaxed text-mut">Cette demande appartient à un accès compte qui n’est plus disponible. Ses informations et son suivi ne sont pas affichés. Les liens déjà copiés restent utilisables.</p>
               {recovery.error ? <ErrorState title="Sauvegarde indisponible" message={recovery.error} onRetry={() => { void recovery.refresh(); }} />
                 : privateRecovery?.pending ? <>
-                  <p className="text-sm leading-relaxed text-mut">Vérifiez uniquement si la demande a été reçue avant de préparer une autre commande. Aucun nouvel envoi ni paiement ne sera effectué.</p>
-                  {error && <p role="status" className="text-sm leading-relaxed text-mut">La réponse reste à vérifier. Votre demande est conservée ; aucun nouvel envoi n’a été effectué.</p>}
-                  <PrimaryAction disabled={busy} loading={busy} onClick={() => { void recoverAttempt(); }}>Vérifier la demande</PrimaryAction>
+                  <p className="text-sm leading-relaxed text-mut">Vérifiez si la demande a été reçue avant de préparer une autre commande. Aucune nouvelle commande ni paiement ne sera envoyé.</p>
+                  {error && <p role="status" className="text-sm leading-relaxed text-mut">La réponse reste à vérifier. Votre demande est conservée ; aucune nouvelle commande n’a été envoyée.</p>}
+                  {privateCloseFor === privateRecovery.clientId ? <>
+                    <p className="text-sm leading-relaxed text-mut">Le serveur fermera uniquement une tentative non acceptée. Une commande déjà acceptée ne sera pas annulée et ses informations resteront masquées.</p>
+                    <PrimaryAction disabled={busy} loading={busy} onClick={() => { void recoverAttempt(true, privateCloseFor); }}>Confirmer la fermeture</PrimaryAction>
+                    <GhostAction disabled={busy} onClick={() => setPrivateCloseFor(null)}>Conserver la demande</GhostAction>
+                  </> : <>
+                    <PrimaryAction disabled={busy} loading={busy} onClick={() => { void recoverAttempt(); }}>Vérifier la demande</PrimaryAction>
+                    <GhostAction disabled={busy} onClick={() => setPrivateCloseFor(privateRecovery.clientId)}>Fermer cette tentative</GhostAction>
+                  </>}
                 </> : <PrimaryAction disabled={busy || !recovery.ready} loading={busy} onClick={() => { void startNewAttempt(); }}>Revenir à mon panier</PrimaryAction>}
             </section> : recovery.error ? (
               <ErrorState title="Sauvegarde indisponible" message={recovery.error} onRetry={() => { void recovery.refresh(); }} />
