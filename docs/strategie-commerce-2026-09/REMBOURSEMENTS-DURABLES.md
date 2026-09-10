@@ -44,7 +44,9 @@ Le reçu financier précède `AuditService.logOnce`. Les reprises et webhooks
 réparent cet audit de manière idempotente ; son identité utilise le reçu et non
 un statut susceptible d'évoluer. Redis reste une notification auxiliaire après
 persistance. Le journal, les données privées de compte et les métadonnées
-fournisseur non nécessaires ne sortent pas dans les réponses/événements.
+fournisseur non nécessaires ne sortent pas dans les réponses métier/événements.
+La sauvegarde privilégiée autorisée conserve le document complet, journal inclus ;
+elle garde ses propres contrôles d'accès et n'est pas une projection publique.
 
 ## Activation : obligatoire en deux temps
 
