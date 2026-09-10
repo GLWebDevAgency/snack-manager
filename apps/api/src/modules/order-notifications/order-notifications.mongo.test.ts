@@ -12,6 +12,7 @@ import { ORDER_PUSH_TTL_MS } from '@sm/contracts';
 import { OrderNotificationsService } from './order-notifications.service';
 import { OrderNotificationsWorker } from './order-notifications.worker';
 import { pushFixture } from './order-push.test-fixture';
+import { endpointHash, sealSubscription } from './order-push.crypto';
 
 function isolatedMongo(raw: string) {
   const url = new URL(raw);
@@ -133,6 +134,21 @@ describe.skipIf(!database && !existsSync(binary))('notifications durables — Mo
     expect(JSON.stringify(raw)).not.toContain(token);
     expect(JSON.stringify(raw)).not.toContain(subscription.keys.auth);
     expect((raw!.expiresAt as Date).getTime()).toBeGreaterThan(Date.now() + ORDER_PUSH_TTL_MS - 10_000);
+  });
+
+  it.each(['https://fcm%2Egoogleapis.com/a', 'https:fcm.googleapis.com/a'])('refuse une nouvelle autorité ambiguë sans écriture et expire un ancien abonnement : %s', async (endpoint) => {
+    await expect(service.subscribe(slug, String(orderId), request(endpoint))).rejects.toThrow();
+    expect(reserve).not.toHaveBeenCalled(); expect(await notices.countDocuments()).toBe(0);
+    await service.subscribe(slug, String(orderId), request()); await ready();
+    const hash = endpointHash(endpoint);
+    const encrypted = sealSubscription(config, String(tenantId), String(orderId), hash, { ...subscription, endpoint });
+    await notices.updateOne({ orderId }, { $set: { 'subscriptions.0.endpointHash': hash, 'subscriptions.0.encrypted': encrypted } });
+    const send = vi.fn();
+    await new OrderNotificationsWorker(orders, notices, { send } as never, config).drainOnce();
+    expect(send).not.toHaveBeenCalled();
+    const stored = await notices.collection.findOne({ orderId });
+    expect(stored?.subscriptions[0]).toMatchObject({ state: 'expired', encrypted: null });
+    expect(stored?.nextAttemptAt).toBeNull();
   });
 
   it('arbitre atomiquement cinq appareils malgré huit inscriptions concurrentes', async () => {

@@ -66,6 +66,19 @@ describe('recommander depuis un reçu invité', () => {
     const f = fixture(); await f.client.load(); f.pending.mockImplementationOnce(async () => { f.forget(); return false; });
     expect(await f.client.confirm(f.append)).toBe(false); expect(f.client.getSnapshot().snapshot).toBeNull();
   });
+  it('masque aussi le reçu oublié lorsque le vrai port panier absorbe le refus de son callback', async () => {
+    const f = fixture(); await f.client.load();
+    f.pending.mockImplementationOnce(async () => { f.forget(); return false; });
+    // useCart.appendIfUnchanged protège sa transaction de stockage par ce
+    // catch. Un refus de capacité ne remonte donc pas comme exception au modèle.
+    f.append.mockImplementationOnce(async (_lines, allowed) => {
+      try { return await allowed(); } catch { return false; }
+    });
+    expect(await f.client.confirm(f.append)).toBe(false);
+    expect(f.append).toHaveBeenCalledTimes(1);
+    expect(f.client.getSnapshot()).toMatchObject({ status: 'error', snapshot: null });
+    expect(f.client.getSnapshot().message).toContain('Ce raccourci n’est plus disponible');
+  });
   it('refuse une réponse d’un autre ordre ou restaurant et une carte en pause', async () => {
     for (const change of [(f: ReturnType<typeof fixture>) => f.loadSource.mockResolvedValue({ ...source, orderId: 'c'.repeat(24) }),
       (f: ReturnType<typeof fixture>) => f.loadSource.mockResolvedValue({ ...source, tenantSlug: 'autre' }),

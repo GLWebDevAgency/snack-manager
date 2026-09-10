@@ -70,6 +70,9 @@ export function createDeviceReorderClient(port: Port) {
         await verify(run);
         return !unresolved && current(run);
       });
+      // Le port panier peut absorber le refus du callback comme une erreur de
+      // stockage. Ne republier aucun aperçu avant de relire sa capacité locale.
+      await verify(run);
       if (current(run)) publish(added ? { status: 'done', snapshot: null, message: 'Les articles sont ajoutés à votre panier. Aucune commande n’a encore été envoyée.' }
         : { status: 'ready', snapshot: fresh, message: 'L’ajout n’a pas été confirmé. Vérifiez votre panier et toute demande en attente avant de réessayer.' });
       return added;
