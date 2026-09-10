@@ -4,7 +4,7 @@
 `2efb77f6d418cf17b353abbfcdd4d2b7547c19ab`. La transaction protégée #155 et la
 migration de liaison sont livrées ; elles ne créent pas encore de carte depuis
 le compte. Le lot suivant, sur `feat/customer-account-loyalty`, prépare
-l'adhésion neuve avec contrats, API, BFF et interface client : **PR en préparation,
+l'adhésion neuve avec contrats, API, BFF et interface client : **PR #157 ouverte,
 pas encore fusionnée ni déployée**. Aucun fournisseur ni pilote supplémentaire
 n'est ouvert ; la production n'est pas modifiée par ces lots.
 
@@ -248,6 +248,18 @@ interne Chromium ni chronologie CDP n'est prétendue. Une autre passe globale
 a dépassé le délai de fermeture de deux anciennes suites livreur : leur reprise
 isolée passe 18/18 et la passe globale séquencée réussit, sans modifier ces
 suites ni relever leurs délais.
+
+La [première CI #157 du SHA `167593ac`](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34445786117)
+a ensuite échoué sur le délai agrégé de cinq secondes d'un test de navigation
+antérieur : **2490 tests web réussis, un échec**. Le rejeu inchangé passe en
+local, sans identifier la cause précise du dépassement distant. Le test est
+séparé en trois cas de géométrie (320/390/1440) et un cas de navigation entre
+les fenêtres ; les assertions, le contre-exemple de reflow et les délais sont
+conservés. Un diagnostic de phase n'est émis qu'en cas d'échec. Cette séparation
+ne constitue pas un correctif produit et ne dispense pas d'une nouvelle CI.
+Après séparation, le fichier passe **40/40** et la suite web complète passe
+**2494/2494** ; typage et lint restent verts. Les trois cas supplémentaires
+proviennent du découpage, pas de nouvelles fonctionnalités.
 
 **Non compris / à recevoir ensuite :** rattachement explicite d'une ancienne
 carte POS avec preuve renforcée, gains des commandes web, consommation d'une
