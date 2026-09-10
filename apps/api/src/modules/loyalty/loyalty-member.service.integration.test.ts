@@ -219,6 +219,38 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     await adminPool?.end();
   });
 
+  it.each([0, 1_299])('ne crédite qu’une seule vente malgré deux canaux et deux opérations (%i centimes)', async purchaseCents => {
+    const tenantRef = `canonical-${randomUUID()}`, programId = randomUUID(), clientId = randomUUID();
+    await withLoyaltyTenant(db, tenantRef, async tx => {
+      await tx.insert(programs).values({ id: programId, tenantRef, status: 'active' });
+      await tx.insert(programVersions).values({ tenantRef, programId, version: 1, name: 'Recette canonique',
+        mechanism: 'points', minimumPurchaseCents: 500, spendStepCents: 100, unitsPerStep: 1,
+        unitLabelSingular: 'point', unitLabelPlural: 'points', termsSummary: 'Recette sans fournisseur' });
+    });
+    const created = await acknowledgeCreated(tenantRef, await service.createMember(tenantRef, {
+      operationId: randomUUID(), firstName: 'Recette', phone: '06 16 18 03 14',
+      termsAccepted: true, termsNoticeVersion: 'loyalty-2026-09',
+    }, actor), actor);
+    const attempts = [{ operationId: randomUUID(), purchaseCents, externalRef: `pos-order:${clientId}` },
+      { operationId: randomUUID(), purchaseCents, externalRef: `ONLINE-ORDER:${clientId.toUpperCase()}` }];
+    const outcomes = await Promise.allSettled(attempts.map((request, index) => service.earn(tenantRef, created.member.id, request,
+      { ...actor, source: index === 0 ? 'pos' : 'online' })));
+    expect(outcomes.filter(outcome => outcome.status === 'fulfilled')).toHaveLength(1);
+    const failed = outcomes.find(outcome => outcome.status === 'rejected');
+    expect(failed).toMatchObject({ status: 'rejected', reason: { status: 409, message: 'Ce ticket a déjà été traité en fidélité' } });
+    const expectedUnits = purchaseCents === 0 ? 0 : 12;
+    const stored = await adminPool.query<{ balance: string; receipts: string; entries: string; earns: string }>(`
+      SELECT w.balance_units::text AS balance,
+        (SELECT count(*)::text FROM loyalty.earn_receipts r WHERE r.tenant_ref=w.tenant_ref) AS receipts,
+        (SELECT count(*)::text FROM loyalty.ledger_entries l WHERE l.tenant_ref=w.tenant_ref AND l.kind='earn') AS entries,
+        (SELECT count(*)::text FROM loyalty.operations o WHERE o.tenant_ref=w.tenant_ref AND o.kind='earn') AS earns
+      FROM loyalty.wallets w WHERE w.tenant_ref=$1 AND w.member_id=$2`, [tenantRef, created.member.id]);
+    expect(stored.rows).toEqual([{ balance: String(expectedUnits), receipts: '1', entries: expectedUnits === 0 ? '0' : '1', earns: '1' }]);
+    const winnerIndex = outcomes.findIndex(outcome => outcome.status === 'fulfilled');
+    expect(await service.earn(tenantRef, created.member.id, attempts[winnerIndex]!,
+      { ...actor, source: winnerIndex === 0 ? 'pos' : 'online' })).toMatchObject({ replayed: true, awardedUnits: expectedUnits });
+  }, integrationTestTimeout);
+
   it('adhère, retrouve, crédite et dépense sans double effet ni fuite tenant', async () => {
     const tenantRef = `classfood-${randomUUID()}`;
     const otherTenantRef = `rival-${randomUUID()}`;
