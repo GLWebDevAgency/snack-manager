@@ -86,6 +86,102 @@ async function preuve(page, nom) {
   await page.screenshot({ path: resolve(process.env.SM_E2E_CAPTURES, `${nom}.png`), fullPage: true });
 }
 
+for (const [depart, arrivee] of [[1280, 820], [820, 1280]]) {
+  scenario(`Caisse — modale persistante ${depart} vers ${arrivee}, focus et fermeture après rotation`,
+    { format: { width: depart, height: 900 } }, async (page, { incidents }) => {
+      await ouvrirCaisse(page);
+      const declencheur = page.getByRole('button', { name: 'Paramètres du poste', exact: true });
+      const panneau = page.getByRole('dialog', { name: 'Paramètres du poste', exact: true });
+      const isolationInitiale = await page.evaluateHandle(() => ({
+        inert: document.querySelectorAll('[inert]').length,
+        overflow: document.body.style.overflow,
+        // Les icônes décoratives diffèrent selon la largeur : comparer les
+        // attributs des nœuds survivants, pas le nombre global d'aria-hidden.
+        nodes: Array.from(document.querySelectorAll('[aria-hidden]')).map((element) => ({
+          element, hidden: element.getAttribute('aria-hidden'),
+        })),
+      }));
+      await declencheur.click();
+      await panneau.waitFor({ state: 'visible' });
+      await panneau.getByRole('tab', { name: 'Clair', exact: true }).click();
+      await page.setViewportSize({ width: arrivee, height: 900 });
+      // Le même dialogue reste ouvert, mais sa racine passe réellement d'un
+      // enfant du POS à un portail body (ou inversement). Un test de panneau
+      // inline remplacé par Overlay ne couvre pas ce cycle de vie.
+      await page.waitForFunction((compact) => {
+        const dialogue = document.querySelector('[role="dialog"][aria-label="Paramètres du poste"]');
+        return !!dialogue && (dialogue.parentElement === document.body) === compact;
+      }, arrivee < 900);
+      await panneau.waitFor({ state: 'visible' });
+      assert.equal(await panneau.evaluate((element) => !!element.closest('[inert], [aria-hidden="true"]')), false,
+        'le dialogue déplacé ne doit pas rester sous une ancienne branche rendue inerte');
+      await page.waitForFunction(() => {
+        const dialogue = document.querySelector('[role="dialog"][aria-label="Paramètres du poste"]');
+        return !!dialogue && dialogue.contains(document.activeElement);
+      });
+      for (const touche of ['Shift+Tab', 'Tab', 'Tab']) {
+        await page.keyboard.press(touche);
+        assert.equal(await panneau.evaluate((element) => element.contains(document.activeElement)), true,
+          'le focus doit rester dans la modale après changement de racine');
+      }
+      await panneau.getByRole('tab', { name: 'Clair', exact: true, selected: true }).waitFor({ state: 'visible' });
+      await preuve(page, `pos-modal-rotation-${depart}-${arrivee}`);
+      await page.keyboard.press('Escape');
+      await panneau.waitFor({ state: 'hidden' });
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Paramètres du poste');
+      assert.equal(await page.evaluate((initial) =>
+        document.querySelectorAll('[inert]').length === initial.inert &&
+        document.body.style.overflow === initial.overflow &&
+        initial.nodes.every(({ element, hidden }) => !element.isConnected || element.getAttribute('aria-hidden') === hidden),
+      isolationInitiale), true, 'fermer doit restaurer l’isolation et le défilement antérieurs');
+      await isolationInitiale.dispose();
+      await declencheur.click();
+      await panneau.getByRole('button', { name: 'Fermer', exact: true }).last().click();
+      await panneau.waitFor({ state: 'hidden' });
+      await declencheur.click();
+      const fond = await panneau.boundingBox();
+      assert.ok(fond);
+      await page.mouse.click(fond.x + 2, fond.y + 2);
+      await panneau.waitFor({ state: 'hidden' });
+      assert.equal(await deborde(page), false);
+      assert.deepEqual(incidents, [], 'aucune erreur de console ni exception navigateur');
+    });
+}
+
+scenario('Caisse — espèces, double rotation et fermeture sans encaisser ni perdre le ticket',
+  { format: { width: 1280, height: 900 } }, async (page, { incidents }) => {
+    await ouvrirCaisse(page);
+    await composerTacos(page);
+    await page.getByRole('button', { name: 'Espèces', exact: true }).click();
+    const especes = page.getByRole('dialog', { name: 'Encaissement espèces', exact: true });
+    await especes.getByRole('checkbox', { name: '+ 20,00 €', exact: true }).click();
+    for (const largeur of [820, 1280]) {
+      await page.setViewportSize({ width: largeur, height: 900 });
+      await page.waitForFunction((compact) => {
+        const dialogue = document.querySelector('[role="dialog"][aria-label="Encaissement espèces"]');
+        return !!dialogue && (dialogue.parentElement === document.body) === compact &&
+          dialogue.contains(document.activeElement) && !dialogue.closest('[inert], [aria-hidden="true"]');
+      }, largeur < 900);
+      await attendreMontant(especes, 'Reçu', '20,00 €');
+      await attendreMontant(especes, 'À rendre', '10,10 €');
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await especes.evaluate((element) => element.contains(document.activeElement)), true);
+      assert.equal(await especes.getByRole('button', { name: "Valider l'encaissement", exact: true }).isDisabled(), false);
+    }
+    await preuve(page, 'pos-modal-especes-double-rotation');
+    await page.keyboard.press('Escape');
+    await especes.waitFor({ state: 'hidden' });
+    await attendreMontant(page, 'Total', '9,90 €');
+    assert.equal(await page.getByRole('button', { name: `Modifier ${PRODUIT}`, exact: true }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: 'Nouvelle commande', exact: true }).count(), 0,
+      'la fermeture ne doit pas valider le paiement ni envoyer la commande');
+    await page.getByRole('button', { name: 'Espèces', exact: true }).click();
+    await attendreMontant(especes, 'Reçu', '0,00 €');
+    await especes.getByRole('button', { name: 'Fermer', exact: true }).click();
+    await especes.waitFor({ state: 'hidden' });
+    assert.deepEqual(incidents, []);
+  });
+
 scenario('Caisse — préférences visuelles, édition, attente et retour du service sans perte du ticket',
   { format: FORMATS.comptoir }, async (page) => {
     await ouvrirCaisse(page);
