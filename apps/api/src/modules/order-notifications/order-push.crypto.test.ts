@@ -19,4 +19,17 @@ describe('clés push chiffrées et liées à leur commande', () => {
     expect(() => openSubscription(config, 'tenant', 'other', hash, sealed)).toThrow();
     expect(() => openSubscription(config, 'tenant', 'order', hash, sealed.slice(0, -2) + 'aa')).toThrow();
   });
+  it.each(['https://fcm%2Egoogleapis.com/a', 'https:fcm.googleapis.com/a'])('refuse aussi un ancien abonnement chiffré ambigu : %s', (endpoint) => {
+    const { config, subscription } = pushFixture();
+    const hash = endpointHash(endpoint);
+    const sealed = sealSubscription(config, 'tenant', 'order', hash, { ...subscription, endpoint });
+    expect(() => openSubscription(config, 'tenant', 'order', hash, sealed)).toThrow();
+  });
+  it('préserve l’identité chiffrée des jetons opaques et de l’autorité HTTPS autorisée', () => {
+    const { config, subscription } = pushFixture();
+    const original = { ...subscription, endpoint: 'HTTPS://FCM.GOOGLEAPIS.COM:443/a%2Fb?token=a%2B%3D' };
+    const hash = endpointHash(original.endpoint);
+    const sealed = sealSubscription(config, 'tenant', 'order', hash, original);
+    expect(openSubscription(config, 'tenant', 'order', hash, sealed)).toEqual(original);
+  });
 });

@@ -7,6 +7,13 @@ export const ORDER_PUSH_HOSTS = ['fcm.googleapis.com', 'updates.push.services.mo
 /** Frontière réseau commune à l'inscription et à chaque envoi. */
 export function isOrderPushEndpoint(value: string): boolean {
   try {
+    // web-push emploie le parseur Node legacy, contrairement à new URL().
+    // Exiger l'autorité ASCII explicite ferme leurs divergences (%, Unicode,
+    // slashs manquants, antislashs, contrôles), sans réécrire les jetons opaques
+    // dont les octets servent aussi d'identité au consentement chiffré.
+    const authority = /^https:\/\/([a-z0-9.-]+)(?::443)?\//i.exec(value);
+    if (!authority || /[\u0000-\u0020\u007f\\]/.test(value) || value.includes('#')) return false;
+    if (!(ORDER_PUSH_HOSTS as readonly string[]).includes(authority[1]!.toLowerCase())) return false;
     const url = new URL(value);
     return value === value.trim() && value.length <= 2048 && url.protocol === 'https:' && !url.port
       && !url.username && !url.password && !url.hash && url.pathname.length > 1
