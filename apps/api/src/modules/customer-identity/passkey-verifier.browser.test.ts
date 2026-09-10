@@ -58,7 +58,14 @@ describe('passkey verifier — real WebAuthn signatures from isolated Chromium',
       allowCredentials: [{ credentialId: credential.credentialId, transports: credential.transports }] });
     authentication = await page.evaluate(optionsJSON => (window as unknown as FixtureWindow).passkeys.startAuthentication({ optionsJSON }), authOptions);
   }, 20_000);
-  afterAll(async () => { try { await context?.close(); } finally { await browser?.close(); } });
+  afterAll(async () => {
+    // This suite owns the launched process and records no HAR/video. Close
+    // that process directly: waiting for a separate context disposal first
+    // can exhaust the hook before browser.close is even reached under load.
+    // Await the real closure, propagate failures, and retain the same timeout.
+    await browser?.close();
+    expect(browser?.isConnected()).not.toBe(true);
+  });
   const verifyRegistration = (response = registration, challenge = registrationChallenge) => verifier.verifyRegistration({ origin, rpId, challenge, response });
   const storedCredential = () => ({ credentialId: credential.credentialId, publicKey: credential.publicKey,
     counter: credential.counter, transports: credential.transports, userHandle });
