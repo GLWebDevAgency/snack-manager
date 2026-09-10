@@ -42,6 +42,7 @@ import { usePosFonts } from './src/FontLoader';
 import { ThemeProvider, useTheme } from './src/theme';
 import { PrefsProvider, usePrefs } from './src/usePrefs';
 import { Splash } from './src/Splash';
+import { BrandSplashPlaceholder, StartupContent } from '@sm/ui-native';
 
 /** Le jeton staff vit 12 h ; au-delà, on redemande le PIN sans rien perdre. */
 const SESSION_TTL = 11 * 60 * 60 * 1000;
@@ -367,16 +368,20 @@ function SuspendedScreen({ name }: { name: string }) {
 /** Les préférences habillent les écrans sans remonter l'état de vente. */
 function Appearance({ ready, unpaired, children, splashDone, finishSplash, deviceName }: { deviceName?: string; ready: boolean; unpaired: boolean; children: ReactNode; splashDone: boolean; finishSplash: () => void }) {
   const { prefs, ready: prefsReady } = usePrefs();
+  const startupKnown = prefsReady || (ready && unpaired);
+  const startupVisible = !splashDone && (!startupKnown || prefs.splash);
   useEffect(() => { if (prefsReady && !prefs.splash) finishSplash(); }, [prefsReady, prefs.splash, finishSplash]);
   return <ThemeProvider theme={prefs.theme}>
-    <AppearanceFrame>{children}</AppearanceFrame>
-    {(prefsReady || (ready && unpaired)) && prefs.splash && !splashDone ? <Splash ready={ready} onDone={finishSplash} deviceName={deviceName} /> : null}
+    <AppearanceFrame startupVisible={startupVisible}>{children}</AppearanceFrame>
+    {startupVisible ? startupKnown
+      ? <Splash ready={ready} onDone={finishSplash} deviceName={deviceName} />
+      : <BrandSplashPlaceholder /> : null}
   </ThemeProvider>;
 }
-function AppearanceFrame({ children }: { children: ReactNode }) {
+function AppearanceFrame({ children, startupVisible }: { children: ReactNode; startupVisible: boolean }) {
   const { palette, theme } = useTheme();
-  return <View style={{ flex: 1, backgroundColor: palette.bg }}>
+  return <StartupContent blocked={startupVisible} style={{ flex: 1, backgroundColor: palette.bg }}>
     <StatusBar style={theme === 'light' ? 'dark' : 'light'} hidden />
     {children}
-  </View>;
+  </StartupContent>;
 }
