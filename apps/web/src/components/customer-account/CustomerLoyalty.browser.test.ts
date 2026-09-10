@@ -24,10 +24,13 @@ type Wire = { request: BrowserRequest; id: string; status: number; bytes: number
 type Selection = { browserRef: string; operationId: string; checkId: string };
 type IdentityRefusal = { before: Selection; after: Selection; current: Selection; profileAfterEof: boolean;
   profileRequest: BrowserRequest; privateSections: number; balances: number; qrImages: number };
+type DisposedResponse = { heldRequest: BrowserRequest; phases: string[]; sectionRemovedBeforeRelease: boolean;
+  sectionStillRemovedAfterEof: boolean; profileAfterEof: boolean; privateSections: number; balances: number; qrImages: number };
 const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte/session', loyalty: '/r/recette/compte/fidelite' };
 let marks: ReadMark[], wires: Map<BrowserRequest, Wire>, rendered: Set<string>;
 let expectedFailures: Set<BrowserRequest>, transportFault: 'none' | 'truncated' | 'invalid-json' | 'invalid-contract';
 let identityRefusals: Map<BrowserRequest, IdentityRefusal>;
+let disposedResponses: Map<BrowserRequest, DisposedResponse>;
 /** A verified application result, not a claim about Chromium's internal cause
  * or CDP/Runtime event order. Missing proof always remains a test failure. */
 function completeResponseRead(failure: Failure, wire: Wire | undefined, observed: ReadMark[]): boolean {
@@ -44,6 +47,18 @@ function completeResponseRead(failure: Failure, wire: Wire | undefined, observed
 }
 function completedApplicationRead(failure: Failure, wire: Wire | undefined, observed: ReadMark[], ui: ReadonlySet<string>): boolean {
   return !!wire && ui.has(wire.id) && completeResponseRead(failure, wire, observed);
+}
+/** Only the explicitly held view response in the leave-screen scenario. A
+ * missing lifecycle/EOF/UI observation is not inferred from teardown timing. */
+function rejectedAfterDisposal(failure: Failure, wire: Wire | undefined, observed: ReadMark[], proof: DisposedResponse | undefined): boolean {
+  return !!wire && !!proof && proof.heldRequest === failure.request
+    && failure.request.url() === `${origin}${paths.loyalty}` && failure.request.method() === 'POST'
+    && failure.request.postData() === JSON.stringify({ step: 'view' })
+    && proof.phases.join(',') === 'held,screen-left,released,eof,profile-visible'
+    && proof.sectionRemovedBeforeRelease && proof.sectionStillRemovedAfterEof && proof.profileAfterEof
+    && proof.privateSections === 0 && proof.balances === 0 && proof.qrImages === 0
+    && completeResponseRead(failure, wire, observed)
+    && observed.some(mark => mark.id === wire.id && mark.event === 'state-member');
 }
 function requestSelection(request: BrowserRequest): Selection {
   const headers = request.headers();
@@ -122,6 +137,7 @@ beforeEach(async () => {
   failures = []; discardedErrors = new Set();
   expectedFailures = new Set(); transportFault = 'none';
   identityRefusals = new Map();
+  disposedResponses = new Map();
   inflight = new Set(); closing = false; sequence = 0; marks = []; wires = new Map(); rendered = new Set();
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   page = await context.newPage(); page.setDefaultTimeout(5_000);
@@ -199,16 +215,19 @@ afterEach(async () => {
   } finally { closing = true; await context.close(); }
   const completed: { id: string; bytes: number }[] = [];
   const rejected: { id: string; bytes: number }[] = [];
+  const disposed: { id: string; bytes: number }[] = [];
   for (const failure of failures) if (!(expectedFailures.has(failure.request) || (discardedErrors.has(failure.request) && failure.error === 'net::ERR_ABORTED'))) {
     const wire = wires.get(failure.request);
     if (completedApplicationRead(failure, wire, marks, rendered)) { completed.push({ id: wire!.id, bytes: wire!.bytes }); continue; }
     if (rejectedForIdentity(failure, wire, marks, identityRefusals.get(failure.request), wires, rendered)) { rejected.push({ id: wire!.id, bytes: wire!.bytes }); continue; }
+    if (rejectedAfterDisposal(failure, wire, marks, disposedResponses.get(failure.request))) { disposed.push({ id: wire!.id, bytes: wire!.bytes }); continue; }
     faults.push(`Unexpected request failure ${failure.request.method()} ${new URL(failure.request.url()).pathname}: ${failure.error}`);
     console.info('Loyalty exact transport failure', { id: wire?.id, status: wire?.status, expectedBytes: wire?.bytes,
       closing: failure.closing, rendered: wire ? rendered.has(wire.id) : false, marks: marks.filter(mark => mark.id === wire?.id) });
   }
   if (completed.length) console.info('Chromium notifications despite exact complete JSON/contract/UI', completed);
   if (rejected.length) console.info('Chromium notifications with complete JSON/contract and exact identity rejection', rejected);
+  if (disposed.length) console.info('Chromium notifications with complete JSON/contract and exact disposed-screen proof', disposed);
   expect(faults).toEqual([]);
 });
 afterAll(async () => { await browser?.close(); await new Promise<void>((resolve, reject) => server?.close(error => error ? reject(error) : resolve())); });
@@ -263,6 +282,32 @@ async function journalSelection(): Promise<Selection> {
   });
 }
 describe('account loyalty — native UI with isolated HTTP', () => {
+  it('requires the exact held request and post-EOF disposal proof, never merely a closed screen', () => {
+    const request = { method: () => 'POST', url: () => `${origin}${paths.loyalty}`, postData: () => JSON.stringify({ step: 'view' }) } as BrowserRequest;
+    const other = { method: () => 'POST', url: () => `${origin}${paths.loyalty}`, postData: () => JSON.stringify({ step: 'view' }) } as BrowserRequest;
+    const failure: Failure = { request, error: 'net::ERR_ABORTED', closing: false };
+    const wire: Wire = { request, id: '1', status: 200, bytes: 227, mime: 'application/json' };
+    const complete: ReadMark[] = [{ id: '1', event: 'eof', bytes: 227 }, { id: '1', event: 'json-valid' }, { id: '1', event: 'contract-valid' }, { id: '1', event: 'state-member' }];
+    const proof: DisposedResponse = { heldRequest: request, phases: ['held', 'screen-left', 'released', 'eof', 'profile-visible'],
+      sectionRemovedBeforeRelease: true, sectionStillRemovedAfterEof: true, profileAfterEof: true, privateSections: 0, balances: 0, qrImages: 0 };
+    expect(rejectedAfterDisposal(failure, wire, complete, proof)).toBe(true);
+    for (const changed of [undefined, { ...proof, heldRequest: other }, { ...proof, phases: [] },
+      { ...proof, phases: ['held', 'released', 'screen-left', 'eof', 'profile-visible'] },
+      { ...proof, phases: ['held', 'screen-left', 'released', 'profile-visible', 'eof'] },
+      { ...proof, sectionRemovedBeforeRelease: false }, { ...proof, sectionStillRemovedAfterEof: false }, { ...proof, profileAfterEof: false },
+      { ...proof, privateSections: 1 }, { ...proof, balances: 1 }, { ...proof, qrImages: 1 }]) {
+      expect(rejectedAfterDisposal(failure, wire, complete, changed)).toBe(false);
+    }
+    for (const observed of [[], complete.filter(mark => mark.event !== 'eof'), complete.filter(mark => mark.event !== 'json-valid'),
+      complete.filter(mark => mark.event !== 'contract-valid'), complete.filter(mark => mark.event !== 'state-member'),
+      complete.map(mark => mark.event === 'eof' ? { ...mark, bytes: 1 } : mark),
+      ...['abort', 'cancel', 'read-rejected', 'json-invalid', 'contract-invalid'].map(event => [...complete, { id: '1', event }])]) {
+      expect(rejectedAfterDisposal(failure, wire, observed, proof)).toBe(false);
+    }
+    expect(rejectedAfterDisposal(failure, { ...wire, request: other }, complete, proof)).toBe(false);
+    expect(rejectedAfterDisposal({ ...failure, request: other }, wire, complete, proof)).toBe(false);
+    expect(rejectedAfterDisposal(failure, { ...wire, id: '2' }, complete, proof)).toBe(false);
+  });
   it('requires exact request, complete JSON, valid contract and matching UI before classifying a Chromium notification', () => {
     const request = { method: () => 'POST', url: () => `${origin}${paths.loyalty}` } as BrowserRequest;
     const failure: Failure = { request, error: 'net::ERR_ABORTED', closing: false };
@@ -337,10 +382,41 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     expect(await page.getByRole('img').count()).toBe(0);
   });
   it('a late response after leaving the screen cannot republish private data', async () => {
+    const held = page.waitForRequest(request => request.url() === `${origin}${paths.loyalty}` && request.method() === 'POST');
     outcome = 'held'; await openLoyalty(); await expect.poll(() => release !== null).toBe(true);
+    const heldRequest = await held;
+    expect(heldRequest.postData()).toBe(JSON.stringify({ step: 'view' }));
+    expect(calls).toEqual([{ step: 'view' }]); expect(inflight.has(heldRequest)).toBe(true);
+    expect(wires.has(heldRequest)).toBe(false); // No response headers before leaving.
+    const section = await page.getByRole('region', { name: 'Fidélité de votre compte' }).elementHandle();
+    expect(section).not.toBeNull();
+    const phases = ['held'];
     await page.getByRole('button', { name: 'Revenir à mon compte', exact: true }).click();
-    registered = true; release?.(); release = null; await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).waitFor();
-    expect(await page.getByText('25 points', { exact: true }).count()).toBe(0); expect(await page.getByRole('img').count()).toBe(0);
+    await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).waitFor();
+    const sectionRemovedBeforeRelease = await section!.evaluate(node => !node.isConnected);
+    expect(sectionRemovedBeforeRelease).toBe(true);
+    expect(await page.getByRole('region', { name: 'Fidélité de votre compte' }).count()).toBe(0);
+    expect(wires.has(heldRequest)).toBe(false); phases.push('screen-left');
+    registered = true; release?.(); release = null; phases.push('released');
+    await expect.poll(() => {
+      const wire = wires.get(heldRequest);
+      return wire !== undefined && completeResponseRead({ request: heldRequest, error: 'net::ERR_ABORTED', closing: false }, wire, marks);
+    }).toBe(true);
+    await session.send('Runtime.evaluate', { expression: 'void 0' }); phases.push('eof');
+    const wire = wires.get(heldRequest)!;
+    expect(marks.some(mark => mark.id === wire.id && mark.event === 'state-member')).toBe(true);
+    const profileAfterEof = await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).inputValue() === 'Camille Recette';
+    expect(profileAfterEof).toBe(true); phases.push('profile-visible');
+    const sectionStillRemovedAfterEof = await section!.evaluate(node => !node.isConnected);
+    expect(sectionStillRemovedAfterEof).toBe(true);
+    const privateSections = await page.getByRole('region', { name: 'Fidélité de votre compte' }).count();
+    const balances = await page.getByText('25 points', { exact: true }).count(), qrImages = await page.getByRole('img').count();
+    expect([privateSections, balances, qrImages]).toEqual([0, 0, 0]);
+    expect(calls).toEqual([{ step: 'view' }]);
+    const proof = { heldRequest, phases, sectionRemovedBeforeRelease, sectionStillRemovedAfterEof, profileAfterEof, privateSections, balances, qrImages };
+    disposedResponses.set(heldRequest, proof);
+    expect(rejectedAfterDisposal({ request: heldRequest, error: 'net::ERR_ABORTED', closing: false }, wire, marks, proof)).toBe(true);
+    await section!.dispose();
   });
   it('an inter-tab publication change masks the old card and drops its held result', async () => {
     const before = await journalSelection();

@@ -261,6 +261,16 @@ Après séparation, le fichier passe **40/40** et la suite web complète passe
 **2494/2494** ; typage et lint restent verts. Les trois cas supplémentaires
 proviennent du découpage, pas de nouvelles fonctionnalités.
 
+La [CI suivante du SHA `81d704f8`](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34447614645)
+valide ces cas, puis échoue sur une notification `ERR_ABORTED` du scénario de
+réponse tardive après fermeture : réponse 200, **227 octets lus jusqu'à EOF**,
+JSON/contrat valides, mais preuve UI post-EOF absente. Ce scénario attend
+désormais la réponse exacte retenue : section démontée avant libération,
+réception complète puis profil visible et absence de carte/solde après EOF.
+La classification est réservée à cette preuve et possède ses contre-tests ;
+elle n'exempte ni les réponses tronquées ni les erreurs arbitraires de fermeture.
+Le runtime et les délais restent inchangés. Nouvelle CI requise avant fusion.
+
 **Non compris / à recevoir ensuite :** rattachement explicite d'une ancienne
 carte POS avec preuve renforcée, gains des commandes web, consommation d'une
 récompense sur une vraie vente et compensation lors d'une annulation ou d'un
