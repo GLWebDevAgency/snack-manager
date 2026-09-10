@@ -1,9 +1,12 @@
 # Rattacher une carte existante au compte client
 
-État au 10 septembre 2026 : implémenté et recetté localement sur
-`feat/customer-loyalty-attachment`, après l'adhésion neuve #157. CI et staging
-de ce nouveau lot restent à recevoir. Aucun pilote, fournisseur ni budget
-supplémentaire n'est ouvert. Production inchangée.
+État au 10 septembre 2026 : PR #158 fusionnée dans `develop` au commit
+`db9c739c408e0286b7fead32b2e82d85fd37c472`, après CI réussie. Le
+[déploiement 34454486357](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34454486357)
+a échoué dans les tests avant les migrations et la mise en ligne ; ce lot
+n'est donc pas encore reçu sur staging. #157 reste la dernière version
+servie vérifiée. [Reprise CI ciblée](REPRISE-CI-SEEDS.md). Aucun pilote,
+fournisseur ni budget supplémentaire n'est ouvert. Production inchangée.
 
 ## Parcours et preuve de propriété
 

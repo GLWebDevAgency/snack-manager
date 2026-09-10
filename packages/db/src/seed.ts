@@ -10,10 +10,6 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import argon2 from 'argon2';
-import mongoose from 'mongoose';
-import { MODELS } from './schemas';
-import { hashPassword } from './password-hash';
 import { assertDisposableMongoTarget, assertNoDurableOrderData } from './disposable-mongo-target';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -592,14 +588,20 @@ async function main() {
   const uri = process.env.MONGO_URL;
   if (!uri) throw new Error('MONGO_URL manquant (racine .env)');
   const target = assertDisposableMongoTarget(uri);
+  // A refused target must not boot the driver, models or password machinery.
+  const { default: mongoose } = await import('mongoose');
   await mongoose.connect(target.uri, { directConnection: true, serverSelectionTimeoutMS: 5_000 });
   try {
     await assertNoDurableOrderData(mongoose.connection.db!);
-    await writeSeedFixture();
+    await writeSeedFixture(mongoose);
   } finally { await mongoose.disconnect(); }
 }
 
-async function writeSeedFixture() {
+async function writeSeedFixture(mongoose: typeof import('mongoose').default) {
+  // Only after the real durable-data guard: loading schemas is not a preflight.
+  const { MODELS } = await import('./schemas');
+  const { hashPassword } = await import('./password-hash');
+  const { default: argon2 } = await import('argon2');
   const Tenant = mongoose.model(MODELS.Tenant.name, MODELS.Tenant.schema, MODELS.Tenant.collection);
   const User = mongoose.model(MODELS.User.name, MODELS.User.schema, MODELS.User.collection);
   const Staff = mongoose.model(MODELS.Staff.name, MODELS.Staff.schema, MODELS.Staff.collection);

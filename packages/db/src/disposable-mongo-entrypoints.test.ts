@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { MongoClient } from 'mongodb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,54 +16,137 @@ const SEED_PROCESS_TIMEOUT_MS = 10_000;
 const SEED_TEST_TIMEOUT_MS = 15_000;
 afterEach(() => vi.restoreAllMocks());
 
-/** A real script process with both drivers intercepted: NO socket can open. */
-function runSeed(script: string, uri: string, durableFixture = false) {
+/** Real CLI processes, intercepted driver ports, and a socket-level refusal.
+ * Node 24 synchronous hooks cover dynamic import as well as CommonJS require. */
+type SeedFixture = 'none' | 'tenants' | 'public_order_admissions' | 'order_capacity_days' | 'read-error' | 'allowed';
+type SeedEntry = 'cli' | 'import' | { loader: 'require' | 'import'; completedReads: boolean };
+function runSeed(script: string, uri: string, durableFixture: SeedFixture = 'none', entry: SeedEntry = 'cli') {
   const dir = mkdtempSync(join(tmpdir(), 'sm-seed-gate-'));
   const hook = join(dir, 'deny-connect.cjs');
-  writeFileSync(hook, `const Module = require('node:module');
-const original = Module._load;
-Module._load = function(name, ...rest) {
-  const loaded = original.call(this, name, ...rest);
-  if (name === 'mongoose') {
-    loaded.connect = async function() {
-      if (process.env.SM_TEST_DURABLE_FIXTURE !== '1') throw new Error('TEST_DRIVER_CONNECT_CALLED');
-      Object.defineProperty(loaded.connection, 'db', { configurable: true, value: {
-        collection: () => ({ findOne: async () => ({ _id: 'opaque' }) })
-      }});
-      return loaded;
-    };
-    loaded.model = function() { throw new Error('TEST_MODEL_CALLED'); };
-    loaded.disconnect = async function() {};
+  const bridge = join(dir, 'mongoose-fixture.cjs');
+  const mongoosePath = createRequire(__filename).resolve('mongoose');
+  const bridgeUrl = pathToFileURL(bridge).href;
+  writeFileSync(bridge, `const mongoose = require(${JSON.stringify(mongoosePath)});
+mongoose.connect = async function() {
+  if (process.env.SM_TEST_DURABLE_FIXTURE === 'none') throw new Error('TEST_DRIVER_CONNECT_CALLED');
+  globalThis.__smSeedReads = [];
+  Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: {
+    collection: (name) => ({ findOne: async () => {
+      globalThis.__smSeedReads.push(name);
+      process.stderr.write('TEST_DURABLE_READ:' + name + '\\n');
+      if (process.env.SM_TEST_DURABLE_FIXTURE === 'read-error') throw new Error('TEST_READ_ERROR');
+      return process.env.SM_TEST_DURABLE_FIXTURE === name ? { _id: 'opaque' } : null;
+    } })
+  }});
+  return mongoose;
+};
+mongoose.model = function() { throw new Error('TEST_WRITER_REACHED'); };
+mongoose.disconnect = async function() { process.stderr.write('TEST_DISCONNECTED\\n'); };
+module.exports = mongoose;`, { mode: 0o600 });
+  writeFileSync(hook, `const { registerHooks } = require('node:module');
+require('node:net').Socket.prototype.connect = function() { throw new Error('TEST_SOCKET_CONNECT_CALLED'); };
+registerHooks({ resolve(name, context, nextResolve) {
+  if (name === 'mongoose' || name === ${JSON.stringify(mongoosePath)} || name === ${JSON.stringify(pathToFileURL(mongoosePath).href)}) {
+    if (context.parentURL !== ${JSON.stringify(bridgeUrl)}) {
+      if (process.env.SM_TEST_DURABLE_FIXTURE === 'none') throw new Error('TEST_PREMATURE_DEPENDENCY_LOAD');
+      return { url: ${JSON.stringify(bridgeUrl)}, shortCircuit: true };
+    }
   }
-  if (name === 'mongodb') loaded.MongoClient.connect = async function() { throw new Error('TEST_DRIVER_CONNECT_CALLED'); };
-  return loaded;
-};`, { mode: 0o600 });
+  if (name === 'argon2' || name === './schemas' || name.endsWith('/src/schemas.ts')
+    || name === './password-hash' || name.endsWith('/src/password-hash.ts')) {
+    if (process.env.SM_TEST_DURABLE_FIXTURE !== 'allowed'
+      || JSON.stringify(globalThis.__smSeedReads) !== JSON.stringify(['tenants', 'public_order_admissions', 'order_capacity_days'])) {
+      throw new Error('TEST_PREMATURE_DEPENDENCY_LOAD');
+    }
+  }
+  return nextResolve(name, context);
+} });`, { mode: 0o600 });
   try {
-    return spawnSync(process.execPath, ['--require', hook, '--import', 'tsx', resolve(__dirname, script)], {
+    const target = resolve(__dirname, script);
+    let args: string[];
+    if (typeof entry === 'object') {
+      const schema = resolve(__dirname, 'schemas.ts');
+      const load = entry.loader === 'require'
+        ? `require(${JSON.stringify(schema)})` : `import(${JSON.stringify(pathToFileURL(schema).href)})`;
+      const reads = entry.completedReads ? ['tenants', 'public_order_admissions', 'order_capacity_days'] : [];
+      args = ['-e', `globalThis.__smSeedReads = ${JSON.stringify(reads)};
+        Promise.resolve().then(() => ${load})
+          .then(() => console.error('TEST_IMPORT_ESCAPED'))
+          .catch(error => { console.error(error.message); process.exitCode = 1; });`];
+    } else {
+      args = entry === 'import' ? ['-e', `require(${JSON.stringify(target)})`] : [target];
+    }
+    return spawnSync(process.execPath, ['--require', hook, '--import', 'tsx', ...args], {
       cwd: resolve(__dirname, '..'), encoding: 'utf8', timeout: SEED_PROCESS_TIMEOUT_MS,
       env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, NODE_ENV: 'test', MONGO_URL: uri,
-        SM_TEST_DURABLE_FIXTURE: durableFixture ? '1' : '0' },
+        SM_TEST_DURABLE_FIXTURE: durableFixture },
     });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-describe('seeds réels : la garde précède mongoose.connect et les writes', () => {
-  it.each(['seed.ts', 'seed-orders.ts'])('%s refuse une base servie avant tout appel au driver', (script) => {
+describe('seeds réels : les gardes précèdent les dépendances et les writes', () => {
+  it.each(['seed.ts', 'seed-orders.ts'])('%s refuse une base servie avant même de charger le driver', (script) => {
     const result = runSeed(script, 'mongodb://127.0.0.1:27017/snackmanager');
     expect(result.error).toBeUndefined();
     expect(result.signal).toBeNull();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MONGO_DISPOSABLE_TARGET_REQUIRED');
+    expect(result.stderr).not.toContain('TEST_PREMATURE_DEPENDENCY_LOAD');
     expect(result.stderr).not.toContain('TEST_DRIVER_CONNECT_CALLED');
   }, SEED_TEST_TIMEOUT_MS);
 
-  it.each(['seed.ts', 'seed-orders.ts'])('%s refuse les preuves présentes avant le premier modèle ou effacement', (script) => {
-    const result = runSeed(script, DISPOSABLE, true);
+  it.each(['seed.ts', 'seed-orders.ts'].flatMap(script =>
+    (['tenants', 'public_order_admissions', 'order_capacity_days'] as const).map(collection => ({ script, collection }))))(
+    '$script refuse les preuves de $collection avant les dépendances du writer', ({ script, collection }) => {
+    const result = runSeed(script, DISPOSABLE, collection);
     expect(result.error).toBeUndefined();
     expect(result.signal).toBeNull();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MONGO_DURABLE_ORDER_DATA_PRESENT');
-    expect(result.stderr).not.toContain('TEST_MODEL_CALLED');
+    expect(result.stderr).not.toContain('TEST_PREMATURE_DEPENDENCY_LOAD');
+    expect(result.stderr).not.toContain('TEST_WRITER_REACHED');
+    expect(result.stderr).toContain('TEST_DISCONNECTED');
+    const collections = ['tenants', 'public_order_admissions', 'order_capacity_days'];
+    expect([...result.stderr.matchAll(/TEST_DURABLE_READ:([a-z_]+)/g)].map(match => match[1]))
+      .toEqual(collections.slice(0, collections.indexOf(collection) + 1));
+  }, SEED_TEST_TIMEOUT_MS);
+  it.each(['seed.ts', 'seed-orders.ts'])('%s ferme une lecture durable échouée sans entrer dans le writer', script => {
+    const result = runSeed(script, DISPOSABLE, 'read-error');
+    expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(1);
+    expect(result.stderr).toContain('MONGO_DURABLE_ORDER_CHECK_FAILED');
+    expect(result.stderr).toContain('TEST_DISCONNECTED');
+    expect(result.stderr).not.toContain('TEST_WRITER_REACHED');
+    expect(result.stderr).not.toContain('TEST_PREMATURE_DEPENDENCY_LOAD');
+    expect(result.stderr).not.toContain('TEST_SOCKET_CONNECT_CALLED');
+  }, SEED_TEST_TIMEOUT_MS);
+  it.each(['seed.ts', 'seed-orders.ts'])('%s atteint le writer seulement après trois contrôles vides, sans écrire', script => {
+    const result = runSeed(script, DISPOSABLE, 'allowed');
+    expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(1);
+    expect(result.stderr).toContain('TEST_WRITER_REACHED');
+    expect(result.stderr).toContain('TEST_DISCONNECTED');
+    expect(result.stderr).not.toContain('TEST_PREMATURE_DEPENDENCY_LOAD');
+    expect(result.stderr).not.toContain('TEST_SOCKET_CONNECT_CALLED');
+    expect([...result.stderr.matchAll(/TEST_DURABLE_READ:([a-z_]+)/g)].map(match => match[1]))
+      .toEqual(['tenants', 'public_order_admissions', 'order_capacity_days']);
+  }, SEED_TEST_TIMEOUT_MS);
+  it.each(['seed.ts', 'seed-orders.ts'])('%s reste sans driver ni connexion lors d’un simple import', script => {
+    const result = runSeed(script, DISPOSABLE, 'none', 'import');
+    expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('TEST_');
+  }, SEED_TEST_TIMEOUT_MS);
+});
+
+describe('contre-preuves du harnais : imports refusés sans validation complète', () => {
+  it.each((['require', 'import'] as const).flatMap(loader => [
+    { loader, fixture: 'allowed' as const, completedReads: false },
+    { loader, fixture: 'order_capacity_days' as const, completedReads: true },
+  ]))('$loader refuse le writer avec $fixture et completedReads=$completedReads', ({ loader, fixture, completedReads }) => {
+    const result = runSeed('seed.ts', DISPOSABLE, fixture, { loader, completedReads });
+    expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(1);
+    expect(result.stderr).toContain('TEST_PREMATURE_DEPENDENCY_LOAD');
+    expect(result.stderr).not.toContain('TEST_IMPORT_ESCAPED');
+    expect(result.stderr).not.toContain('TEST_SOCKET_CONNECT_CALLED');
+    expect(result.stderr).not.toContain('TEST_WRITER_REACHED');
   }, SEED_TEST_TIMEOUT_MS);
 });
 
