@@ -31,6 +31,12 @@ function fixture() {
 }
 
 describe("missions privées et reprise de départ", () => {
+  it.each([false, true])("accepte une liste existante, enrichie=%s", async enriched => {
+    const view = enriched ? { ...mission, deliveredAt: null, paymentSummary: { totalCents: 900, method: "online" as const, status: "paid" as const, tender: "online" as const } } : mission;
+    const f = fixture(); f.request.mockResolvedValueOnce(list([view])); await f.client.start();
+    expect(f.client.getSnapshot()).toMatchObject({ loaded: true, stale: false, missions: [view] });
+    expect(f.storage.length).toBe(0);
+  });
   it("charge seulement la liste et ne persiste aucune coordonnée", async () => {
     const f = fixture(); await f.client.start();
     expect(f.client.getSnapshot()).toMatchObject({ loaded: true, stale: false, missions: [mission] });

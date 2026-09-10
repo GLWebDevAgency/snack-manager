@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { DELIVERY_VIEW_VERSION_HEADER, DeliveryMissionViewSchema } from "@sm/contracts";
 import { GET as list } from "./route";
 import { GET as history } from "../history/route";
 import { GET as detail } from "./[id]/route";
@@ -25,6 +26,10 @@ const LIST = { missions: [MISSION], nextCursor: ID };
 const HISTORY = { missions: [{ ...MISSION, orderStatus: "delivered", deliveredAt: "2026-09-07T11:00:00Z", canAssign: false, canDispatch: false }], nextCursor: null };
 const RESULT = { operationId: OPERATION, appliedRevision: 3, replay: false, outcome: "applied", refusalCode: null,
   mission: { ...MISSION, revision: 3, canDispatch: false, dispatchedAt: "2026-09-07T10:10:00Z" } };
+const PRESENTATION = { deliveredAt: null, paymentSummary: { totalCents: 1290, method: "online", status: "paid", tender: "online" } };
+const LegacyMissionSchema = DeliveryMissionViewSchema.pick({ id: true, number: true, createdAt: true, scheduledAt: true, orderStatus: true, revision: true,
+  operator: true, assignmentId: true, assignedAt: true, dispatchedAt: true, paymentReady: true, canAssign: true, canDispatch: true,
+  customer: true, address: true, instructions: true, items: true }).strict();
 const fetchApi = vi.fn<typeof fetch>();
 const context = (id = ID) => ({ params: Promise.resolve({ id }) });
 const endpoints = [
@@ -66,6 +71,43 @@ beforeEach(() => {
   fetchApi.mockReset(); vi.stubGlobal("fetch", fetchApi);
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+describe.each(endpoints.filter(endpoint => endpoint.name !== "historique"))("compatibilité navigateur missions — $name", endpoint => {
+  const enrich = () => endpoint.name === "liste" ? { ...LIST, missions: [{ ...MISSION, ...PRESENTATION }] }
+    : endpoint.name === "détail" ? { ...MISSION, ...PRESENTATION }
+      : { ...RESULT, mission: { ...RESULT.mission, ...PRESENTATION } };
+  it.each([undefined, "1", "02", "2,2", "v2", "3"])("renvoie la projection stricte historique sans opt-in2 : %s", async version => {
+    fetchApi.mockResolvedValue(Response.json(enrich()));
+    const result = await endpoint.run(request(endpoint, { headers: version ? { [DELIVERY_VIEW_VERSION_HEADER]: version } : {} }));
+    expect(result.status).toBe(200); const body = await result.json(); expect(body).toEqual(endpoint.view);
+    const mission = endpoint.name === "liste" ? body.missions[0] : endpoint.name === "détail" ? body : body.mission;
+    expect(LegacyMissionSchema.safeParse(mission).success).toBe(true);
+    expect(new Headers(fetchApi.mock.calls[0]![1]!.headers).has(DELIVERY_VIEW_VERSION_HEADER)).toBe(false);
+    privateHeaders(result); expect(result.headers.get("set-cookie")).toBeNull();
+  });
+  it("garde les nouveaux champs uniquement sur demande explicite2", async () => {
+    fetchApi.mockResolvedValue(Response.json(enrich()));
+    const result = await endpoint.run(request(endpoint, { headers: { [DELIVERY_VIEW_VERSION_HEADER]: "2" } }));
+    expect(result.status).toBe(200); expect(await result.json()).toEqual(enrich()); privateHeaders(result);
+    const headers = new Headers(fetchApi.mock.calls[0]![1]!.headers);
+    expect(headers.get(DELIVERY_VIEW_VERSION_HEADER)).toBe("2"); expect(headers.get("Authorization")).toBe(`Bearer ${TOKEN}`); expect(headers.has("cookie")).toBe(false);
+  });
+  it("une demande2 reste compatible avec une ancienne API et ne change pas l’autorité", async () => {
+    fetchApi.mockResolvedValue(Response.json(endpoint.view));
+    const incoming = { headers: { [DELIVERY_VIEW_VERSION_HEADER]: "2", Authorization: `Bearer ${PRIVATE}` } };
+    const result = await endpoint.run(request(endpoint, incoming)); expect(result.status).toBe(200); expect(await result.json()).toEqual(endpoint.view);
+    expect(new Headers(fetchApi.mock.calls[0]![1]!.headers).get("Authorization")).toBe(`Bearer ${TOKEN}`);
+    fetchApi.mockClear(); expect((await endpoint.run(request(endpoint, { ...incoming, cookie: null }))).status).toBe(401); expect(fetchApi).not.toHaveBeenCalled();
+  });
+});
+
+it.each([undefined, "invalid", "2"])("l’historique nouveau conserve sa projection complète même sans version : %s", async version => {
+  const endpoint = endpoints[3];
+  const view = { ...HISTORY, missions: HISTORY.missions.map(mission => ({ ...mission, paymentSummary: PRESENTATION.paymentSummary })) };
+  fetchApi.mockResolvedValue(Response.json(view));
+  const result = await history(request(endpoint, { headers: version ? { [DELIVERY_VIEW_VERSION_HEADER]: version } : {} }));
+  expect(result.status).toBe(200); expect(await result.json()).toEqual(view); privateHeaders(result);
+});
 
 describe.each(endpoints)("BFF missions — $name", endpoint => {
   it("valide la projection et ne propage aucun en-tête ou credential amont", async () => {

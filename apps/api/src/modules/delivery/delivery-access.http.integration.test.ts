@@ -192,10 +192,11 @@ describe('cible de la recette HTTP livreur', () => {
     }
   });
 
-  async function http(method: string, path: string, bearer?: string, body?: unknown) {
+  async function http(method: string, path: string, bearer?: string, body?: unknown, version?: string) {
     const response = await fetch(`${origin}${path}`, {
       method, headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(version === undefined ? {} : { 'X-SM-Delivery-View': version }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(5_000),
     });
     const text = await response.text();
@@ -223,6 +224,29 @@ describe('cible de la recette HTTP livreur', () => {
     const session = DeliverySessionViewSchema.parse(body.session);
     return { operator, input, token: body.token, session };
   }
+
+  it.each([undefined, '2', '3', '2, 2'])('négocie la vue session HTTP sans changer le bearer : version %s', async version => {
+    await models.Tenant.updateOne({ _id: TENANT }, { $set: { address: '2 rue du Restaurant', phones: ['0102030405'] } });
+    const connected = await connect();
+    const exchange = await http('POST', '/delivery-access/exchange', undefined, connected.input, version);
+    const session = await http('GET', '/delivery-access/session', connected.token, undefined, version);
+    expect(exchange.status).toBe(200); expect(session.status).toBe(200);
+    const exchanged = exchange.body as { token: string; session: unknown };
+    expect(exchanged.token).toBe(connected.token);
+    expect(exchanged.session).toEqual(session.body);
+    const legacy = DeliverySessionViewSchema.omit({ brand: true, restaurantAddress: true, restaurantPhones: true }).strict();
+    if (version === '2') {
+      expect(DeliverySessionViewSchema.parse(session.body)).toMatchObject({ restaurantAddress: '2 rue du Restaurant', restaurantPhones: ['0102030405'] });
+      expect(session.body).toHaveProperty('brand');
+      expect(legacy.safeParse(session.body).success).toBe(false);
+    } else {
+      expect(legacy.parse(session.body)).toEqual(connected.session);
+      expect(session.body).not.toHaveProperty('brand');
+      expect(session.body).not.toHaveProperty('restaurantAddress');
+      expect(session.body).not.toHaveProperty('restaurantPhones');
+    }
+    expect(exchange.cacheControl).toBe('no-store'); expect(session.cacheControl).toBe('no-store');
+  });
 
   it('authentifie owner et cogérant avec delivery seul, sans accès RH ni fuite des champs Staff', async () => {
     for (const token of [tokens.owner, tokens.cogerant]) {

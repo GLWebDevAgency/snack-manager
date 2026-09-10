@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import type { DeliveryMissionView } from "@sm/contracts";
-import { completeMissionOperation, prepareMissionOperation, readMissionOperation, releaseChangedMissionOperation } from "./delivery-missions-operation";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DELIVERY_VIEW_VERSION, DELIVERY_VIEW_VERSION_HEADER, type DeliveryMissionView } from "@sm/contracts";
+import { missionRequest, completeMissionOperation, prepareMissionOperation, readMissionOperation, releaseChangedMissionOperation } from "./delivery-missions-operation";
 
 const missionId = "507f1f77bcf86cd799439011";
 const scope = "driver:recette:507f1f77bcf86cd799439012";
@@ -83,5 +83,41 @@ describe("intention durable de mission, sans données client", () => {
     expect(() => prepareMissionOperation(store, scope, missionId, "assignment", { ...body, operatorId: mission.operator!.id, expectedOperatorRevision: 0, reason: "Appeler le client au numéro privé" })).toThrow();
     const saved = prepareMissionOperation(store, "bo:507f1f77bcf86cd799439013:user:507f1f77bcf86cd799439014", missionId, "assignment", { ...body, operatorId: mission.operator!.id, expectedOperatorRevision: 0, reason: "Organisation de la tournée" });
     expect(saved.kind).toBe("assignment");
+  });
+});
+
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("transport privé des missions", () => {
+  it.each([
+    ["/livreur/missions", undefined],
+    ["/livreur/missions?after=507f1f77bcf86cd799439099", undefined],
+    [`/livreur/missions/${missionId}`, undefined],
+    [`/livreur/missions/${missionId}/depart`, body],
+    ["/livreur/history", undefined],
+  ] as const)("annonce la vue enrichie sur %s sans changer la requête", async (path, input) => {
+    const payload = { missions: [mission], nextCursor: null };
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(payload));
+    vi.stubGlobal("fetch", request);
+    expect(await missionRequest(path, input)).toEqual(payload);
+    expect(request).toHaveBeenCalledOnce();
+    const [url, init] = request.mock.calls[0]!;
+    expect(url).toBe(path);
+    expect(init).toMatchObject({ method: input ? "POST" : "GET", credentials: "same-origin", cache: "no-store", redirect: "error" });
+    const headers = new Headers(init?.headers);
+    expect(headers.get(DELIVERY_VIEW_VERSION_HEADER)).toBe(DELIVERY_VIEW_VERSION);
+    expect(headers.get("Accept")).toBe("application/json");
+    expect(headers.get("Content-Type")).toBe(input ? "application/json" : null);
+    expect(headers.has("Authorization")).toBe(false);
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(init?.body).toBe(input ? JSON.stringify(input) : undefined);
+  });
+  it.each([false, true])("confirme un résultat corrélé ancien ou enrichi : enrichi=%s", enriched => {
+    const store = storage(), saved = prepareMissionOperation(store, scope, missionId, "dispatch", body);
+    const view = enriched ? { ...mission, deliveredAt: null, paymentSummary: { totalCents: 900, method: "online", status: "paid", tender: "online" } } : mission;
+    const result = { operationId: body.operationId, appliedRevision: 3, replay: false, outcome: "applied", refusalCode: null, mission: view };
+    expect(completeMissionOperation(store, saved, result)).toEqual(result);
+    expect(readMissionOperation(store, scope)).toBeNull();
   });
 });

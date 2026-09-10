@@ -31,12 +31,12 @@ describe('frontières HTTP des missions', () => {
     expect(service.historyCourier).not.toHaveBeenCalled();
     expect(Object.getOwnPropertyNames(DeliveryCourierHistoryController.prototype)).toEqual(['constructor', 'list']);
   });
-  it('un contrôleur livreur sans contexte ne délègue aucune lecture ni mutation', () => {
+  it('un contrôleur livreur sans contexte ne délègue aucune lecture ni mutation', async () => {
     const service = { listCourier: vi.fn(), getCourier: vi.fn(), dispatchCourier: vi.fn() };
     const controller = new DeliveryCourierMissionsController(service as never);
-    expect(() => controller.list({} as never, {})).toThrow();
-    expect(() => controller.get({} as never, 'id')).toThrow();
-    expect(() => controller.dispatch({} as never, 'id', { operationId, expectedRevision: 0 })).toThrow();
+    await expect(controller.list({} as never, {})).rejects.toThrow();
+    await expect(controller.get({} as never, 'id')).rejects.toThrow();
+    await expect(controller.dispatch({} as never, 'id', { operationId, expectedRevision: 0 })).rejects.toThrow();
     expect(service.listCourier).not.toHaveBeenCalled(); expect(service.dispatchCourier).not.toHaveBeenCalled();
   });
   it.each([

@@ -35,6 +35,7 @@ export * from './mediatheque-octets';
 export * from './delivery';
 export * from './delivery-operators';
 export * from './delivery-missions';
+export * from './delivery-view-version';
 export * from './delivery-handoff';
 export * from './commerce';
 export * from './order-refunds';

@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { DeliveryMissionDispatchSchema, DeliveryMissionResultSchema, DeliveryMissionViewSchema } from "@sm/contracts";
+import { DeliveryMissionDispatchSchema, DeliveryMissionResultSchema, DeliveryMissionViewSchema, deliveryMissionResultForVersion } from "@sm/contracts";
 import { boundedJson, failure, invalidMissionRequest, missionApiResponse, missionSession } from "../../../delivery-bff";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!input.success) return invalidMissionRequest();
   const id = params.data.id;
   return missionApiResponse(request, { path: `missions/${id}/dispatch`, method: "POST", token: session.token,
-    body: input.data, schema: DeliveryMissionResultSchema,
+    body: input.data, schema: DeliveryMissionResultSchema, forVersion: deliveryMissionResultForVersion,
     matches: result => result.mission.id === id && result.operationId === input.data.operationId });
 }

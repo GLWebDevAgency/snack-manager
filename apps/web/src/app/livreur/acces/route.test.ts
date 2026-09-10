@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { DELIVERY_VIEW_VERSION_HEADER, DIRECTIONS, DeliverySessionViewSchema } from "@sm/contracts";
 import { DELETE, GET, POST } from "./route";
 
 const INVITATION = "I".repeat(43);
@@ -8,6 +9,9 @@ const SESSION_TOKEN = "S".repeat(43);
 const NOW = new Date("2026-09-07T10:00:00Z");
 const SESSION = { operatorId: "507f1f77bcf86cd799439011", name: "Maya", restaurantName: "Restaurant de test",
   restaurantSlug: "restaurant-test", expiresAt: "2026-09-14T10:00:00Z" };
+const SESSION_V2 = { ...SESSION, brand: DIRECTIONS.nuit, restaurantAddress: "10 rue du Restaurant", restaurantPhones: ["0102030405"] };
+// Frozen list of fields accepted by the already-deployed strict browser.
+const LegacySessionSchema = DeliverySessionViewSchema.pick({ operatorId: true, name: true, restaurantName: true, restaurantSlug: true, expiresAt: true }).strict();
 const fetchApi = vi.fn();
 
 function request(method: "GET" | "POST" | "DELETE", options: {
@@ -32,6 +36,33 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("BFF de l’accès livreur", () => {
+  describe.each(["GET", "POST"] as const)("déploiement progressif — %s", method => {
+    it.each([undefined, "1", "02", "2,2", "v2", "3"])("garde le schéma historique sans opt-in exact : %s", async version => {
+      fetchApi.mockResolvedValue(Response.json(method === "GET" ? SESSION_V2 : { token: SESSION_TOKEN, session: SESSION_V2 }));
+      const incoming = request(method, { cookie: `__Secure-sm_delivery_access=${SESSION_TOKEN}`, headers: version ? { [DELIVERY_VIEW_VERSION_HEADER]: version } : {} });
+      const result = await (method === "GET" ? GET : POST)(incoming);
+      expect(result.status).toBe(200);
+      const body = await result.json(); expect(body).toEqual(SESSION); expect(LegacySessionSchema.safeParse(body).success).toBe(true);
+      expect(new Headers(fetchApi.mock.calls[0]![1].headers).has(DELIVERY_VIEW_VERSION_HEADER)).toBe(false);
+      expect(result.headers.get("cache-control")).toContain("no-store");
+      if (method === "POST") expect(result.headers.get("set-cookie")).toContain("HttpOnly");
+      expect(JSON.stringify(body)).not.toContain(SESSION_TOKEN);
+    });
+    it.each([SESSION, SESSION_V2])("ne relaie la version2 que demandée, et accepte aussi une ancienne API", async upstream => {
+      fetchApi.mockResolvedValue(Response.json(method === "GET" ? upstream : { token: SESSION_TOKEN, session: upstream }));
+      const result = await (method === "GET" ? GET : POST)(request(method, { cookie: `__Secure-sm_delivery_access=${SESSION_TOKEN}`, headers: { [DELIVERY_VIEW_VERSION_HEADER]: "2" } }));
+      expect(result.status).toBe(200); expect(await result.json()).toEqual(upstream);
+      const headers = new Headers(fetchApi.mock.calls[0]![1].headers);
+      expect(headers.get(DELIVERY_VIEW_VERSION_HEADER)).toBe("2"); expect(headers.has("cookie")).toBe(false);
+      expect(result.headers.get("cache-control")).toContain("no-store");
+    });
+    it("ne masque pas une fuite amont derrière la projection de compatibilité", async () => {
+      const polluted = { ...SESSION_V2, trackingToken: INVITATION };
+      fetchApi.mockResolvedValue(Response.json(method === "GET" ? polluted : { token: SESSION_TOKEN, session: polluted }));
+      const result = await (method === "GET" ? GET : POST)(request(method, { cookie: `__Secure-sm_delivery_access=${SESSION_TOKEN}` }));
+      expect(result.status).toBe(503); expect(await result.text()).not.toContain(INVITATION); expect(result.headers.get("set-cookie")).toBeNull();
+    });
+  });
   it("place uniquement la session opaque dans un cookie HttpOnly limité et rend l’identité publique", async () => {
     fetchApi.mockResolvedValue(Response.json({ token: SESSION_TOKEN, session: SESSION }));
     const result = await POST(request("POST"));

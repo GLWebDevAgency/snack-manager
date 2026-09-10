@@ -4,11 +4,12 @@ import {
   DeliveryAccessSecretSchema,
   DeliverySessionExchangeSchema,
   DeliverySessionViewSchema,
+  deliverySessionForVersion,
 } from "@sm/contracts";
 
 import {
   api, boundedJson, clearSession, cookieName, cookieOptions, failure,
-  privateResponse, rateLimited, readToken, rejectOrigin, unavailable,
+  privateResponse, rateLimited, readToken, rejectOrigin, unavailable, deliveryViewVersion,
 } from "../delivery-bff";
 
 function refused(response: Response) {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (Date.parse(session.data.expiresAt) <= Date.now()) {
       return clearSession(failure(401, "ACCESS_UNAVAILABLE", "Cet accès a expiré. Demandez un nouveau lien au restaurant."));
     }
-    return privateResponse(NextResponse.json(session.data));
+    return privateResponse(NextResponse.json(deliverySessionForVersion(session.data, deliveryViewVersion(request))));
   } catch { return unavailable(); }
 }
 
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     const remaining = Date.parse(session.data.expiresAt) - Date.now();
     if (remaining < 1_000 || remaining > DELIVERY_SESSION_TTL_MS + 60_000) return unavailable();
     // The opaque credential never enters the response JSON or client props.
-    const outgoing = privateResponse(NextResponse.json(session.data));
+    const outgoing = privateResponse(NextResponse.json(deliverySessionForVersion(session.data, deliveryViewVersion(request))));
     outgoing.cookies.set(cookieName(), token.data, { ...cookieOptions(),
       maxAge: Math.floor(Math.min(remaining, DELIVERY_SESSION_TTL_MS) / 1_000),
       expires: new Date(Math.min(Date.parse(session.data.expiresAt), Date.now() + DELIVERY_SESSION_TTL_MS)),

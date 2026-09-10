@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DELIVERY_VIEW_VERSION, DELIVERY_VIEW_VERSION_HEADER, DIRECTIONS } from "@sm/contracts";
 import { createDeliveryAccessClient, secureNonce, takeInvitation, type AccessBrowser } from "./access-client";
 
 const TOKEN = "I".repeat(43);
@@ -19,6 +20,44 @@ function fixture(hash = `#invitation=${TOKEN}`) {
   };
   return { browser, calls, client: createDeliveryAccessClient(browser), setOnline: (value: boolean) => { online = value; } };
 }
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("transport navigateur versionné", () => {
+  it("annonce la vue enrichie à chaque lecture, association et déconnexion, sans changer le cookie ou la tentative", async () => {
+    const location = { origin: "https://delivery.test", pathname: "/livreur", search: "", hash: `#invitation=${TOKEN}` };
+    vi.stubGlobal("window", { location, crypto: globalThis.crypto, history: { state: null, replaceState: () => { location.hash = ""; } } });
+    vi.stubGlobal("navigator", { onLine: true });
+    const request = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(Response.json(SESSION))
+      .mockResolvedValueOnce(Response.json(SESSION))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", request);
+    const client = createDeliveryAccessClient();
+    await client.start(); await client.associate();
+    expect(client.getSnapshot()).toMatchObject({ phase: "connected", session: SESSION });
+    await client.logout();
+    expect(client.getSnapshot()).toMatchObject({ phase: "missing", signedOut: true });
+    expect(request.mock.calls.map(([, init]) => init?.method)).toEqual(["GET", "POST", "GET", "DELETE"]);
+    for (const [url, init] of request.mock.calls) {
+      expect(url).toBe("/livreur/acces");
+      expect(init).toMatchObject({ credentials: "same-origin", cache: "no-store", redirect: "error" });
+      expect(new Headers(init?.headers).get(DELIVERY_VIEW_VERSION_HEADER)).toBe(DELIVERY_VIEW_VERSION);
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
+    const submitted = JSON.parse(String(request.mock.calls[1]![1]?.body));
+    expect(submitted).toEqual({ token: TOKEN, nonce: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
+    expect(location.hash).toBe("");
+  });
+  it.each([false, true])("accepte une session existante, enrichie=%s", async enriched => {
+    const session = enriched ? { ...SESSION, brand: DIRECTIONS.nuit, restaurantAddress: "10 rue de la Recette", restaurantPhones: ["0102030405"] } : SESSION;
+    const f = fixture(""); f.browser.request.mockResolvedValueOnce(Response.json(session));
+    await f.client.start();
+    expect(f.client.getSnapshot()).toMatchObject({ phase: "connected", session });
+  });
+});
 
 describe("accès mobile livreur", () => {
   it("retire immédiatement l’identité sur révocation confirmée par une route mission", async () => {
