@@ -3,6 +3,7 @@ import type { ConfigService } from '@nestjs/config';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order } from '@sm/db';
+import { ordersChannel, WS_EVENTS, type CustomerSaleAttribution } from '@sm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { PaymentsService } from './payments.service';
 import type { OrderPaymentLifecycleService, OrderPaymentProvider } from './order-payment-lifecycle.service';
@@ -52,6 +53,33 @@ function build(over: { account?: string | null; secretKey?: string | null } = {}
 }
 
 describe('changement public vers le comptoir — projection et reprise', () => {
+  it('diffuse réellement le changement sans clé ni valeur de compte ou attribution fidélité', async () => {
+    const { service, lifecycle, redis, stripe } = build({ secretKey: null });
+    const owner = { tenantRef: TENANT_ID, parentRef: `AC${'b'.repeat(32)}`, accountId: '11111111-1111-4111-8111-111111111111' };
+    const attribution: CustomerSaleAttribution = { version: 1, tenantRef: TENANT_ID,
+      clientId: '22222222-2222-4222-8222-222222222222', owner, capturedAt: 1789034400000,
+      basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1250, excludedChargeCents: 0, chargedTotalCents: 1250 },
+      decision: 'attributed', memberId: '33333333-3333-4333-8333-333333333333',
+      membershipOperationId: '44444444-4444-4444-8444-444444444444', programId: '55555555-5555-4555-8555-555555555555',
+      rulesVersion: 1, rule: { mechanism: 'points', minimumPurchaseCents: 0, maximumUnitsPerPurchase: null, spendStepCents: 100, unitsPerStep: 1 } };
+    const original = { _id: ORDER_ID, tenantId: TENANT_ID, payment: { method: 'counter', status: 'pending' },
+      customerOwner: owner, customerSaleAttribution: attribution };
+    lifecycle.switchToCounter.mockResolvedValueOnce({ _id: ORDER_ID, tenantId: TENANT_ID, toObject: () => original });
+    expect(await service.switchToCounterPayment(ORDER_ID, TOKEN)).toEqual({ _id: ORDER_ID, payment: { method: 'counter', status: 'pending' } });
+    expect(lifecycle.switchToCounter).toHaveBeenCalledWith(ORDER_ID, TOKEN, null);
+    expect(redis.publish).toHaveBeenCalledTimes(1);
+    const [channel, raw] = redis.publish.mock.calls[0]! as [string, string];
+    expect(channel).toBe(ordersChannel(TENANT_ID));
+    const event = JSON.parse(raw);
+    expect(event).toMatchObject({ event: WS_EVENTS.orderUpdated, payload: { _id: ORDER_ID, payment: { method: 'counter', status: 'pending' } } });
+    for (const key of ['customerOwner', 'customerSaleAttribution']) expect(event.payload).not.toHaveProperty(key);
+    for (const privateValue of ['customerOwner', 'customerSaleAttribution', owner.parentRef, owner.accountId,
+      attribution.clientId, attribution.memberId, attribution.membershipOperationId, attribution.programId]) expect(raw).not.toContain(privateValue);
+    expect(original.customerOwner).toEqual(owner); expect(original.customerSaleAttribution).toEqual(attribution);
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+    expect(stripe.paymentIntents.retrieve).not.toHaveBeenCalled();
+    expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+  });
   it('change la même commande et diffuse le paiement en attente sans preuve privée', async () => {
     const { service, lifecycle, redis, stripe } = build();
     expect(await service.switchToCounterPayment(ORDER_ID, TOKEN)).toEqual({

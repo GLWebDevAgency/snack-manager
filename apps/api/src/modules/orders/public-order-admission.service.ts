@@ -160,6 +160,14 @@ export class PublicOrderAdmissionService {
     const existing = await this.orderByClient(tenantId, body.clientId);
     if (existing) {
       assertPublicRecoveryReplay(existing, binding);
+      // An Order may exist while its insert acknowledgement is still lost.
+      // Resume the winning journal (including private attribution equality),
+      // not a shortcut that leaves its snapshot unverified indefinitely.
+      if (await this.read(admissionId(tenantId, body.clientId))) {
+        const admission = await this.readAuthenticated(tenantId, body.clientId, binding);
+        if (!['committing', 'created'].includes(admission.state)) throw uncertain();
+        return this.result(admission);
+      }
       return { state: 'created', order: recoveryReceipt(existing) };
     }
     const id = admissionId(tenantId, body.clientId);
@@ -214,7 +222,13 @@ export class PublicOrderAdmissionService {
   async createdOrder(tenantId: string, body: CreatePublicOrder, customerOwner?: CustomerOrderOwner) {
     const order = await this.orderByClient(tenantId, body.clientId);
     if (!order) throw uncertain();
-    assertPublicRecoveryReplay(order, publicRecoveryBinding(tenantId, body, customerOwner));
+    const binding = publicRecoveryBinding(tenantId, body, customerOwner);
+    assertPublicRecoveryReplay(order, binding);
+    if (binding && await this.read(admissionId(tenantId, body.clientId))) {
+      const admission = await this.readAuthenticated(tenantId, body.clientId, binding);
+      if (!['committing', 'created'].includes(admission.state)) throw uncertain();
+      return this.journal.committedOrder(admission);
+    }
     return order;
   }
 

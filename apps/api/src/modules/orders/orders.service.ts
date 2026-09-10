@@ -40,7 +40,8 @@ import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 import { type CustomerOrderCommitAuthority } from './customer-order-owner';
-import { CustomerOrderAuthorityLost } from './order-admission.errors';
+import { CustomerOrderAuthorityLost, CustomerOrderPreparationUnavailable } from './order-admission.errors';
+import { prepareCustomerSaleAttribution, type PrepareCustomerSaleAttribution } from './customer-sale-attribution';
 import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-recovery';
 import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
 import type { OrderAdmissionBinding } from './order-admission-identity';
@@ -127,6 +128,7 @@ export class OrdersService {
     delete payload.counterCollection;
     delete payload.publicRecovery;
     delete payload.customerOwner;
+    delete payload.customerSaleAttribution;
     return payload;
   }
 
@@ -258,6 +260,7 @@ export class OrdersService {
     recovery?: PublicRecoveryBinding,
     origin: 'legacy' | 'staff' = 'legacy',
     beforeCommit?: CustomerOrderCommitAuthority,
+    prepareLoyaltyAttribution?: PrepareCustomerSaleAttribution,
   ) {
     const permitted = await this.readFilter(tenantId, {});
     if (permitted.channel && dto.channel !== permitted.channel) {
@@ -304,12 +307,19 @@ export class OrdersService {
       if (dto.type === 'delivery' && !tenant) throw new NotFoundException('Établissement introuvable');
       const delivery = computeDeliveryForOrder(tenant ?? {}, dto, subtotalAfterDiscount);
       const totalDu = subtotalAfterDiscount + (delivery?.feeCents ?? 0);
+      const customerSaleAttribution = recovery?.customerOwner
+        ? await prepareCustomerSaleAttribution(prepareLoyaltyAttribution, Object.freeze({
+          tenantRef: tenantId, clientId: dto.clientId, owner: Object.freeze({ ...recovery.customerOwner }),
+          totals: Object.freeze({ subtotalCents: subtotal, discountCents: promotion?.discount.amount ?? 0,
+            deliveryFeeCents: delivery?.feeCents ?? 0, totalCents: totalDu }),
+        })) : null;
       const candidate = {
         ...(candidateId ? { _id: candidateId } : {}),
         tenantId,
         number,
         clientId: dto.clientId,
         customerOwner: recovery?.customerOwner ?? null,
+        customerSaleAttribution,
         loyaltyMemberId: dto.loyaltyMemberId ?? null,
         loyaltyEarnOperationId: dto.loyaltyEarnOperationId ?? null,
         loyaltyActorRef: dto.loyaltyMemberId ? actor : null,
@@ -398,7 +408,8 @@ export class OrdersService {
       // création de commande avalée.
       // Une réponse perdue après committing n'autorise pas à rendre la promo
       // gagnante : son snapshot reste matérialisable par la reprise publique.
-      if (!admissionBinding || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || err instanceof CustomerOrderAuthorityLost || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
+      if (!admissionBinding || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || err instanceof CustomerOrderAuthorityLost
+        || err instanceof CustomerOrderPreparationUnavailable || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
         await this.rendreReservation(tenantId, promotion);
       }
 

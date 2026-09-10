@@ -10,6 +10,13 @@ export class CustomerOrderAuthorityLost extends ForbiddenException {
   constructor() { super('Le compte ne peut plus autoriser cette nouvelle commande.'); }
 }
 
+/** A local preparation/authority read failed BEFORE any committing CAS.
+ * This is not evidence that the protected account has lost its authority. */
+export class CustomerOrderPreparationUnavailable extends ServiceUnavailableException {
+  constructor() { super({ code: 'ORDER_PREPARATION_UNAVAILABLE',
+    message: 'La commande ne peut pas être préparée pour le moment. Reprenez cette même tentative.' }); }
+}
+
 export function orderAttemptUncertain(): ServiceUnavailableException {
   return new ServiceUnavailableException({ code: 'ORDER_ATTEMPT_UNCERTAIN',
     message: 'La création reste à vérifier. Reprenez cette même tentative.' });

@@ -197,6 +197,8 @@ export class OrderRefundsService {
     if (updated) {
       const payload = { ...updated } as Record<string, unknown>;
       delete payload.paymentFlow;
+      delete payload.customerOwner;
+      delete payload.customerSaleAttribution;
       for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
       await publishRedisBestEffort(this.redis, ordersChannel(String(order.tenantId)), JSON.stringify({ event: WS_EVENTS.orderUpdated, payload }));
     }

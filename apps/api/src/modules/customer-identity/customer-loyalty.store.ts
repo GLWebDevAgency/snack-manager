@@ -6,6 +6,11 @@ import { CustomerLoyaltyRequestSchema, CustomerLoyaltyProgramSchema, CustomerLoy
   type CustomerLoyaltyProgram, type CustomerLoyaltyMember, type CustomerLoyaltyRequest, type CustomerLoyaltyResponse } from '@sm/contracts';
 import type { CustomerIdentityCrypto, ProtectedCustomerSession } from '@sm/customer';
 import { hashLoyaltyQrToken, type LoyaltyCryptoAdapter } from '@sm/loyalty';
+import { loyalty } from '@sm/domain';
+
+export type CustomerLoyaltySaleDecision = { decision: 'none'; reason: 'not_enrolled' | 'program_inactive' | 'member_inactive' }
+  | { decision: 'attributed'; memberId: string; membershipOperationId: string; programId: string;
+    rulesVersion: number; rule: loyalty.LoyaltyEarnRule };
 
 type WithoutExpiry<T> = T extends { expiresAt: number } ? Omit<T, 'expiresAt'> : never;
 export type CustomerLoyaltyStoreResult = WithoutExpiry<CustomerLoyaltyResponse>;
@@ -16,6 +21,7 @@ export interface CustomerLoyaltyStoreContext {
   readonly identity: CustomerIdentityCrypto;
   readonly crypto: LoyaltyCryptoAdapter;
 }
+export type CustomerLoyaltyReadContext = Pick<CustomerLoyaltyStoreContext, 'client' | 'session' | 'scope' | 'crypto'>;
 export class CustomerLoyaltyStoreError extends Error {
   constructor(readonly result: CustomerLoyaltyStoreResult) {
     super('Adhésion fidélité indisponible.');
@@ -27,7 +33,11 @@ type Attach = Extract<CustomerLoyaltyRequest, { step: 'attach' }>;
 type Operation = { kind: string; status: string; request_fingerprint: string; result: unknown; completed_at: Date | null };
 type Membership = { member_id: string; operation_id: string; request_hash: string };
 type MemberRow = { id: string; status: string; joined_at: Date; enrollment_handoff_at: Date | null;
-  qr_generation: string; balance_units: string };
+  qr_generation: string; balance_units?: string };
+type ProgramRow = { id: string; status: string; version: string; version_program_id: string | null;
+  name: string; mechanism: string; terms_summary: string; unit_label_singular: string; unit_label_plural: string;
+  minimum_purchase_cents: number; maximum_units_per_purchase: number | null;
+  spend_step_cents: number | null; units_per_step: number | null; units_per_visit: number | null };
 const unavailable = (): never => { throw new CustomerLoyaltyStoreError({ state: 'unavailable' }); };
 const refuse = (result: CustomerLoyaltyStoreResult): never => { throw new CustomerLoyaltyStoreError(result); };
 const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -50,13 +60,13 @@ function equalHash(a: unknown, b: unknown): boolean {
 /** Only the durable server-proven owner and accepted intention participate in
  * idempotence. A later name edit, browser change or QR rotation is not a new
  * enrollment, and no raw phone/profile belongs in the operation inbox. */
-function fingerprint(ctx: CustomerLoyaltyStoreContext, request: Join): string {
+function fingerprint(ctx: CustomerLoyaltyReadContext, request: Join): string {
   return ctx.crypto.operationFingerprint({ tenantRef: ctx.scope.tenantRef, kind: 'member_create', payload: {
     purpose: 'protected-customer-membership-v1', parentRef: ctx.scope.parentRef, accountId: ctx.session.profile.accountId,
     programId: request.programId, rulesVersion: request.rulesVersion, termsNoticeVersion: request.termsNoticeVersion, termsAccepted: true,
   } });
 }
-function attachmentFingerprint(ctx: CustomerLoyaltyStoreContext,
+function attachmentFingerprint(ctx: CustomerLoyaltyReadContext,
   request: Pick<Attach, 'programId' | 'rulesVersion' | 'termsNoticeVersion'>, presentedQrHash: string): string {
   return ctx.crypto.operationFingerprint({ tenantRef: ctx.scope.tenantRef, kind: 'token_replace', payload: {
     purpose: 'protected-customer-attachment-v1', parentRef: ctx.scope.parentRef, accountId: ctx.session.profile.accountId,
@@ -75,29 +85,47 @@ function verifiedProfile(ctx: CustomerLoyaltyStoreContext): { name: string | nul
     return { name, phone };
   } catch { return unavailable(); }
 }
-async function currentProgram(ctx: CustomerLoyaltyStoreContext): Promise<CustomerLoyaltyProgram | null> {
+async function currentProgramRecord(ctx: CustomerLoyaltyReadContext): Promise<ProgramRow | null> {
   // Same lock as legacy program publication. Never acknowledge terms from a
-  // version read before a concurrent publish committed.
-  const rows = await ctx.client.query(`SELECT p.id,p.status,p.current_version AS version,v.name,v.mechanism,v.terms_summary,
-    v.unit_label_singular,v.unit_label_plural FROM loyalty.programs p JOIN loyalty.program_versions v
-    ON (v.tenant_ref,v.program_id,v.version)=(p.tenant_ref,p.id,p.current_version)
+  // version read before a concurrent publish committed. Lock the program in
+  // its own statement: a JOIN begun before a lock wait can retain the old
+  // version snapshot while PostgreSQL rechecks the updated program row.
+  const locked = await ctx.client.query<{ id: string }>(`SELECT p.id FROM loyalty.programs p
     WHERE p.tenant_ref=$1 FOR SHARE OF p`, [ctx.scope.tenantRef]);
+  if (locked.rows.length > 1) return unavailable();
+  if (!locked.rows.length) return null;
+  const rows = await ctx.client.query<ProgramRow>(`SELECT p.id,p.status,p.current_version AS version,v.program_id AS version_program_id,
+    v.name,v.mechanism,v.terms_summary,v.unit_label_singular,v.unit_label_plural,
+    v.minimum_purchase_cents,v.maximum_units_per_purchase,v.spend_step_cents,v.units_per_step,v.units_per_visit
+    FROM loyalty.programs p LEFT JOIN loyalty.program_versions v
+    ON (v.tenant_ref,v.program_id,v.version)=(p.tenant_ref,p.id,p.current_version)
+    WHERE p.tenant_ref=$1`, [ctx.scope.tenantRef]);
+  if (rows.rows.length !== 1) return unavailable();
   const row = rows.rows[0];
-  if (!row || row.status !== 'active') return null;
+  if (!row || row.id !== locked.rows[0]!.id || !['draft', 'active', 'paused'].includes(row.status)
+    || row.version_program_id !== row.id) return unavailable();
+  return row;
+}
+function programView(row: ProgramRow): CustomerLoyaltyProgram {
   const parsed = CustomerLoyaltyProgramSchema.safeParse({ id: row.id, version: Number(row.version), name: row.name,
     mechanism: row.mechanism, termsSummary: row.terms_summary, unitLabelSingular: row.unit_label_singular, unitLabelPlural: row.unit_label_plural });
   return parsed.success ? parsed.data : unavailable();
 }
-async function association(ctx: CustomerLoyaltyStoreContext): Promise<Membership | null> {
+async function currentProgram(ctx: CustomerLoyaltyReadContext): Promise<CustomerLoyaltyProgram | null> {
+  const row = await currentProgramRecord(ctx);
+  return row?.status === 'active' ? programView(row) : null;
+}
+async function association(ctx: CustomerLoyaltyReadContext): Promise<Membership | null> {
   return (await ctx.client.query<Membership>(`SELECT member_id,operation_id,request_hash FROM customer.loyalty_memberships
     WHERE parent_ref=$1 AND tenant_ref=$2 AND account_id=$3`,
   [ctx.scope.parentRef, ctx.scope.tenantRef, ctx.session.profile.accountId])).rows[0] ?? null;
 }
-async function operation(ctx: CustomerLoyaltyStoreContext, id: string, lock = false): Promise<Operation | null> {
+async function operation(ctx: CustomerLoyaltyReadContext, id: string, lock = false): Promise<Operation | null> {
   return (await ctx.client.query<Operation>(`SELECT kind,status,request_fingerprint,result,completed_at FROM loyalty.operations
     WHERE tenant_ref=$1 AND operation_id=$2${lock ? ' FOR UPDATE' : ''}`, [ctx.scope.tenantRef, id])).rows[0] ?? null;
 }
-async function ownedMember(ctx: CustomerLoyaltyStoreContext, link: Membership, program: CustomerLoyaltyProgram): Promise<CustomerLoyaltyMember> {
+async function ownedMemberRecord(ctx: CustomerLoyaltyReadContext, link: Membership, program: CustomerLoyaltyProgram,
+  includeBalance: boolean): Promise<MemberRow> {
   const original = await operation(ctx, link.operation_id);
   const receipt = object(original?.result);
   if (!original || original.status !== 'completed' || !original.completed_at
@@ -115,7 +143,7 @@ async function ownedMember(ctx: CustomerLoyaltyStoreContext, link: Membership, p
     if (!attached.success || !equalHash(link.request_hash, attachmentFingerprint(ctx, attached.data, attached.data.presentedQrHash))) return unavailable();
     event = 'token_replaced'; notice = null; reason = attachmentReason; initialGeneration = attached.data.qrGeneration;
   } else return unavailable();
-  const row = (await ctx.client.query<MemberRow>(`SELECT m.id,m.status,m.joined_at,m.enrollment_handoff_at,m.qr_generation,w.balance_units
+  const row = (await ctx.client.query<MemberRow>(`SELECT m.id,m.status,m.joined_at,m.enrollment_handoff_at,m.qr_generation${includeBalance ? ',w.balance_units' : ''}
     FROM loyalty.members m JOIN loyalty.wallets w ON (w.tenant_ref,w.member_id)=(m.tenant_ref,m.id)
     WHERE m.tenant_ref=$1 AND m.id=$2 AND w.program_id=$3
       AND EXISTS (SELECT 1 FROM loyalty.membership_events e WHERE e.tenant_ref=m.tenant_ref AND e.member_id=m.id
@@ -123,10 +151,43 @@ async function ownedMember(ctx: CustomerLoyaltyStoreContext, link: Membership, p
         AND e.terms_notice_version IS NOT DISTINCT FROM $7::text AND e.reason IS NOT DISTINCT FROM $8::text)
     FOR SHARE OF m`, [ctx.scope.tenantRef, link.member_id, program.id, link.operation_id,
     `customer:${ctx.session.profile.accountId}`, event, notice, reason])).rows[0];
-  if (!row || row.status !== 'active' || !row.enrollment_handoff_at || Number(row.qr_generation) < initialGeneration) return unavailable();
+  if (!row || !['active', 'blocked', 'anonymized'].includes(row.status) || !row.enrollment_handoff_at
+    || !Number.isSafeInteger(Number(row.qr_generation)) || Number(row.qr_generation) < initialGeneration) return unavailable();
+  return row;
+}
+async function ownedMember(ctx: CustomerLoyaltyReadContext, link: Membership, program: CustomerLoyaltyProgram): Promise<CustomerLoyaltyMember> {
+  const row = await ownedMemberRecord(ctx, link, program, true);
+  if (row.status !== 'active') return unavailable();
   const parsed = CustomerLoyaltyMemberSchema.safeParse({ id: row.id, joinedAt: row.joined_at.toISOString(), qrGeneration: Number(row.qr_generation),
     balanceUnits: Number(row.balance_units), unitLabelSingular: program.unitLabelSingular, unitLabelPlural: program.unitLabelPlural });
   return parsed.success ? parsed.data : unavailable();
+}
+
+/** Lecture interne uniquement, sous withProtectedCustomerSession. Réutilise la
+ * preuve de rattachement, jamais le téléphone/QR. Le statut du programme est
+ * observé maintenant ; la règle vient de sa version SQL publiée, pas du reçu
+ * de consentement. Aucune écriture, donnée de profil ou lecture de solde. */
+export async function readCustomerLoyaltySaleAttribution(ctx: CustomerLoyaltyReadContext): Promise<CustomerLoyaltySaleDecision> {
+  const row = await currentProgramRecord(ctx);
+  if (!row) return { decision: 'none', reason: 'program_inactive' };
+  const program = programView(row);
+  const rawRule = { mechanism: row.mechanism, minimumPurchaseCents: row.minimum_purchase_cents,
+    maximumUnitsPerPurchase: row.maximum_units_per_purchase,
+    ...(row.mechanism === 'points' ? { spendStepCents: row.spend_step_cents, unitsPerStep: row.units_per_step }
+      : { unitsPerVisit: row.units_per_visit }) };
+  // Les colonnes inutilisées restent NULL : ne pas convertir une ligne SQL
+  // incohérente en une règle différente par simple omission de ses champs.
+  if ((row.mechanism === 'points' && row.units_per_visit !== null)
+    || (row.mechanism === 'stamps' && (row.spend_step_cents !== null || row.units_per_step !== null))) return unavailable();
+  const checked = loyalty.validateLoyaltyEarnRule(rawRule as loyalty.LoyaltyEarnRule);
+  if (!checked.ok) return unavailable();
+  if (row.status !== 'active') return { decision: 'none', reason: 'program_inactive' };
+  const link = await association(ctx);
+  if (!link) return { decision: 'none', reason: 'not_enrolled' };
+  const member = await ownedMemberRecord(ctx, link, program, false);
+  if (member.status !== 'active') return { decision: 'none', reason: 'member_inactive' };
+  return { decision: 'attributed', memberId: member.id, membershipOperationId: link.operation_id,
+    programId: program.id, rulesVersion: program.version, rule: checked.value };
 }
 
 async function currentCard(ctx: CustomerLoyaltyStoreContext, link: Membership, member: CustomerLoyaltyMember): Promise<CustomerLoyaltyStoreResult> {

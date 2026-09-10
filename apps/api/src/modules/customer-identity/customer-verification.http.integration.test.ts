@@ -24,6 +24,7 @@ import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.serv
 import type { customerOrdersMongoFixture } from '../orders/customer-orders.test-fixture';
 import { LoyaltyCryptoAdapter, loyaltyDb } from '@sm/loyalty';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
+import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
 import { LoyaltyMemberService, type LoyaltyActorContext } from '../loyalty/loyalty-member.service';
 import type { LoyaltyPurchaseVerifier } from '../loyalty/loyalty-purchase-verifier';
 
@@ -66,6 +67,7 @@ const query = { read: () => query, readConcern: () => query, maxTimeMS: () => qu
   { provide: CUSTOMER_IDENTITY_REPOSITORY, useFactory: () => new PostgresCustomerIdentityRepository(database.app) },
   { provide: CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, useValue: () => provider },
   { provide: CustomerLoyaltyService, useFactory: () => new CustomerLoyaltyService(database.app, loyaltyCrypto, httpQuota as unknown as SharedPublicQuota) },
+  { provide: CustomerSaleAttributionService, useFactory: () => new CustomerSaleAttributionService(database.app, loyaltyCrypto) },
   { provide: OnlineOrderCheckoutService, useValue: {
     createForCustomer: (...args: Parameters<OnlineOrderCheckoutService['createForCustomer']>) => commerceCheckout!.createForCustomer(...args),
     listForCustomer: (...args: Parameters<OnlineOrderCheckoutService['listForCustomer']>) => commerceCheckout!.listForCustomer(...args),
@@ -398,6 +400,53 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
   function access(a: Awaited<ReturnType<typeof protectedAccount>>) {
     return { ...a.binding, ...a.protection.publication, sessionToken: a.activated.token };
   }
+
+  it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('captures a real protected membership and rule at sale, replays after rule change and never credits or exposes it', async () => {
+    const a = await protectedAccount(), programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const own = access(a); await ok('name', { ...own, request: { name: 'Mina', expectedRevision: 0 } });
+    const operationId = randomUUID();
+    const joined = await ok('loyalty', { ...own, request: { step: 'join', operationId, programId, rulesVersion: 1,
+      termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true } });
+    if (joined.state !== 'member') throw new Error('Expected protected membership');
+    const mongo = await commerceFixture();
+    try {
+      provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+      const request = mongo.request(); dropAction = 'order-create';
+      await expect(http('order-create', { ...own, request })).rejects.toBeDefined(); expect(dropAction).toBeNull();
+      const stored = await mongo.models.orders.collection.findOne({ clientId: request.clientId });
+      expect(stored?.customerSaleAttribution).toMatchObject({ decision: 'attributed', memberId: joined.member.id,
+        membershipOperationId: operationId, programId, rulesVersion: 1,
+        rule: { mechanism: 'points', spendStepCents: 100, unitsPerStep: 1 },
+        basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1250, excludedChargeCents: 0, chargedTotalCents: 1250 } });
+      expect(stored).toMatchObject({ loyaltyMemberId: null, loyaltyEarnState: null });
+      const client = await database.admin.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`INSERT INTO loyalty.program_versions(tenant_ref,program_id,version,name,mechanism,
+          spend_step_cents,units_per_step,unit_label_singular,unit_label_plural,terms_summary)
+          VALUES($1,$2,2,'Nouvelle règle de recette','points',100,4,'point','points','Règle suivante.')`, [env.SM_CUSTOMER_PILOT_TENANT_ID, programId]);
+        await client.query('UPDATE loyalty.programs SET current_version=2 WHERE tenant_ref=$1 AND id=$2', [env.SM_CUSTOMER_PILOT_TENANT_ID, programId]);
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+      const read = vi.spyOn(app!.get(CustomerSaleAttributionService), 'prepare');
+      try {
+        read.mockRejectedValue(new Error('Unavailable PG adapter after committed order'));
+        const replay = await ok('order-create', { ...own, request });
+        expect(replay.state).toBe('created'); expect(read).not.toHaveBeenCalled();
+        const history = await ok('orders', { ...own, request: { filter: 'all', limit: 20, cursor: null } });
+        const json = JSON.stringify({ replay, history, events: mongo.replica.redis.publish.mock.calls });
+        for (const forbidden of ['customerSaleAttribution', joined.member.id, operationId, programId]) expect(json).not.toContain(forbidden);
+      } finally { read.mockRestore(); }
+      expect((await mongo.models.orders.collection.findOne({ clientId: request.clientId }))?.customerSaleAttribution).toEqual(stored?.customerSaleAttribution);
+      const next = await ok('order-create', { ...own, request: mongo.request() });
+      expect(next.state).toBe('created');
+      const snapshots = await mongo.models.orders.collection.find({}).toArray();
+      expect(snapshots.map(row => row.customerSaleAttribution?.rulesVersion).sort()).toEqual([1, 2]);
+      expect((await database.admin.query('SELECT count(*)::int AS n FROM loyalty.ledger_entries WHERE tenant_ref=$1', [env.SM_CUSTOMER_PILOT_TENANT_ID])).rows[0].n).toBe(0);
+      expect((await database.admin.query('SELECT balance_units FROM loyalty.wallets WHERE tenant_ref=$1 AND member_id=$2', [env.SM_CUSTOMER_PILOT_TENANT_ID, joined.member.id])).rows[0].balance_units).toBe('0');
+      expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+    } finally { commerceCheckout = undefined; await mongo.close(); }
+  }, 30_000);
 
   it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('owns a real Mongo order after a lost signed HTTP result, replays once, and isolates history without SMS', async () => {
     const a = await protectedAccount(), b = await protectedAccount(phones[1]);

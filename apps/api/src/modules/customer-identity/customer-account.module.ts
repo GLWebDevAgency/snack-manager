@@ -10,11 +10,12 @@ import { CustomerAccountRuntime, CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICA
 import { TwilioVerifyTransport } from './twilio-verify.transport';
 import { OrdersModule } from '../orders/orders.module';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
+import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
 
 @Module({
   imports: [OrdersModule],
   controllers: [CustomerAccountController],
-  providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier, CustomerLoyaltyService,
+  providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier, CustomerLoyaltyService, CustomerSaleAttributionService,
     { provide: CUSTOMER_HUMAN_FETCH, useValue: globalThis.fetch },
     { provide: CUSTOMER_IDENTITY_REPOSITORY, inject: [POSTGRES_POOL],
       useFactory: (pool: Pool) => new PostgresCustomerIdentityRepository(pool) },

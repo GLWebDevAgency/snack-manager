@@ -1,11 +1,15 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import mongoose, { Types, type Model, type Query, type Connection } from 'mongoose';
-import { MODELS, type Order } from '@sm/db';
+import { MODELS, type Order, type PublicOrderAdmission } from '@sm/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { customerOrdersMongoFixture, customerOrdersTestDatabase } from './customer-orders.test-fixture';
 import { orderAdmissionId } from './order-admission-identity';
 import { publicRecoveryBinding } from './order-recovery';
 import type { CustomerOrderOwner } from './customer-order-owner';
+import type { PrepareCustomerSaleAttribution } from './customer-sale-attribution';
+import type { CustomerSaleAttribution } from '@sm/contracts';
+import { CustomerOrderAuthorityLost } from './order-admission.errors';
+import { OrderCapacityCommitStore } from './order-capacity-commit.store';
 
 const TENANT = '507f1f77bcf86cd799439011';
 const SLOT = '2030-05-02T09:00:00.000Z';
@@ -63,9 +67,218 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
   });
   afterAll(async () => { try { await secondConnection?.close(); await f?.close(); } finally { vi.useRealTimers(); } });
   const query = { filter: 'all' as const, limit: 20, cursor: null };
-  function create(actor = a, body = f.request(), owner = OWNER, beforeCommit = vi.fn(async () => owner)) {
-    return actor.checkout.createForCustomer({ slug: 'isolated-capacity', body, owner, beforeCommit, sourceKey: SOURCE });
+  function create(actor = a, body = f.request(), owner = OWNER, beforeCommit = vi.fn(async () => owner),
+    prepareLoyaltyAttribution: PrepareCustomerSaleAttribution = async input => ({
+      version: 1, tenantRef: input.tenantRef, clientId: input.clientId, owner: input.owner, capturedAt: Date.now(),
+      basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: input.totals.subtotalCents - input.totals.discountCents,
+        excludedChargeCents: input.totals.deliveryFeeCents, chargedTotalCents: input.totals.totalCents },
+      decision: 'none', reason: 'not_enrolled',
+    })) {
+    return actor.checkout.createForCustomer({ slug: 'isolated-capacity', body, owner, beforeCommit, sourceKey: SOURCE, prepareLoyaltyAttribution });
   }
+
+  function sale(input: Parameters<PrepareCustomerSaleAttribution>[0]): CustomerSaleAttribution {
+    return { version: 1, tenantRef: input.tenantRef, clientId: input.clientId, owner: input.owner, capturedAt: Date.now(),
+      basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: input.totals.subtotalCents - input.totals.discountCents,
+        excludedChargeCents: input.totals.deliveryFeeCents, chargedTotalCents: input.totals.totalCents },
+      decision: 'attributed', memberId: randomUUID(), membershipOperationId: randomUUID(), programId: randomUUID(), rulesVersion: 7,
+      rule: { mechanism: 'points', spendStepCents: 100, unitsPerStep: 2, minimumPurchaseCents: 0, maximumUnitsPerPurchase: null },
+    };
+  }
+
+  it('freezes attribution from server prices, excludes legacy earn and never publishes its private contents', async () => {
+    const body = f.request(); const prepare = vi.fn(async input => sale(input));
+    const created = await create(a, body, OWNER, vi.fn(async () => OWNER), prepare);
+    expect(prepare).toHaveBeenCalledExactlyOnceWith({ tenantRef: TENANT, clientId: body.clientId, owner: OWNER,
+      totals: { subtotalCents: 1250, discountCents: 0, deliveryFeeCents: 0, totalCents: 1250 } });
+    const expected = await prepare.mock.results[0]!.value;
+    const rawOrder = await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) });
+    expect(rawOrder?.customerSaleAttribution).toEqual(expected);
+    expect(rawOrder).toMatchObject({ loyaltyMemberId: null, loyaltyEarnOperationId: null, loyaltyEarnState: null });
+    const hydrated = await f.models.orders.findById(created._id).select('+customerSaleAttribution');
+    expect(hydrated?.toObject({ transform: false }).customerSaleAttribution).toEqual(expected);
+    const outputs = [created, hydrated?.toObject(), hydrated?.toJSON(),
+      await f.models.orders.findById(created._id).lean(), await a.orders.list(TENANT, {}),
+      await a.orders.byId(TENANT, created._id), await a.checkout.listForCustomer(OWNER, query),
+      await a.checkout.detailForCustomer(OWNER, created._id), await a.checkout.reorderForCustomer(OWNER, created._id),
+      await a.admissions.recover(TENANT, body.clientId, body.recoveryProof!), a.redis.publish.mock.calls];
+    for (const output of outputs) {
+      const json = JSON.stringify(output);
+      expect(json).not.toContain('customerSaleAttribution');
+      if (expected.decision !== 'attributed') throw new Error('Expected attribution');
+      for (const secret of [expected.memberId, expected.membershipOperationId, expected.programId]) expect(json).not.toContain(secret);
+    }
+    const disconnectedPG = vi.fn(async () => { throw new Error('PG unavailable after commit'); });
+    expect(await create(b, body, OWNER, vi.fn(async () => OWNER), disconnectedPG)).toEqual(created);
+    expect(disconnectedPG).not.toHaveBeenCalled();
+  });
+
+  it.each(['unavailable', 'wrong_account', 'wrong_total'] as const)('does not commit or permanently reject a failed attribution read (%s)', async failure => {
+    const body = f.request();
+    const prepare = vi.fn(async input => {
+      if (failure === 'unavailable') throw new Error('PG private failure');
+      const snapshot = sale(input);
+      return failure === 'wrong_account' ? { ...snapshot, owner: OTHER }
+        : { ...snapshot, basis: { ...snapshot.basis, eligiblePurchaseCents: 1, chargedTotalCents: 1 } };
+    });
+    await expect(create(a, body, OWNER, vi.fn(async () => OWNER), prepare)).rejects.toMatchObject({ status: 503 });
+    expect(await f.models.orders.countDocuments()).toBe(0);
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    expect(admission).toMatchObject({ state: 'validating', snapshot: null, validationOwner: null });
+    expect(admission?.capacity).toBeUndefined();
+    expect(a.gate.release).toHaveBeenCalledTimes(1);
+    await expect(create(b, body)).resolves.toMatchObject({ totals: { total: 1250 } });
+  });
+
+  it('uses the net merchandise amount while retaining the real delivery charge separately', async () => {
+    await f.models.tenants.collection.updateOne({ _id: new Types.ObjectId(TENANT) }, { $set: {
+      onlineDelivery: true, encaissement: { accountId: 'acct_fixture_attribution_only', chargesEnabled: true },
+      delivery: { enabled: true, leadTimeMin: 45, slotCapacity: 5,
+        zones: [{ id: 'fixture', name: 'Zone de recette', postalCodes: ['75001'], feeCents: 500, minimumOrderCents: 0 }] },
+    } });
+    await f.models.promotions.collection.insertOne({ _id: new Types.ObjectId(), tenantId: new Types.ObjectId(TENANT), name: 'Recette',
+      kind: 'amount', value: 250, active: true, channels: ['online'], code: null, maxUsage: 1, usageCount: 0 } as never);
+    const body = f.request({ fulfillment: 'delivery', payment: { method: 'online' },
+      delivery: { address: { line1: '10 rue de la Recette', postalCode: '75001', city: 'Paris', country: 'FR' } } });
+    const prepare = vi.fn(async input => sale(input));
+    const created = await create(a, body, OWNER, vi.fn(async () => OWNER), prepare);
+    expect(prepare).toHaveBeenCalledExactlyOnceWith({ tenantRef: TENANT, clientId: body.clientId, owner: OWNER,
+      totals: { subtotalCents: 1250, discountCents: 250, deliveryFeeCents: 500, totalCents: 1500 } });
+    expect(created).toMatchObject({ totals: { total: 1500 }, payment: { method: 'online', status: 'pending' } });
+    expect((await f.models.orders.collection.findOne({ clientId: body.clientId }))?.customerSaleAttribution?.basis)
+      .toEqual({ policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1000, excludedChargeCents: 500, chargedTotalCents: 1500 });
+  });
+
+  it('keeps the winning attribution when two replicas race for the same sale', async () => {
+    const body = f.request(); const first = vi.fn(async input => sale(input)), second = vi.fn(async input => sale(input));
+    const outcomes = await Promise.allSettled([
+      create(a, body, OWNER, vi.fn(async () => OWNER), first), create(b, body, OWNER, vi.fn(async () => OWNER), second),
+    ]);
+    expect(outcomes.some(outcome => outcome.status === 'fulfilled')).toBe(true);
+    expect(await f.models.orders.countDocuments()).toBe(1);
+    const stored = await f.models.orders.collection.findOne({ clientId: body.clientId });
+    const sampled = await Promise.all([...first.mock.results, ...second.mock.results].map(result => result.value));
+    expect(sampled).toContainEqual(stored?.customerSaleAttribution);
+    const before = stored?.customerSaleAttribution;
+    const unexpected = vi.fn(async () => { throw new Error('Never read after commitment'); });
+    await create(a, body, OWNER, vi.fn(async () => OWNER), unexpected);
+    expect(unexpected).not.toHaveBeenCalled();
+    expect((await f.models.orders.collection.findOne({ clientId: body.clientId }))?.customerSaleAttribution).toEqual(before);
+  });
+
+  it('arbitrates two different prepared snapshots at the actual committing CAS', async () => {
+    const body = f.request(); await a.admissions.begin(TENANT, body, OWNER);
+    const binding = await a.admissions.claimValidation(TENANT, body.clientId, publicRecoveryBinding(TENANT, body, OWNER)!);
+    if (!binding) throw new Error('Expected validation claim');
+    const input = { tenantRef: TENANT, clientId: body.clientId, owner: OWNER,
+      totals: { subtotalCents: 1250, discountCents: 0, deliveryFeeCents: 0, totalCents: 1250 } };
+    const candidates = [sale(input), sale(input)].map(customerSaleAttribution => ({
+      _id: new Types.ObjectId(), tenantId: TENANT, clientId: body.clientId, channel: 'online', type: 'pickup',
+      customerOwner: OWNER, customerSaleAttribution, number: 1, lines: [],
+      totals: { subtotal: 1250, discount: null, deliveryFee: 0, total: 1250 },
+      payment: { method: 'counter', status: 'pending' }, trackingToken: randomBytes(24).toString('base64url'),
+      pickup: { slot: new Date(SLOT), customerName: 'Fixture' }, status: 'new',
+    }));
+    expect(candidates[0]!.customerSaleAttribution).not.toEqual(candidates[1]!.customerSaleAttribution);
+    const first = new OrderCapacityCommitStore(f.models.admissions, f.models.orders, f.models.days);
+    const second = new OrderCapacityCommitStore(
+      secondConnection.model<PublicOrderAdmission>(MODELS.PublicOrderAdmission.name),
+      secondConnection.model<Order>(MODELS.Order.name), f.models.days);
+    let entered = 0; let ready!: () => void; let release!: () => void;
+    const bothReady = new Promise<void>(resolve => { ready = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const authority = async () => { if (++entered === 2) ready(); await released; return OWNER; };
+    const settled = Promise.all([
+      first.commit(TENANT, body.clientId, binding, candidates[0]!, authority),
+      second.commit(TENANT, body.clientId, binding, candidates[1]!, authority),
+    ]);
+    try {
+      await Promise.race([bothReady, settled.then(() => { throw new Error('Both candidates must reach the authorization barrier'); })]);
+    } finally { release(); }
+    const results = await settled;
+    expect(entered).toBe(2); expect(results[0]?.orderId).toBe(results[1]?.orderId);
+    const winner = candidates.find(candidate => String(candidate._id) === results[0]?.orderId);
+    expect(winner).toBeDefined();
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    expect(admission).toMatchObject({ state: 'committing', snapshot: { customerSaleAttribution: winner!.customerSaleAttribution } });
+    await b.admissions.recover(TENANT, body.clientId, body.recoveryProof!);
+    expect((await f.models.orders.collection.findOne({ clientId: body.clientId }))?.customerSaleAttribution).toEqual(winner!.customerSaleAttribution);
+    expect(await f.models.orders.countDocuments()).toBe(1);
+  });
+
+  it('repairs a lost acknowledgement without another attribution or another order', async () => {
+    let lost = false;
+    const admissions = new Proxy(f.models.admissions, { get(target, key, receiver) {
+      if (key !== 'updateOne') return Reflect.get(target, key, receiver);
+      return (...args: unknown[]) => {
+        const query = Reflect.apply(target.updateOne, target, args) as Query<unknown, Order>;
+        const execute = query.exec.bind(query);
+        query.exec = async () => {
+          if (!lost && (args[1] as { $set?: { state?: string } }).$set?.state === 'created') {
+            lost = true; throw new Error('Synthetic lost acknowledgement');
+          }
+          return execute();
+        };
+        return query;
+      };
+    } });
+    const body = f.request(), prepare = vi.fn(async input => sale(input));
+    const created = await create(f.replica({ admissions }), body, OWNER, vi.fn(async () => OWNER), prepare);
+    expect(lost).toBe(true);
+    const attribution = (await f.models.orders.collection.findOne({ clientId: body.clientId }))?.customerSaleAttribution;
+    expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
+      .toMatchObject({ state: 'committing', snapshot: { customerSaleAttribution: attribution } });
+    expect(await create(b, body, OWNER, vi.fn(async () => OWNER), prepare)).toEqual(created);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(await f.models.orders.countDocuments()).toBe(1);
+    expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
+      .toMatchObject({ state: 'created', snapshot: null });
+  });
+
+  it('requires the preparer for a NEW protected order but never enriches an old committed order', async () => {
+    const body = f.request();
+    const input = { slug: 'isolated-capacity', body, owner: OWNER, beforeCommit: vi.fn(async () => OWNER), sourceKey: SOURCE };
+    await expect(a.checkout.createForCustomer(input)).rejects.toMatchObject({ status: 503 });
+    expect(await f.models.orders.countDocuments()).toBe(0);
+    const created = await create(b, body);
+    // Reproduce a genuinely pre-feature ticket; a normal ODM update must not
+    // create this historical state or attach anything retroactively.
+    await f.models.orders.collection.updateOne({ _id: new Types.ObjectId(created._id) }, { $unset: { customerSaleAttribution: '' } });
+    expect(await a.checkout.createForCustomer(input)).toEqual(created);
+    expect((await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) }))?.customerSaleAttribution).toBeUndefined();
+  });
+
+  it('materializes the winning private attribution after a crash without rereading PG or changing the rule', async () => {
+    const body = f.request(); const block = blockedInsert(f.models.orders);
+    const prepare = vi.fn(async input => sale(input));
+    await expect(create(f.replica({ orders: block.model }), body, OWNER, vi.fn(async () => OWNER), prepare)).rejects.toThrow();
+    const expected = await prepare.mock.results[0]!.value;
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    expect(admission).toMatchObject({ state: 'committing', snapshot: { customerSaleAttribution: expected } });
+    expect(await f.models.orders.countDocuments()).toBe(0);
+    block.release();
+    const recovered = await b.admissions.recover(TENANT, body.clientId, body.recoveryProof!);
+    expect(recovered.state).toBe('created');
+    expect((await f.models.orders.collection.findOne({ clientId: body.clientId }))?.customerSaleAttribution).toEqual(expected);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(b.gate.authorize).not.toHaveBeenCalled();
+    expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
+      .toMatchObject({ state: 'created', snapshot: null });
+  });
+
+  it('does not acknowledge or publish a different materialized attribution after insertion', async () => {
+    const body = f.request(); const block = blockedInsert(f.models.orders);
+    await expect(create(f.replica({ orders: block.model }), body, OWNER, vi.fn(async () => OWNER), async input => sale(input))).rejects.toThrow();
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    const snapshot = admission!.snapshot as unknown as Record<string, unknown>;
+    const attribution = snapshot.customerSaleAttribution as CustomerSaleAttribution;
+    await f.models.orders.collection.insertOne({ ...snapshot, customerSaleAttribution: { ...attribution, memberId: randomUUID() } } as never);
+    await expect(b.admissions.recover(TENANT, body.clientId, body.recoveryProof!)).rejects.toMatchObject({ status: 503 });
+    await expect(create(b, body)).rejects.toMatchObject({ status: 503 });
+    expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
+      .toMatchObject({ state: 'committing', snapshot: { customerSaleAttribution: attribution } });
+    expect(b.redis.publish).not.toHaveBeenCalled();
+  });
 
   it('reads the exact minimal reorder snapshot without writing orders, admissions or publishing events', async () => {
     const created = await create();
@@ -173,7 +386,7 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
 
   it.each(['changed', 'lost'] as const)('rechecks authority at the committing boundary (%s), never adopts B', async reason => {
     const body = f.request();
-    const authority = vi.fn(async () => { if (reason === 'lost') throw new Error('Synthetic authority unavailable'); return OTHER; });
+    const authority = vi.fn(async () => { if (reason === 'lost') throw new CustomerOrderAuthorityLost(); return OTHER; });
     await expect(create(a, body, OWNER, authority)).rejects.toMatchObject({ status: 409, response: { code: 'ORDER_ATTEMPT_REJECTED', reason: 'unavailable' } });
     expect(authority).toHaveBeenCalledTimes(1);
     expect(await f.models.orders.countDocuments()).toBe(0);
@@ -181,6 +394,23 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
     expect(admission).toMatchObject({ state: 'rejected', customerOwner: OWNER, snapshot: null });
     expect(admission?.capacity).toBeUndefined();
     expect(a.gate.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a PG I/O failure before CAS retryable, releases reservations and does not reject the attempt', async () => {
+    const promoId = new Types.ObjectId();
+    await f.models.promotions.collection.insertOne({ _id: promoId, tenantId: new Types.ObjectId(TENANT), name: 'Recette',
+      kind: 'amount', value: 100, active: true, channels: ['online'], code: null, maxUsage: 1, usageCount: 0 } as never);
+    const body = f.request();
+    await expect(create(a, body, OWNER, vi.fn(async () => { throw new Error('Synthetic PG I/O'); })))
+      .rejects.toMatchObject({ status: 503 });
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    expect(admission).toMatchObject({ state: 'validating', customerOwner: OWNER, snapshot: null, validationOwner: null });
+    expect(admission?.capacity).toBeUndefined();
+    expect(await f.models.orders.countDocuments()).toBe(0);
+    expect((await f.models.promotions.findById(promoId).lean())?.usageCount).toBe(0);
+    expect(a.gate.release).toHaveBeenCalledTimes(1);
+    await expect(create(b, body)).resolves.toMatchObject({ totals: { total: 1150 } });
+    expect(await f.models.orders.countDocuments()).toBe(1);
   });
 
   it('an abandonment during the final authority await wins before CAS and compensates the real promotion', async () => {

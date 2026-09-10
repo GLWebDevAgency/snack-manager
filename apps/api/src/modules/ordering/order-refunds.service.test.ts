@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 import type { Order } from '@sm/db';
 import type Redis from 'ioredis';
+import { ordersChannel, WS_EVENTS, type CustomerSaleAttribution } from '@sm/contracts';
 import { OrderRefundsService, type RefundStripeClient } from './order-refunds.service';
 import type { ProviderRefund } from './order-refunds.policy';
 
@@ -14,12 +15,15 @@ type Row = {
   __v: number;
   _id: string; tenantId: string; channel: string; totals: { total: number };
   payment: { status: string; stripePaymentIntentId: string; stripeAccountId: string; refundSyncVersion: number; [key: string]: unknown };
+  customerOwner?: CustomerSaleAttribution['owner'];
+  customerSaleAttribution?: CustomerSaleAttribution;
 };
 let row: Row;
 let provider: ProviderRefund[];
 let stripe: RefundStripeClient;
 let sut: OrderRefundsService;
 let capabilities: string[];
+let publication: ReturnType<typeof vi.fn<(channel: string, message: string) => Promise<number>>>;
 const get = (object: object, path: string): unknown => path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], object);
 const matches = (filter: Record<string, unknown>) => Object.entries(filter).every(([key, value]) => get(row, key) === value);
 
@@ -50,10 +54,33 @@ beforeEach(() => {
     },
     charges: { retrieve: vi.fn(async () => ({ payment_intent: 'pi_paid' })) },
   };
-  sut = new OrderRefundsService(model, async () => stripe, { publish: vi.fn(async () => 1) } as unknown as Redis, { pourTenant: async () => capabilities } as never, { log: vi.fn(async () => undefined) } as never);
+  publication = vi.fn(async () => 1);
+  sut = new OrderRefundsService(model, async () => stripe, { publish: publication } as unknown as Redis, { pourTenant: async () => capabilities } as never, { log: vi.fn(async () => undefined) } as never);
 });
 
 describe('restaurant refunds', () => {
+  it('publishes the reconciled refund without the protected owner or loyalty attribution keys and values', async () => {
+    const owner = { tenantRef: TENANT, parentRef: `AC${'a'.repeat(32)}`, accountId: '11111111-1111-4111-8111-111111111111' };
+    const attribution: CustomerSaleAttribution = { version: 1, tenantRef: TENANT,
+      clientId: '22222222-2222-4222-8222-222222222222', owner, capturedAt: 1789034400000,
+      basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1250, excludedChargeCents: 0, chargedTotalCents: 1250 },
+      decision: 'attributed', memberId: '33333333-3333-4333-8333-333333333333',
+      membershipOperationId: '44444444-4444-4444-8444-444444444444', programId: '55555555-5555-4555-8555-555555555555',
+      rulesVersion: 1, rule: { mechanism: 'points', minimumPurchaseCents: 0, maximumUnitsPerPurchase: null, spendStepCents: 100, unitsPerStep: 1 } };
+    row.customerOwner = owner; row.customerSaleAttribution = attribution;
+    provider.push({ id: 're_private_projection', amount: 250, status: 'succeeded' });
+    expect(await sut.summary(TENANT, ID)).toMatchObject({ status: 'partial', refundedCents: 250 });
+    expect(publication).toHaveBeenCalledTimes(1);
+    const [channel, raw] = publication.mock.calls[0]!;
+    expect(channel).toBe(ordersChannel(TENANT));
+    const event = JSON.parse(raw);
+    expect(event).toMatchObject({ event: WS_EVENTS.orderUpdated, payload: { _id: ID, payment: { refundedCents: 250 } } });
+    for (const key of ['customerOwner', 'customerSaleAttribution']) expect(event.payload).not.toHaveProperty(key);
+    for (const privateValue of ['customerOwner', 'customerSaleAttribution', owner.parentRef, owner.accountId,
+      attribution.clientId, attribution.memberId, attribution.membershipOperationId, attribution.programId]) expect(raw).not.toContain(privateValue);
+    expect(row.customerOwner).toEqual(owner); expect(row.customerSaleAttribution).toEqual(attribution);
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
+  });
   it('does not refund a counter payment through a retained canceled Stripe intent', async () => {
     row.payment.method = 'counter';
     await expect(sut.request(TENANT, ID, 'owner1', body)).rejects.toThrow('Aucun paiement Stripe confirmé');

@@ -8,8 +8,9 @@ import { CustomerIdentityCrypto, PostgresCustomerIdentityRepository, withProtect
 import { LoyaltyCryptoAdapter, loyaltyDb } from '@sm/loyalty';
 import { LoyaltyMemberService, type LoyaltyActorContext } from '../loyalty/loyalty-member.service';
 import type { LoyaltyPurchaseVerifier } from '../loyalty/loyalty-purchase-verifier';
-import { CustomerLoyaltyStoreError, runCustomerLoyalty, type CustomerLoyaltyStoreContext,
+import { CustomerLoyaltyStoreError, runCustomerLoyalty, readCustomerLoyaltySaleAttribution, type CustomerLoyaltyStoreContext,
   type CustomerLoyaltyStoreResult } from './customer-loyalty.store';
+import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
 
 const integration = process.env.CUSTOMER_TEST_DATABASE_URL ? describe : describe.skip;
 const hash = () => randomBytes(32).toString('hex');
@@ -143,6 +144,137 @@ integration('customer loyalty writer — protected account and ordinary PostgreS
     snapshot.joined = (await f.admin.query("SELECT * FROM loyalty.membership_events WHERE tenant_ref=$1 AND kind='joined'", [tenantRef])).rows;
     return snapshot;
   }
+
+  async function attribution(a: Awaited<ReturnType<typeof account>>, interpose?: (ctx: CustomerLoyaltyStoreContext) => CustomerLoyaltyStoreContext) {
+    return withProtectedCustomerSession(f.app, a.principal, async context => {
+      const ctx = { ...context, scope: a.principal, identity, crypto };
+      return readCustomerLoyaltySaleAttribution(interpose ? interpose(ctx) : ctx);
+    });
+  }
+  it('sale attribution reads the current immutable rule, not the enrollment consent version, without writing or decrypting', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const request = join(id);
+    const joined = await run(a, request); if (joined?.state !== 'member') throw new Error('Membership fixture missing');
+    await f.admin.query(`INSERT INTO loyalty.program_versions(tenant_ref,program_id,version,name,mechanism,minimum_purchase_cents,
+      maximum_units_per_purchase,spend_step_cents,units_per_step,unit_label_singular,unit_label_plural)
+      VALUES($1,$2,2,'Club publié','points',500,50,200,3,'point','points')`, [a.principal.tenantRef, id]);
+    await f.admin.query('UPDATE loyalty.programs SET current_version=2 WHERE id=$1', [id]);
+    const before = await preserved(a.principal.tenantRef), counts = await rows(a.principal.tenantRef);
+    const result = await attribution(a, ctx => ({ ...ctx, identity: { open: () => { throw new Error('Profile must not be opened'); } } as never,
+      crypto: new Proxy(crypto, { get(target, key) {
+        if (['decryptProfile', 'deriveEnrollmentQrToken', 'phoneLookupHash'].includes(String(key))) return () => { throw new Error('Private material must not be loaded'); };
+        const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+      } }) }));
+    expect(result).toEqual({ decision: 'attributed', memberId: joined.member.id, membershipOperationId: request.operationId,
+      programId: id, rulesVersion: 2, rule: { mechanism: 'points', minimumPurchaseCents: 500, maximumUnitsPerPurchase: 50,
+        spendStepCents: 200, unitsPerStep: 3 } });
+    expect(await preserved(a.principal.tenantRef)).toEqual(before); expect(await rows(a.principal.tenantRef)).toEqual(counts);
+    expect(JSON.stringify(result)).not.toMatch(/phone|encrypted|qrToken|balance|name|sessionHash|browserHash/);
+  });
+  it('sale attribution supports the exact attachment receipt without returning the former or current QR', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    const request = attach(id, old.qrToken); expect((await run(a, request))?.state).toBe('member');
+    expect(await attribution(a)).toMatchObject({ decision: 'attributed', memberId: old.member.id, membershipOperationId: request.operationId,
+      programId: id, rulesVersion: 1 });
+    expect(JSON.stringify(await attribution(a))).not.toContain(old.qrToken);
+  });
+  it('sale attribution waits for a real concurrent publication and captures its committed rule, not the previously joined version', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const request = join(id);
+    expect((await run(a, request))?.state).toBe('member');
+    const publisher = await f.admin.connect();
+    let reading: Promise<unknown> | undefined;
+    try {
+      await publisher.query('BEGIN');
+      const pid = (await publisher.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      await publisher.query('SELECT id FROM loyalty.programs WHERE id=$1 FOR UPDATE', [id]);
+      await publisher.query(`INSERT INTO loyalty.program_versions(tenant_ref,program_id,version,name,mechanism,minimum_purchase_cents,
+        maximum_units_per_purchase,spend_step_cents,units_per_step,unit_label_singular,unit_label_plural)
+        VALUES($1,$2,2,'Club publié','points',500,50,200,3,'point','points')`, [a.principal.tenantRef, id]);
+      await publisher.query('UPDATE loyalty.programs SET current_version=2 WHERE id=$1', [id]);
+      reading = attribution(a).then(value => ({ value }), error => ({ error }));
+      await expect.poll(async () => (await f.admin.query(`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE usename=$1 AND wait_event_type='Lock' AND $2=ANY(pg_blocking_pids(pid))`, [f.role, pid])).rows[0].n,
+      { timeout: 2000 }).toBe(1);
+      await publisher.query('COMMIT');
+      expect(await reading).toMatchObject({ value: { decision: 'attributed', programId: id, rulesVersion: 2,
+        rule: { mechanism: 'points', minimumPurchaseCents: 500, maximumUnitsPerPurchase: 50, spendStepCents: 200, unitsPerStep: 3 } } });
+    } finally { await publisher.query('ROLLBACK'); await reading; publisher.release(); }
+  });
+  it('sale attribution distinguishes no active program from a missing membership without creating either', async () => {
+    const a = await account();
+    expect(await attribution(a)).toEqual({ decision: 'none', reason: 'program_inactive' });
+    const id = await program(a.principal.tenantRef);
+    expect(await attribution(a)).toEqual({ decision: 'none', reason: 'not_enrolled' });
+    await f.admin.query("UPDATE loyalty.programs SET status='paused' WHERE id=$1", [id]);
+    expect(await attribution(a)).toEqual({ decision: 'none', reason: 'program_inactive' });
+    expect(await rows(a.principal.tenantRef)).toEqual(empty);
+  });
+  it.each(['block', 'anonymize'] as const)('sale attribution proves an inactive member after %s, without adopting another card', async action => {
+    const a = await account(); const id = await program(a.principal.tenantRef);
+    const joined = await run(a, join(id)); if (joined?.state !== 'member') throw new Error('Membership fixture missing');
+    await pos.changeLifecycle(a.principal.tenantRef, joined.member.id, action === 'block'
+      ? { operationId: randomUUID(), action, reasonCode: 'suspected_sharing' }
+      : { operationId: randomUUID(), action, reasonCode: 'customer_request', confirmation: 'ANONYMISER' }, manager);
+    const before = await rows(a.principal.tenantRef);
+    expect(await attribution(a)).toEqual({ decision: 'none', reason: 'member_inactive' });
+    expect(await rows(a.principal.tenantRef)).toEqual(before);
+  });
+  it('sale attribution refuses a corrupt ownership receipt instead of returning not_enrolled', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); await run(a, join(id));
+    let observed = false;
+    await expect(attribution(a, ctx => ({ ...ctx, client: new Proxy(ctx.client, { get(target, key) {
+      if (key !== 'query') { const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value; }
+      return async (sql: string, values?: unknown[]) => {
+        const result = await target.query(sql, values);
+        if (sql.includes('SELECT kind,status,request_fingerprint,result,completed_at')) {
+          observed = true;
+          result.rows[0]!.result = { ...result.rows[0]!.result, accountId: randomUUID() };
+        }
+        return result;
+      };
+    } }) }))).rejects.toMatchObject({ reason: 'unavailable' });
+    expect(observed).toBe(true);
+  });
+  it.each(['missing-version', 'invalid-rule', 'unused-rule-column', 'unknown-status'] as const)(
+    'sale attribution refuses %s from the real SQL read, never treating corruption as proven absence', async kind => {
+      const a = await account(); await program(a.principal.tenantRef);
+      let observed = false;
+      await expect(attribution(a, ctx => ({ ...ctx, client: new Proxy(ctx.client, { get(target, key) {
+        if (key !== 'query') { const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value; }
+        return async (sql: string, values?: unknown[]) => {
+          const result = await target.query(sql, values);
+          if (sql.includes('p.current_version AS version')) {
+            expect(result.rows).toHaveLength(1); observed = true;
+            if (kind === 'missing-version') result.rows[0]!.version_program_id = null;
+            if (kind === 'invalid-rule') result.rows[0]!.spend_step_cents = 0;
+            if (kind === 'unused-rule-column') result.rows[0]!.units_per_visit = 1;
+            if (kind === 'unknown-status') result.rows[0]!.status = 'corrupt';
+          }
+          return result;
+        };
+      } }) }))).rejects.toMatchObject({ reason: 'unavailable' });
+      expect(observed).toBe(true); expect(await rows(a.principal.tenantRef)).toEqual(empty);
+    });
+  it('sale attribution service crosses the real protected SQL boundary and refuses a revoked session even with feature disabled', async () => {
+    const a = await account({ parentRef: `AC${randomBytes(16).toString('hex')}`, tenantRef: randomBytes(12).toString('hex') });
+    const id = await program(a.principal.tenantRef); const request = join(id);
+    const joined = await run(a, request); if (joined?.state !== 'member') throw new Error('Membership fixture missing');
+    const current = await repo.authenticateProtected(a.principal); if (!current) throw new Error('Session fixture missing');
+    const input = { selection: a.principal, identity,
+      expected: { owner: { parentRef: a.principal.parentRef, tenantRef: a.principal.tenantRef, accountId: a.accountId },
+        sessionId: current.sessionId, expiresAt: current.expiresAt }, clientId: randomUUID(),
+      totals: { subtotalCents: 1500, discountCents: 500, deliveryFeeCents: 300, totalCents: 1300 }, enabled: async () => true };
+    const service = new CustomerSaleAttributionService(f.app, crypto);
+    const before = await rows(a.principal.tenantRef), state = await preserved(a.principal.tenantRef);
+    expect(await service.prepare(input)).toEqual({ version: 1, tenantRef: a.principal.tenantRef, clientId: input.clientId,
+      owner: input.expected.owner, capturedAt: expect.any(Number),
+      basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1000, excludedChargeCents: 300, chargedTotalCents: 1300 },
+      decision: 'attributed', memberId: joined.member.id, membershipOperationId: request.operationId, programId: id, rulesVersion: 1,
+      rule: { mechanism: 'points', minimumPurchaseCents: 0, maximumUnitsPerPurchase: null, spendStepCents: 100, unitsPerStep: 1 } });
+    expect(await rows(a.principal.tenantRef)).toEqual(before); expect(await preserved(a.principal.tenantRef)).toEqual(state);
+    await repo.revoke({ ...a.principal, all: false });
+    await expect(service.prepare({ ...input, enabled: async () => false })).rejects.toMatchObject({ reason: 'unauthorized' });
+    expect(await rows(a.principal.tenantRef)).toEqual(before); expect(await preserved(a.principal.tenantRef)).toEqual(state);
+  });
 
   it('attaches a handed POS card atomically, preserves its history and credit, and replaces only its QR', async () => {
     const a = await account({ name: null }); const id = await program(a.principal.tenantRef); const old = await existingCard(a);

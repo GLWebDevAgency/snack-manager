@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { ConflictException } from '@nestjs/common';
 import { Types, type Model } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order, PublicOrderAdmission } from '@sm/db';
-import { ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/contracts';
+import { CustomerSaleAttributionSchema, ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/contracts';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { assertOrderAdmissionBinding, isPublicOrderAdmission, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, type OrderAdmissionBinding } from './order-admission-identity';
 import { assertPublicRecoveryReplay, recoveryNotFound } from './order-recovery';
@@ -38,7 +39,7 @@ export class OrderAdmissionJournal {
   }
 
   orderByClient(tenantId: string, clientId: string) {
-    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner +customerSaleAttribution').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 
   async authenticated(tenantId: string, clientId: string, binding: OrderAdmissionBinding) {
@@ -123,6 +124,16 @@ export class OrderAdmissionJournal {
       if (!order) throw writeError ?? uncertain();
       this.assertOrderIdentity(order, admission);
       if (order.number !== snapshot.number) throw uncertain();
+      // Keep the durable snapshot until the exact private attribution has
+      // survived materialization. A lost insert/ACK never resamples PG state.
+      const actual = order.toObject({ transform: false }).customerSaleAttribution;
+      if (snapshot.customerSaleAttribution == null) {
+        if (actual != null) throw uncertain();
+      } else {
+        const expected = CustomerSaleAttributionSchema.safeParse(snapshot.customerSaleAttribution);
+        const materialized = CustomerSaleAttributionSchema.safeParse(actual);
+        if (!expected.success || !materialized.success || !isDeepStrictEqual(expected.data, materialized.data)) throw uncertain();
+      }
       void publishRedisBestEffort(this.redis, ordersChannel(tenantId), JSON.stringify({ event: WS_EVENTS.orderCreated, payload: order.toObject() }));
       try {
         await this.admissions.updateOne({ _id: admission._id, state: 'committing', orderId: order._id },

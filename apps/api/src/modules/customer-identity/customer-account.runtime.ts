@@ -15,6 +15,8 @@ import type { PhoneVerificationTransport } from './phone-verification.port';
 import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 import { customerCommerce } from './customer-commerce';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
+import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
+import { CustomerOrderAuthorityLost } from '../orders/order-admission.errors';
 
 export const CUSTOMER_IDENTITY_REPOSITORY = Symbol('CUSTOMER_IDENTITY_REPOSITORY');
 export const CUSTOMER_VERIFICATION_TRANSPORT_FACTORY = Symbol('CUSTOMER_VERIFICATION_TRANSPORT_FACTORY');
@@ -32,7 +34,8 @@ export class CustomerAccountRuntime {
     @Inject(CustomerAccountHumanVerifier) private readonly human: CustomerAccountHumanVerifier,
     @Inject(CUSTOMER_VERIFICATION_TRANSPORT_FACTORY) private readonly transportFactory: CustomerVerificationTransportFactory,
     @Optional() @Inject(OnlineOrderCheckoutService) private readonly checkout?: OnlineOrderCheckoutService,
-    @Optional() @Inject(CustomerLoyaltyService) private readonly loyalty?: CustomerLoyaltyService) {}
+    @Optional() @Inject(CustomerLoyaltyService) private readonly loyalty?: CustomerLoyaltyService,
+    @Optional() @Inject(CustomerSaleAttributionService) private readonly saleAttribution?: CustomerSaleAttributionService) {}
 
   async execute(relay: CustomerRelay, raw: unknown): Promise<unknown> {
     try {
@@ -128,6 +131,24 @@ export class CustomerAccountRuntime {
               : relay.action === 'order-detail' ? { action: relay.action, request: this.input('order-detail', raw).request }
                 : { action: relay.action, request: this.input('order-reorder', raw).request };
           result = await customerCommerce({ checkout: this.checkout, authorize, slug: relay.slug, client: relay.client, now: Date.now,
+            prepareLoyaltyAttribution: async (principal, sale) => {
+              if (!this.saleAttribution) throw new CustomerIdentityError('unavailable');
+              const identity = new CustomerIdentityCrypto(access.identityKey);
+              try {
+                return await this.saleAttribution.prepare({ identity, clientId: sale.clientId, totals: sale.totals,
+                  expected: { owner: { parentRef: principal.parentRef, tenantRef: principal.tenantRef, accountId: principal.accountId },
+                    sessionId: principal.sessionId, expiresAt: principal.expiresAt },
+                  selection: { parentRef: access.parentRef, tenantRef, browserRef: input.browserRef,
+                    browserHash: identity.hash('browser', tenantRef, input.browserSecret),
+                    sessionHash: identity.hash('session', tenantRef, input.sessionToken!),
+                    expectedOperationId: input.expectedOperationId!, expectedCheckId: input.expectedCheckId!, now: Date.now() },
+                  enabled: async () => { this.access(relay, access); return this.loyaltyTenant(access); },
+                });
+              } catch (error) {
+                if (error instanceof CustomerIdentityError && error.reason === 'unauthorized') throw new CustomerOrderAuthorityLost();
+                throw error;
+              }
+            },
             publicationFence: recheck => { commerceFence = recheck; } }, command);
           break;
         }
