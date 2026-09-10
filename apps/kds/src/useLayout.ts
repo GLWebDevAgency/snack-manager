@@ -18,6 +18,7 @@
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { TOUCH_MIN } from '@sm/client-core';
+import type { KdsTheme, KdsDensity } from './prefs';
 import {
   ACTION_MIN_HEIGHT,
   ALLDAY_MIN_SCREEN,
@@ -32,6 +33,18 @@ import {
 } from './config';
 
 export interface Layout {
+  compactIdentity: boolean;
+  pinPadW: number;
+  pinKeyW: number;
+  pinKeyH: number;
+  pinBrand: number;
+  pairingCols: number;
+  pairingKey: number;
+  pairingWidth: number;
+  pairingSlotW: number;
+  pairingMark: number;
+  pairingMarkFits: boolean;
+  modalW: number;
   width: number;
   height: number;
   orientation: 'landscape' | 'portrait';
@@ -135,7 +148,25 @@ export function computeLayout(width: number, height: number, pinAllDay = false):
   const finalStage = w - pad * 2 - (allDayW > 0 ? allDayW + gap : 0);
   const finalColW = Math.max(0, (finalStage - gap * (cols - 1)) / cols);
 
+  const pinPadW = Math.min(Math.round(300 * scale), Math.max(0, w - 48));
+  const pairingGap = half(10 * scale);
+  const pairingKey = Math.max(TOUCH_MIN, Math.round(58 * scale));
+  const pairingCols = Math.max(3, Math.min(w < 620 ? 6 : 8, Math.floor((w - 80) / (pairingKey + pairingGap))));
+  const pairingWidth = Math.min(Math.max(0, w - 32), pairingKey * pairingCols + pairingGap * (pairingCols - 1) + 42);
+  const pairingMark = Math.min(96, Math.max(72, Math.round(80 * scale)));
+  const pairingPadH = Math.ceil(32 / pairingCols) * (pairingKey + pairingGap) - pairingGap;
+
   return {
+    pinPadW,
+    pinKeyW: Math.max(TOUCH_MIN, (pinPadW - 2 * half(10 * scale)) / 3),
+    pinKeyH: Math.max(TOUCH_MIN, half(58 * scale)),
+    pinBrand: half(66 * scale),
+    pairingCols, pairingKey, pairingWidth,
+    pairingSlotW: Math.max(0, Math.min(Math.round(46 * scale), (pairingWidth - 42 - 40) / 6)),
+    pairingMark,
+    pairingMarkFits: h - 48 - pairingPadH - Math.round(320 * scale) >= pairingMark + 4,
+    compactIdentity: w >= 480,
+    modalW: Math.min(520 * scale, Math.max(0, w - 32)),
     width: w,
     height: h,
     orientation: h > w ? 'portrait' : 'landscape',
@@ -155,7 +186,7 @@ export function computeLayout(width: number, height: number, pinAllDay = false):
     far: (size: number) => half(size * farScale),
     // L'épinglage change la largeur des colonnes : il doit donc entrer dans la
     // clé, sinon les feuilles de style mémoïsées resteraient sur l'ancienne.
-    key: `${scale}${compact ? 'c' : 'w'}${allDayW ? 'a' : ''}`,
+    key: `${w}x${h}:${scale}${compact ? 'c' : 'w'}${allDayW ? 'a' : ''}`,
   };
 }
 
@@ -171,16 +202,18 @@ export function useLayout(pinAllDay = false): Layout {
  * Fabrique de feuille de style dépendante de l'échelle, mémoïsée par palier.
  *
  * `StyleSheet.create` n'est appelé qu'une fois par valeur d'échelle rencontrée
- * (au plus une cinquantaine de paliers), pas à chaque rendu de carte : une
+ * (au plus 64 dimensions/thèmes récents), pas à chaque rendu de carte : une
  * colonne de vingt tickets qui bat à la seconde ne recrée aucun style.
  */
-export function scaledStyles<T>(build: (layout: Layout) => T): (layout: Layout) => T {
+export function scaledStyles<T>(build: (layout: Layout, theme: KdsTheme, density: KdsDensity) => T): (layout: Layout, theme?: KdsTheme, density?: KdsDensity) => T {
   const cache = new Map<string, T>();
-  return (layout: Layout): T => {
-    const hit = cache.get(layout.key);
+  return (layout: Layout, theme: KdsTheme = 'dark', density: KdsDensity = 'comfort'): T => {
+    const key = `${layout.key}:${theme}:${density}`;
+    const hit = cache.get(key);
     if (hit) return hit;
-    const made = build(layout);
-    cache.set(layout.key, made);
+    const made = build(layout, theme, density);
+    if (cache.size >= 64) cache.delete(cache.keys().next().value!);
+    cache.set(key, made);
     return made;
   };
 }

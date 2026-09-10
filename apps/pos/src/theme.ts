@@ -11,6 +11,7 @@ import { createContext, createElement, useContext, useMemo, type ReactNode } fro
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { PALETTES, palette, radius, type ColorTheme, type Palette } from '@sm/client-core';
 import { ratioContraste } from '@sm/contracts';
+import { BRAND_FONT } from '@sm/ui-native/brand';
 
 /**
  * Variantes réservées au texte fonctionnel sur les surfaces sombres du POS.
@@ -26,10 +27,7 @@ export function makeSemanticText(p: Palette) {
 export const semanticText = makeSemanticText(palette);
 
 /** Inter est embarquée et chargée par usePosFonts ; pile système en secours web. */
-export const FONT: string = Platform.select({
-  web: 'Inter, "SF Pro Display", -apple-system, "Segoe UI", Roboto, system-ui, sans-serif',
-  default: 'Inter',
-}) as string;
+export const FONT = BRAND_FONT;
 
 export const DUR = { fast: 200, base: 260, slow: 340 } as const;
 
