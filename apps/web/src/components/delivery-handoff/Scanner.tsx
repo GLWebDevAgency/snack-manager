@@ -13,13 +13,30 @@ export function DeliveryHandoffScanner({ missionId, proofId, onRead, onClose }: 
   const seen = useRef(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    let stopped = false; let controls: IScannerControls | undefined;
+    let stopped = false; let controls: IScannerControls | undefined, stream: MediaStream | undefined;
+    const preview = video.current;
+    const release = () => {
+      stream?.getTracks().forEach(track => track.stop());
+      if (preview) { preview.pause(); preview.srcObject = null; }
+    };
     void (async () => {
       try {
         const { BrowserQRCodeReader } = await import("@zxing/browser");
-        if (stopped || !video.current) return;
+        if (stopped || !preview) return;
         const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 250 });
-        const camera = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: "environment" } } }, video.current, result => {
+        const acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
+        // Une permission tardive ne doit jamais attacher une caméra à une
+        // remise déjà refermée. Nous possédons aussi le flux pendant play().
+        if (stopped || !preview.isConnected) { acquired.getTracks().forEach(track => track.stop()); return; }
+        stream = acquired; preview.srcObject = stream;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([preview.play(), new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => reject(new Error("Camera playback unavailable")), 5000);
+          })]);
+        } finally { if (timer) clearTimeout(timer); }
+        if (stopped || !preview.isConnected) { release(); return; }
+        controls = reader.scan(preview, result => {
           if (!result || stopped || seen.current) return;
           const parsed = parseDeliveryHandoffQr(result.getText());
           if (!parsed || parsed.orderId !== missionId || (proofId && parsed.proofId !== proofId)) {
@@ -28,11 +45,11 @@ export function DeliveryHandoffScanner({ missionId, proofId, onRead, onClose }: 
           seen.current = true;
           controls?.stop();
           onRead(result.getText());
-        });
-        if (stopped || seen.current) camera.stop(); else controls = camera;
-      } catch { if (!stopped) setError("La caméra n’est pas disponible. Vous pouvez saisir le code à six chiffres présenté par le client."); }
+        }, release);
+        if (stopped || seen.current) controls.stop();
+      } catch { release(); if (!stopped) setError("La caméra n’est pas disponible. Vous pouvez saisir le code à six chiffres présenté par le client."); }
     })();
-    return () => { stopped = true; controls?.stop(); };
+    return () => { stopped = true; controls?.stop(); release(); };
   }, [missionId, proofId, onRead]);
   return <div className="lv-scanner space-y-3">
     <div className="relative overflow-hidden rounded-card border border-line bg-bg">
