@@ -139,8 +139,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
     phase('viewport'); await page.setViewportSize({ width, height: 900 });
     const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
     const entry = page.getByRole('button', { name: 'Mon compte', exact: true });
-    phase('unique-entries');
-    expect(await entry.count()).toBe(1); expect(await page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).count()).toBe(1);
+    const deviceOrders = page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true });
     phase('atomic-geometry'); const geometry = await accountNavigationGeometry();
     try { assertAccountNavigationAligned(geometry, width); }
     catch (error) {
@@ -149,9 +148,20 @@ describe('customer entry placement — real Storefront and loyalty components', 
       process.stdout.write(`Customer navigation failure capture: ${failure}\n`);
       throw error;
     }
-    phase('priority-and-overflow');
-    expect(await primary.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await entry.evaluate(node => getComputedStyle(node).backgroundColor));
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // Independent observations need not pay five sequential browser RPCs.
+    // Keep the native accessible-name locators and strict evaluate semantics:
+    // partitioning a union by aria-label would miss aria-labelledby overrides.
+    // Geometry remains sampled separately in one synchronous browser turn.
+    phase('parallel-controls');
+    const [accountCount, ordersCount, primaryColor, accountColor, fitsViewport] = await Promise.all([
+      entry.count(), deviceOrders.count(),
+      primary.evaluate(node => getComputedStyle(node).backgroundColor),
+      entry.evaluate(node => getComputedStyle(node).backgroundColor),
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ]);
+    expect(accountCount).toBe(1); expect(ordersCount).toBe(1);
+    expect(primaryColor).not.toBe(accountColor);
+    expect(fitsViewport).toBe(true);
     if (evidence) { phase('capture'); await page.screenshot({ path: join(evidence, `storefront-${width}.png`) }); }
     phase('network-boundary');
     expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);

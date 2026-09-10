@@ -1,14 +1,18 @@
 # Rattacher une carte existante au compte client
 
-État au 10 septembre 2026 : **PR #158 fusionnée** après les contrôles verts du
-SHA `cf6f68f53e5db96d5e6e6ccf3b5aa262bd7d4a00`. La [CI 34453104765](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34453104765)
-et le [balayage 34453104770](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34453104770)
-sont reçus. Le [déploiement staging 34454486357](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34454486357)
-du squash `db9c739c408e0286b7fead32b2e82d85fd37c472` a échoué à l'étape Tests,
-avant préflight, migrations et publication. La PR verte n'est donc pas une
-livraison : staging reste sur #157, correctif de CI prioritaire en cours.
-Aucun pilote, fournisseur ni budget supplémentaire n'est ouvert.
-Production inchangée. Suite : [gains sur vente et remboursements](GAINS-VENTE-REMBOURSEMENTS.md).
+État au 10 septembre 2026 : **PR #158 reçue sur staging via le correctif #159**,
+révision `b8dd285857aeb802c4b7a20d471cfb896fd6e683`. Le premier déploiement
+avait échoué avant les migrations ; la [reprise CI ciblée](REPRISE-CI-SEEDS.md)
+est désormais reçue. [Déploiement 34462162794](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34462162794) :
+sept jobs verts, bootstrap 96 objets avant/après, trois migrateurs et quatre
+services réussis, révision API exacte, smoke indépendant **8/8**.
+[E2E 34464095176](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34464095176) :
+12 démonstrations réussies, quatre parcours authentifiés ignorés faute
+d'identifiants ; checkout effectif exact dans les deux jobs. Cela ne valide
+ni le parcours privé staging ni un OTP réel. Capacités compte Classfood
+toujours fermées sur les deux domaines. Aucun pilote, fournisseur ni budget
+supplémentaire ouvert. Production inchangée.
+Suite : [gains sur vente et remboursements](GAINS-VENTE-REMBOURSEMENTS.md).
 
 ## Parcours et preuve de propriété
 

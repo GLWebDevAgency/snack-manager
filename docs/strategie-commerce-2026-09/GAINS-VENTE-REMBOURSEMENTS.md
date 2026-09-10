@@ -1,6 +1,6 @@
 # Fidélité sur vente et remboursement — socle de calcul
 
-État au 10 septembre 2026 : préparation du lot suivant #158, sur
+État au 10 septembre 2026 : lot suivant #158, après réception de la reprise #159, sur
 `feat/loyalty-sale-entitlement`. Deux fonctions pures sont implémentées dans
 `@sm/domain`, sans writer, worker supplémentaire, migration ou activation.
 Elles ne rendent pas encore les gains web disponibles.
@@ -69,10 +69,12 @@ trois compositions avec l'assiette et des contrôles de conservation/monotonie.
 Les montants extrêmes, seuils, plafonds, zéro, remboursement complet, reprises,
 snapshots périmés et entrées invalides sont couverts.
 
-Domaine complet **495/495**, typage/lint/build et exports CommonJS vérifiés.
-Vérification globale **51/51 tâches**, dont 41 réutilisées du cache local ;
-mêmes tests/délais, paquets séquencés. Les suites web/API dépendantes ont été
-rejouées lors de cette passe, sans nouveau fournisseur ou jeu de données distant.
+Domaine complet **501/501** rejoué après synchronisation avec #159 ; typage,
+lint, build et exports CommonJS vérifiés. Vérification globale **51/51 tâches**,
+dont **45 réutilisées du cache local** ; mêmes tests/délais, paquets séquencés.
+Web **2528/2528**, API **3388 passés / 675 ignorés** hors variables des bases
+dédiées. Ces nombres se recouvrent ; aucun nouveau fournisseur ou jeu de données
+distant n'est utilisé. Le code domaine est inchangé par cette synchronisation.
 Ces tests ne sont ni une preuve bancaire ni une recette Mongo→PostgreSQL.
 Il reste à éprouver deux workers concurrents, la réponse perdue après commit,
 le remboursement avant/après crédit, le changement de règle et le passage
