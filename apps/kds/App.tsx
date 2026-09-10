@@ -22,7 +22,7 @@ import { REMINDER_MS } from './src/config';
 import { makeUi } from './src/ui';
 import { ThemeProvider } from './src/theme';
 import { usePrefs } from './src/usePrefs';
-import { BrandSplash, useBrandFonts } from '@sm/ui-native';
+import { BrandSplash, BrandSplashPlaceholder, StartupContent, useBrandFonts } from '@sm/ui-native';
 import { SettingsSheet } from './src/components/SettingsSheet';
 import type { KdsTheme } from './src/prefs';
 
@@ -57,6 +57,8 @@ export default function App() {
   useAutoSync(client, 15000);
   const activeDeviceScope = sync.scopeValid ? (device?.queueScope ?? null) : null;
   const { prefs, ready: prefsReady, patchPrefs } = usePrefs(activeDeviceScope);
+  const startupKnown = prefsReady || (!restoring && !activeDeviceScope);
+  const startupVisible = !splashDone && (!startupKnown || prefs.splash);
   const { palette } = makeUi(prefs.theme);
   const soundOn = prefs.sound;
   const allDayOn = prefs.allDay;
@@ -169,6 +171,7 @@ export default function App() {
     <ThemeProvider theme={prefs.theme}>
     <View style={styles.root}>
       <StatusBar style={prefs.theme === 'light' ? 'dark' : 'light'} />
+      <StartupContent blocked={startupVisible} style={{ flex: 1 }}>
       {/* Le retour à la vitrine, en démonstration UNIQUEMENT. */}
       <DemoBanner />
       {restoring ? (
@@ -265,8 +268,10 @@ export default function App() {
         soundSupported={soundSupported} onTheme={(theme) => patchPrefs({ theme })} onDensity={(density) => patchPrefs({ density })}
         onToggleSound={toggleSound} onToggleAllDay={toggleAllDay} onToggleSplash={() => patchPrefs((p) => ({ splash: !p.splash }))}
         onClose={() => setSettingsOpen(false)} onLogout={() => { setSettingsOpen(false); void logout(); }} /> : null}
-      {(prefsReady || (!restoring && !device)) && prefs.splash && !splashDone ?
-        <BrandSplash ready={!restoring} onDone={finishSplash} kindLabel="Cuisine" deviceName={device?.device.name ?? 'Écran'} reducedMotion={reducedMotion} /> : null}
+      </StartupContent>
+      {startupVisible ? startupKnown
+        ? <BrandSplash ready={!restoring} onDone={finishSplash} kindLabel="Cuisine" deviceName={device?.device.name ?? 'Écran'} reducedMotion={reducedMotion} />
+        : <BrandSplashPlaceholder /> : null}
     </View>
     </ThemeProvider>
   );

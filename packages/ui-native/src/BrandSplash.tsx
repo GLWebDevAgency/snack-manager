@@ -1,8 +1,9 @@
-import { forwardRef, useCallback, useEffect, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, type PathProps } from 'react-native-svg';
 import { SM_PATHS } from './SMMark';
 import { BRAND_FONT as FONT } from './brand';
+import { STARTUP_SKIP_ID } from './StartupContent';
 
 // Animated injecte `collapsable` pour les Views natives ; ce n'est pas un
 // attribut SVG DOM. Conserver le vrai ref Path pour la mise à jour du tracé.
@@ -14,8 +15,14 @@ const ease = Easing.bezier(0.2, 0.8, 0.2, 1);
 const spring = Easing.bezier(0.34, 1.56, 0.64, 1);
 // Longueur du tracé original (le pathLength normalisé du SVG web n'existe pas en RN).
 const TICKET_LENGTH = 101.553;
+const backdrop = [StyleSheet.absoluteFill, { zIndex: 1000, backgroundColor: '#000000' }];
 
-/** Le démarrage accompagne la restauration réelle, sans ajouter de délai au poste prêt. */
+/** Cache continu pendant la lecture des préférences, sans jouer d'animation par défaut. */
+export function BrandSplashPlaceholder() {
+  return <View testID="brand-splash-placeholder" style={backdrop} />;
+}
+
+/** La séquence complète reste visible pendant que le poste se restaure en arrière-plan. */
 export function BrandSplash({ ready, onDone, deviceName = 'Poste 1', kindLabel = 'Caisse', reducedMotion = false }: {
   kindLabel?: string;
   reducedMotion?: boolean;
@@ -24,6 +31,8 @@ export function BrandSplash({ ready, onDone, deviceName = 'Poste 1', kindLabel =
   deviceName?: string;
 }) {
   const reduced = reducedMotion;
+  const [introDone, setIntroDone] = useState(reduced);
+  const [skipRequested, setSkipRequested] = useState(false);
   const complete = useRef(onDone);
   complete.current = onDone;
   const done = useRef(false);
@@ -47,8 +56,10 @@ export function BrandSplash({ ready, onDone, deviceName = 'Poste 1', kindLabel =
     const values = [outline, top, patty, bottom, bolt, word, subtitle, progress, skip];
     if (reduced) {
       values.forEach((value) => value.setValue(1));
+      setIntroDone(true);
       return;
     }
+    setIntroDone(false);
     const enter = (value: Animated.Value, delay: number, duration: number, easing = ease, native = true) =>
       Animated.timing(value, { toValue: 1, delay, duration, easing, useNativeDriver: native && Platform.OS !== 'web' });
     const animation = Animated.parallel([
@@ -57,25 +68,30 @@ export function BrandSplash({ ready, onDone, deviceName = 'Poste 1', kindLabel =
       enter(bolt, 1220, 380, spring), enter(word, 1300, 600), enter(subtitle, 1650, 500),
       enter(progress, 1350, 1150), enter(skip, 1800, 500),
     ]);
-    animation.start();
-    return () => animation.stop();
+    // Attendre la fin réelle : un poste déjà prêt ne doit pas couper le tracé,
+    // l'assemblage du logo ni la lecture de « Caisse » / « Cuisine ».
+    let hold: ReturnType<typeof setTimeout> | undefined;
+    animation.start(({ finished }) => {
+      if (finished) hold = setTimeout(() => setIntroDone(true), 150);
+    });
+    return () => { animation.stop(); clearTimeout(hold); };
   }, [reduced, outline, top, patty, bottom, bolt, word, subtitle, progress, skip]);
 
+  const shouldExit = skipRequested || (ready && introDone);
   useEffect(() => {
-    if (!ready || done.current) return;
-    [outline, top, patty, bottom, bolt, word, subtitle, progress, skip].forEach((value) => value.setValue(1));
-    const animation = Animated.timing(opacity, { toValue: 0, duration: 200, easing: ease, useNativeDriver: Platform.OS !== 'web' });
+    if (!shouldExit || done.current) return;
+    const animation = Animated.timing(opacity, { toValue: 0, duration: reduced ? 200 : 400, easing: ease, useNativeDriver: Platform.OS !== 'web' });
     animation.start(({ finished }) => { if (finished) finish(); });
     return () => animation.stop();
-  }, [ready, opacity, finish, outline, top, patty, bottom, bolt, word, subtitle, progress, skip]);
+  }, [shouldExit, reduced, opacity, finish]);
 
   const layers = [
     { path: SM_PATHS.top, color: '#ffffff', value: top },
     { path: SM_PATHS.patty, color: '#c9a15a', value: patty },
     { path: SM_PATHS.bot, color: '#ffffff', value: bottom },
   ];
-  return <Animated.View style={[StyleSheet.absoluteFill, { zIndex: 1000, backgroundColor: '#000000', opacity }]}>
-    <Pressable onPress={finish} accessibilityRole="button" accessibilityLabel="Passer l’animation de démarrage"
+  return <Animated.View testID="brand-splash" style={[backdrop, { opacity }]}>
+    <Pressable nativeID={STARTUP_SKIP_ID} onPress={() => setSkipRequested(true)} accessibilityRole="button" accessibilityLabel="Passer l’animation de démarrage"
       style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
       <View style={{ alignItems: 'center', gap: 26, pointerEvents: 'none' }} accessible={false}>
         <View style={{ width: 128, height: 128 }}>
@@ -102,7 +118,7 @@ export function BrandSplash({ ready, onDone, deviceName = 'Poste 1', kindLabel =
           {kindLabel} · {deviceName}
         </Animated.Text>
         <View style={{ width: 160, height: 2, borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)', marginTop: 6 }}>
-          <Animated.View style={{ width: 160, height: 2, backgroundColor: '#c9a15a', transform: [
+          <Animated.View testID="brand-splash-progress" style={{ width: 160, height: 2, backgroundColor: '#c9a15a', transform: [
             { translateX: -80 }, { scaleX: progress }, { translateX: 80 },
           ] }} />
         </View>
