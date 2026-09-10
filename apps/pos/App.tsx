@@ -259,7 +259,7 @@ export default function App() {
 
   const protectActiveSale = session !== null && saleInFlight.active;
   const posScreen = session ? (
-    <PosScreen key={session.tenantSlug} session={session} onLock={onLock} saleInFlight={saleInFlight} logoUrl={device?.tenant.logoUrl} deviceName={device?.device.name} />
+    <PosScreen key={session.tenantSlug} session={session} onLock={onLock} saleInFlight={saleInFlight} startupComplete={splashDone} logoUrl={device?.tenant.logoUrl} deviceName={device?.device.name} />
   ) : null;
 
   return (

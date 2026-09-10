@@ -116,12 +116,14 @@ export function PosScreen({
   session,
   onLock,
   saleInFlight,
+  startupComplete,
   logoUrl,
   deviceName,
 }: {
   session: Session;
   onLock: (reason?: string) => void;
   saleInFlight: SaleInFlightGate;
+  startupComplete: boolean;
   logoUrl?: string | null;
   deviceName?: string;
 }) {
@@ -615,7 +617,9 @@ export function PosScreen({
   const servicePaymentActions = useMemo(() => ({ read: readServicePayment, collect: collectServicePayment, store: client.tenantStore }), [readServicePayment, collectServicePayment]);
 
   useEffect(() => {
-    if (!ready || offline || collectionTarget || !isCounterHandoverRole(session.staffRole)) return;
+    // Une reprise ne doit pas ouvrir de portail modal sous l'écran de démarrage.
+    // Le menu, la session et la file continuent à se restaurer indépendamment.
+    if (!startupComplete || !ready || offline || collectionTarget || !isCounterHandoverRole(session.staffRole)) return;
     let cancelled = false;
     void pendingCollectionIds(client.tenantStore).then(async (ids) => {
       const id = ids[0];
@@ -626,7 +630,7 @@ export function PosScreen({
       if (!cancelled) push('Un encaissement interrompu peut nécessiter une vérification. Ouvrez la commande avant de percevoir un règlement.', 'warn');
     });
     return () => { cancelled = true; };
-  }, [collectionTarget, offline, push, readServicePayment, ready, session.staffRole]);
+  }, [collectionTarget, offline, push, readServicePayment, ready, session.staffRole, startupComplete]);
 
   /**
    * Rafraîchissement demandé par un événement `order.*` du restaurant.
