@@ -1,12 +1,13 @@
 # Compte client et carte fidélité — raccordement
 
-État au 10 septembre 2026 : **association durable #156 reçue sur staging**, sur
-`2efb77f6d418cf17b353abbfcdd4d2b7547c19ab`. La transaction protégée #155 et la
-migration de liaison sont livrées ; elles ne créent pas encore de carte depuis
-le compte. Le lot suivant, sur `feat/customer-account-loyalty`, prépare
-l'adhésion neuve avec contrats, API, BFF et interface client : **PR #157 ouverte,
-pas encore fusionnée ni déployée**. Aucun fournisseur ni pilote supplémentaire
-n'est ouvert ; la production n'est pas modifiée par ces lots.
+État au 10 septembre 2026 : **adhésion neuve #157 fusionnée et déployée sur
+staging**, sur `1f50f66ec49471cfe11d15ba4686400330e02dc2`. La transaction
+protégée #155 et l'association durable #156 sont intégrées. Le déploiement
+34450323107 est vert, les quatre services Railway sont reçus et le smoke
+confirme 8/8, révision servie comprise. Le [rattachement explicite d'une carte
+existante](RATTACHEMENT-CARTE-EXISTANTE.md) est le lot suivant, recetté localement
+mais pas encore livré. Aucun fournisseur ni pilote supplémentaire n'est ouvert ;
+la production n'est pas modifiée par ces lots.
 
 ## Parcours retenu
 
@@ -192,7 +193,23 @@ repassé isolément puis la suite entière a passé en 56 secondes, sans augment
 de délai. Le nouveau worktree nécessitait également le build des dépendances
 avant la recette API ; celle-ci a été rejouée une fois ces builds terminés.
 
-## Troisième étape — adhésion neuve en préparation de PR, non livrée
+## Troisième étape — adhésion neuve #157 reçue sur staging
+
+La [CI finale 34449245840](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34449245840)
+du SHA `f0460c0a9b13f3ce4bddbf5dc5f6d401b3681205` est passée avant fusion.
+Le [déploiement 34450323107](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34450323107)
+du squash `1f50f66ec49471cfe11d15ba4686400330e02dc2` est reçu : quatre services
+Railway et smoke **8/8**, dont vérification directe de la révision API. Les
+fronts sont corrélés à ce pipeline exact ; ils n'exposent pas eux-mêmes de SHA.
+Ce reçu ne valide pas une inscription SMS réelle : le pilote reste fermé.
+[E2E 34451981150](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34451981150) :
+**12 démonstrations passées, quatre parcours authentifiés ignorés** faute
+d'identifiants. Les deux jobs ont effectivement checkouté `1f50f66`, malgré la
+métadonnée `headSha` de `workflow_run` pointant vers `main`. Bootstrap pré/post :
+**96 objets**, les trois migrateurs passent. Les capacités du compte Classfood
+renvoient toujours `available: false` sur le domaine plateforme et personnalisé.
+L'historique de préparation ci-dessous conserve les résultats et incidents
+locaux antérieurs, sans les présenter comme une recette privée staging.
 
 Le lot `feat/customer-account-loyalty` ajoute les contrats stricts `view`,
 `join`, `card`, leur orchestration serveur, le relais BFF signé et l'écran
