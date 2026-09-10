@@ -1,5 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { customerOrderOwnerField } from './customer-order-owner.schema';
+import { customerSaleAttributionField } from './customer-sale-attribution.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
@@ -63,6 +64,7 @@ function hidePrivateOrderFields(
   returned: Record<string, unknown>,
 ): Record<string, unknown> {
   delete returned.customerOwner;
+  delete returned.customerSaleAttribution;
   delete returned.loyaltyMemberId;
   delete returned.loyaltyEarnOperationId;
   delete returned.loyaltyActorRef;
@@ -988,6 +990,7 @@ export const OrderSchema = new Schema(
     number: { type: Number, required: true }, // séquence journalière par tenant
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
     customerOwner: customerOrderOwnerField(),
+    customerSaleAttribution: customerSaleAttributionField(),
     /** Preuve de reprise publique, atomique avec la vente ; jamais adoptée après création. */
     publicRecovery: {
       type: new Schema({
