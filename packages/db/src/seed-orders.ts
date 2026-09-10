@@ -18,8 +18,7 @@
  */
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import mongoose, { Types } from 'mongoose';
-import { MODELS } from './schemas';
+import type { Types } from 'mongoose';
 import { assertDisposableMongoTarget, assertNoDurableOrderData } from './disposable-mongo-target';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -237,14 +236,16 @@ async function main() {
   const uri = process.env.MONGO_URL;
   if (!uri) throw new Error('MONGO_URL manquant (racine .env)');
   const target = assertDisposableMongoTarget(uri);
+  const { default: mongoose } = await import('mongoose');
   await mongoose.connect(target.uri, { directConnection: true, serverSelectionTimeoutMS: 5_000 });
   try {
     await assertNoDurableOrderData(mongoose.connection.db!);
-    await writeOrderFixtures();
+    await writeOrderFixtures(mongoose);
   } finally { await mongoose.disconnect(); }
 }
 
-async function writeOrderFixtures() {
+async function writeOrderFixtures(mongoose: typeof import('mongoose').default) {
+  const { MODELS } = await import('./schemas');
   const db = mongoose.connection.db!;
   const ordersCol = db.collection('orders');
   const Counter = mongoose.model(MODELS.Counter.name, MODELS.Counter.schema, MODELS.Counter.collection);
@@ -360,7 +361,7 @@ async function writeOrderFixtures() {
     if (chance(0.03) && subtotal > 300) {
       const amount = Math.min(pick([100, 150, 200, Math.round(subtotal * 0.1 / 10) * 10]), subtotal - 100);
       if (amount > 0) {
-        discount = { amount, reason: pick(DISCOUNT_REASONS), staffId: new Types.ObjectId(GERANT) };
+        discount = { amount, reason: pick(DISCOUNT_REASONS), staffId: new mongoose.Types.ObjectId(GERANT) };
       }
     }
     const total = subtotal - (discount?.amount ?? 0);
@@ -427,7 +428,7 @@ async function writeOrderFixtures() {
 
     const lastAt = statusHistory[statusHistory.length - 1]?.at ?? t0;
     const doc: Record<string, unknown> = {
-      _id: new Types.ObjectId(),
+      _id: new mongoose.Types.ObjectId(),
       tenantId,
       number: 0, // affecté après tri chronologique du jour
       clientId: `seed-${dayKey}-${String(seq).padStart(3, '0')}`,
