@@ -132,6 +132,8 @@ export class PaymentsService {
     const order = await this.lifecycle.switchToCounter(orderId, token, await this.provider());
     const payload = { ...order.toObject() } as Record<string, unknown>;
     delete payload.paymentFlow;
+    delete payload.customerOwner;
+    delete payload.customerSaleAttribution;
     for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
     try {
       await this.redis.publish(ordersChannel(String(order.tenantId)), JSON.stringify({

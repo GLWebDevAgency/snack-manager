@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { customerCommerce } from './customer-commerce';
 import { customerSafeError } from './customer-account.error';
 import { CustomerIdentityError } from './customer-identity.service';
+import { CustomerOrderAuthorityLost } from '../orders/order-admission.errors';
 function fixture() {
   const principal = { parentRef: `AC${'a'.repeat(32)}`, tenantRef: 'a'.repeat(24), accountId: randomUUID(), sessionId: randomUUID(), expiresAt: Date.now() + 60_000 };
   const checkout = { listForCustomer: vi.fn().mockResolvedValue({ orders: [], nextCursor: null }),
@@ -20,6 +21,27 @@ function failure(promise: Promise<unknown>) {
   return promise.then(() => { throw new Error('Expected a refusal'); }, customerSafeError);
 }
 describe('customer commerce account fence, no distributed-transaction claim', () => {
+  it.each(['unauthorized', 'unavailable'] as const)('distinguishes proven authority loss from %s at commit', async reason => {
+    const f = fixture();
+    f.checkout.createForCustomer.mockImplementation(async input => {
+      f.authorize.mockRejectedValue(new CustomerIdentityError(reason));
+      await input.beforeCommit();
+      throw new Error('unreachable');
+    });
+    const request = { clientId: randomUUID(), recoveryProof: 'a'.repeat(64), turnstileToken: 'fixture', lines: [], payment: { method: 'counter' as const },
+      pickup: { slot: '2030-09-09T12:00:00.000Z', customerName: 'Fixture', customerPhone: '0600000000' } };
+    const pending = customerCommerce(f, { action: 'order-create', request });
+    if (reason === 'unauthorized') await expect(pending).rejects.toBeInstanceOf(CustomerOrderAuthorityLost);
+    else await expect(pending).rejects.toMatchObject({ reason: 'unavailable' });
+  });
+  it('classifies a proven owner change through the commerce wrapper as lost authority, not PG I/O', async () => {
+    const f = fixture(); f.checkout.createForCustomer.mockImplementation(async input => {
+      f.principal.accountId = randomUUID(); await input.beforeCommit(); throw new Error('unreachable');
+    });
+    const request = { clientId: randomUUID(), recoveryProof: 'a'.repeat(64), turnstileToken: 'fixture', lines: [], payment: { method: 'counter' as const },
+      pickup: { slot: '2030-09-09T12:00:00.000Z', customerName: 'Fixture', customerPhone: '0600000000' } };
+    await expect(customerCommerce(f, { action: 'order-create', request })).rejects.toBeInstanceOf(CustomerOrderAuthorityLost);
+  });
   it('reads a reorder source for the authenticated owner without entering checkout', async () => {
     const f = fixture(); f.checkout.reorderForCustomer.mockResolvedValue(source);
     expect(await customerCommerce(f, reorder)).toEqual({ expiresAt: f.principal.expiresAt, ...source });
@@ -41,9 +63,9 @@ describe('customer commerce account fence, no distributed-transaction claim', ()
       return source;
     });
     const error = await failure(customerCommerce(f, reorder));
-    // An impossible changed principal is a closed runtime failure, not the
-    // normal stable-owner missing-order response (404).
-    expect(error.getStatus()).toBe(['accountId', 'tenantRef', 'parentRef'].includes(field) ? 503 : 401);
+    // A changed principal loses authority just like the expired session; it
+    // is not the normal stable-owner missing-order response (404).
+    expect(error.getStatus()).toBe(401);
     expect(JSON.stringify(error.getResponse())).not.toContain('Private source');
     expect(f.checkout.createForCustomer).not.toHaveBeenCalled();
   });

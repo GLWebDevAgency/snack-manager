@@ -3,11 +3,15 @@ import { CustomerAccountResponses, PublicOrderRejectionReasonSchema, type Custom
 import type { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 import { assertCustomerOrderOwner, type CustomerOrderOwner } from '../orders/customer-order-owner';
 import { CustomerIdentityError } from './customer-identity.service';
+import { CustomerOrderAuthorityLost } from '../orders/order-admission.errors';
+import type { CustomerSaleAttributionInput, PrepareCustomerSaleAttribution } from '../orders/customer-sale-attribution';
 
 export type CustomerCommercePrincipal = CustomerOrderOwner & { sessionId: string; expiresAt: number };
 type Port = { checkout: Pick<OnlineOrderCheckoutService, 'createForCustomer' | 'listForCustomer' | 'detailForCustomer' | 'reorderForCustomer'>;
   authorize: () => Promise<CustomerCommercePrincipal>; slug: string; client: string; now: () => number;
-  publicationFence?: (recheck: () => Promise<CustomerOrderOwner>) => void };
+  publicationFence?: (recheck: () => Promise<CustomerOrderOwner>) => void;
+  prepareLoyaltyAttribution?: (principal: CustomerCommercePrincipal, input: CustomerSaleAttributionInput)
+    => ReturnType<PrepareCustomerSaleAttribution> };
 type Request = { action: 'order-create'; request: CustomerAccountEnvelope<'order-create'>['request'] }
   | { action: 'orders'; request: CustomerAccountEnvelope<'orders'>['request'] }
   | { action: 'order-detail'; request: CustomerAccountEnvelope<'order-detail'>['request'] }
@@ -27,7 +31,8 @@ export async function customerCommerce(port: Port, input: Request) {
   const owner = { parentRef: principal.parentRef, tenantRef: principal.tenantRef, accountId: principal.accountId };
   async function recheck() {
     const latest = await port.authorize();
-    assertCustomerOrderOwner(owner, { parentRef: latest.parentRef, tenantRef: latest.tenantRef, accountId: latest.accountId });
+    try { assertCustomerOrderOwner(owner, { parentRef: latest.parentRef, tenantRef: latest.tenantRef, accountId: latest.accountId }); }
+    catch { throw new CustomerIdentityError('unauthorized'); }
     if (latest.sessionId !== principal.sessionId || latest.expiresAt <= port.now()
       || latest.expiresAt !== principal.expiresAt) throw new CustomerIdentityError('unauthorized');
     return owner;
@@ -35,6 +40,15 @@ export async function customerCommerce(port: Port, input: Request) {
   // Runtime may still await tenant/browser checks after this use case returns.
   // Its last private-publication check must compare the SAME original owner.
   port.publicationFence?.(recheck);
+  async function beforeCommit() {
+    try { return await recheck(); }
+    catch (error) {
+      if (error instanceof CustomerIdentityError && error.reason === 'unauthorized') throw new CustomerOrderAuthorityLost();
+      // An I/O failure is not proof of revocation. The Mongo boundary converts
+      // it into a retryable pre-commit error, never a durable rejected attempt.
+      throw error;
+    }
+  }
   async function query<T>(work: () => Promise<T>): Promise<T> {
     try { return await work(); }
     catch (error) {
@@ -56,7 +70,11 @@ export async function customerCommerce(port: Port, input: Request) {
     try {
       result = { state: 'created', expiresAt: principal.expiresAt,
         order: await query(() => port.checkout.createForCustomer({ slug: port.slug, body: input.request, owner,
-          sourceKey: `customer:${port.client}`, beforeCommit: recheck })) };
+          sourceKey: `customer:${port.client}`, beforeCommit,
+          prepareLoyaltyAttribution: async input => {
+            if (!port.prepareLoyaltyAttribution) throw new CustomerIdentityError('unavailable');
+            return port.prepareLoyaltyAttribution(Object.freeze({ ...principal }), input);
+          } })) };
     } catch (error) {
       // Only a durable rejection from the common admission protocol is terminal.
       // Other failures may have committed and must stay uncertain for C01 recovery.

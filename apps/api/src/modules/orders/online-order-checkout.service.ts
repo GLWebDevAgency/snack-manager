@@ -15,9 +15,12 @@ import { validCustomerOrderOwner, type CustomerOrderOwner, type CustomerOrderCom
 import { recoveryNotFound } from './order-recovery';
 import { customerOrderCreated } from './customer-order-projection';
 import { CustomerOrderHistoryService } from './customer-order-history.service';
+import type { PrepareCustomerSaleAttribution } from './customer-sale-attribution';
+import { CustomerOrderPreparationUnavailable } from './order-admission.errors';
 
 export type CustomerCheckoutInput = {
   slug: string; body: CreatePublicOrder; owner: CustomerOrderOwner; sourceKey: string; beforeCommit: CustomerOrderCommitAuthority;
+  prepareLoyaltyAttribution?: PrepareCustomerSaleAttribution;
 };
 
 export type OnlineOrderDependencies = {
@@ -28,7 +31,7 @@ export type OnlineOrderDependencies = {
 /** One checkout use case for prices, promotions, capacity, anti-abuse and payment state.
  * Route adapters supply authority; this function never accepts a browser-selected owner. */
 export async function executeOnlineCheckout(deps: OnlineOrderDependencies, slug: string, body: CreatePublicOrder, request?: Request,
-  customer?: Pick<CustomerCheckoutInput, 'owner' | 'beforeCommit' | 'sourceKey'>) {
+  customer?: Pick<CustomerCheckoutInput, 'owner' | 'beforeCommit' | 'sourceKey' | 'prepareLoyaltyAttribution'>) {
     if (body.recoveryProof) {
       if (!deps.recoveryQuota) throw new ServiceUnavailableException('La reprise de commande est indisponible');
       if (customer) await enforceOrderRecoverySourceQuota(deps.recoveryQuota, slug, body.clientId, customer.sourceKey);
@@ -172,7 +175,7 @@ export async function executeOnlineCheckout(deps: OnlineOrderDependencies, slug:
 
           const args = [tenantId, trustedOrder, 'online:turnstile', null, binding] as const;
           const outcome = customer
-            ? await deps.orders.createWithOutcome(...args, 'legacy', customer.beforeCommit)
+            ? await deps.orders.createWithOutcome(...args, 'legacy', customer.beforeCommit, customer.prepareLoyaltyAttribution)
             : await deps.orders.createWithOutcome(...args);
           if (!outcome.created) await deps.publicOrderGate.release(proof);
           return outcome.order;
@@ -180,6 +183,13 @@ export async function executeOnlineCheckout(deps: OnlineOrderDependencies, slug:
       );
     } catch (err) {
       if (binding) {
+        if (err instanceof CustomerOrderPreparationUnavailable) {
+          // The typed error proves this validator issued no committing CAS.
+          // Release only its validation claim; retain the same C01 attempt.
+          await deps.admissions!.releaseValidation(tenantId, body.clientId, binding);
+          await deps.publicOrderGate.release(proof);
+          throw err;
+        }
         if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof NotFoundException || err instanceof ForbiddenException) {
           const observed = await deps.admissions!.reject(tenantId, body.clientId, binding, err instanceof ForbiddenException ? 'unavailable' : admissionStage);
           if (observed.state === 'created') return deps.admissions!.createdOrder(tenantId, body, customer?.owner);
@@ -223,7 +233,8 @@ export class OnlineOrderCheckoutService {
     if (!validCustomerOrderOwner(input.owner) || typeof input.beforeCommit !== 'function'
       || !/^customer:[A-Za-z0-9_-]{43}$/.test(input.sourceKey) || !input.body.recoveryProof) throw recoveryNotFound();
     const result = await executeOnlineCheckout(this.dependencies(), input.slug, input.body, undefined,
-      { owner: Object.freeze({ ...input.owner }), sourceKey: input.sourceKey, beforeCommit: input.beforeCommit });
+      { owner: Object.freeze({ ...input.owner }), sourceKey: input.sourceKey, beforeCommit: input.beforeCommit,
+        prepareLoyaltyAttribution: input.prepareLoyaltyAttribution });
     if ('paused' in result) throw new ServiceUnavailableException('La commande est indisponible.');
     return customerOrderCreated(result);
   }

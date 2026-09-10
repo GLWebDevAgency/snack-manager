@@ -5,7 +5,7 @@ import { formatDay, parisYmd } from '../ordering/paris-time';
 import { recoveryNotFound } from './order-recovery';
 import { assertOrderAdmissionBinding, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, publicRecoveryOfAdmission, type OrderAdmissionBinding } from './order-admission-identity';
 import { assertCustomerOrderOwner, type CustomerOrderCommitAuthority } from './customer-order-owner';
-import { CustomerOrderAuthorityLost, PublicOrderSnapshotInvalid } from './order-admission.errors';
+import { CustomerOrderAuthorityLost, CustomerOrderPreparationUnavailable, PublicOrderSnapshotInvalid } from './order-admission.errors';
 import { assertOrderCapacityIndexesReady } from './order-capacity-index-readiness';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
@@ -119,7 +119,13 @@ export class OrderCapacityCommitStore {
       if (binding.customerOwner) {
         // Last controllable PG authorization boundary; never held across Mongo.
         // No future account is adopted, even if the caller's cookies changed.
-        try { assertCustomerOrderOwner(await beforeCommit!(), binding.customerOwner); }
+        let currentOwner;
+        try { currentOwner = await beforeCommit!(); }
+        catch (error) {
+          if (error instanceof CustomerOrderAuthorityLost) throw error;
+          throw new CustomerOrderPreparationUnavailable();
+        }
+        try { assertCustomerOrderOwner(currentOwner, binding.customerOwner); }
         catch { throw new CustomerOrderAuthorityLost(); }
       }
       try {
