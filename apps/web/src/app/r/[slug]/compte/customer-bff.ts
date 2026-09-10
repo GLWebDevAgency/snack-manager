@@ -9,7 +9,7 @@ import { customerRelayHeaders } from './customer-relay';
 import { parseCustomerOrdersPage, parseCustomerOrderDetail, parseCustomerOrderReorder } from '../../../../components/customer-account/orders-response';
 
 type Action = CustomerAccountAction;
-const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create', 'order-reorder'];
+const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create', 'order-reorder', 'loyalty'];
 export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,10 +18,10 @@ const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
 const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
   check: 'confirmation', recover: 'resultat', protection: 'protection', passkey: 'cle-acces', recovery: 'secours', session: 'session', name: 'profil', logout: 'session',
-  orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes', 'order-reorder': 'commandes/recommander' };
+  orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes', 'order-reorder': 'commandes/recommander', loyalty: 'fidelite' };
 const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', intent: 'POST', start: 'POST', check: 'POST',
   recover: 'POST', protection: 'POST', passkey: 'POST', recovery: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE',
-  orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST', 'order-reorder': 'POST' };
+  orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST', 'order-reorder': 'POST', loyalty: 'POST' };
 
 function privateResponse(response: NextResponse) {
   response.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -285,6 +285,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const raw = await boundedJson(response, signal, customerAccountResponseLimit(action));
     const output = CustomerAccountResponses[apiAction].safeParse(raw);
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
+    if (action === 'loyalty') {
+      const result = CustomerAccountResponses.loyalty.parse(output.data);
+      const selected = CustomerAccountBrowserRequests.loyalty.parse(parsed.data);
+      if (result.expiresAt <= Date.now() || result.expiresAt > Date.now() + SESSION_MAX_MS
+        || (result.state === 'card' && selected.step !== 'card')) return unavailable();
+      return privateResponse(NextResponse.json(result));
+    }
     if (action === 'orders') return privateResponse(NextResponse.json(parseCustomerOrdersPage(output.data, CustomerAccountBrowserRequests.orders.parse(parsed.data))));
     if (action === 'order-detail') return privateResponse(NextResponse.json(parseCustomerOrderDetail(output.data, CustomerAccountBrowserRequests['order-detail'].parse(parsed.data).orderId)));
     if (action === 'order-reorder') return privateResponse(NextResponse.json(parseCustomerOrderReorder(output.data, CustomerAccountBrowserRequests['order-reorder'].parse(parsed.data).orderId)));

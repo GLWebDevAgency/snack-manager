@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { Tenant } from '@sm/db';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository } from '@sm/customer';
-import { CustomerAccountEnvelopes, CustomerAccountResponses, customerAccountResponseLimit, type CustomerAccountAction,
+import { aLaCapacite, publicLoyaltyAvailable, CustomerAccountEnvelopes, CustomerAccountResponses, customerAccountResponseLimit, type CustomerAccountAction,
   type CustomerAccountEnvelope } from '@sm/contracts';
 import { CustomerIdentityError, CustomerIdentityService, type CustomerSessionView } from './customer-identity.service';
 import { customerAccessConfiguration, customerSendConfiguration, type CustomerAccessConfiguration } from './customer-account.config';
@@ -14,6 +14,7 @@ import type { CustomerRelay } from './customer-account.guard';
 import type { PhoneVerificationTransport } from './phone-verification.port';
 import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 import { customerCommerce } from './customer-commerce';
+import { CustomerLoyaltyService } from './customer-loyalty.service';
 
 export const CUSTOMER_IDENTITY_REPOSITORY = Symbol('CUSTOMER_IDENTITY_REPOSITORY');
 export const CUSTOMER_VERIFICATION_TRANSPORT_FACTORY = Symbol('CUSTOMER_VERIFICATION_TRANSPORT_FACTORY');
@@ -30,7 +31,8 @@ export class CustomerAccountRuntime {
     @Inject(CUSTOMER_IDENTITY_REPOSITORY) private readonly repository: CustomerIdentityRepository,
     @Inject(CustomerAccountHumanVerifier) private readonly human: CustomerAccountHumanVerifier,
     @Inject(CUSTOMER_VERIFICATION_TRANSPORT_FACTORY) private readonly transportFactory: CustomerVerificationTransportFactory,
-    @Optional() @Inject(OnlineOrderCheckoutService) private readonly checkout?: OnlineOrderCheckoutService) {}
+    @Optional() @Inject(OnlineOrderCheckoutService) private readonly checkout?: OnlineOrderCheckoutService,
+    @Optional() @Inject(CustomerLoyaltyService) private readonly loyalty?: CustomerLoyaltyService) {}
 
   async execute(relay: CustomerRelay, raw: unknown): Promise<unknown> {
     try {
@@ -129,6 +131,20 @@ export class CustomerAccountRuntime {
             publicationFence: recheck => { commerceFence = recheck; } }, command);
           break;
         }
+        case 'loyalty': {
+          if (!this.loyalty) throw new CustomerIdentityError('unavailable');
+          const input = this.input('loyalty', raw);
+          const identity = new CustomerIdentityCrypto(access.identityKey);
+          result = await this.loyalty.execute({ request: input.request, identity,
+            selection: { parentRef: access.parentRef, tenantRef, browserRef: input.browserRef,
+              browserHash: identity.hash('browser', tenantRef, input.browserSecret),
+              sessionHash: identity.hash('session', tenantRef, input.sessionToken),
+              expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId, now: Date.now() },
+            enabled: async () => { this.access(relay, access); return this.loyaltyTenant(access); },
+            publicationFence: recheck => { commerceFence = recheck; },
+          });
+          break;
+        }
         case 'name': {
           const input = this.input('name', raw);
           result = view(await core.updateName({ ...binding!, token: input.sessionToken, ...input.request,
@@ -194,6 +210,14 @@ export class CustomerAccountRuntime {
       .read('primary').readConcern('majority').maxTimeMS(10_000).lean().exec();
     if (!row || String(row._id) !== access.tenantRef || row.slug !== access.slug
       || !['trial', 'active'].includes(row.account?.status ?? '')) throw new CustomerIdentityError('unavailable');
+  }
+  private async loyaltyTenant(access: CustomerAccessConfiguration): Promise<boolean> {
+    const row = await this.tenants.findOne({ _id: access.tenantRef, slug: access.slug },
+      { _id: 1, slug: 1, account: 1, plan: 1, onlineOrdering: 1, onlineDelivery: 1, standaloneLoyalty: 1, derogationsCapacite: 1 })
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean().exec();
+    return !!row && String(row._id) === access.tenantRef && row.slug === access.slug
+      && ['trial', 'active'].includes(row.account?.status ?? '')
+      && publicLoyaltyAvailable(row.account, aLaCapacite(row, 'loyalty'));
   }
 }
 function view(value: CustomerSessionView) {

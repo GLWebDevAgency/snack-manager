@@ -7,7 +7,7 @@ import { build, type BuildOptions } from 'esbuild';
 import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest';
 import { marqueDeRepli } from '@sm/contracts';
 import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
@@ -116,35 +116,63 @@ describe('customer entry placement — real Storefront and loyalty components', 
     });
     return { reads: () => accountRequests.length, accountRequests, mutations };
   }
-  it('keeps ordering primary and opens local orders from the account panel without competing dialogs', async () => {
+  function navigationDiagnostic(scenario: string) {
+    let phase = 'fixture'; const started = Date.now();
+    onTestFailed(() => { console.error(`Customer navigation failure: ${scenario}; phase=${phase}; elapsedMs=${Date.now() - started}`); });
+    return (next: string) => { phase = next; };
+  }
+  async function openStorefrontNavigation(phase: (next: string) => void) {
+    phase('storefront-navigation');
     const requests = await navigationFixture(false); await page.goto(`${origin}/storefront`);
+    phase('ordering-entry');
     await page.getByRole('button', { name: 'Commander maintenant', exact: true }).waitFor();
     // Storefront recovery now checks account capability while restoring C01.
     // With no selected browser/publication, it must not request a private
     // session, orders, or establish any browser/identity capability.
+    phase('closed-capability-only');
     await expect.poll(() => requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
-    for (const width of [320, 390, 1440]) {
-      await page.setViewportSize({ width, height: 900 });
-      const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
-      const entry = page.getByRole('button', { name: 'Mon compte', exact: true });
-      expect(await entry.count()).toBe(1); expect(await page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).count()).toBe(1);
-      const geometry = await accountNavigationGeometry();
-      try { assertAccountNavigationAligned(geometry, width); }
-      catch (error) {
-        const failure = await mkdtemp(join(tmpdir(), 'sm-account-layout-failure-'));
-        await page.screenshot({ path: join(failure, `storefront-${width}.png`) });
-        process.stdout.write(`Customer navigation failure capture: ${failure}\n`);
-        throw error;
-      }
-      expect(await primary.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await entry.evaluate(node => getComputedStyle(node).backgroundColor));
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      if (evidence) await page.screenshot({ path: join(evidence, `storefront-${width}.png`) });
+    return requests;
+  }
+  it.each([320, 390, 1440])('keeps ordering primary and personal entries aligned at %ipx', async width => {
+    const phase = navigationDiagnostic(`geometry-${width}`);
+    const requests = await openStorefrontNavigation(phase);
+    phase('viewport'); await page.setViewportSize({ width, height: 900 });
+    const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
+    const entry = page.getByRole('button', { name: 'Mon compte', exact: true });
+    phase('unique-entries');
+    expect(await entry.count()).toBe(1); expect(await page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).count()).toBe(1);
+    phase('atomic-geometry'); const geometry = await accountNavigationGeometry();
+    try { assertAccountNavigationAligned(geometry, width); }
+    catch (error) {
+      const failure = await mkdtemp(join(tmpdir(), 'sm-account-layout-failure-'));
+      await page.screenshot({ path: join(failure, `storefront-${width}.png`) });
+      process.stdout.write(`Customer navigation failure capture: ${failure}\n`);
+      throw error;
     }
+    phase('priority-and-overflow');
+    expect(await primary.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await entry.evaluate(node => getComputedStyle(node).backgroundColor));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (evidence) { phase('capture'); await page.screenshot({ path: join(evidence, `storefront-${width}.png`) }); }
+    phase('network-boundary');
+    expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
+    expect(requests.mutations).toEqual([]);
+  });
+  it('opens local orders from the account panel without competing dialogs', async () => {
+    const phase = navigationDiagnostic('account-to-device-orders');
+    const requests = await openStorefrontNavigation(phase);
+    // The original aggregate finished its viewport loop on desktop before
+    // exercising this interaction. Keep that same navigation surface here.
+    phase('navigation-viewport'); await page.setViewportSize({ width: 1440, height: 900 });
+    phase('account-open');
     await open(); await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
+    phase('device-orders-open');
     await page.getByRole('dialog', { name: 'Mon compte' }).getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).click();
     await page.getByRole('dialog', { name: 'Mes commandes', exact: true }).waitFor();
+    phase('single-dialog');
     await expect.poll(() => page.getByRole('dialog').count()).toBe(1);
+    phase('escape-closes-dialog');
     await page.keyboard.press('Escape'); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
+    phase('network-boundary');
     expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
     expect(requests.mutations).toEqual([]);
   });

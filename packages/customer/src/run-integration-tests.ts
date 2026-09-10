@@ -21,6 +21,7 @@ else {
   // signed HTTP/Nest boundary. No provider or remote datastore is used.
   const http = spawnSync(process.execPath, [require.resolve('vitest/vitest.mjs'), 'run',
     'src/modules/customer-identity/customer-verification.http.integration.test.ts',
+    'src/modules/customer-identity/customer-loyalty.store.integration.test.ts',
     '--maxWorkers=1', '--no-file-parallelism'], {
     cwd: resolve(__dirname, '../../../apps/api'), stdio: 'inherit', timeout: 120_000,
   });

@@ -41,6 +41,7 @@ export * from './order-refunds';
 export * from './order-counter';
 export * from './order-recovery';
 export * from './customer-orders';
+export * from './customer-loyalty';
 export * from './menu-legacy-options';
 export * from './menu-featured';
 
