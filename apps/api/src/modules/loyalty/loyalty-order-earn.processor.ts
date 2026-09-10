@@ -46,7 +46,10 @@ export interface LoyaltyEarnDrainResult {
   completed: number;
   failed: number;
   retried: number;
+  reviewRequired: number;
 }
+
+type ProcessOutcome = 'completed' | 'failed' | 'retried' | 'reviewRequired';
 
 class InvalidLoyaltyEarnIntent extends Error {}
 
@@ -90,7 +93,6 @@ function permanentFailure(error: unknown): boolean {
     error instanceof NotFoundException ||
     error instanceof BadRequestException ||
     code === LOYALTY_POS_TICKET_REFERENCE_INVALID_CODE ||
-    code === LOYALTY_POS_TICKET_NOT_ELIGIBLE_CODE ||
     code === LOYALTY_POS_TICKET_AMOUNT_MISMATCH_CODE
   );
 }
@@ -102,7 +104,9 @@ function permanentFailure(error: unknown): boolean {
  * prend ensuite un bail atomique, ne crédite qu'une vente `delivered + paid`,
  * et utilise l'operationId comme clé idempotente. Un arrêt après le commit
  * PostgreSQL mais avant le marquage Mongo expire simplement le bail : le
- * passage suivant rejoue le résultat, sans jamais recréditer le portefeuille.
+ * passage suivant relit le reçu, sans jamais recréditer le portefeuille. Une
+ * vente devenue inéligible n'est jamais déclarée « sans gain » par déduction :
+ * un reçu connu exige rapprochement, un reçu encore invisible reste réessayable.
  */
 @Injectable()
 export class LoyaltyOrderEarnProcessor
@@ -139,18 +143,17 @@ export class LoyaltyOrderEarnProcessor
   }
 
   async drain(now: Date = new Date()): Promise<LoyaltyEarnDrainResult> {
-    if (this.draining) return { claimed: 0, completed: 0, failed: 0, retried: 0 };
+    if (this.draining) return { claimed: 0, completed: 0, failed: 0, retried: 0, reviewRequired: 0 };
     this.draining = true;
     const result: LoyaltyEarnDrainResult = {
       claimed: 0,
       completed: 0,
       failed: 0,
       retried: 0,
+      reviewRequired: 0,
     };
     try {
       await this.recoverExpiredLeases(now);
-      await this.cancelIneligibleSales();
-
       for (let index = 0; index < MAX_BATCH; index += 1) {
         const order = await this.claimNext(new Date());
         if (!order) break;
@@ -177,34 +180,26 @@ export class LoyaltyOrderEarnProcessor
     );
   }
 
-  private async cancelIneligibleSales(): Promise<void> {
-    await this.orders.updateMany(
-      {
-        loyaltyEarnState: 'pending',
-        $or: [{ status: 'cancelled' }, { 'payment.status': 'refunded' }],
-      },
-      {
-        $set: {
-          loyaltyEarnState: 'cancelled',
-          loyaltyEarnLastError: 'sale_cancelled',
-          loyaltyEarnNextAttemptAt: null,
-          loyaltyEarnLeaseUntil: null,
-        },
-      },
-    );
-  }
-
   private async claimNext(now: Date): Promise<ClaimedOrder | null> {
     const leaseUntil = new Date(now.getTime() + LEASE_MS);
     const query = this.orders.findOneAndUpdate(
       {
         loyaltyEarnState: 'pending',
-        status: 'delivered',
-        'payment.status': 'paid',
-        $or: [
-          { loyaltyEarnNextAttemptAt: null },
-          { loyaltyEarnNextAttemptAt: { $exists: false } },
-          { loyaltyEarnNextAttemptAt: { $lte: now } },
+        $and: [
+          {
+            $or: [
+              { status: 'delivered', 'payment.status': 'paid' },
+              { status: 'cancelled' },
+              { 'payment.status': 'refunded' },
+            ],
+          },
+          {
+            $or: [
+              { loyaltyEarnNextAttemptAt: null },
+              { loyaltyEarnNextAttemptAt: { $exists: false } },
+              { loyaltyEarnNextAttemptAt: { $lte: now } },
+            ],
+          },
         ],
       },
       {
@@ -222,9 +217,8 @@ export class LoyaltyOrderEarnProcessor
     )) as ClaimedOrder | null;
   }
 
-  private async process(
-    order: ClaimedOrder,
-  ): Promise<'completed' | 'failed' | 'retried'> {
+  private async process(order: ClaimedOrder): Promise<ProcessOutcome> {
+    let intentVerified = false;
     try {
       const tenantRef = String(order.tenantId);
       const memberId = order.loyaltyMemberId;
@@ -232,6 +226,7 @@ export class LoyaltyOrderEarnProcessor
       const actorRef = order.loyaltyActorRef;
       const total = order.totals?.total;
       if (
+        !Types.ObjectId.isValid(tenantRef) ||
         !UUID_V4.test(order.clientId) ||
         !memberId ||
         !UUID_V4.test(memberId) ||
@@ -246,27 +241,45 @@ export class LoyaltyOrderEarnProcessor
       ) {
         throw new InvalidLoyaltyEarnIntent();
       }
+      intentVerified = true;
 
-      await this.loyalty.earn(
+      // Lecture sans mutation, prix courant, profil ou contrôle Mongo sous
+      // verrou PG. « Non observé » ne ferme jamais une vente inéligible : un
+      // ancien worker peut encore être en train de committer son gain.
+      const receipt = await this.loyalty.readEarnReceipt({
         tenantRef,
+        clientId: order.clientId,
         memberId,
+        operationId,
+      });
+      if (receipt.kind === 'conflict') return await this.requireReview(order, 'earn_receipt_conflict');
+      if (order.status !== 'delivered' || order.payment?.status !== 'paid') {
+        return receipt.kind === 'recorded'
+          ? await this.requireReview(order, 'recorded_gain_sale_ineligible')
+          : await this.defer(order, 'sale_ineligible_unsettled');
+      }
+
+      if (receipt.kind === 'not_observed') {
+        await this.loyalty.earn(
+          tenantRef,
+          memberId,
+          {
+            operationId,
+            purchaseCents: total,
+            externalRef: `pos-order:${order.clientId}`,
+          },
+          {
+            source: 'pos',
+            actorRef,
+            deviceRef: order.loyaltyDeviceRef ?? null,
+          },
+        );
+      }
+      const acknowledged = await this.orders.updateOne(
         {
-          operationId,
-          purchaseCents: total,
-          externalRef: `pos-order:${order.clientId}`,
-        },
-        {
-          source: 'pos',
-          actorRef,
-          deviceRef: order.loyaltyDeviceRef ?? null,
-        },
-      );
-      await this.orders.updateOne(
-        {
-          _id: order._id,
-          loyaltyEarnOperationId: operationId,
-          loyaltyEarnState: 'processing',
-          loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
+          ...this.ownedLease(order),
+          status: 'delivered',
+          'payment.status': 'paid',
         },
         {
           $set: {
@@ -278,15 +291,18 @@ export class LoyaltyOrderEarnProcessor
           },
         },
       );
-      return 'completed';
+      // Si le remboursement ou un nouveau bail a gagné, ne pas annoncer un
+      // acquittement réussi. Le bail restant sera repris après expiration.
+      return acknowledged.modifiedCount === 1 ? 'completed' : 'retried';
     } catch (error) {
       const errorCode = loyaltyEarnSafeErrorCode(error);
       if (permanentFailure(error)) {
-        await this.orders.updateOne(
+        // Un refus de nouvelle mutation ne prouve pas l'absence d'un commit
+        // concurrent sous un autre alias. Ne pas l'étiqueter « aucun gain ».
+        if (intentVerified) return this.requireReview(order, 'earn_confirmation_rejected');
+        const result = await this.orders.updateOne(
           {
-            _id: order._id,
-            loyaltyEarnState: 'processing',
-            loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
+            ...this.ownedLease(order),
           },
           {
             $set: {
@@ -297,29 +313,61 @@ export class LoyaltyOrderEarnProcessor
             },
           },
         );
+        if (result.modifiedCount !== 1) return 'retried';
         this.logger.warn(`Gain fidélité en échec contrôlé (${errorCode})`);
         return 'failed';
       }
 
-      const nextAttemptAt = new Date(
-        Date.now() + loyaltyEarnRetryDelayMs(order.loyaltyEarnAttempts),
-      );
-      await this.orders.updateOne(
-        {
-          _id: order._id,
-          loyaltyEarnState: 'processing',
-          loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
-        },
-        {
-          $set: {
-            loyaltyEarnState: 'pending',
-            loyaltyEarnLastError: errorCode,
-            loyaltyEarnNextAttemptAt: nextAttemptAt,
-            loyaltyEarnLeaseUntil: null,
-          },
-        },
-      );
-      return 'retried';
+      return this.defer(order, errorCode);
     }
+  }
+
+  private ownedLease(order: ClaimedOrder) {
+    return {
+      _id: order._id,
+      tenantId: String(order.tenantId),
+      loyaltyEarnOperationId: order.loyaltyEarnOperationId,
+      loyaltyEarnState: 'processing' as const,
+      loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
+      loyaltyEarnAttempts: order.loyaltyEarnAttempts,
+    };
+  }
+
+  private async requireReview(
+    order: ClaimedOrder,
+    code: 'earn_receipt_conflict' | 'recorded_gain_sale_ineligible' | 'earn_confirmation_rejected',
+  ): Promise<ProcessOutcome> {
+    const result = await this.orders.updateOne(
+      { ...this.ownedLease(order), status: order.status, 'payment.status': order.payment?.status },
+      {
+        $set: {
+          loyaltyEarnState: 'reconciliation_required',
+          loyaltyEarnLastError: code,
+          loyaltyEarnNextAttemptAt: null,
+          loyaltyEarnLeaseUntil: null,
+        },
+      },
+    );
+    if (result.modifiedCount !== 1) return 'retried';
+    this.logger.warn(`Gain fidélité à rapprocher (${code})`);
+    return 'reviewRequired';
+  }
+
+  private async defer(order: ClaimedOrder, errorCode: string): Promise<'retried'> {
+    const nextAttemptAt = new Date(
+      Date.now() + loyaltyEarnRetryDelayMs(order.loyaltyEarnAttempts),
+    );
+    await this.orders.updateOne(
+      this.ownedLease(order),
+      {
+        $set: {
+          loyaltyEarnState: 'pending',
+          loyaltyEarnLastError: errorCode,
+          loyaltyEarnNextAttemptAt: nextAttemptAt,
+          loyaltyEarnLeaseUntil: null,
+        },
+      },
+    );
+    return 'retried';
   }
 }

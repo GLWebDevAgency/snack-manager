@@ -89,6 +89,7 @@ import {
 } from '@sm/loyalty';
 import { LOYALTY_CRYPTO, LOYALTY_DB } from '../../loyalty-db.module';
 import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
+import { readLoyaltyEarnReceipt } from './loyalty-earn-receipt.reader';
 
 type ProgramRow = typeof programs.$inferSelect;
 type ProgramVersionRow = typeof programVersions.$inferSelect;
@@ -481,6 +482,11 @@ const ENROLLMENT_RECOVERY_RETRY_MS = 750;
 
 @Injectable()
 export class LoyaltyMemberService {
+  /** Preuve de reprise interne ; aucune route publique ni mutation du portefeuille. */
+  readEarnReceipt(input: { tenantRef: string; clientId: string; memberId: string; operationId: string }) {
+    return readLoyaltyEarnReceipt(this.db, input);
+  }
+
   constructor(
     @Inject(LOYALTY_DB) private readonly db: LoyaltyDb,
     @Inject(LOYALTY_CRYPTO) private readonly crypto: LoyaltyCryptoAdapter,
