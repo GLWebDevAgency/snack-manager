@@ -677,6 +677,7 @@ interface WebModalManager {
     initialFocus: ModalInitialFocus,
   ) => WebModalLayer;
   unregister: (layer: WebModalLayer) => void;
+  replaceRoot: (layer: WebModalLayer, root: HTMLElement) => void;
   refocus: (layer: WebModalLayer) => void;
   isTop: (layer: WebModalLayer) => boolean;
 }
@@ -917,6 +918,16 @@ function getWebModalManager(doc: Document): WebModalManager {
       });
     },
 
+    replaceRoot(layer, root) {
+      // Une rotation peut déplacer le même dialogue dans/hors du portail.
+      // Conserver sa place dans la pile et son déclencheur : le réinscrire
+      // comme une nouvelle modale perdrait la cible de restitution du focus.
+      layer.cancelScheduledFocus?.();
+      layer.root = root;
+      applyIsolation();
+      if (top() === layer) scheduleLayerFocus(layer);
+    },
+
     refocus(layer) {
       if (top() === layer) scheduleLayerFocus(layer);
     },
@@ -935,12 +946,21 @@ function useWebModalLayer(
   onClose: () => void,
   initialFocus: ModalInitialFocus,
   focusKey?: string | number,
-): () => void {
+): { requestClose: () => void; attachRoot: (node: unknown) => void } {
   const onCloseRef = useRef(onClose);
   const initialFocusRef = useRef(initialFocus);
   const layerRef = useRef<WebModalLayer | null>(null);
   onCloseRef.current = onClose;
   initialFocusRef.current = initialFocus;
+
+  const attachRoot = useCallback((node: unknown) => {
+    const root = node as HTMLElement | null;
+    rootRef.current = root;
+    const layer = layerRef.current;
+    if (Platform.OS === 'web' && root && layer && layer.root !== root) {
+      layer.manager.replaceRoot(layer, root);
+    }
+  }, [rootRef]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -964,11 +984,12 @@ function useWebModalLayer(
     layer.manager.refocus(layer);
   }, [focusKey, initialFocus]);
 
-  return useCallback(() => {
+  const requestClose = useCallback(() => {
     const layer = layerRef.current;
     if (Platform.OS === 'web' && layer && !layer.manager.isTop(layer)) return;
     onCloseRef.current();
   }, []);
+  return { requestClose, attachRoot };
 }
 
 /**
@@ -1008,7 +1029,7 @@ export function Overlay({
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const modalRoot = useRef<HTMLElement | null>(null);
-  const requestClose = useWebModalLayer(modalRoot, onClose, initialFocus, focusKey);
+  const { requestClose, attachRoot } = useWebModalLayer(modalRoot, onClose, initialFocus, focusKey);
 
   useEffect(() => {
     Animated.timing(v, {
@@ -1022,9 +1043,7 @@ export function Overlay({
   return (
     <ModalSurface compact={L.compact} onClose={requestClose}>
     <View
-      ref={(node) => {
-        modalRoot.current = node as unknown as HTMLElement | null;
-      }}
+      ref={attachRoot}
       tabIndex={-1}
       role="dialog"
       aria-modal
@@ -1094,7 +1113,7 @@ export function Drawer({
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const drawerRoot = useRef<HTMLElement | null>(null);
-  const requestClose = useWebModalLayer(drawerRoot, onClose, 'first');
+  const { requestClose, attachRoot } = useWebModalLayer(drawerRoot, onClose, 'first');
 
   useEffect(() => {
     Animated.timing(v, {
@@ -1108,9 +1127,7 @@ export function Drawer({
   return (
     <ModalSurface compact={L.compact} onClose={requestClose}>
     <View
-      ref={(node) => {
-        drawerRoot.current = node as unknown as HTMLElement | null;
-      }}
+      ref={attachRoot}
       tabIndex={-1}
       role="dialog"
       aria-modal

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { Order } from '@sm/client-core';
-import { hair, hair2, ink, radius, surface, tabular, type } from '../ui';
+import { makeUi, radius, tabular } from '../ui';
+import { useAccentText, useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Sheen } from './primitives';
 
@@ -9,11 +10,8 @@ import { Sheen } from './primitives';
  * Panneau « À lancer » (All Day) — le cumul de production, toutes commandes
  * confondues, pour les statuts « Nouveau » et « En préparation ».
  *
- * Deux écarts assumés avec la maquette :
- *  1. l'agrégation inclut la **variante** (« Tacos XL » ≠ « Tacos L ») : en
- *     cuisine ce sont deux gestes différents, les cumuler serait trompeur ;
- *  2. le panneau **suit le filtre canal** de la barre haute, pour rester
- *     cohérent avec ce que les colonnes affichent au même instant.
+ * La présentation conserve l'agrégation par nom ET variante, ainsi que le
+ * filtre canal appliqué aux colonnes. Changer de thème ne change aucun cumul.
  */
 
 export interface ProductionLine {
@@ -64,7 +62,9 @@ export function AllDayPanel({
   style?: StyleProp<ViewStyle>;
   layout: Layout;
 }) {
-  const styles = panelStyles(layout);
+  const { theme } = useUi();
+  const accentText = useAccentText(accent);
+  const styles = panelStyles(layout, theme);
   const lines = useMemo(() => aggregate(orders), [orders]);
   const total = lines.reduce((sum, l) => sum + l.qty, 0);
 
@@ -75,7 +75,7 @@ export function AllDayPanel({
       <View style={styles.header}>
         <Text style={styles.title}>À lancer</Text>
         <View style={[styles.total, { borderColor: accent }]}>
-          <Text style={[styles.totalText, { color: accent }]}>{total}</Text>
+          <Text style={[styles.totalText, { color: accentText }]}>{total}</Text>
         </View>
       </View>
 
@@ -89,7 +89,7 @@ export function AllDayPanel({
         ) : (
           lines.map((line) => (
             <View key={line.key} style={styles.row}>
-              <Text style={[styles.qty, { color: accent }]}>{line.qty}×</Text>
+              <Text style={[styles.qty, { color: accentText }]}>{line.qty}×</Text>
               <View style={styles.rowBody}>
                 <Text style={styles.name}>{line.name}</Text>
                 {line.variant ? (
@@ -113,8 +113,9 @@ export function AllDayPanel({
   );
 }
 
-const panelStyles = scaledStyles((l: Layout) =>
-  StyleSheet.create({
+const panelStyles = scaledStyles((l: Layout, theme) => {
+  const { surface, hair, hair2, ink, type, palette } = makeUi(theme);
+  return StyleSheet.create({
     panel: {
       backgroundColor: surface.card,
       borderRadius: radius.lg,
@@ -139,7 +140,7 @@ const panelStyles = scaledStyles((l: Layout) =>
       fontWeight: '800',
       letterSpacing: 1.2,
       textTransform: 'uppercase',
-      color: '#ffffff',
+      color: palette.text,
     },
     total: {
       minWidth: l.far(30),
@@ -175,7 +176,7 @@ const panelStyles = scaledStyles((l: Layout) =>
       fontSize: l.far(14.5),
       fontWeight: '700',
       lineHeight: l.far(19),
-      color: '#ffffff',
+      color: palette.text,
     },
     variant: {
       backgroundColor: surface.el2,
@@ -212,5 +213,5 @@ const panelStyles = scaledStyles((l: Layout) =>
       color: ink.dimmer,
       lineHeight: l.fs(15),
     },
-  }),
-);
+  });
+});

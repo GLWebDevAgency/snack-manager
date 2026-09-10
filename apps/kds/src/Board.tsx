@@ -7,18 +7,17 @@ import {
   CHANNEL_FILTERS,
   contrastOn,
   EMPTY_COPY,
-  hair2,
-  ink,
-  palette,
   radius,
   STATUS_TONE,
-  surface,
   tabular,
-  type,
   type BoardStatus,
   type ChannelFilter,
 } from './ui';
 import { clockHM } from './format';
+import { makeUi } from './ui';
+import { useUi } from './theme';
+import type { KdsDensity } from './prefs';
+import { SMMark, BRAND_GOLD } from '@sm/ui-native';
 import { scaledStyles, type Layout } from './useLayout';
 import { aggregate, AllDayPanel } from './components/AllDayPanel';
 import { OrderCard } from './components/OrderCard';
@@ -39,6 +38,10 @@ import { CardSkeleton, EmptyState, Tap } from './components/primitives';
  */
 
 export interface BoardProps {
+  density?: KdsDensity;
+  logoUrl?: string | null;
+  onSettings?: () => void;
+  onLogout?: () => void;
   orders: Order[];
   now: number;
   accent: string;
@@ -69,7 +72,8 @@ type CompactTab = BoardStatus | 'allday';
 
 export function Board(props: BoardProps) {
   const { orders, layout } = props;
-  const styles = boardStyles(layout);
+  const { theme, palette, type } = useUi();
+  const styles = boardStyles(layout, theme);
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState<CompactTab>('new');
 
@@ -115,6 +119,10 @@ export function Board(props: BoardProps) {
       <View style={styles.root}>
         <CompactBar
           tenantName={props.tenantName}
+          logoUrl={props.logoUrl}
+          onSettings={props.onSettings}
+          filter={filter}
+          onFilter={setFilter}
           accent={props.accent}
           clock={clockHM(props.now)}
           online={props.online}
@@ -181,6 +189,7 @@ export function Board(props: BoardProps) {
             ) : (
               grouped[tab].map((order) => (
                 <OrderCard
+                  density={props.density}
                   key={order._id}
                   order={order}
                   now={props.now}
@@ -210,6 +219,9 @@ export function Board(props: BoardProps) {
     <View style={styles.root}>
       <Toolbar
         tenantName={props.tenantName}
+        logoUrl={props.logoUrl}
+        onSettings={props.onSettings}
+        onLogout={props.onLogout}
         accent={props.accent}
         clock={clockHM(props.now)}
         online={props.online}
@@ -240,6 +252,7 @@ export function Board(props: BoardProps) {
 
         {BOARD_STATUSES.map((status) => (
           <StatusColumn
+            density={props.density}
             key={status}
             status={status}
             orders={grouped[status]}
@@ -252,6 +265,10 @@ export function Board(props: BoardProps) {
             layout={layout}
           />
         ))}
+      </View>
+      <View style={{ position: 'absolute', bottom: layout.fs(2), right: layout.pad + layout.fs(4), flexDirection: 'row', alignItems: 'center', gap: layout.fs(6), opacity: 0.55, pointerEvents: 'none' }}>
+        <SMMark size={layout.fs(16)} color={palette.text} accessible={false} />
+        <Text style={{ fontFamily: type.body.fontFamily, fontSize: layout.fs(10.5), fontWeight: '600', color: palette.text }}>Propulsé par Snack <Text style={{ color: BRAND_GOLD }}>Manager</Text></Text>
       </View>
     </View>
   );
@@ -270,7 +287,8 @@ function OfflineBanner({
   pending: number;
   layout: Layout;
 }) {
-  const styles = boardStyles(layout);
+  const { theme } = useUi();
+  const styles = boardStyles(layout, theme);
   return (
     <View style={styles.banner} accessibilityLiveRegion="polite">
       <Text style={styles.bannerText} numberOfLines={2}>
@@ -307,12 +325,14 @@ function TabButton({
   reducedMotion: boolean;
   layout: Layout;
 }) {
-  const styles = boardStyles(layout);
+  const { theme, palette, hair2, ink, surface } = useUi();
+  const styles = boardStyles(layout, theme);
   return (
     <Tap
       onPress={onPress}
       label={count === undefined ? label : `${label}, ${count} ${noun}(s)`}
       selected={active}
+      role="tab"
       reducedMotion={reducedMotion}
       style={[
         styles.tab,
@@ -335,10 +355,11 @@ function TabButton({
   );
 }
 
-const boardStyles = scaledStyles((l: Layout) =>
-  StyleSheet.create({
+const boardStyles = scaledStyles((l: Layout, theme) => {
+  const { palette, surface, ink, hair2, type } = makeUi(theme);
+  return StyleSheet.create({
     root: { flex: 1, backgroundColor: palette.bg },
-    stage: { flex: 1, flexDirection: 'row', gap: l.gap, padding: l.pad, minHeight: 0 },
+    stage: { flex: 1, flexDirection: 'row', gap: l.gap, padding: l.pad, paddingBottom: l.pad + l.fs(14), minHeight: 0 },
 
     banner: {
       backgroundColor: alpha(palette.red, 0.14),
@@ -354,7 +375,7 @@ const boardStyles = scaledStyles((l: Layout) =>
       color: ink.onRed,
       lineHeight: l.fs(17),
     },
-    bannerDetail: { fontWeight: '500', color: alpha('#ff8b7b', 0.75) },
+    bannerDetail: { fontWeight: '500', color: ink.onRed },
 
     tabs: {
       flexDirection: 'row',
@@ -397,5 +418,5 @@ const boardStyles = scaledStyles((l: Layout) =>
     // Longhands (et non `flex: 1`) : le panneau porte déjà `flexShrink: 0`,
     // seule une surcharge propriété par propriété le neutralise à coup sûr.
     fill: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 },
-  }),
-);
+  });
+});
