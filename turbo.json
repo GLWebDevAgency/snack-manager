@@ -29,6 +29,10 @@
       ],
       "outputs": []
     },
+    "@sm/ui-native#build": {
+      "dependsOn": ["typecheck"],
+      "outputs": []
+    },
     "@sm/pos#typecheck": {
       "dependsOn": ["^build", "@sm/db#build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/src/modules/orders/price-order-lines.ts", "$TURBO_ROOT$/apps/api/package.json"]

@@ -16,7 +16,8 @@
     "@sm/client-core": "workspace:*",
     "@sm/contracts": "workspace:*",
     "react-native-svg": "15.15.4",
-    "expo-font": "~57.0.3"
+    "expo-font": "~57.0.3",
+    "@sm/ui-native": "workspace:*"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",
