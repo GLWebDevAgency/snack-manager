@@ -1,9 +1,12 @@
 # Rattacher une carte existante au compte client
 
-État au 10 septembre 2026 : implémenté et recetté localement sur
-`feat/customer-loyalty-attachment`, après l'adhésion neuve #157. CI et staging
-de ce nouveau lot restent à recevoir. Aucun pilote, fournisseur ni budget
-supplémentaire n'est ouvert. Production inchangée.
+État au 10 septembre 2026 : **PR #158 fusionnée** après les contrôles verts du
+SHA `cf6f68f53e5db96d5e6e6ccf3b5aa262bd7d4a00`. La [CI 34453104765](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34453104765)
+et le [balayage 34453104770](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34453104770)
+sont reçus. Le [déploiement staging 34454486357](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34454486357)
+du squash `db9c739c408e0286b7fead32b2e82d85fd37c472` est en cours, pas encore
+recetté. Aucun pilote, fournisseur ni budget supplémentaire n'est ouvert.
+Production inchangée. Suite : [gains sur vente et remboursements](GAINS-VENTE-REMBOURSEMENTS.md).
 
 ## Parcours et preuve de propriété
 
