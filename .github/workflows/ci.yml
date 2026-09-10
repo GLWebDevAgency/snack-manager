@@ -190,7 +190,7 @@ jobs:
       - name: Tests du smoke public — réponses HTTP locales
         run: pnpm --filter @sm/api exec vitest run ../../scripts/smoke.test.mjs --root ../..
 
-      # Les suites générales restent rapides et hermétiques. Ces trois fichiers
+      # Les suites générales restent rapides et hermétiques. Ces fichiers
       # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
       # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et
       # ledger ne peuvent plus se déclarer verts en ayant été ignorés.
@@ -198,9 +198,11 @@ jobs:
         env:
           POSTGRES_BOOTSTRAP_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
           LOYALTY_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          LOYALTY_CANONICAL_SALE_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
         run: |
           pnpm --filter @sm/postgres-bootstrap exec vitest run src/bootstrap.integration.test.ts
           pnpm --filter @sm/loyalty exec vitest run src/schema.integration.test.ts
+          pnpm --filter @sm/loyalty exec vitest run src/canonical-sale.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
 
       - name: Tests PostgreSQL réels — identité client et quotas durables

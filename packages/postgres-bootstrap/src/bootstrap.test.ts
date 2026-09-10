@@ -361,6 +361,10 @@ const ALLOWED_DYNAMIC_MIGRATION_BLOCKS = new Set([
   // tenant_isolation liées aux tables. Toute modification du bloc exige une
   // revue explicite et la mise à jour de cette empreinte.
   `loyalty:${LOYALTY_INITIAL_MIGRATION}:0000_glorious_swordsman:5f77fde3d5db88b65ad991d0a6cda96031e4a0cfe2449bb265805a83883833fe`,
+  // loyalty/0006 : deux index liés aux tables existantes, aucun objet autonome
+  // ni EXECUTE dynamique. Le bloc remplace uniquement le détail privé 23505.
+  // Empreinte relue : une modification exige une nouvelle revue explicite.
+  'loyalty:1789040000000:0006_canonical_sale_uniqueness:fb4be515f0f537dbc5fd1ffd8db79d2f9f952bbe5bc9b26a2f52136122f0cef5',
 ]);
 
 function sqlDigest(sql: string): string {
@@ -934,6 +938,17 @@ describe('manifeste PostgreSQL versionné', () => {
     expect(() => discoverCreatedObject(sql, 'supply', 123, '0001_rogue')).toThrow(
       /Bloc DO dynamique non allowlisté/,
     );
+  });
+
+  it('autorise seulement le bloc canonique exact et refuse son altération ou déplacement', () => {
+    const sql = readFileSync(resolve(__dirname, '../../loyalty/drizzle/0006_canonical_sale_uniqueness.sql'), 'utf8');
+    const block = splitTopLevelSqlStatements(sql).find(statement => /^DO\b/.test(withoutLeadingComments(statement)));
+    expect(block).toBeDefined();
+    expect(discoverCreatedObject(block!, 'loyalty', 1789040000000, '0006_canonical_sale_uniqueness')).toBeNull();
+    const changed = block!.replace('BEGIN', 'BEGIN\n CREATE TABLE public.unreviewed(id integer);');
+    expect(() => discoverCreatedObject(changed, 'loyalty', 1789040000000, '0006_canonical_sale_uniqueness')).toThrow(/non allowlisté/);
+    expect(() => discoverCreatedObject(block!, 'customer', 1789040000000, '0006_canonical_sale_uniqueness')).toThrow(/non allowlisté/);
+    expect(() => discoverCreatedObject(block!, 'loyalty', 1789040000001, '0006_canonical_sale_uniqueness')).toThrow(/non allowlisté/);
   });
 
   it('échoue fermé sur un nouveau kind CREATE autonome', () => {

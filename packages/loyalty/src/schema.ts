@@ -406,6 +406,11 @@ export const earnReceipts = loyaltySchema.table(
       table.source,
       table.externalRef,
     ),
+    // A sale has one identity across historical POS/online aliases and source
+    // labels. Keep the original index for every noncanonical reference.
+    uniqueIndex('earn_receipts_tenant_canonical_sale_uq')
+      .on(table.tenantRef, sql`lower(split_part(${table.externalRef}, ':', 2))`)
+      .where(sql`${table.source} IN ('pos', 'online') AND ${table.externalRef} ~* '^(pos-order|online-order|order):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'`),
     uniqueIndex('earn_receipts_tenant_operation_uq').on(
       table.tenantRef,
       table.operationId,
@@ -479,6 +484,9 @@ export const ledgerEntries = loyaltySchema.table(
     uniqueIndex('ledger_earn_external_ref_uq')
       .on(table.tenantRef, table.source, table.externalRef)
       .where(sql`${table.kind} = 'earn' AND ${table.externalRef} IS NOT NULL`),
+    uniqueIndex('ledger_earn_canonical_sale_uq')
+      .on(table.tenantRef, sql`lower(split_part(${table.externalRef}, ':', 2))`)
+      .where(sql`${table.kind} = 'earn' AND ${table.source} IN ('pos', 'online') AND ${table.externalRef} ~* '^(pos-order|online-order|order):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'`),
     uniqueIndex('ledger_redeem_external_ref_uq')
       .on(table.tenantRef, table.source, table.externalRef)
       .where(sql`${table.kind} = 'redeem' AND ${table.externalRef} IS NOT NULL`),
