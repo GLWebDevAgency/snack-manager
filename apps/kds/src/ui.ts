@@ -9,6 +9,7 @@ export { palette, radius, space, TOUCH_MIN };
 
 /** Inter est embarquée par le socle UI ; aucune police distante au démarrage. */
 export const FONT = BRAND_FONT;
+export const SETTINGS_TRIGGER_ID = 'kds-settings-trigger';
 export const tabular: TextStyle = { fontVariant: ['tabular-nums'] };
 
 const elevate = (css: string, native: { color: string; opacity: number; radius: number; y: number; elevation: number }): ViewStyle =>

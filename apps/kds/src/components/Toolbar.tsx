@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@sm/ui-native';
-import { alpha, CHANNEL_FILTERS, contrastOn, makeUi, radius, STATUS_TONE, tabular, type ChannelFilter } from '../ui';
+import { alpha, CHANNEL_FILTERS, contrastOn, makeUi, radius, SETTINGS_TRIGGER_ID, STATUS_TONE, tabular, type ChannelFilter } from '../ui';
 import { useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Chip, Pill, Sheen, StatusDot, Tap } from './primitives';
@@ -58,10 +58,10 @@ function SyncBadge({ online, pending, layout }: { online: boolean; pending: numb
   return null;
 }
 
-function IconButton({ icon, label, onPress, layout, reducedMotion }: { icon: string; label: string; onPress: () => void; layout: Layout; reducedMotion: boolean }) {
+function IconButton({ icon, label, nativeID, onPress, layout, reducedMotion }: { icon: string; label: string; nativeID?: string; onPress: () => void; layout: Layout; reducedMotion: boolean }) {
   const { theme, ink, surface } = useUi();
   const bar = barStyles(layout, theme);
-  return <Tap label={label} onPress={onPress} reducedMotion={reducedMotion} style={bar.iconButton} pressedStyle={{ backgroundColor: surface.el2 }}><Icon name={icon} size={layout.fs(18)} color={ink.dim} /></Tap>;
+  return <Tap nativeID={nativeID} label={label} onPress={onPress} reducedMotion={reducedMotion} style={bar.iconButton} pressedStyle={{ backgroundColor: surface.el2 }}><Icon name={icon} size={layout.fs(18)} color={ink.dim} /></Tap>;
 }
 
 function ChannelChips({ filter, onFilter, accent, reducedMotion, layout }: Pick<ToolbarProps, 'filter' | 'onFilter' | 'accent' | 'reducedMotion' | 'layout'>) {
@@ -106,7 +106,7 @@ export function Toolbar({
         <SyncBadge online={online} pending={pending} layout={layout} />
         <Chip text="À lancer" icon="kds-list" active={allDayOn} onPress={onToggleAllDay} accent={accent} reducedMotion={reducedMotion} tone={{ bg: accent, fg: contrastOn(accent) }} layout={layout} />
         <Chip text={soundOn ? 'Son' : 'Muet'} icon={soundOn ? 'kds-bell' : 'bellOff'} active={soundOn} onPress={onToggleSound} accent={accent} reducedMotion={reducedMotion} tone={{ bg: accent, fg: contrastOn(accent) }} layout={layout} />
-        {onSettings ? <IconButton icon="gear" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
+        {onSettings ? <IconButton nativeID={SETTINGS_TRIGGER_ID} icon="gear" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
         {onLogout ? <IconButton icon="lock" label="Fermer le service" onPress={onLogout} layout={layout} reducedMotion={reducedMotion} /> : null}
       </View>
     </View>
@@ -134,7 +134,7 @@ export function CompactBar({
         </View> : null}
         <Text style={bar.clockSm}>{clock}</Text>
         <Chip text={soundOn ? 'Couper le son' : 'Activer le son'} icon={soundOn ? 'kds-bell' : 'bellOff'} iconOnly active={soundOn} onPress={onToggleSound} accent={accent} reducedMotion={reducedMotion} tone={{ bg: accent, fg: contrastOn(accent) }} layout={layout} />
-        {onSettings ? <IconButton icon="gear" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
+        {onSettings ? <IconButton nativeID={SETTINGS_TRIGGER_ID} icon="gear" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
       </View>
       {!online || pending > 0 ? <View style={bar.compactSync}><SyncBadge online={online} pending={pending} layout={layout} /></View> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={bar.compactFilters} contentContainerStyle={bar.compactFilterContent} accessibilityRole="tablist" accessibilityLabel="Filtrer par canal de commande">

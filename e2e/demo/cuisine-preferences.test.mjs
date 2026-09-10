@@ -170,6 +170,82 @@ scenario('Cuisine — rotation, onglets et filtre compact conservent les command
     assert.deepEqual(await tickets(page), avant, 'le retour paysage ne doit pas perdre un ticket ou garder un filtre invisible');
   });
 
+scenario('Cuisine — paramètres ouverts pendant les rotations, isolation et retour clavier au rouage actuel',
+  { format: { width: 1280, height: 800 } }, async (page) => {
+    await ouvrirCuisine(page);
+    const avant = await tickets(page);
+    await preferences(page, { densite: 'Dense', theme: 'Clair' });
+    const reglages = page.getByRole('button', { name: REGLAGES });
+    const panneau = page.getByRole('dialog', { name: REGLAGES });
+    const formats = {
+      paysage: { width: 1280, height: 800 },
+      portrait: { width: 820, height: 1180 },
+      telephone: { width: 320, height: 568 },
+    };
+    const verifierChoix = async () => {
+      await panneau.getByRole('radio', { name: /^Dense\./, checked: true }).waitFor({ state: 'visible' });
+      await panneau.getByRole('radio', { name: 'Clair', exact: true, checked: true }).waitFor({ state: 'visible' });
+    };
+
+    for (const parcours of [
+      ['paysage', 'portrait', 'telephone', 'paysage'],
+      ['telephone', 'portrait', 'paysage', 'telephone'],
+    ]) {
+      await page.setViewportSize(formats[parcours[0]]);
+      if (parcours[0] === 'telephone') await onglet(page, 'Nouveau').waitFor({ state: 'visible' });
+      else await colonne(page, 'Nouveau').waitFor({ state: 'visible' });
+      await reglages.click();
+      await panneau.waitFor({ state: 'visible' });
+      const origine = await panneau.elementHandle();
+
+      for (const nom of parcours) {
+        const format = formats[nom];
+        await page.setViewportSize(format);
+        // Attendre le rendu React, pas seulement la taille du navigateur.
+        await panneau.getByRole('button', { name: 'Fermer le service', exact: true })
+          .waitFor({ state: nom === 'paysage' ? 'hidden' : 'visible' });
+        await verifierChoix();
+        assert.equal(await panneau.evaluate((el, ancien) => el === ancien, origine), true,
+          'une rotation ne doit pas remonter le dialogue');
+        assert.equal(await panneau.evaluate((el) => !!el.closest('[inert], [aria-hidden="true"]')), false);
+        const fond = page.getByRole('button', { name: REGLAGES, includeHidden: true });
+        assert.equal(await fond.evaluate((el) => !!el.closest('[inert]')), true,
+          'le nouveau rouage doit rester dans le fond isolé tant que les paramètres sont ouverts');
+        const boite = await panneau.boundingBox();
+        assert.deepEqual(boite, { x: 0, y: 0, ...format }, 'le dialogue doit continuer à couvrir tout l’écran');
+        await panneau.getByRole('button', { name: 'Fermer', exact: true }).last().click({ trial: true });
+
+        const clair = panneau.getByRole('radio', { name: 'Clair', exact: true });
+        await clair.focus();
+        await clair.press('Home');
+        await panneau.getByRole('radio', { name: 'Sombre', exact: true, checked: true }).waitFor({ state: 'visible' });
+        await panneau.getByRole('radio', { name: 'Sombre', exact: true }).press('End');
+        await verifierChoix();
+        for (const touche of ['Tab', 'Tab', 'Shift+Tab']) {
+          await page.keyboard.press(touche);
+          assert.equal(await panneau.evaluate((el) => el.contains(document.activeElement)), true);
+        }
+      }
+
+      await page.keyboard.press('Escape');
+      await panneau.waitFor({ state: 'hidden' });
+      await reglages.and(page.locator(':focus')).waitFor({ state: 'visible' });
+      assert.equal(await reglages.evaluate((el) => !!el.closest('[inert], [aria-hidden="true"]')), false);
+      // La poursuite au clavier doit fonctionner sans clic de rattrapage.
+      await page.keyboard.press('Enter');
+      await panneau.waitFor({ state: 'visible' });
+      await verifierChoix();
+      await panneau.getByRole('button', { name: 'Fermer', exact: true }).last().click();
+      await panneau.waitFor({ state: 'hidden' });
+      await reglages.and(page.locator(':focus')).waitFor({ state: 'visible' });
+    }
+
+    await page.setViewportSize(formats.paysage);
+    for (const statut of STATUTS) await colonne(page, statut.colonne).waitFor({ state: 'visible' });
+    assert.deepEqual(await tickets(page), avant, 'les rotations des paramètres doivent préserver chaque commande et ses options');
+    await preuve(page, 'kds-reglages-rotation-focus-restaure');
+  });
+
 scenario('Cuisine — téléphone 320 × 568, réglages et progression jusqu’à Prêt sans remise',
   { format: { width: 320, height: 568 } }, async (page) => {
     await ouvrirCuisine(page);
