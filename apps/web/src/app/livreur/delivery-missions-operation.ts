@@ -1,5 +1,5 @@
 import {
-  DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionResultSchema, DeliveryMissionViewSchema,
+  DELIVERY_VIEW_VERSION, DELIVERY_VIEW_VERSION_HEADER, DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionResultSchema, DeliveryMissionViewSchema,
   type DeliveryMissionAssign, type DeliveryMissionDispatch, type DeliveryMissionView,
 } from "@sm/contracts";
 
@@ -95,7 +95,7 @@ export class MissionHttpError extends Error {
 export async function missionRequest(path: string, body?: DeliveryMissionDispatch): Promise<unknown> {
   const response = await fetch(path, {
     method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
-    headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: { Accept: "application/json", [DELIVERY_VIEW_VERSION_HEADER]: DELIVERY_VIEW_VERSION, ...(body ? { "Content-Type": "application/json" } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(12_000),
   });
   const raw: unknown = await response.json().catch(() => null);

@@ -1,4 +1,4 @@
-import { DeliveryAccessSecretSchema, DeliverySessionViewSchema, type DeliverySessionView } from "@sm/contracts";
+import { DELIVERY_VIEW_VERSION, DELIVERY_VIEW_VERSION_HEADER, DeliveryAccessSecretSchema, DeliverySessionViewSchema, type DeliverySessionView } from "@sm/contracts";
 import { capturedInvitation } from "./invitation-bootstrap";
 
 type Phase = "checking" | "invitation" | "missing" | "connected" | "associating" | "disconnecting" | "error";
@@ -39,7 +39,7 @@ const browserPort: AccessBrowser = {
   nonce: () => secureNonce(window.crypto),
   request: (method, body) => fetch("/livreur/acces", {
     method, credentials: "same-origin", cache: "no-store", redirect: "error",
-    headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: { Accept: "application/json", [DELIVERY_VIEW_VERSION_HEADER]: DELIVERY_VIEW_VERSION, ...(body ? { "Content-Type": "application/json" } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(12_000),
   }),
 };

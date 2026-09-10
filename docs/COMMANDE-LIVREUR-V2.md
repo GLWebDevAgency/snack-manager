@@ -28,6 +28,8 @@ Le départ exige toujours une mission prête, affectée à l'opérateur et dont 
 
 L'historique est une lecture serveur séparée, paginée par cinquante livraisons terminées, limitée au restaurant et à l'opérateur authentifié. Il utilise l'heure de remise enregistrée par le serveur et ne réintroduit pas ces missions dans la liste des actions disponibles. Les résumés de paiement exposés sont en lecture seule.
 
+Les vues enrichies de session et de mission exigent l'en-tête `X-SM-Delivery-View: 2`, transmis explicitement du navigateur au BFF puis à l'API. Sans cette version exacte, les réponses conservent la projection historique, y compris les missions imbriquées dans les acquittements de mutation. Les anciens navigateurs et back offices restent ainsi compatibles pendant le déploiement progressif ; les nouveaux clients acceptent aussi les anciennes réponses. L'historique, qui est une nouvelle route, conserve son propre contrat.
+
 Les préférences locales couvrent le thème, l'application de navigation, l'alerte sonore et le maintien de l'écran allumé pendant une tournée. Le son, la vibration et le Wake Lock dépendent des autorisations et possibilités du navigateur. Le lien SMS ouvre le composeur du téléphone : l'envoi reste une action du livreur, sans envoi serveur automatique ni garantie de réception.
 
 ## Notifications, wallets et exploitation

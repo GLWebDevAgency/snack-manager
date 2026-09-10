@@ -209,10 +209,11 @@ describe('cible de recette HTTP des missions', () => {
   });
 
   // Aucun bearer ni corps de requête n'est journalisé, même lors d'un échec.
-  async function http(method: string, path: string, bearer?: string, body?: unknown) {
+  async function http(method: string, path: string, bearer?: string, body?: unknown, version?: string) {
     const response = await fetch(`${origin}${path}`, {
       method, headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(version === undefined ? {} : { 'X-SM-Delivery-View': version }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(5_000),
     });
     const text = await response.text();
@@ -268,6 +269,61 @@ describe('cible de recette HTTP des missions', () => {
   function expectPrivate(body: unknown) {
     expect(/trackingToken|fixture-tracking|stripe|paymentFlow|totals|fixture-private|operations|fingerprint|assignedBy|tenantId|sessionVersion/.test(JSON.stringify(body))).toBe(false);
   }
+
+  it.each([undefined, '2', '3', '2, 2'])('négocie listes, détails et mutations imbriquées manager/livreur : version %s', async version => {
+    const connected = await connect();
+    const managerId = await seed(); const courierId = await seed();
+    const legacy = DeliveryMissionViewSchema.omit({ deliveredAt: true, paymentSummary: true }).strict();
+    const assertView = (body: unknown) => {
+      if (version === '2') {
+        expect(DeliveryMissionViewSchema.parse(body)).toMatchObject({ deliveredAt: null,
+          paymentSummary: { totalCents: 1500, method: 'online', status: 'paid' } });
+        expect(legacy.safeParse(body).success).toBe(false);
+      } else {
+        expect(legacy.safeParse(body).success).toBe(true);
+        expect(body).not.toHaveProperty('deliveredAt'); expect(body).not.toHaveProperty('paymentSummary');
+      }
+      expectPrivate(body);
+    };
+    for (const id of [managerId, courierId]) {
+      const input = assignBody(connected.operator);
+      const assigned = await http('POST', `/delivery/missions/${id}/assignment`, tokens.owner, input, version);
+      expect(assigned.status).toBe(200);
+      const result = DeliveryMissionResultSchema.parse(assigned.body);
+      expect(result).toMatchObject({ operationId: input.operationId, outcome: 'applied', appliedRevision: 1 });
+      assertView(result.mission);
+    }
+    for (const [base, token] of [['/delivery/missions', tokens.owner], ['/delivery-access/missions', connected.token]]) {
+      const list = await http('GET', base!, token, undefined, version);
+      expect(list.status).toBe(200);
+      const page = DeliveryMissionsViewSchema.parse(list.body);
+      expect(page.missions).toHaveLength(2); page.missions.forEach(assertView);
+      expect(page.nextCursor).toBeNull();
+      const detail = await http('GET', `${base}/${courierId}`, token, undefined, version);
+      expect(detail.status).toBe(200); assertView(detail.body);
+    }
+    for (const [path, token] of [[`/delivery/missions/${managerId}/dispatch`, tokens.owner],
+      [`/delivery-access/missions/${courierId}/dispatch`, connected.token]]) {
+      const input = { operationId: randomUUID(), expectedRevision: 1 };
+      const dispatched = await http('POST', path!, token, input, version);
+      expect(dispatched.status).toBe(200);
+      const result = DeliveryMissionResultSchema.parse(dispatched.body);
+      expect(result).toMatchObject({ operationId: input.operationId, outcome: 'applied', appliedRevision: 2, replay: false });
+      assertView(result.mission);
+      const replayed = await http('POST', path!, token, input, version);
+      expect(replayed.status).toBe(200);
+      const replay = DeliveryMissionResultSchema.parse(replayed.body);
+      expect(replay).toMatchObject({ operationId: input.operationId, outcome: 'applied', appliedRevision: 2, replay: true });
+      assertView(replay.mission);
+      const refusedInput = { operationId: randomUUID(), expectedRevision: 2 };
+      const refused = await http('POST', path!, token, refusedInput, version);
+      expect(refused.status).toBe(200);
+      const refusal = DeliveryMissionResultSchema.parse(refused.body);
+      expect(refusal).toMatchObject({ operationId: refusedInput.operationId, outcome: 'rejected',
+        refusalCode: 'delivery.mission.departed', appliedRevision: 3, replay: false });
+      assertView(refusal.mission);
+    }
+  });
 
   it('owner et cogérant affectent avec delivery seul, sans RH ; tenant et sessions restent vérifiés', async () => {
     for (const token of [tokens.owner, tokens.cogerant]) {

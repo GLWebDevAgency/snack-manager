@@ -1,9 +1,9 @@
 import {
-  Body, Controller, Get, Header, HttpCode, HttpException, HttpStatus, Post, Req,
+  Body, Controller, Get, Header, Headers, HttpCode, HttpException, HttpStatus, Post, Req,
   ServiceUnavailableException, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { DeliverySessionExchangeSchema, type DeliverySessionExchange } from '@sm/contracts';
+import { DELIVERY_VIEW_VERSION_HEADER, DeliverySessionExchangeSchema, deliverySessionForVersion, type DeliverySessionExchange } from '@sm/contracts';
 import { Public } from '../../common/auth';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { trustedClientIp } from '../../common/trusted-client-ip';
@@ -23,6 +23,7 @@ export class DeliveryAccessController {
   async exchange(
     @Body(zod(DeliverySessionExchangeSchema)) body: DeliverySessionExchange,
     @Req() request: Request,
+    @Headers(DELIVERY_VIEW_VERSION_HEADER) version?: string,
   ) {
     let allowed: boolean;
     try {
@@ -40,15 +41,16 @@ export class DeliveryAccessController {
       throw new ServiceUnavailableException('La connexion livreur est momentanément indisponible');
     }
     if (!allowed) throw new HttpException('Trop de tentatives. Réessayez dans un instant.', HttpStatus.TOO_MANY_REQUESTS);
-    return this.access.exchange(body);
+    const result = await this.access.exchange(body);
+    return { ...result, session: deliverySessionForVersion(result.session, version) };
   }
 
   @Get('session')
   @UseGuards(DeliveryAccessGuard)
   @Header('Cache-Control', 'no-store')
-  session(@Req() request: DeliveryAccessRequest) {
+  session(@Req() request: DeliveryAccessRequest, @Headers(DELIVERY_VIEW_VERSION_HEADER) version?: string) {
     if (!request.deliverySession) throw new UnauthorizedException();
-    return request.deliverySession.session;
+    return deliverySessionForVersion(request.deliverySession.session, version);
   }
 
   @Post('logout')

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DeliveryAccessSecretSchema } from "@sm/contracts";
+import { DELIVERY_VIEW_VERSION, DELIVERY_VIEW_VERSION_HEADER, DeliveryAccessSecretSchema } from "@sm/contracts";
 
 /** Server-only transport shared by the delivery access and mission Route Handlers. */
 const COOKIE_PATH = "/livreur";
@@ -129,9 +129,15 @@ export async function api(request: NextRequest, path: string, method: string, to
     method, cache: "no-store", redirect: "error",
     signal: AbortSignal.any([request.signal, AbortSignal.timeout(API_TIMEOUT_MS)]),
     headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(deliveryViewVersion(request) ? { [DELIVERY_VIEW_VERSION_HEADER]: DELIVERY_VIEW_VERSION } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
+}
+
+/** Older browsers keep their strict historical schema; opt-in is per request. */
+export function deliveryViewVersion(request: NextRequest): string | null {
+  return request.headers.get(DELIVERY_VIEW_VERSION_HEADER) === DELIVERY_VIEW_VERSION ? DELIVERY_VIEW_VERSION : null;
 }
 
 export function unavailable() {
@@ -209,12 +215,13 @@ type ViewSchema<T> = { safeParse(value: unknown): { success: true; data: T } | {
 export async function missionApiResponse<T>(request: NextRequest, options: {
   path: string; method: "GET" | "POST"; token: string; schema: ViewSchema<T>;
   body?: unknown; matches?: (value: T) => boolean;
+  forVersion?: (value: T, version: string | null) => unknown;
 }) {
   try {
     const response = await api(request, options.path, options.method, options.token, options.body);
     if (response.status !== 200) return await missionFailure(response);
     const parsed = options.schema.safeParse(await response.json());
     if (!parsed.success || (options.matches && !options.matches(parsed.data))) return unavailable();
-    return privateResponse(NextResponse.json(parsed.data));
+    return privateResponse(NextResponse.json(options.forVersion ? options.forVersion(parsed.data, deliveryViewVersion(request)) : parsed.data));
   } catch { return unavailable(); }
 }
