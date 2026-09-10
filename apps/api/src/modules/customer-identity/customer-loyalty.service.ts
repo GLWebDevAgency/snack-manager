@@ -8,6 +8,8 @@ import { POSTGRES_POOL } from '../../postgres.module';
 import { LOYALTY_CRYPTO } from '../../loyalty-db.module';
 import { CustomerIdentityError } from './customer-identity.service';
 import { CustomerLoyaltyStoreError, runCustomerLoyalty, type CustomerLoyaltyStoreResult } from './customer-loyalty.store';
+import { SharedPublicQuota } from '../../common/shared-public-quota';
+import { reserveLoyaltyAttachmentQuota } from './customer-loyalty-attachment.quota';
 
 type Selection = Parameters<CustomerIdentityRepository['authenticateProtected']>[0];
 type Principal = { accountId: string; sessionId: string; expiresAt: number };
@@ -17,8 +19,10 @@ function samePrincipal(expected: Principal, current: ProtectedCustomerSession): 
   return expected.accountId === current.profile.accountId && expected.sessionId === current.sessionId
     && expected.expiresAt === current.expiresAt && current.expiresAt > Date.now();
 }
-function collision(error: unknown): CustomerLoyaltyStoreResult | null {
+function collision(error: unknown, attaching: boolean): CustomerLoyaltyStoreResult | null {
   if (!error || typeof error !== 'object' || !('code' in error) || error.code !== '23505' || !('constraint' in error)) return null;
+  if (attaching && ['loyalty_memberships_pkey', 'loyalty_memberships_tenant_member_uq', 'loyalty_memberships_tenant_operation_uq']
+    .includes(String(error.constraint))) return { state: 'attachment_refused' };
   return error.constraint === 'member_profiles_tenant_phone_uq' ? { state: 'existing_card' }
     : error.constraint === 'operations_tenant_ref_operation_id_pk' ? { state: 'conflict' } : null;
 }
@@ -30,14 +34,19 @@ function collision(error: unknown): CustomerLoyaltyStoreResult | null {
 @Injectable()
 export class CustomerLoyaltyService {
   constructor(@Inject(POSTGRES_POOL) private readonly pool: Pool,
-    @Inject(LOYALTY_CRYPTO) private readonly crypto: LoyaltyCryptoAdapter) {}
+    @Inject(LOYALTY_CRYPTO) private readonly crypto: LoyaltyCryptoAdapter,
+    @Inject(SharedPublicQuota) private readonly quota: SharedPublicQuota) {}
 
-  async execute(input: { selection: Selection; identity: CustomerIdentityCrypto; request: unknown;
+  async execute(input: { selection: Selection; identity: CustomerIdentityCrypto; request: unknown; sourceClient: string;
     enabled: () => Promise<boolean>; publicationFence: (fence: () => Promise<void>) => void }): Promise<CustomerLoyaltyResponse> {
     const parsed = CustomerLoyaltyRequestSchema.safeParse(input.request);
     if (!parsed.success) throw new CustomerIdentityError('invalid_request');
     const request = parsed.data;
     const enabled = await input.enabled();
+    if (enabled && request.step === 'attach') await reserveLoyaltyAttachmentQuota(this.quota, {
+      sourceClient: input.sourceClient, parentRef: input.selection.parentRef, tenantRef: input.selection.tenantRef,
+      sessionHash: input.selection.sessionHash, qrToken: request.qrToken, identity: input.identity,
+    });
     const captured: { principal: Principal | null; refusal: CustomerLoyaltyStoreResult | null } = { principal: null, refusal: null };
     let result: CustomerLoyaltyStoreResult | null;
     try {
@@ -49,7 +58,7 @@ export class CustomerLoyaltyService {
         } catch (error) {
           // Capture only the safe outcome, then let the wrapper ROLLBACK. Never
           // keep querying/return success inside an aborted PostgreSQL transaction.
-          captured.refusal = error instanceof CustomerLoyaltyStoreError ? error.result : collision(error);
+          captured.refusal = error instanceof CustomerLoyaltyStoreError ? error.result : collision(error, request.step === 'attach');
           throw error;
         }
       });

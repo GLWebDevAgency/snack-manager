@@ -1,7 +1,7 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CUSTOMER_LOYALTY_NOTICE_VERSION, customerAccountResponseLimit } from '@sm/contracts';
+import { CUSTOMER_LOYALTY_NOTICE_VERSION, CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, customerAccountResponseLimit } from '@sm/contracts';
 import { customerAccount } from './customer-bff';
 
 const origin = 'https://staging.snackmanager.fr', api = 'https://customer-api.example.test';
@@ -11,6 +11,7 @@ const cookies = `__Host-sm_customer_browser_classfood=${browserSecret}; __Host-s
 const context = { params: Promise.resolve({ slug: 'classfood' }) }, upstream = vi.fn<typeof fetch>();
 const join = { step: 'join', operationId: randomUUID(), programId: randomUUID(), rulesVersion: 1,
   termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true };
+const attach = { ...join, step: 'attach', termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, qrToken: randomBytes(32).toString('base64url') };
 const program = { id: join.programId, version: 1, name: 'Les habitués', mechanism: 'points', termsSummary: 'Conditions du restaurant.', unitLabelSingular: 'point', unitLabelPlural: 'points' };
 const member = { id: randomUUID(), joinedAt: '2026-09-09T12:00:00.000Z', qrGeneration: 1, balanceUnits: 0, unitLabelSingular: 'point', unitLabelPlural: 'points' };
 function request(body: unknown = { step: 'view' }, headers: Record<string, string> = {}) {
@@ -29,10 +30,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe('private loyalty BFF — isolated upstream, real handler', () => {
-  it.each(['view', 'join', 'card'] as const)('%s carries only the strict request and signed current authority', async step => {
-    const body = step === 'join' ? join : { step };
+  it.each(['view', 'join', 'attach', 'card'] as const)('%s carries only the strict request and signed current authority', async step => {
+    const body = step === 'join' ? join : step === 'attach' ? attach : { step };
     const output = { expiresAt: Date.now() + 60_000, ...(step === 'view' ? { state: 'available', program, profileReady: true }
-      : step === 'join' ? { state: 'member', member } : { state: 'card', member, qrToken: randomBytes(32).toString('base64url') }) };
+      : step === 'card' ? { state: 'card', member, qrToken: randomBytes(32).toString('base64url') } : { state: 'member', member }) };
     upstream.mockResolvedValue(Response.json(output));
     const response = await customerAccount(request(body), context, 'loyalty');
     expect(response.status).toBe(200); expect(await response.json()).toEqual(output);
@@ -40,7 +41,33 @@ describe('private loyalty BFF — isolated upstream, real handler', () => {
     const sent = upstream.mock.calls[0]!;
     expect(sent[0]).toBe(`${api}/public/customer/classfood/loyalty`);
     expect(JSON.parse(String(sent[1]!.body))).toEqual({ request: body, browserRef, browserSecret, sessionToken, expectedOperationId, expectedCheckId });
-    expect(new Headers(sent[1]!.headers).get('x-sm-customer-proof')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const headers = new Headers(sent[1]!.headers), key = Buffer.from(process.env.SM_CUSTOMER_RELAY_SIGNING_KEY!, 'base64');
+    const payload = ['customer-v1', headers.get('x-sm-customer-at'), 'classfood', 'loyalty', 'POST', '/public/customer/classfood/loyalty', origin,
+      headers.get('x-sm-customer-client'), createHash('sha256').update(String(sent[1]!.body)).digest('hex')].join('\0');
+    expect(headers.get('x-sm-customer-proof')).toBe(createHmac('sha256', key).update(payload).digest('base64url'));
+  });
+  it.each(['phone', 'accountId', 'memberId', 'marketing', 'sessionToken'] as const)('rejects attachment authority injection %s before upstream', async field => {
+    expect((await customerAccount(request({ ...attach, [field]: 'not-authority' }), context, 'loyalty')).status).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+  it('requires a canonical raw attachment QR, exact notice and fresh explicit consent', async () => {
+    for (const body of [{ ...attach, qrToken: 'A'.repeat(42) + 'B' }, { ...attach, qrToken: `https://example.test/#card=${attach.qrToken}` },
+      { ...attach, qrToken: undefined }, { ...attach, termsAccepted: false }, { ...attach, termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION }]) {
+      expect((await customerAccount(request(body), context, 'loyalty')).status).toBe(400);
+    }
+    expect(upstream).not.toHaveBeenCalled();
+  });
+  it('returns uniform attachment refusal without QR, cookie or private extra fields', async () => {
+    const output = { state: 'attachment_refused', expiresAt: Date.now() + 60_000 };
+    upstream.mockResolvedValue(Response.json(output));
+    const response = await customerAccount(request(attach), context, 'loyalty');
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(output);
+    expect(response.headers.get('set-cookie')).toBeNull(); expect(response.headers.get('cache-control')).toContain('private, no-store');
+  });
+  it('never forwards an unsolicited card after attachment', async () => {
+    upstream.mockResolvedValue(Response.json({ state: 'card', member, qrToken: attach.qrToken, expiresAt: Date.now() + 60_000 }));
+    const response = await customerAccount(request(attach), context, 'loyalty');
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain(attach.qrToken); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it.each([['CJK', '界'.repeat(6000)], ['JSON-escaped controls', '\u0001'.repeat(6000)]])('preserves a valid 6000-character %s terms DTO within the bounded transport', async (_label, termsSummary) => {
     const output = { state: 'available', expiresAt: Date.now() + 60_000, program: { ...program, termsSummary }, profileReady: true };

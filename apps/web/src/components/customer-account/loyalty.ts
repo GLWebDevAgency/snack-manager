@@ -1,12 +1,13 @@
-import { CUSTOMER_LOYALTY_NOTICE_VERSION, CustomerLoyaltyRequestSchema, CustomerLoyaltyResponseSchema,
+import { CUSTOMER_LOYALTY_NOTICE_VERSION, CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, CustomerLoyaltyRequestSchema, CustomerLoyaltyResponseSchema,
   type CustomerLoyaltyRequest, type CustomerLoyaltyResponse } from '@sm/contracts';
 import { CustomerAccountHttpError, type CustomerAccountAccess, type CustomerAccountRequest } from './client';
 import { sameOrderAccess } from './orders';
 
 export type CustomerLoyaltyState = Readonly<{ status: 'idle' | 'loading' | 'ready' | 'error';
-  response: CustomerLoyaltyResponse | null; pendingJoin: boolean; message: string | null }>;
-const EMPTY: CustomerLoyaltyState = { status: 'idle', response: null, pendingJoin: false, message: null };
+  response: CustomerLoyaltyResponse | null; pendingJoin: boolean; pendingAttachment: boolean; message: string | null }>;
+const EMPTY: CustomerLoyaltyState = { status: 'idle', response: null, pendingJoin: false, pendingAttachment: false, message: null };
 type Join = Extract<CustomerLoyaltyRequest, { step: 'join' }>;
+type Attachment = Extract<CustomerLoyaltyRequest, { step: 'attach' }>;
 type Port = { access: CustomerAccountAccess; currentAccess: () => CustomerAccountAccess | null; request: CustomerAccountRequest;
   active: () => boolean; lock?: (job: () => Promise<void>) => Promise<void>; now?: () => number; uuid?: () => string };
 
@@ -15,7 +16,7 @@ type Port = { access: CustomerAccountAccess; currentAccess: () => CustomerAccoun
  * No QR, profile, member, balance or consent is written to browser storage. */
 export function createCustomerLoyaltyClient(port: Port) {
   const access = structuredClone(port.access), now = port.now ?? Date.now;
-  let state = EMPTY, pending: Join | null = null, generation = 0, busy = false;
+  let state = EMPTY, pending: Join | Attachment | null = null, generation = 0, busy = false;
   let expiresAt = access.expiresAt;
   const listeners = new Set<() => void>();
   const publish = (next: CustomerLoyaltyState) => { state = next; listeners.forEach(listener => listener()); };
@@ -29,7 +30,7 @@ export function createCustomerLoyaltyClient(port: Port) {
     if (busy || !port.active()) return;
     const request = CustomerLoyaltyRequestSchema.parse(input);
     busy = true; const run = ++generation;
-    publish({ status: 'loading', response: null, pendingJoin: pending !== null, message: null });
+    publish({ status: 'loading', response: null, pendingJoin: pending?.step === 'join', pendingAttachment: pending?.step === 'attach', message: null });
     try {
       if (!port.lock) throw new CustomerAccountHttpError(409);
       await port.lock(() => verify(run));
@@ -42,15 +43,15 @@ export function createCustomerLoyaltyClient(port: Port) {
       if (!current(run)) return;
       expiresAt = result.expiresAt;
       pending = null;
-      publish({ status: 'ready', response: result, pendingJoin: false, message: null });
+      publish({ status: 'ready', response: result, pendingJoin: false, pendingAttachment: false, message: null });
     } catch (cause) {
       if (generation !== run || !port.active()) return;
       const status = cause instanceof CustomerAccountHttpError ? cause.status : 0;
       // A stale view must never regain a result (including an accepted join).
-      if (!current(run)) pending = null;
-      publish({ status: 'error', response: null, pendingJoin: pending !== null,
+      if (!current(run) || (pending?.step === 'attach' && (status === 401 || status === 409))) pending = null;
+      publish({ status: 'error', response: null, pendingJoin: pending?.step === 'join', pendingAttachment: pending?.step === 'attach',
         message: status === 401 || status === 409 ? 'Votre accès a changé. Revenez à votre compte et actualisez-le avant de continuer.'
-          : pending ? `Votre demande de carte n’est pas confirmée. ${status === 429 ? 'Trop de demandes. Patientez avant de reprendre cette même demande.' : 'Réessayez cette même demande pour en vérifier le résultat.'}`
+          : pending ? `${pending.step === 'attach' ? 'Votre demande de rattachement n’est pas confirmée.' : 'Votre demande de carte n’est pas confirmée.'} ${status === 429 ? 'Trop de demandes. Patientez avant de reprendre cette même demande.' : 'Réessayez cette même demande pour en vérifier le résultat.'}`
             : status === 429 ? 'Trop de demandes. Patientez avant de réessayer.'
               : 'La fidélité ne peut pas être vérifiée pour le moment. Votre compte reste indépendant.' });
     } finally { if (generation === run) busy = false; }
@@ -65,6 +66,16 @@ export function createCustomerLoyaltyClient(port: Port) {
       pending = { step: 'join', operationId: (port.uuid ?? (() => crypto.randomUUID()))(), programId: response.program.id,
         rulesVersion: response.program.version, termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true };
       await send(pending);
+    },
+    async attach(qrToken: string, accepted: boolean) {
+      const response = state.response;
+      if (!accepted || busy || pending || state.status !== 'ready' || !response
+        || (response.state !== 'available' && response.state !== 'terms_changed')) return;
+      const parsed = CustomerLoyaltyRequestSchema.safeParse({ step: 'attach', operationId: (port.uuid ?? (() => crypto.randomUUID()))(),
+        programId: response.program.id, rulesVersion: response.program.version,
+        termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, termsAccepted: true, qrToken });
+      if (!parsed.success || parsed.data.step !== 'attach') return;
+      pending = parsed.data; await send(pending);
     },
     card: () => state.status === 'ready' && state.response?.state === 'member' ? send({ step: 'card' }) : Promise.resolve(),
     hideCard: () => { if (state.response?.state === 'card') { const { qrToken: _qr, ...member } = state.response; void _qr;

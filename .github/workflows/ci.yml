@@ -73,6 +73,17 @@ jobs:
     # laisser voir un dépassement plutôt que de le masquer par un timeout serré.
     timeout-minutes: 20
     services:
+      redis:
+        # Official multi-architecture manifest, resolved for Redis 8.10.1-alpine.
+        # Ephemeral test-only service; never an application Redis target.
+        image: redis:8.10.1-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
+        ports:
+          - 127.0.0.1:6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         # Digest multi-architecture officiel de postgres:17.6-alpine3.22.
         image: postgres:17.6-alpine3.22@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
@@ -201,6 +212,11 @@ jobs:
         env:
           CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer
         run: pnpm --filter @sm/api exec vitest run src/modules/orders/customer-orders.integration.test.ts
+
+      - name: Tests Redis réels — quotas de rattachement fidélité
+        env:
+          LOYALTY_ATTACHMENT_TEST_REDIS_URL: redis://127.0.0.1:6381/0
+        run: pnpm --filter @sm/api exec vitest run src/modules/customer-identity/customer-loyalty-attachment.quota.integration.test.ts
 
       - name: Tests MongoDB réels — émission durable des factures
         env:

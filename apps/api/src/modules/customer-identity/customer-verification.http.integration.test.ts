@@ -9,7 +9,7 @@ import type { RequestHandler } from 'express';
 import type { Pool } from 'pg';
 import type { z } from 'zod';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CUSTOMER_LOYALTY_NOTICE_VERSION, CustomerAccountResponses, CustomerAccountEnvelopes, type CustomerAccountAction, type CustomerAccountEnvelope,
+import { CUSTOMER_LOYALTY_NOTICE_VERSION, CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, CustomerAccountResponses, CustomerAccountEnvelopes, type CustomerAccountAction, type CustomerAccountEnvelope,
   type CustomerProtectionRequest, type CustomerRecoveryRequest } from '@sm/contracts';
 import { PostgresCustomerIdentityRepository } from '@sm/customer';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
@@ -22,8 +22,10 @@ import type { PhoneVerificationTransport } from './phone-verification.port';
 import { customerPasskeyFixture } from './customer-passkey.test-fixture';
 import { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 import type { customerOrdersMongoFixture } from '../orders/customer-orders.test-fixture';
-import { LoyaltyCryptoAdapter } from '@sm/loyalty';
+import { LoyaltyCryptoAdapter, loyaltyDb } from '@sm/loyalty';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
+import { LoyaltyMemberService, type LoyaltyActorContext } from '../loyalty/loyalty-member.service';
+import type { LoyaltyPurchaseVerifier } from '../loyalty/loyalty-purchase-verifier';
 
 // Real signed HTTP -> Nest guard/controller/runtime/core -> migrated PostgreSQL
 // under a NOSUPERUSER/NOBYPASSRLS role. Only tenant lookup, HTTP rate limiting,
@@ -44,6 +46,7 @@ const provider = {
   check: vi.fn<PhoneVerificationTransport['check']>(),
 };
 const human = { verify: vi.fn().mockResolvedValue(true) };
+const httpQuota = { reserve: vi.fn().mockResolvedValue(true), reserveClient: vi.fn().mockResolvedValue(true) };
 const config = new ConfigService();
 let commerceCheckout: OnlineOrderCheckoutService | undefined;
 let loyaltyEnabled = false;
@@ -58,11 +61,11 @@ const query = { read: () => query, readConcern: () => query, maxTimeMS: () => qu
 @Module({ controllers: [CustomerAccountController], providers: [CustomerAccountGuard, CustomerAccountRuntime,
   { provide: ConfigService, useValue: config },
   { provide: getModelToken('Tenant'), useValue: { findOne: () => query } },
-  { provide: SharedPublicQuota, useValue: { reserve: async () => true } },
+  { provide: SharedPublicQuota, useValue: httpQuota },
   { provide: CustomerAccountHumanVerifier, useValue: human },
   { provide: CUSTOMER_IDENTITY_REPOSITORY, useFactory: () => new PostgresCustomerIdentityRepository(database.app) },
   { provide: CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, useValue: () => provider },
-  { provide: CustomerLoyaltyService, useFactory: () => new CustomerLoyaltyService(database.app, loyaltyCrypto) },
+  { provide: CustomerLoyaltyService, useFactory: () => new CustomerLoyaltyService(database.app, loyaltyCrypto, httpQuota as unknown as SharedPublicQuota) },
   { provide: OnlineOrderCheckoutService, useValue: {
     createForCustomer: (...args: Parameters<OnlineOrderCheckoutService['createForCustomer']>) => commerceCheckout!.createForCustomer(...args),
     listForCustomer: (...args: Parameters<OnlineOrderCheckoutService['listForCustomer']>) => commerceCheckout!.listForCustomer(...args),
@@ -124,6 +127,8 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     commerceCheckout = undefined;
     loyaltyEnabled = false;
     tenantStatus = 'trial';
+    httpQuota.reserve.mockReset().mockResolvedValue(true);
+    httpQuota.reserveClient.mockReset().mockResolvedValue(true);
     env = customerTestEnvironment();
     const parent = `AC${randomUUID().replaceAll('-', '')}`, tenant = randomBytes(12).toString('hex');
     env.SM_CUSTOMER_VERIFY_ACCOUNT_SID = parent; env.SM_CUSTOMER_PILOT_TENANT_ID = tenant;
@@ -224,6 +229,74 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
     return id;
   }
+
+  async function posLoyaltyCard() {
+    const actor: LoyaltyActorContext = { source: 'pos', actorRef: 'fixture-cashier', deviceRef: 'fixture-pos' };
+    const pos = new LoyaltyMemberService(loyaltyDb(database.app), loyaltyCrypto, {
+      confirmedPurchaseCents: async () => { throw new Error('No purchase or provider allowed'); },
+    } as unknown as LoyaltyPurchaseVerifier);
+    const operationId = randomUUID(), tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!;
+    const card = await pos.createMember(tenantRef, { operationId, firstName: 'Carte existante', phone: phones[0],
+      termsAccepted: true, termsNoticeVersion: 'loyalty-2026-09' }, actor);
+    await pos.acknowledgeEnrollment(tenantRef, { operationId }, actor);
+    return { card, pos, actor, tenantRef };
+  }
+  const attachment = (programId: string, qrToken: string) => ({ step: 'attach' as const, programId, qrToken,
+    operationId: randomUUID(), rulesVersion: 1, termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, termsAccepted: true } as const);
+
+  it('attaches an acknowledged POS card through protected signed HTTP and recovers its lost receipt without another rotation or SMS', async () => {
+    const a = await protectedAccount(), programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const existing = await posLoyaltyCard(); const own = access(a);
+    const request = attachment(programId, existing.card.qrToken);
+    // Account intentionally has no name; attachment preserves the existing POS profile.
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+    dropAction = 'loyalty'; await expect(http('loyalty', { ...own, request })).rejects.toBeDefined();
+    const recovered = await ok('loyalty', { ...own, request: { step: 'view' } });
+    expect(recovered).toMatchObject({ state: 'member', member: { id: existing.card.member.id, qrGeneration: 2, balanceUnits: 0 } });
+    expect(recovered).not.toHaveProperty('qrToken');
+    expect(await ok('loyalty', { ...own, request })).toEqual(recovered);
+    const card = await ok('loyalty', { ...own, request: { step: 'card' } });
+    if (card.state !== 'card') throw new Error('Expected protected current QR');
+    expect(card.qrToken).not.toBe(existing.card.qrToken);
+    const rows = (await database.admin.query(`SELECT kind,count(*)::int AS count FROM loyalty.membership_events
+      WHERE tenant_ref=$1 GROUP BY kind ORDER BY kind`, [existing.tenantRef])).rows;
+    expect(rows).toEqual([{ kind: 'joined', count: 1 }, { kind: 'token_replaced', count: 1 }]);
+    expect(await existing.pos.resolveMember(existing.tenantRef, { by: 'qr_token', qrToken: card.qrToken }))
+      .toMatchObject({ id: existing.card.member.id });
+    await expect(existing.pos.resolveMember(existing.tenantRef, { by: 'qr_token', qrToken: existing.card.qrToken })).rejects.toMatchObject({ status: 404 });
+    const sourceCalls = httpQuota.reserve.mock.calls.filter(([value]) => value.scope === 'customer-loyalty-attach-source-v1');
+    expect(sourceCalls).toHaveLength(2); expect(sourceCalls[0]![0]).toEqual(sourceCalls[1]![0]);
+    expect(sourceCalls[0]![0].clientKey).not.toContain('192.0.2.20');
+    expect(httpQuota.reserveClient).toHaveBeenCalledTimes(4);
+    await ok('logout', { ...own, request: { all: true } });
+    expect((await http('loyalty', { ...own, request: { step: 'card' } })).status).toBe(401);
+    expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it('returns one neutral refusal for a foreign or unknown QR without taking ownership', async () => {
+    const a = await protectedAccount(phones[1]), programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const existing = await posLoyaltyCard(); const own = access(a);
+    const refused = await ok('loyalty', { ...own, request: attachment(programId, existing.card.qrToken) });
+    expect(refused).toEqual({ state: 'attachment_refused', expiresAt: a.activated.view.expiresAt });
+    expect(await ok('loyalty', { ...own, request: attachment(programId, randomBytes(32).toString('base64url')) })).toEqual(refused);
+    expect((await database.admin.query('SELECT count(*)::int AS count FROM customer.loyalty_memberships WHERE tenant_ref=$1', [existing.tenantRef])).rows[0].count).toBe(0);
+  }, 30_000);
+
+  it('returns fixed HTTP 429 on an attachment quota refusal without changing the POS token or blocking ordinary reads', async () => {
+    const a = await protectedAccount(), programId = await loyaltyProgram(); loyaltyEnabled = true;
+    const existing = await posLoyaltyCard(); const own = access(a);
+    httpQuota.reserveClient.mockResolvedValue(false);
+    const refused = await http('loyalty', { ...own, request: attachment(programId, existing.card.qrToken) });
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ code: 'CUSTOMER_RATE_LIMITED', message: 'Trop de demandes. Réessayez plus tard.' });
+    const counts = (await database.admin.query(`SELECT
+      (SELECT count(*)::int FROM customer.loyalty_memberships WHERE tenant_ref=$1) AS links,
+      (SELECT count(*)::int FROM loyalty.membership_events WHERE tenant_ref=$1 AND kind='token_replaced') AS rotations`, [existing.tenantRef])).rows[0];
+    expect(counts).toEqual({ links: 0, rotations: 0 });
+    expect((await ok('loyalty', { ...own, request: { step: 'view' } })).state).toBe('available');
+    expect(httpQuota.reserveClient).toHaveBeenCalledTimes(1);
+  }, 30_000);
 
   it('creates one account-owned loyalty card through signed HTTP, recovers response loss and survives passkey reconnection without SMS', async () => {
     const a = await protectedAccount(); const programId = await loyaltyProgram();

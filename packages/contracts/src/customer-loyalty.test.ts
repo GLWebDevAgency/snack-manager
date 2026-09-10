@@ -5,7 +5,26 @@ import { CUSTOMER_LOYALTY_NOTICE_VERSION, CustomerLoyaltyRequestSchema, Customer
 
 const join = () => ({ step: 'join' as const, operationId: randomUUID(), programId: randomUUID(), rulesVersion: 1,
   termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION, termsAccepted: true });
+const attach = () => ({ ...join(), step: 'attach', termsNoticeVersion: 'customer-loyalty-attach-2026-09',
+  qrToken: Buffer.alloc(32, 21).toString('base64url') });
 describe('protected customer loyalty transport', () => {
+  it('accepts explicit attachment with a canonical QR and a distinct replacement notice', () => {
+    expect(CustomerLoyaltyRequestSchema.safeParse(attach()).success).toBe(true);
+    for (const patch of [{ termsAccepted: false }, { termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION },
+      { qrToken: 'https://untrusted.test/card' }, { qrToken: `${attach().qrToken}=` }, { qrToken: `${'A'.repeat(42)}B` }]) {
+      expect(CustomerLoyaltyRequestSchema.safeParse({ ...attach(), ...patch }).success).toBe(false);
+    }
+    for (const field of ['phone', 'phoneHash', 'accountId', 'memberId', 'parentRef', 'tenantRef', 'balanceUnits', 'marketingConsent']) {
+      expect(CustomerLoyaltyRequestSchema.safeParse({ ...attach(), [field]: 'untrusted' }).success).toBe(false);
+    }
+  });
+  it('returns one neutral attachment refusal with no account, card or QR data', () => {
+    const response = { state: 'attachment_refused', expiresAt: Date.now() + 60_000 };
+    expect(CustomerLoyaltyResponseSchema.safeParse(response).success).toBe(true);
+    for (const field of ['phone', 'phoneHash', 'accountId', 'memberId', 'qrToken', 'reason']) {
+      expect(CustomerLoyaltyResponseSchema.safeParse({ ...response, [field]: 'private' }).success).toBe(false);
+    }
+  });
   it.each(['界', '\u0001'])('fits the largest valid terms and labels in the bounded JSON response (%j)', character => {
     const response = { state: 'available', expiresAt: Date.now() + 60_000, profileReady: true,
       program: { id: randomUUID(), version: Number.MAX_SAFE_INTEGER, name: character.repeat(160), mechanism: 'points',

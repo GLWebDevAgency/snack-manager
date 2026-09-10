@@ -76,8 +76,9 @@ export type CustomerSessionView = {
   profile: { name: string | null; phoneE164: string; phoneVerifiedAt: number; revision: number };
 };
 export class CustomerIdentityError extends Error {
-  constructor(readonly reason: 'unavailable' | 'invalid_request' | 'unauthorized' | 'conflict' | 'not_found') {
+  constructor(readonly reason: 'unavailable' | 'invalid_request' | 'unauthorized' | 'conflict' | 'not_found' | 'limited') {
     super(reason === 'unavailable' ? 'Service de compte momentanément indisponible.'
+      : reason === 'limited' ? 'Trop de demandes. Réessayez dans un instant.'
       : reason === 'conflict' ? 'Le profil a changé. Actualisez-le avant de réessayer.'
         : 'Accès au compte invalide ou expiré.');
     this.name = 'CustomerIdentityError';
