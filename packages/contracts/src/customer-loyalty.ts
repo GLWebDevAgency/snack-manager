@@ -3,12 +3,17 @@ import { z } from 'zod';
 // Account enrollment is explicit and separate from optional marketing consent.
 export const CUSTOMER_LOYALTY_NOTICE_VERSION = 'customer-loyalty-2026-09';
 export const CUSTOMER_LOYALTY_NOTICE = 'Je demande ma carte de fidélité gratuite pour ce restaurant et accepte les conditions du programme présentées sur cet écran. Cette adhésion ne m’inscrit à aucun message publicitaire.';
+export const CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION = 'customer-loyalty-attach-2026-09';
+export const CUSTOMER_LOYALTY_ATTACHMENT_NOTICE = 'Je rattache ma carte existante à ce compte et accepte les conditions du programme présentées sur cet écran. Son ancien QR sera remplacé et ne fonctionnera plus. Mon solde sera conservé. Ce rattachement ne m’inscrit à aucun message publicitaire.';
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const qrToken = z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
 export const CustomerLoyaltyRequestSchema = z.discriminatedUnion('step', [
   z.strictObject({ step: z.literal('view') }),
   z.strictObject({ step: z.literal('join'), operationId: uuid, programId: uuid, rulesVersion: integer.min(1),
     termsNoticeVersion: z.literal(CUSTOMER_LOYALTY_NOTICE_VERSION), termsAccepted: z.literal(true) }),
+  z.strictObject({ step: z.literal('attach'), operationId: uuid, programId: uuid, rulesVersion: integer.min(1),
+    termsNoticeVersion: z.literal(CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION), termsAccepted: z.literal(true), qrToken }),
   z.strictObject({ step: z.literal('card') }),
 ]);
 export type CustomerLoyaltyRequest = z.infer<typeof CustomerLoyaltyRequestSchema>;
@@ -24,8 +29,8 @@ export const CustomerLoyaltyResponseSchema = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('terms_changed'), expiresAt, ...available }),
   z.strictObject({ state: z.literal('member'), expiresAt, member: CustomerLoyaltyMemberSchema }),
   z.strictObject({ state: z.literal('card'), expiresAt, member: CustomerLoyaltyMemberSchema,
-    qrToken: z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/) }),
-  z.strictObject({ state: z.enum(['unavailable', 'name_required', 'existing_card', 'conflict']), expiresAt }),
+    qrToken }),
+  z.strictObject({ state: z.enum(['unavailable', 'name_required', 'existing_card', 'attachment_refused', 'conflict']), expiresAt }),
 ]);
 export type CustomerLoyaltyResponse = z.infer<typeof CustomerLoyaltyResponseSchema>;
 export type CustomerLoyaltyProgram = z.infer<typeof CustomerLoyaltyProgramSchema>;

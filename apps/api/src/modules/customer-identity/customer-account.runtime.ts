@@ -135,7 +135,7 @@ export class CustomerAccountRuntime {
           if (!this.loyalty) throw new CustomerIdentityError('unavailable');
           const input = this.input('loyalty', raw);
           const identity = new CustomerIdentityCrypto(access.identityKey);
-          result = await this.loyalty.execute({ request: input.request, identity,
+          result = await this.loyalty.execute({ request: input.request, identity, sourceClient: relay.client,
             selection: { parentRef: access.parentRef, tenantRef, browserRef: input.browserRef,
               browserHash: identity.hash('browser', tenantRef, input.browserSecret),
               sessionHash: identity.hash('session', tenantRef, input.sessionToken),

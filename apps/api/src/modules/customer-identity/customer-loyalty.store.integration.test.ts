@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CUSTOMER_LOYALTY_NOTICE_VERSION, type CustomerLoyaltyRequest } from '@sm/contracts';
+import { CUSTOMER_LOYALTY_NOTICE_VERSION, CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, type CustomerLoyaltyRequest } from '@sm/contracts';
 import { CustomerIdentityCrypto, PostgresCustomerIdentityRepository, withProtectedCustomerSession,
   type CustomerIdentityRepository, type CustomerSession, type VerificationReservation } from '@sm/customer';
 import { LoyaltyCryptoAdapter, loyaltyDb } from '@sm/loyalty';
@@ -94,13 +94,15 @@ integration('customer loyalty writer — protected account and ordinary PostgreS
   const join = (programId: string): Join => ({ step: 'join', operationId: randomUUID(), programId, rulesVersion: 1,
     termsAccepted: true, termsNoticeVersion: CUSTOMER_LOYALTY_NOTICE_VERSION });
   async function run(a: Awaited<ReturnType<typeof account>>, request: CustomerLoyaltyRequest,
-    after?: (context: CustomerLoyaltyStoreContext, result: CustomerLoyaltyStoreResult) => Promise<void>) {
+    after?: (context: CustomerLoyaltyStoreContext, result: CustomerLoyaltyStoreResult) => Promise<void>,
+    interpose?: (context: CustomerLoyaltyStoreContext) => CustomerLoyaltyStoreContext) {
     let safe: CustomerLoyaltyStoreResult | undefined;
     let native: unknown;
     try {
       return await withProtectedCustomerSession(f.app, a.principal, async context => {
         try {
-          const ctx = { ...context, scope: a.principal, identity, crypto };
+          const original = { ...context, scope: a.principal, identity, crypto };
+          const ctx = interpose ? interpose(original) : original;
           const result = await runCustomerLoyalty(ctx, request);
           await after?.(ctx, result);
           return result;
@@ -120,6 +122,239 @@ integration('customer loyalty writer — protected account and ordinary PostgreS
     return counts;
   }
   const empty = { members: 0, member_profiles: 0, wallets: 0, membership_events: 0, member_tokens: 0, operations: 0, links: 0 };
+
+  const attach = (programId: string, qrToken: string): Extract<CustomerLoyaltyRequest, { step: 'attach' }> => ({
+    step: 'attach', operationId: randomUUID(), programId, rulesVersion: 1, qrToken,
+    termsAccepted: true, termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION,
+  });
+  async function existingCard(a: Awaited<ReturnType<typeof account>>, handed = true, phone: string | null = a.phone) {
+    const operationId = randomUUID();
+    const created = await pos.createMember(a.principal.tenantRef, { operationId, firstName: 'Carte POS existante', phone,
+      termsAccepted: true, termsNoticeVersion: 'loyalty-2026-09' }, actor);
+    if (handed) await pos.acknowledgeEnrollment(a.principal.tenantRef, { operationId }, actor);
+    return { ...created, operationId };
+  }
+  async function preserved(tenantRef: string) {
+    const snapshot: Record<string, unknown> = {};
+    for (const table of ['member_profiles', 'wallets', 'ledger_entries', 'consent_events', 'consent_state']) {
+      snapshot[table] = (await f.admin.query(`SELECT * FROM loyalty.${table} WHERE tenant_ref=$1`, [tenantRef])).rows;
+    }
+    snapshot.members = (await f.admin.query('SELECT id,status,joined_at,enrollment_handoff_at FROM loyalty.members WHERE tenant_ref=$1', [tenantRef])).rows;
+    snapshot.joined = (await f.admin.query("SELECT * FROM loyalty.membership_events WHERE tenant_ref=$1 AND kind='joined'", [tenantRef])).rows;
+    return snapshot;
+  }
+
+  it('attaches a handed POS card atomically, preserves its history and credit, and replaces only its QR', async () => {
+    const a = await account({ name: null }); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    await pos.adjust(a.principal.tenantRef, old.member.id, { operationId: randomUUID(), units: 25, reason: 'Crédit antérieur fixture' }, manager);
+    const before = await preserved(a.principal.tenantRef), counts = await rows(a.principal.tenantRef);
+    const request = attach(id, old.qrToken); const result = await run(a, request);
+    expect(result).toMatchObject({ state: 'member', member: { id: old.member.id, balanceUnits: 25, qrGeneration: 2 } });
+    expect(result).not.toHaveProperty('qrToken'); expect(await preserved(a.principal.tenantRef)).toEqual(before);
+    expect(await rows(a.principal.tenantRef)).toEqual({ ...counts, operations: counts.operations! + 1,
+      membership_events: counts.membership_events! + 1, member_tokens: counts.member_tokens! + 1, links: 1 });
+    const operation = (await f.admin.query('SELECT kind,status,result FROM loyalty.operations WHERE tenant_ref=$1 AND operation_id=$2',
+      [a.principal.tenantRef, request.operationId])).rows[0];
+    expect(operation).toMatchObject({ kind: 'token_replace', status: 'completed', result: {
+      customerAccountAttachment: 'v1', parentRef: a.principal.parentRef, accountId: a.accountId, memberId: old.member.id,
+      previousGeneration: 1, qrGeneration: 2, termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION } });
+    expect(JSON.stringify(operation)).not.toContain(old.qrToken); expect(JSON.stringify(operation)).not.toContain(a.phone);
+    await expect(pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: old.qrToken })).rejects.toMatchObject({ status: 404 });
+    const current = await run(a, { step: 'card' }); if (current?.state !== 'card') throw new Error('Attached card absent');
+    expect(current.qrToken).not.toBe(old.qrToken);
+    expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: current.qrToken }))
+      .toMatchObject({ id: old.member.id, balanceUnits: 25 });
+  });
+
+  it('attaches a historical cutover-closed POS operation and retries without replaying a revoked QR', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    // Reproduce the exact historical cutover receipt without replaying migrations.
+    await f.admin.query(`UPDATE loyalty.operations SET request_fingerprint=repeat('0',64),result='{"enrollmentCutoverClosed":true}'::jsonb
+      WHERE tenant_ref=$1 AND operation_id=$2`, [a.principal.tenantRef, old.operationId]);
+    const request = attach(id, old.qrToken), result = await run(a, request); expect(result?.state).toBe('member');
+    const counts = await rows(a.principal.tenantRef); expect(await run(a, request)).toEqual(result);
+    const replacement = await pos.replaceQr(a.principal.tenantRef, old.member.id,
+      { operationId: randomUUID(), expectedGeneration: 2, reasonCode: 'lost_or_compromised' }, manager);
+    expect(await run(a, request)).toMatchObject({ state: 'member', member: { qrGeneration: 3 } });
+    expect(await run(a, request)).not.toHaveProperty('qrToken');
+    expect(await run(a, { step: 'card' })).toMatchObject({ state: 'card', qrToken: replacement.qrToken });
+    expect(await run(a, { ...request, rulesVersion: 2 })).toEqual({ state: 'conflict' });
+    expect(await run(a, { ...request, qrToken: replacement.qrToken })).toEqual({ state: 'conflict' });
+    expect(await run(a, { ...request, operationId: randomUUID() })).toEqual({ state: 'attachment_refused' });
+    expect(await rows(a.principal.tenantRef)).toEqual({ ...counts, operations: counts.operations! + 1,
+      membership_events: counts.membership_events! + 1, member_tokens: counts.member_tokens! + 1 });
+    expect((await f.admin.query('SELECT result FROM loyalty.operations WHERE operation_id=$1', [old.operationId])).rows[0].result)
+      .toEqual({ enrollmentCutoverClosed: true });
+  });
+
+  it.each(['wrong-phone', 'no-phone', 'unhanded', 'expired', 'wrong-qr'] as const)
+    ('refuses %s attachment uniformly without linking, rotating or claiming an operation', async kind => {
+      const a = await account(); const id = await program(a.principal.tenantRef);
+      const old = await existingCard(a, kind !== 'unhanded', kind === 'no-phone' ? null : kind === 'wrong-phone' ? '+33600000001' : a.phone);
+      if (kind === 'expired') await f.admin.query("UPDATE loyalty.member_tokens SET expires_at=clock_timestamp()-interval '1 second' WHERE member_id=$1", [old.member.id]);
+      const counts = await rows(a.principal.tenantRef), before = await preserved(a.principal.tenantRef);
+      expect(await run(a, attach(id, kind === 'wrong-qr' ? randomBytes(32).toString('base64url') : old.qrToken)))
+        .toEqual({ state: 'attachment_refused' });
+      expect(await rows(a.principal.tenantRef)).toEqual(counts); expect(await preserved(a.principal.tenantRef)).toEqual(before);
+      expect((await f.admin.query('SELECT qr_generation FROM loyalty.members WHERE id=$1', [old.member.id])).rows[0].qr_generation).toBe('1');
+    });
+
+  it('rolls back a rotation when a pre-existing ownership anchor is hidden by another parent RLS scope', async () => {
+    const a = await account({ phone: '+33600000001' }); const id = await program(a.principal.tenantRef);
+    const b = await account({ tenantRef: a.principal.tenantRef }); const old = await existingCard(b);
+    expect(b.principal.parentRef).not.toBe(a.principal.parentRef); expect(b.accountId).not.toBe(a.accountId);
+    // Construct only the immutable ownership anchor to exercise the native
+    // cross-parent uniqueness backstop. This does not claim to replay a valid
+    // prior attachment, nor bypass the customer phone anti-duplication flow.
+    await f.admin.query(`INSERT INTO customer.loyalty_memberships(parent_ref,tenant_ref,account_id,member_id,operation_id,request_hash)
+      VALUES($1,$2,$3,$4,$5,$6)`, [a.principal.parentRef, a.principal.tenantRef, a.accountId, old.member.id, old.operationId, hash()]);
+    const visible = await withProtectedCustomerSession(f.app, b.principal, async ({ client }) =>
+      (await client.query('SELECT 1 FROM customer.loyalty_memberships WHERE tenant_ref=$1 AND member_id=$2', [a.principal.tenantRef, old.member.id])).rowCount);
+    expect(visible).toBe(0);
+    const before = await rows(a.principal.tenantRef);
+    await expect(run(b, attach(id, old.qrToken))).rejects.toMatchObject({ code: '23505', constraint: 'loyalty_memberships_tenant_member_uq' });
+    expect(await rows(a.principal.tenantRef)).toEqual(before);
+    expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: old.qrToken }))
+      .toMatchObject({ id: old.member.id, status: 'active' }); // The losing rotation was rolled back.
+    expect((await f.admin.query('SELECT qr_generation FROM loyalty.members WHERE id=$1', [old.member.id])).rows[0].qr_generation).toBe('1');
+    expect(await run(b, { step: 'card' })).toEqual({ state: 'unavailable' });
+    expect(await run(b, { ...attach(id, old.qrToken), operationId: old.operationId })).toEqual({ state: 'conflict' });
+  });
+
+  it.each(['session', 'protection', 'expiry'] as const)('rolls back attachment and QR replacement after loss of %s', async what => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    const before = await rows(a.principal.tenantRef); let wrote = false;
+    await expect(run(a, attach(id, old.qrToken), async ({ client }, result) => {
+      wrote = result.state === 'member';
+      if (what === 'expiry') {
+        await client.query("UPDATE customer.sessions SET expires_at=clock_timestamp()+interval '30 milliseconds' WHERE id=$1", [a.sessionId]);
+        await client.query(`SELECT pg_sleep(GREATEST(0,extract(epoch FROM expires_at-clock_timestamp()))+0.025)
+          FROM customer.sessions WHERE id=$1`, [a.sessionId]);
+      } else await client.query(what === 'session'
+        ? 'UPDATE customer.sessions SET revoked_at=clock_timestamp() WHERE account_id=$1'
+        : 'UPDATE customer.passkey_credentials SET revoked_at=clock_timestamp() WHERE account_id=$1', [a.accountId]);
+    })).rejects.toMatchObject({ reason: 'unavailable' });
+    expect(wrote).toBe(true); expect(await rows(a.principal.tenantRef)).toEqual(before);
+    expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: old.qrToken }))
+      .toMatchObject({ id: old.member.id, status: 'active' });
+  });
+
+  it.each(['profile-context', 'profile-phone', 'profile-version', 'customer-phone', 'blocked', 'anonymized'] as const)
+    ('rejects %s without converting possession of a QR into account authority', async kind => {
+      const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+      if (kind.startsWith('profile')) {
+        const payload = crypto.encryptProfile({ tenantRef: a.principal.tenantRef,
+          memberId: kind === 'profile-context' ? randomUUID() : old.member.id },
+        { firstName: 'Existing', phone: kind === 'profile-phone' ? '+33600000002' : a.phone });
+        await f.admin.query('UPDATE loyalty.member_profiles SET encrypted_payload=$2,key_version=$3 WHERE member_id=$1',
+          [old.member.id, JSON.stringify(payload), kind === 'profile-version' ? payload.keyVersion + 1 : payload.keyVersion]);
+      } else if (kind === 'customer-phone') {
+        await f.admin.query('UPDATE customer.verified_contacts SET encrypted_phone=$2 WHERE account_id=$1',
+          [a.accountId, identity.seal('phone', a.principal.tenantRef, hash(), a.phone)]);
+      } else await pos.changeLifecycle(a.principal.tenantRef, old.member.id, kind === 'blocked'
+        ? { operationId: randomUUID(), action: 'block', reasonCode: 'suspected_sharing' }
+        : { operationId: randomUUID(), action: 'anonymize', reasonCode: 'customer_request', confirmation: 'ANONYMISER' }, manager);
+      const before = await rows(a.principal.tenantRef);
+      expect(await run(a, attach(id, old.qrToken))).toEqual({ state: 'attachment_refused' });
+      expect(await rows(a.principal.tenantRef)).toEqual(before);
+    });
+
+  it('rechecks the presented token when a genuine POS rotation wins after the initial QR lookup', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    let paused = false, release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    // Observe the exact real query/promise, then pause its return. All SQL and
+    // locking still execute on the original PostgreSQL connection.
+    const attachment = run(a, attach(id, old.qrToken), undefined, ctx => ({ ...ctx, client: new Proxy(ctx.client, {
+      get(target, key) {
+        if (key === 'query') return (...args: unknown[]) => {
+          const result = Reflect.apply(target.query, target, args) as Promise<unknown>;
+          return typeof args[0] === 'string' && args[0].startsWith('SELECT member_id FROM loyalty.member_tokens')
+            ? result.then(async value => { paused = true; await gate; return value; }) : result;
+        };
+        const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) })).then(value => ({ value }), error => ({ error }));
+    try {
+      await expect.poll(() => paused, { timeout: 2000 }).toBe(true);
+      const replaced = await pos.replaceQr(a.principal.tenantRef, old.member.id,
+        { operationId: randomUUID(), expectedGeneration: 1, reasonCode: 'lost_or_compromised' }, manager);
+      release(); expect(await attachment).toEqual({ value: { state: 'attachment_refused' } });
+      expect(await pos.resolveMember(a.principal.tenantRef, { by: 'qr_token', qrToken: replaced.qrToken })).toMatchObject({ id: old.member.id });
+      expect((await rows(a.principal.tenantRef)).links).toBe(0);
+      expect((await rows(a.principal.tenantRef)).operations).toBe(2);
+    } finally { release(); await attachment; }
+  });
+
+  it('serializes attachment against a genuine POS rotation with an observed member row-lock wait', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    let pid = 0, release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const attachment = run(a, attach(id, old.qrToken), async ({ client }, result) => {
+      if (result.state !== 'member') throw new Error('Attachment did not commit its local writes');
+      pid = (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; await gate;
+    }).then(value => ({ value }), error => ({ error }));
+    let rotation: Promise<{ value?: unknown; error?: unknown }> | undefined;
+    try {
+      await expect.poll(() => pid, { timeout: 2000 }).not.toBe(0);
+      rotation = pos.replaceQr(a.principal.tenantRef, old.member.id,
+        { operationId: randomUUID(), expectedGeneration: 1, reasonCode: 'lost_or_compromised' }, manager)
+        .then(value => ({ value }), error => ({ error }));
+      await expect.poll(async () => (await f.admin.query(`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE usename=$1 AND wait_event_type='Lock' AND $2=ANY(pg_blocking_pids(pid))`, [f.role, pid])).rows[0].n,
+      { timeout: 2000 }).toBe(1);
+      release(); expect(await attachment).toMatchObject({ value: { state: 'member', member: { qrGeneration: 2 } } });
+      expect(await rotation).toMatchObject({ error: { status: 409 } });
+      expect((await rows(a.principal.tenantRef)).operations).toBe(2);
+    } finally { release(); await attachment; await rotation; }
+  });
+
+  it.each(['extra-field', 'qr-proof', 'notice', 'generation', 'discriminator'] as const)
+    ('rejects corrupted attachment receipt %s without treating an ordinary rotation as ownership', async kind => {
+      const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+      const request = attach(id, old.qrToken); expect((await run(a, request))?.state).toBe('member');
+      const { result } = (await f.admin.query('SELECT result FROM loyalty.operations WHERE operation_id=$1', [request.operationId])).rows[0];
+      const patch = kind === 'extra-field' ? { customerAccountEnrollment: 'v1' } : kind === 'qr-proof' ? { presentedQrHash: hash() }
+        : kind === 'notice' ? { termsNoticeVersion: 'different-notice' } : kind === 'generation' ? { qrGeneration: 3 }
+          : { customerAccountAttachment: 'v2' };
+      await f.admin.query('UPDATE loyalty.operations SET result=$2 WHERE operation_id=$1', [request.operationId, JSON.stringify({ ...result, ...patch })]);
+      const counts = await rows(a.principal.tenantRef);
+      for (const read of [{ step: 'view' }, { step: 'card' }, request] as CustomerLoyaltyRequest[]) {
+        expect(await run(a, read)).toEqual({ state: 'unavailable' });
+      }
+      expect(await rows(a.principal.tenantRef)).toEqual(counts);
+    });
+
+  it('requires current attachment terms and an exact protected publication, without requiring another name entry', async () => {
+    const a = await account({ name: null }); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    const request = attach(id, old.qrToken), counts = await rows(a.principal.tenantRef);
+    expect(await run(a, { ...request, rulesVersion: 2 })).toMatchObject({ state: 'terms_changed', program: { version: 1 } });
+    for (const patch of [{ parentRef: `other_${hash()}` }, { tenantRef: `other_${hash()}` },
+      { expectedCheckId: randomUUID() }, { browserHash: hash() }, { sessionHash: hash() }]) {
+      expect(await run({ ...a, principal: { ...a.principal, ...patch } }, request)).toBeNull();
+    }
+    expect(await rows(a.principal.tenantRef)).toEqual(counts);
+    expect((await run(a, request))?.state).toBe('member');
+  });
+
+  it('replays concurrent identical attachments after the real parent lock without a second QR rotation', async () => {
+    const a = await account(); const id = await program(a.principal.tenantRef); const old = await existingCard(a);
+    const request = attach(id, old.qrToken); let pid = 0, release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const first = run(a, request, async ({ client }, result) => {
+      if (result.state !== 'member') throw new Error('Attachment was refused');
+      pid = (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; await gate;
+    }).then(value => ({ value }), error => ({ error }));
+    let second: Promise<{ value?: CustomerLoyaltyStoreResult | null; error?: unknown }> | undefined;
+    try {
+      await expect.poll(() => pid, { timeout: 2000 }).not.toBe(0);
+      second = run(a, request).then(value => ({ value }), error => ({ error }));
+      await expect.poll(async () => (await f.admin.query(`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE usename=$1 AND wait_event_type='Lock' AND wait_event='advisory' AND $2=ANY(pg_blocking_pids(pid))`,
+      [f.role, pid])).rows[0].n, { timeout: 2000 }).toBe(1);
+      release(); const result = await first; expect(result).toMatchObject({ value: { state: 'member', member: { qrGeneration: 2 } } });
+      expect(await second).toEqual(result);
+      expect(await rows(a.principal.tenantRef)).toMatchObject({ members: 1, operations: 2, member_tokens: 2, membership_events: 2, links: 1 });
+    } finally { release(); await first; await second; }
+  });
 
   it('shows versioned terms, creates seven durable records atomically and re-encrypts a full 120-character name', async () => {
     const a = await account({ name: 'É'.repeat(120) }); const id = await program(a.principal.tenantRef);
