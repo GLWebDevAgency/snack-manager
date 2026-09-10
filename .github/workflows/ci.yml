@@ -179,7 +179,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Tests
-        run: pnpm exec turbo run test $TURBO_FLAGS
+        # Chaque suite Vitest a déjà ses workers ; plusieurs paquets peuvent
+        # sinon lancer leurs navigateurs/processus natifs en même temps.
+        # Séquencer les paquets conserve tous les tests et leurs délais.
+        run: pnpm exec turbo run test --concurrency=1 $TURBO_FLAGS
 
       - name: Gardes des outils de reprise Mongo
         run: pnpm --filter @sm/api exec vitest run ../../scripts/reprise-mongo.test.mjs --root ../..

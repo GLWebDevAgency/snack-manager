@@ -1,4 +1,4 @@
-# Reprise CI : charger les seeds après les gardes
+# Reprise CI : gardes des seeds et observations navigateur
 
 ## Incident observé le 10 septembre 2026
 
@@ -49,7 +49,7 @@ l'objet d'une compilation TypeScript ciblée sans émission.
 
 ## Réception
 
-Recette locale finale : **51/51 tâches** (`pnpm verify`, 41 en cache),
+Recette locale avant complément navigateur : **51/51 tâches** (`pnpm verify`, 41 en cache),
 DB **437 tests passés / 10 ignorés**, dont **32** tests du harnais ; API
 **3388 passés / 675 ignorés**. La compilation ciblée de `seed.ts` réussit.
 Ces nombres se recouvrent et ne prouvent pas des parcours privés staging.
@@ -60,7 +60,39 @@ rejeu ciblé inchangé passe **15/15**, puis la vérification globale du diff
 final réussit. Aucune modification de ce test ni de ses délais ; cause du
 nettoyage lent non démontrée. Conserver cet incident si le symptôme récidive.
 
-La nouvelle PR et son déploiement restent à recevoir. Exiger la CI verte,
+La [première CI de #159](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34458278857)
+a confirmé les seeds (**437 passés / 10 ignorés**), puis échoué sur deux
+tests d'affichage mobile de `CustomerAccount.browser.test.ts` : 320 et
+390 px, délai de 5 s, phase `priority-and-overflow`, après l'alignement.
+Le web comptait **2526 réussites / 2 échecs**. Aucune fusion effectuée.
+
+Le complément exécute en parallèle les deux comptages, les deux couleurs et
+le contrôle de débordement, via les mêmes locators natifs de rôles accessibles
+et leurs lectures strictes. Unicité, alignement, tailles tactiles, couleurs distinctes et
+largeur restent vérifiés ; le délai de 5 s est inchangé. Aucun composant
+produit n'est modifié. La géométrie reste mesurée dans un seul tour navigateur.
+Cette réduction des attentes successives n'attribue pas à elle seule la cause
+de toute lenteur CI. Une première proposition de lecture unifiée a été écartée
+en revue : sa classification par `aria-label` pouvait manquer un nom accessible
+modifié par `aria-labelledby`. Les locators natifs conservent ce contre-contrôle.
+
+L'étape générale de tests CI séquence désormais les paquets avec
+`turbo run test --concurrency=1`. Chaque suite conserve ses workers et ses
+délais ; aucun test, contrôle de données natives, échec ou étape n'est ignoré.
+Cela évite de superposer les pools des différents paquets sur le même runner,
+sans présenter la contention comme cause unique démontrée des deux incidents.
+Les permissions, secrets, déclencheurs et règles de promotion ne changent pas.
+
+Contrôle du complément : panneau **40/40** ; vérification globale **51/51** (47 en cache),
+puis commande de tests séquencée avec cache en écriture seule : **27/27 tâches,
+zéro résultat réutilisé**, dont web **2528/2528**, DB **437 passés / 10 ignorés**
+et API **3388 passés / 675 ignorés**. Le dry-run comparatif sélectionne exactement
+les mêmes 13 tâches de test et 14 prérequis. Ces contrôles locaux ne remplacent
+pas la nouvelle CI GitHub ni ses suites de données natives. Le dernier
+`pnpm verify` avant publication réussit **51/51**, intégralement en cache après
+ces recettes ; il n'est pas présenté comme 51 nouvelles exécutions.
+
+La nouvelle tête de PR et son déploiement restent à recevoir. Exiger la CI verte,
 les étapes de migrations, les quatre services Railway, la révision API
 attendue, le smoke et les E2E effectivement exécutés. Une fusion ne remplace
 aucune de ces preuves. Aucun GO production, fournisseur ou pilote n'est déduit.
