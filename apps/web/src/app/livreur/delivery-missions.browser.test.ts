@@ -37,15 +37,17 @@ beforeAll(async () => {
       const bo = location.pathname.startsWith('/admin');
       createRoot(document.getElementById('root')).render(<React.StrictMode>{bo ? <main className="p-6"><h1>Commandes du restaurant</h1><DeliveryMissionModal order={{_id:'${id}',number:12}} onClose={()=>{}} onUpdated={()=>{}} /></main> : <DeliveryAccess />}</React.StrictMode>);`,
     resolveDir: root, sourcefile: "missions-test-entry.tsx", loader: "tsx" },
-    bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
+    outdir: "/virtual-delivery-missions", bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
     define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_API_URL": '"/api"' } }),
     readFile(cssPath, "utf8").then(source => postcss([tailwind({ base: fileURLToPath(new URL("../..", import.meta.url)) })]).process(source, { from: cssPath })),
   ]);
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js"))!.text;
+  const styles = css.css + await readFile(fileURLToPath(new URL("./livreur.css", import.meta.url)), "utf8") + (bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "");
   server = createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     if (req.url === "/missions.js" || req.url === "/missions.css") {
       res.setHeader("Content-Type", req.url.endsWith(".js") ? "text/javascript" : "text/css");
-      res.end(req.url.endsWith(".js") ? bundle.outputFiles[0].text : css.css); return;
+      res.end(req.url.endsWith(".js") ? script : styles); return;
     }
     if (req.url === "/livreur" || req.url?.startsWith("/admin/orders")) {
       res.setHeader("Content-Type", "text/html");
@@ -186,6 +188,16 @@ describe("missions livreur et affectation BO rendues", () => {
     await expectReducedMotionSettled();
     await capture("mobile-320-list.png");
     await page.setViewportSize({ width: 1440, height: 1000 }); await capture("desktop-driver-list.png");
+  });
+  it("réactive la navigation après fermeture du détail et ne laisse aucune action derrière la modale", async () => {
+    await openDriver(); await detail();
+    expect(await page.getByRole("tab", { name: "Compte", exact: true }).count()).toBe(0);
+    await page.getByRole("button", { name: "Retour à la tournée", exact: true }).click();
+    await page.getByRole("tab", { name: "Compte", exact: true }).click();
+    await page.getByRole("heading", { name: "Mon compte", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Tournée", exact: true }).click();
+    await page.getByRole("button", { name: "Voir la mission n°12", exact: true }).waitFor();
+    expect(posts).toEqual([]);
   });
   it.each(["longue", "ralentie", "infinie", "bloquée"] as const)("le contrôle du mouvement refuse une animation %s, sans attendre qu’elle disparaisse pour l’oublier", async kind => {
     await openDriver(); await expectReducedMotionSettled();

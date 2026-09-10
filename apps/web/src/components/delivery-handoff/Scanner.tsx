@@ -34,7 +34,7 @@ export function DeliveryHandoffScanner({ missionId, proofId, onRead, onClose }: 
     })();
     return () => { stopped = true; controls?.stop(); };
   }, [missionId, proofId, onRead]);
-  return <div className="space-y-3">
+  return <div className="lv-scanner space-y-3">
     <div className="relative overflow-hidden rounded-card border border-line bg-bg">
       <video ref={video} muted playsInline className="aspect-square max-h-[260px] w-full object-cover" aria-label="Caméra de lecture du QR de remise" />
       <div aria-hidden className="pointer-events-none absolute inset-8 rounded-card border-2 border-accent" />

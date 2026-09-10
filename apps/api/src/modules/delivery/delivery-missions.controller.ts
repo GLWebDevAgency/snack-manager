@@ -80,3 +80,17 @@ export class DeliveryCourierMissionsController {
     return this.missions.dispatchCourier(this.session(request), id, body);
   }
 }
+
+@Public()
+@Controller('delivery-access/history')
+@UseGuards(DeliveryMissionsQuotaGuard, DeliveryAccessGuard)
+export class DeliveryCourierHistoryController {
+  constructor(private readonly missions: DeliveryMissionsService) {}
+
+  @Get()
+  @Header('Cache-Control', 'private, no-store')
+  list(@Req() request: DeliveryAccessRequest, @Query(zod(DeliveryMissionsQuerySchema)) query: DeliveryMissionsQuery) {
+    if (!request.deliverySession) throw new UnauthorizedException('Accès livreur invalide ou expiré');
+    return this.missions.historyCourier(request.deliverySession, query);
+  }
+}

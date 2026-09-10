@@ -40,6 +40,7 @@ import {
   type Draft,
 } from "./cart";
 import { euros } from "./helpers";
+import { expressRemovals } from "./recommendation-model";
 import {
   Badge,
   OptionChip,
@@ -87,7 +88,9 @@ export function ProductSheet({
   blocked = false,
   /** Paire typographique du masque — obligatoire, comme sur `MenuBoard`. */
   prixMono,
+  recommendations,
 }: {
+  recommendations?: ReactNode;
   draft: Draft | null;
   onChange: (next: Draft) => void;
   onClose: () => void;
@@ -159,7 +162,7 @@ export function ProductSheet({
         </div>
       }
     >
-      <ProductHero name={product.name} photoUrl={product.photoUrl} />
+      <ProductHero name={product.name} photoUrl={product.photoUrl} cover={product.photoCover} />
 
       <div className="px-4 pb-1 pt-4">
         <div className="flex items-start gap-3">
@@ -242,6 +245,14 @@ export function ProductSheet({
                 <SubLabel id={retraitsId} icon="minus">
                   Ce que je retire
                 </SubLabel>
+                <div role="group" aria-label="Retraits express" className="flex flex-wrap gap-2">
+                  {expressRemovals(product.removables).map(preset => <OptionChip key={preset.label}
+                    on={preset.keys.every(key => current.removed.includes(key))}
+                    onClick={() => onChange({ ...current, removed: preset.keys.every(key => current.removed.includes(key))
+                      ? current.removed.filter(key => !preset.keys.includes(key)) : [...new Set([...current.removed, ...preset.keys])] })}>
+                    {preset.label}
+                  </OptionChip>)}
+                </div>
                 {/* Les chips `aria-pressed` d'une même grappe forment un
                     GROUPE, et il doit être nommé : sans lui, « sans oignons »
                     se lisait sans qu'on sache de quel choix il relève. */}
@@ -359,6 +370,7 @@ export function ProductSheet({
             className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
           />
         </section>
+        {!editing && recommendations}
       </div>
     </Sheet>
   );
@@ -400,15 +412,18 @@ function SubLabel({
 function ProductHero({
   name,
   photoUrl,
+  cover,
 }: {
   name: string;
   photoUrl: string | null;
+  cover?: boolean;
 }) {
   if (photoUrl) {
     return (
       <div className="relative h-[210px] w-full overflow-hidden">
         <Plate
           photoUrl={photoUrl}
+          cover={cover}
           name={name}
           mono={64}
           pad="p-6"

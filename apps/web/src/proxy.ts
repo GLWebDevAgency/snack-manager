@@ -395,6 +395,12 @@ function verdictPourRestaurant(pathname: string, slug: string): Verdict {
     pathname === `/r/${slug}` ||
     pathname === `/r/${slug}/` ||
     pathname === `/r/${slug}/icon.svg` ||
+    pathname === `/r/${slug}/carte` ||
+    pathname === `/r/${slug}/manifest.webmanifest` ||
+    pathname === `/r/${slug}/sw.js` ||
+    pathname === `/r/${slug}/icon.png` ||
+    pathname === `/r/${slug}/recherche` ||
+    pathname === `/r/${slug}/commandes` ||
     pathname === `/r/${slug}/fidelite` ||
     pathname.startsWith(`/r/${slug}/fidelite/`)
   ) {

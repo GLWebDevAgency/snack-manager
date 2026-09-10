@@ -37,10 +37,15 @@ beforeEach(() => {
 });
 
 describe("générateurs de métadonnées publics", () => {
-  it.each([restaurant, embed])("pose l'icône restaurant sans installer la commande", async (generate) => {
-    expect(await generate(params)).toMatchObject({
-      manifest: null, icons: { icon: [{ url: "/r/classfood/icon.svg" }], apple: [] },
-    });
+  it("rend l’application Commande installable avec les seules ressources publiques du restaurant", async () => {
+    const metadata = await restaurant(params);
+    expect(metadata).toMatchObject({ manifest: "/r/classfood/manifest.webmanifest", icons: {
+      icon: [{ url: "/r/classfood/icon.svg" }], apple: [{ url: "/r/classfood/icon.png?size=180" }],
+    }, appleWebApp: { capable: true, title: "Classfood" } });
+    expect(JSON.stringify(metadata)).not.toMatch(/private-token|private-order-id/);
+  });
+  it("garde l’embed sans installation ni icône de plateforme", async () => {
+    expect(await embed(params)).toMatchObject({ manifest: null, icons: { icon: [{ url: "/r/classfood/icon.svg" }], apple: [] } });
   });
 
   it.each([restaurant, embed])("laisse le layout neutre protéger les erreurs de catalogue", async (generate) => {

@@ -44,17 +44,19 @@ beforeAll(async () => {
       import {DeliveryAccess} from './delivery-access';
       createRoot(document.getElementById('root')).render(React.createElement(React.StrictMode,null,React.createElement(DeliveryAccess)));`,
     resolveDir: root, sourcefile: "delivery-access-test-entry.tsx", loader: "tsx" },
-    bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
+    outdir: "/virtual-delivery-access", bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
     define: { "process.env.NODE_ENV": '"production"' } }),
     readFile(cssPath, "utf8").then(source => postcss([tailwind({ base: fileURLToPath(new URL("../..", import.meta.url)) })])
       .process(source, { from: cssPath })),
   ]);
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js"))!.text;
+  const styles = css.css + await readFile(fileURLToPath(new URL("./livreur.css", import.meta.url)), "utf8") + (bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "");
   server = createServer(async (req, res) => {
     try {
       res.setHeader("Cache-Control", "no-store");
       if (req.url === "/delivery.js" || req.url === "/delivery.css") {
         res.setHeader("Content-Type", req.url.endsWith(".js") ? "text/javascript" : "text/css");
-        res.end(req.url.endsWith(".js") ? bundle.outputFiles[0].text : css.css); return;
+        res.end(req.url.endsWith(".js") ? script : styles); return;
       }
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -226,11 +228,12 @@ describe("accès livreur mobile réel, BFF et API locale", () => {
     await openInvitation(); await associate();
     // The connected heading precedes the missions effect. Let its initial GET
     // finish before revoking, so this case exercises the explicit access check.
-    await page.getByText("Aucune mission pour le moment", { exact: true }).waitFor();
+    await page.getByText("Rien à récupérer", { exact: true }).waitFor();
     expect(await context.cookies()).toHaveLength(1);
     upstreamSession = false;
     const refused = page.waitForResponse(response => response.url() === `${origin}/livreur/acces`
       && response.request().method() === "GET" && response.status() === 401);
+    await page.getByRole("tab", { name: "Compte", exact: true }).click();
     await Promise.all([refused, page.getByRole("button", { name: "Vérifier mon accès", exact: true }).click()]);
     await page.getByRole("alert").filter({ hasText: "Votre accès a expiré ou a été retiré" }).waitFor();
     expect(await page.getByText(session.name, { exact: true }).count()).toBe(0);
@@ -260,6 +263,7 @@ describe("accès livreur mobile réel, BFF et API locale", () => {
 
   it("hors connexion, retire le succès et attend la confirmation réelle de déconnexion", async () => {
     await openInvitation(); await associate();
+    await page.getByRole("tab", { name: "Compte", exact: true }).click();
     await context.setOffline(true);
     await page.getByRole("alert").filter({ hasText: "Vous êtes hors connexion" }).waitFor();
     expect(await page.getByRole("heading", { name: "Accès associé.", exact: true }).count()).toBe(0);

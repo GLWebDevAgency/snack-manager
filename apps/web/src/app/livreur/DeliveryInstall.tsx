@@ -115,11 +115,11 @@ export function DeliveryInstall({ associated }: { associated: boolean }) {
   if (!environment.ready) return null;
   if (environment.standalone) return workerFailed ? <p role="status" className="mb-7 text-xs leading-5 text-mut">{WORKER_UNAVAILABLE}</p> : null;
   return (
-    <Card flat className="mb-7 p-4" aria-label="Installer SM Livreur" onKeyDown={event => { if (helpOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeHelp(); } }}>
+    <Card flat className="lv-install mb-7 p-4" aria-label="Installer SM Livreur" onKeyDown={event => { if (helpOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeHelp(); } }}>
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-card bg-accentwash text-accentink"><Icon name="home" size={17} /></span>
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-[-0.02em]">SM Livreur, à portée de main</h2>
+          <h2 className="text-sm font-semibold tracking-[-0.02em]">SM Livreur sur l’écran d’accueil</h2>
           <p className="mt-1 text-[13px] leading-5 text-mut">{associated ? "Retrouvez vos missions depuis l’écran d’accueil." : "Ajoutez un raccourci, puis associez votre téléphone avec le lien du restaurant."} L’installation est facultative.</p>
         </div>
       </div>

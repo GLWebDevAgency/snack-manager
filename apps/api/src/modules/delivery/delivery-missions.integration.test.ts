@@ -123,6 +123,52 @@ function interceptWrite(model: Model<Order>, before?: () => Promise<void>, after
     return { operator: (await directory.list(TENANT)).operators[0]!, session };
   }
 
+  it('historique : scope tenant/livreur, ordre serveur, pagination et projection sans secrets', async () => {
+    const { session, operator } = await connected();
+    const assignment = { operatorId: operator.id, assignmentId: randomUUID(), operatorName: operator.name, assignedAt: new Date(), assignedBy: actor.sub };
+    const seedHistory = async (i: number, overrides: Record<string, unknown> = {}) => {
+      const id = await seed({ number: i + 1, status: 'delivered', deliveryMission: { version: 1, revision: 1, assignment, operations: [] }, ...overrides });
+      await orders.updateOne({ _id: id }, { $set: { 'delivery.deliveredAt': new Date(Date.UTC(2030, 0, 1, 12, Math.floor(i / 2))), 'delivery.dispatchedAt': new Date('2030-01-01T11:30:00Z') } });
+      return id;
+    };
+    const ids = await Promise.all(Array.from({ length: 52 }, (_, i) => seedHistory(i)));
+    const otherTenant = await seedHistory(90, { tenantId: OTHER });
+    const otherOperator = await createOperator('Autre livreur');
+    const foreign = await seedHistory(91, { deliveryMission: { version: 1, revision: 1, assignment: { ...assignment, operatorId: otherOperator.id }, operations: [] } });
+    await seed({ deliveryMission: { version: 1, revision: 1, assignment, operations: [] } });
+    const first = await service().historyCourier(session);
+    expect(first.missions).toHaveLength(50); expect(first.nextCursor).not.toBeNull();
+    expect(first.missions[0]!.number).toBeGreaterThanOrEqual(51);
+    expect(first.missions.every(mission => mission.orderStatus === 'delivered' && !mission.canDispatch && !mission.canAssign && Boolean(mission.deliveredAt))).toBe(true);
+    expect(first.missions[0]!.paymentSummary).toMatchObject({ totalCents: 1500, method: 'online', status: 'paid' });
+    expect(JSON.stringify(first)).not.toMatch(/tracking|stripe|paymentFlow|private-meta|operations|tenantId/);
+    const second = await service().historyCourier(session, { after: first.nextCursor! });
+    expect(second.missions).toHaveLength(2); expect(second.nextCursor).toBeNull();
+    expect(new Set([...first.missions, ...second.missions].map(mission => mission.id))).toEqual(new Set(ids));
+    await expect(service().historyCourier(session, { after: foreign })).rejects.toMatchObject({ status: 400 });
+    await expect(service().historyCourier(session, { after: otherTenant })).rejects.toMatchObject({ status: 400 });
+    const current = await operators.findById(operator.id).select('+sessionVersion');
+    await operators.updateOne({ _id: operator.id }, { $set: { active: false } });
+    expect(current).not.toBeNull();
+    await expect(service().historyCourier(session)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('historique : refuse la réponse si l’accès est révoqué pendant la lecture Mongo', async () => {
+    const { session, operator } = await connected();
+    await seed({ status: 'delivered', delivery: { address: { line1: '1 rue de recette', postalCode: '75001', city: 'Paris', country: 'FR' }, deliveredAt: new Date(), zoneId: 'fixture', zoneName: 'Recette', feeCents: 250, estimatedMinutes: 20 },
+      deliveryMission: { version: 1, revision: 1, assignment: { operatorId: operator.id, assignmentId: randomUUID(), operatorName: operator.name, assignedAt: new Date(), assignedBy: actor.sub }, operations: [] } });
+    const model = new Proxy(orders, { get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== 'find') return typeof value === 'function' ? value.bind(target) : value;
+      return (...args: unknown[]) => {
+        const query = Reflect.apply(value, target, args) as Query<unknown, Order>; const exec = query.exec.bind(query);
+        query.exec = async () => { const rows = await exec(); await operators.updateOne({ _id: operator.id }, { $set: { active: false } }); return rows; };
+        return query;
+      };
+    } });
+    await expect(service(model).historyCourier(session)).rejects.toMatchObject({ status: 401 });
+  });
+
   it('rend une commande legacy révision zéro et projection privée limitée', async () => {
     const id = await seed();
     const view = await service().getManager(TENANT, id, actor);

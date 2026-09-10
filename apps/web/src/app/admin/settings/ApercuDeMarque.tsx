@@ -131,6 +131,13 @@ export function ApercuDeMarque({ brand, nom }: { brand: Brand; nom: string }) {
         </div>
       )}
 
+      {(brand.tagline || brand.taglineSub) && (
+        <div className="mt-4 px-4">
+          {brand.tagline && <p className="font-display text-xl font-bold leading-tight">{brand.tagline}</p>}
+          {brand.taglineSub && <p className="mt-1 text-sm text-mut">{brand.taglineSub}</p>}
+        </div>
+      )}
+
       <div className="mt-4 px-4">
         <SectionHead title="Nos incontournables" note="Retrait au comptoir, paiement sur place ou en ligne." />
         <div className="flex flex-col gap-2.5">

@@ -175,6 +175,9 @@ export type MenuProduct = {
   isNew: boolean;
   outOfStock: boolean;
   photoUrl: string | null;
+  photoKind?: "cutout" | "cover";
+  photoCover?: boolean;
+  popular?: boolean;
   /** Prix affiché en carte : « dès X » quand il y a des variantes. */
   fromPrice: number;
   /** Le produit ouvre-t-il la fiche de configuration ? */
@@ -324,6 +327,9 @@ function toProduct(raw: unknown): MenuProduct | null {
     isNew: p.isNew === true,
     outOfStock: p.outOfStock === true,
     photoUrl: typeof p.photoUrl === "string" ? p.photoUrl : null,
+    photoKind: p.photoKind === "cover" ? "cover" : "cutout",
+    photoCover: p.photoKind === "cover" || p.photoCover === true,
+    popular: p.popular === true,
     fromPrice:
       variants.length > 0
         ? Math.min(...variants.map((v) => v.price))

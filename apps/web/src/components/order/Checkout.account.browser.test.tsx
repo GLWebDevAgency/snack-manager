@@ -70,6 +70,8 @@ beforeAll(async () => {
     alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
     define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
     plugins: [{ name: 'provider-fixtures', setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
+      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ contents: `export const usePathname=()=>window.location.pathname;export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
       builder.onResolve({ filter: /^next\/font\/google$/ }, () => ({ path: 'fonts', namespace: 'fixture-fonts' }));
       builder.onLoad({ filter: /.*/, namespace: 'fixture-fonts' }, () => ({ contents: `const font=()=>({variable:'',className:'',style:{fontFamily:'Arial'}});export {${['Alegreya_Sans','Archivo','Archivo_Black','Bricolage_Grotesque','Cormorant_Garamond','Familjen_Grotesk','Figtree','Fraunces','Instrument_Sans','JetBrains_Mono','Lato','Libre_Baskerville','Manrope','Nunito','Nunito_Sans','Outfit','Playfair_Display','Source_Sans_3'].map(name => `font as ${name}`).join(',')}}` }));
       builder.onResolve({ filter: /\/(StripeCard|TurnstileCheck)$/ }, args => ({ path: args.path.split('/').at(-1)!, namespace: 'fixture-provider' }));
@@ -92,6 +94,7 @@ beforeAll(async () => {
       json(res, authenticated ? { expiresAt, profile: { name: 'Compte Recette', phoneE164: '+33600000001', phoneVerifiedAt: verifiedAt, revision: 0 } } : {}, authenticated ? 200 : 401); return;
     }
     if (path === '/api/public/tenants/recette/slots') { json(res, slots); return; }
+    if (path === '/api/public/tenants/recette/order-notifications/config') { json(res, { available: false, publicKey: null }); return; }
     if (path === '/api/public/funnel' && req.method === 'POST') { res.writeHead(204).end(); return; }
     let raw = ''; for await (const chunk of req) raw += chunk.toString(); const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
     calls.push({ path, body, headers: req.headers });
@@ -122,10 +125,9 @@ afterEach(async () => { heldCreate?.res.destroy(); heldPayment?.destroy(); heldR
 afterAll(async () => { await browser?.close(); if (server) await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }); process.stdout.write(`Checkout fixture captures: ${captures}\n`); });
 async function activate(target: Locator) { await expect.poll(() => target.isEnabled()).toBe(true); await target.focus(); await target.press('Enter'); }
 async function checkout(method: 'counter' | 'online' = 'counter', submit = true) {
-  await activate(page.getByRole('button', { name: /^Continuer/ }));
+  await activate(page.getByRole('button', { name: /^Choisir le retrait/ }));
+  await activate(page.getByRole('button', { name: /^Continuer · retrait/ }));
   await page.getByLabel('Prénom et nom', { exact: true }).fill('Compte Recette'); await page.getByLabel('Téléphone', { exact: true }).fill('0600000001');
-  await activate(page.getByRole('button', { name: 'Choisir le créneau', exact: true }));
-  await activate(page.getByRole('button', { name: /^18:00/ })); await activate(page.getByRole('button', { name: /^Continuer · retrait/ }));
   if (method === 'counter') await activate(page.getByRole('radio', { name: /Payer au comptoir/ }));
   if (submit) await activate(page.getByRole('button', { name: method === 'counter' ? /^Confirmer la commande/ : /^Payer/ }));
 }
@@ -386,7 +388,8 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
     expect(await page.getByText('4242', { exact: false }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).count()).toBe(0);
     expect(await page.evaluate(async () => (await window.checkoutAccountFixture.journal.readDeviceCheckoutReceipts('recette')).map(row => row.receipt.number))).toEqual([77]);
-    await activate(page.getByRole('button', { name: /^Continuer/ }));
+    await activate(page.getByRole('button', { name: /^Choisir le retrait/ }));
+    await activate(page.getByRole('button', { name: /^Continuer · retrait/ }));
     expect(await page.getByLabel('Prénom et nom', { exact: true }).inputValue()).toBe('');
     expect(accountReads).toBe(baseline);
   });

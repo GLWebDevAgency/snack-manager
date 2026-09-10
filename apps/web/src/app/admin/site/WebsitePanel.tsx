@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WebsiteUrlSchema } from "@sm/contracts";
 import { api, type TenantMe } from "@/lib/api";
 import { Btn, Field, Input, Panel, useToast } from "@/components/ui";
+import { useSiteEditScope } from "./site-scope";
 
 export function WebsitePanel() {
+  const scope = useSiteEditScope(), scopeRef = useRef(scope);
+  const alive = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const toast = useToast();
   const [url, setUrl] = useState("");
   const [saved, setSaved] = useState("");
@@ -15,7 +19,7 @@ export function WebsitePanel() {
   useEffect(() => {
     let cancelled = false;
     void api.get<TenantMe>("/tenants/me").then((tenant) => {
-      if (cancelled) return;
+      if (cancelled || !scopeRef.current.current()) return;
       const current = tenant.websiteUrl ?? "";
       setUrl(current); setSaved(current); setLoaded(true);
     }).catch(() => { if (!cancelled) setError("Impossible de charger le site vitrine. Rechargez la page pour réessayer."); });
@@ -23,7 +27,7 @@ export function WebsitePanel() {
   }, []);
 
   async function save() {
-    if (!loaded || busy) return;
+    if (!loaded || busy || !scope.current()) return;
     const next = url.trim();
     if (next && !WebsiteUrlSchema.safeParse(next).success) {
       setError("Saisissez une adresse HTTPS valide, par exemple https://classfood.fr."); return;
@@ -31,9 +35,10 @@ export function WebsitePanel() {
     setBusy(true); setError(null);
     try {
       await api.patch("/tenants/me/identity", { websiteUrl: next || null });
+      if (!alive.current || !scope.current()) return;
       setSaved(next); setUrl(next); toast("Lien du site vitrine enregistré", { icon: "check" });
-    } catch { setError("Enregistrement impossible. Votre lien précédent est conservé."); }
-    finally { setBusy(false); }
+    } catch { if (alive.current && scope.current()) setError("Enregistrement impossible. Votre lien précédent est conservé."); }
+    finally { if (alive.current && scope.current()) setBusy(false); }
   }
 
   return <Panel title="Votre site vitrine" sub="Votre identité, votre adresse, votre site sur mesure">

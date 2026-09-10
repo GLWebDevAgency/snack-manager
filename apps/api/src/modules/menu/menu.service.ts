@@ -22,6 +22,7 @@ import { publierMenuMisAJour } from '../../common/menu-updated';
 import { MediasService } from '../mediatheque/medias.service';
 import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
 import { AuditService } from '../audit/audit.module';
+import { MenuPopularityService } from './menu-popularity.service';
 
 @Injectable()
 export class MenuService {
@@ -32,6 +33,7 @@ export class MenuService {
     private readonly supply: SupplyService,
     private readonly audit: AuditService,
     private readonly medias: MediasService,
+    private readonly popularity?: MenuPopularityService,
   ) {}
 
   /**
@@ -97,6 +99,23 @@ export class MenuService {
     publierMenuMisAJour(this.redis, tenantId, meta);
   }
 
+  private async withPresentation<T extends {
+    _id: unknown; categoryId?: unknown; active?: boolean; photoUrl?: string | null;
+    photoKind?: string | null; popularOverride?: boolean | null;
+  }>(tenantId: string, prods: T[], cats: { _id: unknown; active?: boolean }[]) {
+    const activeCategories = new Set(cats.filter((c) => c.active === true).map((c) => String(c._id)));
+    const eligible = (p: T) => p.active === true && activeCategories.has(String(p.categoryId)) && Boolean(p.photoUrl);
+    const top = await this.popularity?.top(tenantId,
+      prods.filter((p) => eligible(p) && p.popularOverride !== false).map((p) => String(p._id)),
+    ) ?? new Set<string>();
+    return prods.map((p) => ({
+      ...p,
+      photoKind: p.photoKind === 'cover' ? 'cover' as const : 'cutout' as const,
+      photoCover: p.photoKind === 'cover',
+      popular: eligible(p) && (p.popularOverride ?? top.has(String(p._id))),
+    }));
+  }
+
   /** Menu complet (back-office) : toutes catégories + produits, y compris inactifs. */
   async fullMenu(tenantId: string) {
     const [cats, rawProds] = await Promise.all([
@@ -106,7 +125,8 @@ export class MenuService {
     const avecModificateurs = await this.withModifiers(tenantId, rawProds);
     // Usage « fiche » : le back-office montre les photos en grand dans
     // l'éditeur d'un plat, c'est le plus exigeant de ses affichages.
-    const { produits: prods, medias } = await this.avecPhotos(tenantId, avecModificateurs, 'fiche');
+    const { produits, medias } = await this.avecPhotos(tenantId, avecModificateurs, 'fiche');
+    const prods = await this.withPresentation(tenantId, produits, cats);
     return {
       categories: cats.map((c) => ({
         ...c,
@@ -131,11 +151,12 @@ export class MenuService {
     const avecModificateurs = await this.withModifiers(tenantId, rawProds);
     // La même projection métier pour toutes les surfaces ; seule la découpe
     // de photo change entre grille de caisse et carte du site public.
-    const { produits: prods, medias } = await this.avecPhotos(
+    const { produits, medias } = await this.avecPhotos(
       tenantId,
       avecModificateurs,
       photoUsage,
     );
+    const prods = await this.withPresentation(tenantId, produits, cats);
     return {
       featuredConfigured: cats.some((c) => (c.featuredRevision ?? 0) > 0 || featuredProductIdsOf(c.featuredProductIds).length > 0),
       categories: cats.filter((c) => c.active === true).map((c) => ({

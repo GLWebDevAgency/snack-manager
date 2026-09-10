@@ -228,6 +228,21 @@ jobs:
           CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer
         run: pnpm --filter @sm/api exec vitest run src/modules/orders/customer-orders.integration.test.ts
 
+      - name: Tests MongoDB réels — notifications durables de commande
+        env:
+          # Base dérivée avec UUID, contrôlée avant tout nettoyage. Le service
+          # push reste simulé ; aucun serveur Mongo applicatif n'est lu.
+          ORDER_NOTIFICATIONS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_order_notifications_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/order-notifications/order-notifications.mongo.test.ts
+
+      - name: Tests MongoDB et Redis réels — domaines des wallets
+        env:
+          # Base Mongo distincte suffixée UUID ; Redis ne touche que des clés
+          # UUID sur la base 15, sans FLUSHDB. Aucun appel Stripe réel.
+          PAYMENT_DOMAINS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_payment_domains_test_ci
+          PAYMENT_DOMAINS_TEST_REDIS_URL: redis://127.0.0.1:6381/15
+        run: pnpm --filter @sm/api exec vitest run src/modules/payment-domains/payment-domains.integration.test.ts
+
       - name: Tests Redis réels — quotas de rattachement fidélité
         env:
           LOYALTY_ATTACHMENT_TEST_REDIS_URL: redis://127.0.0.1:6381/0

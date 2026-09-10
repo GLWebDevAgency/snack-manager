@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   NotFoundException,
   Optional,
@@ -251,6 +252,16 @@ export class OrdersController {
    * Suivi client — exige `?t=<trackingToken>` (remis à la création).
    * Sans jeton valide : 404, jamais 403 (voir `OrdersService.publicTracking`).
    */
+  @Public()
+  @Get('public/tenants/:slug/orders/:id/reorder')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  reorder(@Param('slug') slug: string, @Param('id') id: string, @Query('t') token: unknown) {
+    return this.orders.publicReorder(slug, id, token);
+  }
+
   @Public()
   @Get('public/orders/:id')
   tracking(

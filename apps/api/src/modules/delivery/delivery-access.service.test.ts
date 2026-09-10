@@ -139,6 +139,16 @@ describe('DeliveryAccessService — frontière livreur opaque', () => {
     }), expect.any(Object), { new: true, runValidators: true, writeConcern: { w: 'majority', j: true, wtimeout: 10_000 } });
   });
 
+  it('projette la marque et les coordonnées publiques sans exposer la configuration privée du restaurant', async () => {
+    clock(); const h = harness({ connected: true });
+    Object.assign(h.state.tenant!, { address: '1 rue de recette, Paris', phones: ['0100000000'], brandColor: '#cb241c',
+      stripeAccountId: 'private-processor', settingsSecret: 'private-settings' });
+    const result = await h.service.authenticate(SESSION_TOKEN);
+    expect(DeliverySessionViewSchema.parse(result.session)).toEqual(result.session);
+    expect(result.session).toMatchObject({ restaurantAddress: '1 rue de recette, Paris', restaurantPhones: ['0100000000'], brand: { palette: { accent: '#cb241c' } } });
+    expect(JSON.stringify(result.session)).not.toMatch(/private-|sessionHash|tenantId|stripe|settingsSecret/);
+  });
+
   it('récupère une réponse perdue avec le même nonce sans nouvelle écriture ni prolongation', async () => {
     clock(); const h = harness();
     h.state.operator!.invite!.expiresAt = new Date(NOW.getTime() + 1_000);

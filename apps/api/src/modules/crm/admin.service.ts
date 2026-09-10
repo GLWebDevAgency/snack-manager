@@ -395,7 +395,7 @@ export class AdminService {
     // repris part du repli, et le journal doit dire de quoi il partait
     // vraiment — c'est le même résolveur que toutes les surfaces.
     const avant = marqueObservee(before);
-    const aEnregistrer = masqueAEnregistrer(brand, before.logoUrl, this.origines.hotes);
+    const aEnregistrer = masqueAEnregistrer(brand, before.logoUrl, this.origines.hotes, before.brand);
     const tenant = await this.updateTenant(tenantId, { brand: aEnregistrer });
 
     await this.record(actor, {

@@ -63,6 +63,7 @@ export async function generateViewport({ params }: Params): Promise<Viewport> {
   return {
     width: "device-width",
     initialScale: 1,
+    viewportFit: "cover",
     // L’iframe est déjà contrainte par l’hôte : pas de zoom parasite au tap.
     maximumScale: 5,
     themeColor: brand.palette.ground,

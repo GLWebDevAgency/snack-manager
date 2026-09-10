@@ -171,6 +171,9 @@ export const BrandSchema = z.object({
   motion: BrandMotionSchema,
   logo: LogoSchema,
   hero: ImageUrl,
+  /** Accroche de la commande en ligne ; absente sur les marques historiques. */
+  tagline: z.string().trim().max(48).nullable().optional(),
+  taglineSub: z.string().trim().max(90).nullable().optional(),
   preset: PresetKeySchema.nullable().default(null),
   /*
    * `.default()` et non `.optional()` : tous les masques déjà stockés sont

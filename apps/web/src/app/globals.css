@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Shared mobile navigation material and photo overlay. Photo text is always
+   light on a dark scrim, independently of the restaurant's page theme. */
+:root {
+  --cf-nav-surface-dark: #1c1c1c;
+  --cf-nav-surface-light: rgba(255,255,255,.96);
+  --cf-nav-line-dark: rgba(255,255,255,.14);
+  --cf-nav-line-light: rgba(28,22,18,.18);
+  --cf-nav-shadow-dark: 0 14px 34px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.06) inset;
+  --cf-nav-shadow-light: 0 14px 34px rgba(28,22,18,.24), 0 2px 6px rgba(28,22,18,.12), 0 1px 0 rgba(255,255,255,.9) inset;
+  --cf-nav-highlight-dark: #2c2c2c;
+  --cf-nav-highlight-light: rgba(28,22,18,.08);
+  --cf-nav-highlight-line-dark: rgba(255,255,255,.08);
+  --cf-nav-highlight-line-light: rgba(28,22,18,.10);
+  --cf-photo-text: #fff;
+  --cf-photo-scrim: linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.25) 40%,rgba(0,0,0,.82));
+  --cf-photo-pill: rgba(0,0,0,.55);
+  --cf-photo-line: rgba(255,255,255,.22);
+}
+
 /*
  * Tokens EFFECTIFS « SM Dark » — valeurs littérales des maquettes
  * (docs/specs/design-system.md §2, docs/specs/backoffice-restaurant.md §2).

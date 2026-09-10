@@ -27,6 +27,7 @@ import {
   WS_EVENTS,
   StaffOrderAttemptResultSchema,
   StaffPhoneOrderAttemptRequestSchema,
+  GuestOrderReorderResponseSchema,
 } from '@sm/contracts';
 import type { Counter, Order, Product, Promotion, Tenant } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
@@ -45,6 +46,7 @@ import { prepareCustomerSaleAttribution, type PrepareCustomerSaleAttribution } f
 import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-recovery';
 import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
 import type { OrderAdmissionBinding } from './order-admission-identity';
+import { customerOrderReorder } from './customer-order-projection';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -597,6 +599,21 @@ export class OrdersService {
         estimatedMinutes: order.delivery.estimatedMinutes,
       } : null,
     };
+  }
+
+  /** Guest-only, tenant-correlated source. Historical references are projected
+   * by the same rules as account reorder; no names are resolved into new IDs. */
+  async publicReorder(slug: string, id: string, token: unknown) {
+    const filter = trackingFilter(id, token);
+    if (!filter || !/^[a-z0-9][a-z0-9_-]{0,127}$/.test(slug)) throw new NotFoundException('Commande introuvable');
+    const tenant = await this.tenants.findOne({ slug }).select('_id').read('primary').readConcern('majority').maxTimeMS(10_000).lean();
+    if (!tenant) throw new NotFoundException('Commande introuvable');
+    const order = await this.orders.findOne({ ...filter, tenantId: tenant._id, customerOwner: null,
+      channel: 'online', type: { $in: ['pickup', 'delivery'] } })
+      .select('_id number lines.productId lines.name lines.variantKey lines.variantName lines.qty lines.unitPrice lines.options.groupKey lines.options.choiceKey lines.removed')
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
+    if (!order) throw new NotFoundException('Commande introuvable');
+    return GuestOrderReorderResponseSchema.parse({ tenantSlug: slug, ...customerOrderReorder(order) });
   }
 
   /**

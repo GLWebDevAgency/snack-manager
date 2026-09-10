@@ -1,44 +1,22 @@
 "use client";
 
-/**
- * Vitrine + tunnel de commande d’un restaurant.
- *
- * Un seul composant sert les trois portes d’entrée :
- *   `mode="site"`  → /r/[slug] : page publique complète (en-tête, héro, carte,
- *                    avis, infos pratiques, pied de page) — c’est la page qu’on
- *                    référence dans Google Business ;
- *   `mode="embed"` → /embed/[slug] : la même carte et le même tunnel, sans
- *                    en-tête ni pied de page, calibrés pour une iframe.
- *
- * ─── POURQUOI L’EMBED NE PORTE PAS LA BANDE D’ACCUEIL ───
- *
- * Ce n’est ni la même page ni le même visiteur. L’embed est posé DANS le site
- * du restaurateur : celui qui le voit vient de traverser les photos, le logo
- * et le décor de ce site — la photo d’établissement, il l’a déjà vue, souvent
- * la même. Trois raisons de plus, dans l’ordre de leur poids :
- *   · l’iframe remonte sa hauteur à la page hôte (`postMessage`/`resize`) :
- *     une bande de plus, c’est 130 px poussés dans la mise en page de
- *     QUELQU’UN D’AUTRE, sans qu’il l’ait demandé ;
- *   · jusqu’à 2 Mo non redimensionnés seraient facturés au chargement d’une
- *     page qui n’est pas la nôtre, pour une image qu’elle affiche déjà ;
- *   · l’embed est délibérément amputé (ni incontournables, ni avis, ni
- *     mentions) : c’est la carte et le tunnel, rien d’autre. Une vitrine
- *     complète y serait un doublon, pas un service.
- * La bande vit donc dans `SiteHeader` seul, jamais dans `EmbedHeader`.
- *
- * Hiérarchie de la page (maquette `docs/specs/commande-en-ligne.md` §5.1) :
- *   en-tête de restaurant (identité + état + héro + appel à l’action)
- *   ├ bandeau d’état (pause, fermeture, panier réconcilié)
- *   ├ rail « Les incontournables »
- *   ├ carte : navigation collante + sections à double filet
- *   └ avis · infos pratiques · mentions
- *
- * Le rendu est identique côté serveur et côté client : noms, descriptions et
- * prix sont dans le HTML livré, sans attendre l’exécution du JavaScript.
- */
+/** Restaurant storefront and checkout shared by site, embed and the explicit
+ * demo. Navigation keeps the live cart/recovery controllers mounted. The
+ * embed retains its host resize protocol and guest-only account boundary. */
 
 import { storefrontHighlights } from "./highlights";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSMTabTransition } from "@/components/ui/SMTabBar";
+import { OrderHeader, OrderHero } from "./OrderHeader";
+import { OrderTabBar } from "./OrderTabBar";
+import { Recommendations } from "./Recommendations";
+import { applyDevicePreferences } from "./device-preferences";
+import { useDevicePreferences } from "./device-preferences-store";
+import { DevicePreferencesSheet } from "../customer-account/DevicePreferencesSheet";
+import { usePathname } from "next/navigation";
+import { OrderInstall } from "./OrderInstall";
+import { navigateOrderView, useEmbeddedOrderView, useOrderInstallationRequest } from "./order-navigation";
+import "./order-v2.css";
 import { logoPour, TYPE_PAIRS, WebsiteUrlSchema } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars, Verrou, verrouPour } from "@/components/ui";
@@ -46,8 +24,9 @@ import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { classesPolices } from "@/components/masque/polices";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
-import { networkApi, type MenuProduct, type OrderingApi, type Site } from "./api";
+import { networkApi, type MenuCategory, type MenuProduct, type OrderingApi, type Site } from "./api";
 import {
+  setVariant,
   draftFromLine,
   draftToLine,
   indexMenu,
@@ -58,7 +37,6 @@ import {
 } from "./cart";
 import {
   cityOf,
-  hhmm,
   nextOpeningLabel,
   telHref,
   weekSchedule,
@@ -103,9 +81,6 @@ const EMBED_HEADER_H = 58;
  * peu d’air qu’on voit : le défaut visible reste du bon côté.
  */
 const EMBED_HEADER_VERROU_H = 76;
-
-/** Nombre de produits mis en avant sur la vitrine. */
-
 
 export function Storefront({
   site,
@@ -210,14 +185,33 @@ export function Storefront({
     () => apparenceStripeDe(masque, brand),
     [masque, brand],
   );
-  const index = useMemo(() => indexMenu(site.categories), [site.categories]);
+  const [catalogue, setCatalogue] = useState({ source: site.categories, categories: site.categories });
+  if (catalogue.source !== site.categories) setCatalogue({ source: site.categories, categories: site.categories });
+  const categories = catalogue.source === site.categories ? catalogue.categories : site.categories;
+  const updateCatalogue = useCallback((next: MenuCategory[]) => setCatalogue({ source: site.categories, categories: next }), [site.categories]);
+  const index = useMemo(() => indexMenu(categories), [categories]);
   const cart = useCart(site.tenant.slug, index);
   const recovery = useCheckoutRecovery(site.tenant.slug, demo, !embed);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);
   const [deviceOrdersOpen, setDeviceOrdersOpen] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [navigationLocked, setNavigationLocked] = useState(false);
+  const devicePreferences = useDevicePreferences(site.tenant.slug, !demo);
+  const pathname = usePathname();
+  const embeddedView = useEmbeddedOrderView();
+  const installRequested = useOrderInstallationRequest();
+  const activeTab = embed || demo ? embeddedView
+    : pathname?.endsWith("/recherche") ? "search" : pathname?.endsWith("/commandes") ? "orders" : "menu";
+  function setActiveTab(key: string) {
+    navigateOrderView(site.tenant.slug, key === "search" || key === "orders" ? key : "menu", embed || demo);
+  }
+  const [headerHeight, setHeaderHeight] = useState(72);
+  const transition = useSMTabTransition({ activeKey: activeTab, onSelect: setActiveTab });
   const rootRef = useRef<HTMLDivElement>(null);
+  const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
+  const bindRoot = useCallback((node: HTMLDivElement | null) => { rootRef.current = node; setDialogContainer(node); }, []);
 
   // ── L'entonnoir : la visite au montage, le panier au premier article. ──
   // (Les deux jalons suivants partent du tunnel lui-même — voir Checkout.)
@@ -230,7 +224,7 @@ export function Storefront({
   }, [cart.lines.length]);
 
   const paused = site.ordering.paused;
-  const blocked = paused || site.categories.length === 0;
+  const blocked = paused || categories.length === 0;
 
   const inCart = useMemo(
     () =>
@@ -242,7 +236,7 @@ export function Storefront({
   );
 
   // La sélection du gérant est partagée avec les scènes TV.
-  const highlights = useMemo(() => storefrontHighlights(site.categories, site.featuredConfigured), [site.categories, site.featuredConfigured]);
+  const highlights = useMemo(() => storefrontHighlights(categories, site.featuredConfigured), [categories, site.featuredConfigured]);
 
   // ── Lignes écartées à la réconciliation : on l’annonce, on ne l’escamote pas ──
   const notice =
@@ -273,7 +267,7 @@ export function Storefront({
   }
 
   // ── Ouverture de la fiche produit ──
-  function pick(product: MenuProduct) {
+  function pick(product: MenuProduct, variantKey?: string) {
     if (blocked) return;
     // Produit sans option : ajout direct — un appui suffit, pas de feuille.
     if (!product.configurable) {
@@ -284,7 +278,8 @@ export function Storefront({
       else cart.upsert(draftToLine(newDraft(product)));
       return;
     }
-    setDraft(newDraft(product));
+    const draft = variantKey ? setVariant(newDraft(product), variantKey) : newDraft(product);
+    setDraft(applyDevicePreferences(draft, devicePreferences.preferences));
   }
 
   /** « Modifier » depuis le panier : la fiche rouvre pré-remplie. */
@@ -296,41 +291,32 @@ export function Storefront({
 
   function scrollToMenu() {
     setTunnel(false);
-    document
-      .getElementById("carte")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveTab("menu");
+    requestAnimationFrame(() => document.getElementById("carte")?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start",
+    }));
   }
 
   const cityName = cityOf(site.tenant.address);
 
-  /*
-   * L'IMAGE D'ACCUEIL — lue sur LE MASQUE, comme le logo juste au-dessus.
-   *
-   * `brand` et non `site.tenant.brand` : sous `?masque=<direction>`, la
-   * matrice de captures rend une direction de référence, dont le `hero` est
-   * `null` par construction (`DIRECTIONS`). Les six captures restent donc
-   * exactement ce qu'elles étaient — la bande n'apparaît que sur la marque
-   * réellement stockée par un restaurant.
-   *
-   * Le cadrage passe par la médiathèque de la charge `/site` : `brand.hero` ne
-   * stocke qu'une URL, sans point d'intérêt (voir `hero.ts`).
-   */
-  const hero = brand.hero;
+  // La photo d’accueil choisie par le restaurateur prime sur les produits à l’affiche.
+  // Le cadrage et le texte alternatif viennent de sa médiathèque.
+  const hero = brand.hero ?? highlights.find(product => product.photoUrl)?.photoUrl ?? null;
   const heroCadrage = useMemo(() => cadrageDuHero(hero, site.medias), [hero, site.medias]);
   const heroAlt = useMemo(() => altDuHero(hero, site.medias), [hero, site.medias]);
 
   return (
     <div
-      ref={rootRef}
+      ref={bindRoot}
       style={masque}
       className={cx(
         classesPolices,
         // `clip` et non `hidden` : `overflow-x: hidden` force `overflow-y:
         // auto` et fait de cette racine un conteneur de défilement — les
         // barres collantes de la carte cesseraient alors de coller.
-        "font-body min-h-dvh overflow-x-clip bg-bg text-ink",
+        "sm-order font-body min-h-dvh overflow-x-clip bg-bg text-ink",
         // Dégage la barre de panier flottante.
-        cart.count > 0 || recovery.active || recovery.last ? "pb-28" : "pb-10",
+        cart.count > 0 || recovery.active || recovery.last ? "sm-order-with-cart" : "",
       )}
     >
       {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
@@ -347,27 +333,30 @@ export function Storefront({
           onClose={showClose ? closeEmbed : null}
         />
       ) : (
-        <SiteHeader
-          site={site}
-          hero={hero}
-          heroCadrage={heroCadrage}
-          heroAlt={heroAlt}
-          logoUrl={logoMarque}
-          verrouUrl={verrouMarque}
-          cityName={cityName}
-          paused={paused}
-          onOrder={scrollToMenu}
-        />
+        <OrderHeader onHeightChange={setHeaderHeight} site={site} logoUrl={logoMarque} lockupUrl={verrouMarque}
+          account={!demo && <CustomerAccountEntry dialogContainer={dialogContainer} compact slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
+            onCatalogVerified={updateCatalogue} loyaltyHref={loyalty?.chemin} onDeviceOrders={() => setDeviceOrdersOpen(true)} onDevicePreferences={() => setPreferencesOpen(true)} />} />
       )}
 
       {/* Une seule borne, jamais un point de rupture : la colonne suit la
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
-        {!demo && <nav aria-label="Vos accès personnels" className={cx("gap-2 pt-4 sm:flex sm:justify-end", embed ? "flex justify-end" : "grid grid-cols-2")}>
-          {!embed && <CustomerAccountEntry slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
-            loyaltyHref={loyalty?.chemin} onDeviceOrders={() => setDeviceOrdersOpen(true)} />}
-          <Tap onClick={() => setDeviceOrdersOpen(true)} className="cf-press flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-pill border border-ink/10 bg-surface px-3 text-left hover:border-ink/25" aria-label="Mes commandes sur cet appareil"><Icon name="ticket" size={18} className="hidden sm:block" /><span><span className="block text-[13px] font-bold">Mes commandes</span><span className="block text-[11px] text-mut">Sur cet appareil</span></span></Tap>
-        </nav>}
+        <OrderInstall key={site.tenant.slug} slug={site.tenant.slug} name={site.tenant.name} disabled={demo || embed}
+          eligible={!tunnel && (installRequested || recovery.active?.state === "received" || !!recovery.last)} />
+        <div {...transition.contentProps}>
+        {!embed && activeTab === "menu" && <OrderHero site={site} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
+        {!demo && <DeviceOrdersSheet open={activeTab === "orders" || deviceOrdersOpen} presentation={activeTab === "orders" ? "page" : "sheet"}
+          slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed} onClose={() => setDeviceOrdersOpen(false)}
+          onCatalogVerified={updateCatalogue} onNavigationLockedChange={setNavigationLocked} onReordered={() => { setDeviceOrdersOpen(false); setTunnel(true); }} />}
+        {activeTab === "orders" && <div className="sm-order-orders-access">
+          {demo ? <div className="sm-order-tab-page"><h2>Mes commandes</h2><p>La démonstration conserve le suivi dans le panier pendant cette visite.</p></div>
+            : <>{!embed && <CustomerAccountEntry dialogContainer={dialogContainer} slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
+              onCatalogVerified={updateCatalogue} loyaltyHref={loyalty?.chemin} onDevicePreferences={() => setPreferencesOpen(true)} />}
+              <Tap className="sm-order-entry" onClick={() => setPreferencesOpen(true)} disabled={navigationLocked}>
+                <Icon name="gear" size={22} /><span><b>Préférences de cet appareil</b><small>Coordonnées mémorisées et choix habituels</small></span><Icon name="arrow" size={18} />
+              </Tap></>}
+        </div>}
+        <div hidden={activeTab === "orders"}>
         {cart.persistenceError && <div className="pt-4">
           <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
         </div>}
@@ -394,7 +383,7 @@ export function Storefront({
 
         {paused && <PauseCard site={site} />}
 
-        {!embed && (
+        {!embed && activeTab === "menu" && (
           <Highlights
             products={highlights}
             inCart={inCart}
@@ -422,12 +411,12 @@ export function Storefront({
           n'emporte ni avis, ni incontournables, ni mentions — la carte et le
           tunnel, rien d'autre.
         */}
-        {!embed && loyalty && (
+        {!embed && activeTab === "menu" && loyalty && (
           <FideliteVitrine slug={site.tenant.slug} resume={loyalty} />
         )}
 
-        <section id="carte" className="scroll-mt-4">
-          {site.categories.length === 0 ? (
+        <section id="carte" style={{ scrollMarginTop: embed ? EMBED_HEADER_H : headerHeight }}>
+          {categories.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-6 py-20 text-center">
               <span className="grid size-11 place-items-center rounded-card bg-surface2 text-mut">
                 <Icon name="grid" size={20} />
@@ -441,17 +430,18 @@ export function Storefront({
             </div>
           ) : (
             <MenuBoard
-              categories={site.categories}
+              categories={categories}
+              search={activeTab === "search"}
               onPick={pick}
               inCart={inCart}
               disabled={blocked}
               prixMono={prixMono}
-              stickyTop={embed ? (verrouMarque ? EMBED_HEADER_VERROU_H : EMBED_HEADER_H) : 0}
+              stickyTop={embed ? (verrouMarque ? EMBED_HEADER_VERROU_H : EMBED_HEADER_H) : headerHeight}
             />
           )}
         </section>
 
-        {!embed && (
+        {!embed && activeTab === "menu" && (
           <>
             {/* Sur grand écran, avis et infos pratiques se font face plutôt que
                 de s’empiler sur 1 080 px de large. */}
@@ -462,11 +452,13 @@ export function Storefront({
             <LegalFooter site={site} cityName={cityName} prixMono={prixMono} />
           </>
         )}
+        </div>
+        </div>
       </main>
 
       {/* ── Barre de panier flottante ── */}
       {(cart.count > 0 || recovery.active || recovery.last) && !tunnel && (
-        <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(12px+env(safe-area-inset-bottom))]">
+        <div className="sm-order-cart">
           <div className="mx-auto max-w-[560px]">
             <Tap
               onClick={() => setTunnel(true)}
@@ -484,7 +476,7 @@ export function Storefront({
                 fond du bouton laisse le couple onAccent/accent intact, celui
                 que le résolveur garantit sur les six directions.
               */}
-              <span className="grid size-8 shrink-0 place-items-center rounded-pill border-[1.5px] border-onaccent/50 text-[14px] font-extrabold tabular-nums">
+              <span className="sm-order-cart-count grid size-10 shrink-0 place-items-center rounded-pill border border-onaccent/35 text-[15px] font-extrabold tabular-nums">
                 {recovery.active ? <Icon name="clock" size={16} /> : cart.count || <Icon name="clock" size={16} />}
               </span>
               <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
@@ -497,8 +489,14 @@ export function Storefront({
         </div>
       )}
 
+      <div><OrderTabBar slug={site.tenant.slug} activeKey={activeTab} theme={brand.mode} hidden={tunnel}
+        minimizable={!draft && !deviceOrdersOpen && !preferencesOpen} disabled={navigationLocked} loyaltyHref={!embed ? loyalty?.chemin : null}
+        demo={demo} onSelect={key => transition.selectTab(key === "search" || key === "orders" ? key : "menu")} /></div>
+
       <ProductSheet
         draft={draft}
+        recommendations={draft && !draft.lineId ? <Recommendations categories={categories} lines={cart.lines}
+          onPick={pick} prixMono={prixMono} excludeProductId={draft.product.id} disabled={blocked} /> : null}
         blocked={blocked}
         prixMono={prixMono}
         onChange={setDraft}
@@ -509,10 +507,12 @@ export function Storefront({
         }}
       />
 
-      {!demo && <DeviceOrdersSheet open={deviceOrdersOpen} slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed} onClose={() => setDeviceOrdersOpen(false)} />}
+      {!demo && <DevicePreferencesSheet open={preferencesOpen} slug={site.tenant.slug} tenantName={site.tenant.name} categories={categories}
+        loyaltyEnabled={!!loyalty} onClose={() => setPreferencesOpen(false)} />}
 
       <Checkout
         open={tunnel}
+        recommendations={<Recommendations categories={categories} lines={cart.lines} onPick={pick} prixMono={prixMono} disabled={blocked} />}
         recovery={recovery}
         api={api}
         demo={demo}
@@ -568,332 +568,6 @@ function DemoRibbon() {
 // ─────────────────────────────────────────────────────────────
 // En-têtes
 // ─────────────────────────────────────────────────────────────
-
-/**
- * En-tête de restaurant — le bloc qui donne son ton à la page.
- *
- * Deux étages, et c’est la maquette : une **barre d’identité** courte (logo,
- * nom, appel) puis une **carte d’accroche** — état de service, promesse en
- * trois lignes, appel à l’action. L’accroche est une CARTE et non une pleine
- * page : elle tient dans ~300 px, si bien que le premier plat de la carte
- * apparaît dès le premier écran d’un téléphone. Un site de restauration dont
- * le premier écran ne montre aucun plat perd le client avant la faim.
- *
- * Le nom du restaurant reste le `h1` (c’est la page référencée) ; la promesse
- * est une accroche, pas un titre de document.
- *
- * ═══ LA BANDE D’ACCUEIL NE COÛTE QUE SA DIFFÉRENCE ═══
- *
- * Quand le restaurant a posé une image d’accueil (`brand.hero`), elle prend la
- * tête de CETTE carte — pas un étage de plus au-dessus d’elle. Et les deux
- * pastilles (« c’est ouvert ? », « c’est bon ? ») descendent SUR la photo au
- * lieu d’ouvrir le corps de la carte : la bande ne coûte donc au premier écran
- * que sa hauteur MOINS la place qu’elles laissent (48 px sur une ligne, 88 sur
- * deux). Mesuré sur un téléphone de 390 px : une bande de 130 px alourdit
- * l’en-tête de 41 px, et le premier plateau du rail passe de 647 à 689 px du
- * haut — il reste au premier écran.
- *
- * Sans image, rien ne bouge — pas de réceptacle vide, pas de hauteur réservée :
- * l’immense majorité des restaurants n’en aura pas avant longtemps, et leur
- * vitrine reste au pixel celle d’hier.
- */
-function SiteHeader({
-  site,
-  hero,
-  heroCadrage,
-  heroAlt,
-  logoUrl,
-  verrouUrl,
-  cityName,
-  paused,
-  onOrder,
-}: {
-  site: Site;
-  /** L’image d’accueil du masque — `null` pour l’immense majorité des cartes. */
-  hero: string | null;
-  /** `object-position` issu du point d’intérêt de la médiathèque. */
-  heroCadrage: string;
-  /** Vide tant que le restaurateur n’a rien saisi : la bande est décorative. */
-  heroAlt: string;
-  /** La déclinaison de `brand.logo` qui va avec le mode du masque. */
-  logoUrl: string | null;
-  /** Le VERROU du masque — « logo avec le nom » — ou `null` s’il n’y en a pas. */
-  verrouUrl: string | null;
-  cityName: string;
-  /** Commande en ligne suspendue : l’appel à l’action ne promet plus rien. */
-  paused: boolean;
-  onOrder: () => void;
-}) {
-  const phone = site.tenant.phones[0];
-  const lead = site.slots?.leadTimeMin ?? 15;
-  const nextSlot = site.slots?.slots.find((s) => !s.full)?.iso ?? null;
-  const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
-
-  /*
-   * UNE IMAGE D’ACCUEIL QUI NE CHARGE PAS NE LAISSE PAS DE TROU.
-   *
-   * Même motif que `Plate` : l’état porte l’URL qu’il juge, et le nœud est
-   * relu au montage — la page est rendue côté serveur, donc une image morte a
-   * déjà échoué quand React s’attache et `onError` ne se déclenchera jamais.
-   * L’enjeu est ici plus grand que sur un plateau de produit : la bande
-   * retirée, les pastilles retournent DANS la carte et la vitrine redevient
-   * exactement celle d’un restaurant sans photo, au lieu de garder un cadre
-   * vide de 130 px en tête de page.
-   */
-  const [etat, setEtat] = useState({ url: hero, casse: false });
-  if (etat.url !== hero) setEtat({ url: hero, casse: false });
-  const bande = hero && !etat.casse ? hero : null;
-  const casse = () => setEtat({ url: hero, casse: true });
-
-  /*
-   * Les deux questions que le client se pose avant de lire quoi que ce soit —
-   * « c’est ouvert ? » et « c’est bon ? ». Elles restent visibles à 390 px, et
-   * elles restent PREMIÈRES dans l’ordre de lecture, sur la photo comme dans
-   * la carte.
-   *
-   * `bg-surface` quand elles se posent sur la photo : une plaque OPAQUE, et
-   * c’est ce qui rend leur texte lisible sur n’importe quel cliché. Le voile
-   * du masque assombrit toujours, mais `--cf-text` suit le MODE du restaurant :
-   * sur les quatre directions claires, l’encre tombe entre 1,13:1 et 1,70:1
-   * sur une photo SOMBRE voilée, et remonte à 5,35–6,00 sur une photo blanche
-   * — c’est la photo qui déciderait, et on ne la choisit pas. Sur la plaque,
-   * le couple redevient `ink/surface` : 9,10:1 au pire des six directions,
-   * garanti par `contraste()` (mesures dans `hero.test.ts`).
-   */
-  const pastilles = (
-    <div className="flex flex-wrap items-center gap-2">
-      <span
-        className={cx(
-          "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
-          bande && "bg-surface",
-          paused
-            ? "border-prep/45 text-prept"
-            : site.openNow
-              ? "border-ok/40 text-okt"
-              : "border-ink/14 text-mut",
-        )}
-      >
-        <Dot tone={paused ? "prep" : site.openNow ? "ok" : "mut"} />
-        {paused
-          ? "Commande en ligne suspendue"
-          : site.openNow
-            ? "Ouvert maintenant"
-            : "Fermé"}
-        {!paused && site.openNow && nextSlot && (
-          <span className="font-extrabold tabular-nums text-ink">
-            · retrait {hhmm(nextSlot)}
-          </span>
-        )}
-        {!paused && !site.openNow && reopen && (
-          <span className="font-semibold text-mut">· {reopen}</span>
-        )}
-      </span>
-      {site.reviews.count > 0 && (
-        <span
-          className={cx(
-            "inline-flex h-8 items-center gap-1.5 rounded-pill border border-ink/12 px-3 text-[13px] font-bold text-ink",
-            bande && "bg-surface",
-          )}
-        >
-          <Stars value={site.reviews.avg} size={12} />
-          <span className="tabular-nums">
-            {site.reviews.avg.toLocaleString("fr-FR", {
-              minimumFractionDigits: 1,
-              maximumFractionDigits: 1,
-            })}
-          </span>
-          <span className="font-semibold tabular-nums text-mut">
-            ({site.reviews.count})
-          </span>
-        </span>
-      )}
-    </div>
-  );
-
-  /* La ville — écrite UNE fois : elle se pose sous le nom écrit comme sous le
-     verrou, et doit rester lisible sous un verrou plus large qu’une tuile. */
-  const sousTitre = (
-    <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-      {cityName || "Click & collect"}
-    </p>
-  );
-
-  return (
-    <header className="relative">
-      {/* ── Barre d’identité ──
-          Avec un VERROU posé, l’en-tête l’emploie TEL QUEL à la place de la
-          tuile plus le nom : le graphiste du restaurant a déjà composé les
-          deux, les recomposer en police du produit défait son travail. Le nom
-          reste lu — il est l’`alt` du verrou, et le verrou est posé DANS le
-          `h1`, qui garde donc son rôle et son texte accessible.
-          Sans verrou (l’immense majorité), rien ne change. */}
-      <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 pb-3 pt-4">
-        <Verrou
-          src={verrouUrl}
-          nom={site.tenant.name}
-          hauteur={44}
-          balise="h1"
-          sous={sousTitre}
-          replier={
-            <>
-              <BrandMark name={site.tenant.name} logoUrl={logoUrl} size={44} />
-              <div className="min-w-0 flex-1">
-                <h1 className="font-display truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
-                  {site.tenant.name}
-                </h1>
-                {sousTitre}
-              </div>
-            </>
-          }
-        />
-        {phone && (
-          <a
-            href={telHref(phone)}
-            aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
-          >
-            <Icon name="phone" size={18} />
-          </a>
-        )}
-      </div>
-
-      {/* ── Carte d’accroche ── */}
-      <div className="mx-auto w-full max-w-[1080px] px-4 pb-1">
-        <div className="sm-hero sm-grain relative overflow-hidden rounded-wide border border-ink/8 shadow-card">
-          {bande ? (
-            /*
-              La bande d’accueil. Rapport fixé et plafonné : 130 px sur un
-              téléphone de 390 px, 220 px au plus sur un écran large. Le client
-              vient commander, pas admirer — une photo pleine hauteur repousse
-              le premier plat sous la ligne de flottaison.
-            */
-            <div className="relative aspect-[16/6] max-h-[220px] w-full">
-              <div className="sm-hero-media absolute inset-0 overflow-hidden">
-                {/*
-                  Photo de restaurant : domaine non maîtrisé, `next/image`
-                  imposerait une liste blanche — <img> volontaire, avec repli
-                  à l’erreur, comme `Plate`.
-
-                  CHARGEMENT DÉLIBÉRÉMENT EFFACÉ. C’est la plus grosse image de
-                  la page — jusqu’à 2 Mo, et rien ne la redimensionne encore
-                  (`MEDIA_LARGEUR_CIBLE` attend son transformateur). Elle ne
-                  doit donc pas passer devant les photos de plats, ni devant le
-                  script de paiement, sur la 4G d’un trottoir : `lazy` la fait
-                  charger APRÈS la mise en page, `fetchPriority="low"` la range
-                  derrière le reste, `decoding="async"` empêche son décodage de
-                  bloquer le fil principal. Le cadre, lui, est déjà à sa
-                  hauteur définitive : aucun décalage à l’arrivée, et pendant
-                  l’attente c’est le dégradé de `.sm-hero` qu’on voit — la
-                  carte d’hier, pas un trou gris.
-                */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={bande}
-                  /* Vide tant que le restaurateur n’a rien saisi : un `alt`
-                     vide RETIRE l’image de l’arbre d’accessibilité, ce qui est
-                     exactement ce qu’on veut d’un décor. Y recopier le nom du
-                     restaurant le ferait annoncer deux fois — il est déjà le
-                     `h1` deux lignes plus haut. */
-                  alt={heroAlt}
-                  loading="lazy"
-                  fetchPriority="low"
-                  decoding="async"
-                  onError={casse}
-                  ref={(node) => {
-                    if (node?.complete && node.naturalWidth === 0) casse();
-                  }}
-                  style={{ objectPosition: heroCadrage }}
-                  className="size-full object-cover"
-                />
-                <span aria-hidden className="sm-hero-voile absolute inset-0" />
-              </div>
-              <div className="absolute inset-x-0 bottom-0 px-5 pb-4 lg:px-7">
-                {pastilles}
-              </div>
-            </div>
-          ) : (
-            /* Nom en typographie fantôme — profondeur, jamais lu. Il tient le
-               rôle que la photo tient quand elle existe : sous une vraie
-               image, ce contour la salirait. */
-            <span
-              aria-hidden
-              className="sm-ghost font-display absolute -left-2 top-14 text-[clamp(4.75rem,3.5rem+3.5vw,7rem)] font-black opacity-70"
-            >
-              {site.tenant.name}
-            </span>
-          )}
-
-          <div className="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-end lg:justify-between lg:p-7">
-            <div className="min-w-0">
-              {!bande && pastilles}
-
-              {/* Promesse en trois temps — la copy de la maquette. */}
-              {/* Corps fluide : la promesse grandit avec la fenêtre au lieu
-                  de sauter d'un cran à 1 024 px. */}
-              <p
-                className={cx(
-                  "font-display text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink",
-                  // La marge séparait la promesse des pastilles ; parties sur
-                  // la photo, elle n’a plus rien à écarter.
-                  !bande && "mt-4",
-                )}
-              >
-                Commandez.
-                <br />
-                Récupérez.
-                <br />
-                <span className="text-accentink">Régalez-vous.</span>
-              </p>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-mut">
-                {paused
-                  ? "La carte reste consultable — la commande rouvre très vite."
-                  : site.openNow
-                    ? `Click & collect · prêt en ~${lead} min, sans compte.`
-                    : "Commandez dès maintenant pour un créneau au prochain service."}
-              </p>
-            </div>
-
-            <div className="flex shrink-0 flex-col gap-3 lg:items-end">
-              <div className="flex gap-2.5">
-                <Tap
-                  onClick={onOrder}
-                  className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-pill bg-accent px-6 text-[15px] font-extrabold text-onaccent shadow-[0_12px_30px_-12px_var(--cf-accent)]"
-                >
-                  {paused ? "Voir la carte" : "Commander maintenant"}
-                  <Icon name="arrow" size={17} stroke={2.6} />
-                </Tap>
-                {paused && phone && (
-                  <a
-                    href={telHref(phone)}
-                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
-                  >
-                    <Icon name="phone" size={16} />
-                    Appeler
-                  </a>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-mut lg:justify-end">
-                {site.todayHours && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon name="clock" size={14} className="shrink-0" />
-                    Aujourd’hui&nbsp;: {hoursOfToday(site)}
-                  </span>
-                )}
-                {site.tenant.address && (
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <Glyph name="pin" size={14} className="shrink-0" />
-                    <span className="truncate">{site.tenant.address}</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 function hoursOfToday(site: Site): string {
   const entry = site.todayHours;
@@ -1224,8 +898,7 @@ function LegalFooter({
         {cityName ? ` · ${cityName}` : ""} · Prix TTC, service compris
       </p>
       <p className="mt-1 text-[12px] leading-relaxed text-mut">
-        Allergènes et composition&nbsp;: demandez au comptoir. Commande en ligne
-        propulsée par Snack Manager.
+        Allergènes et composition&nbsp;: demandez au comptoir.
       </p>
       {websiteUrl && (
         <a href={websiteUrl} className="mt-3 inline-flex min-h-11 items-center rounded-ctrl px-3 text-[13px] font-bold text-ink underline decoration-ink/30 underline-offset-4 transition-colors hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">

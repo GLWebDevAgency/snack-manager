@@ -5,7 +5,7 @@ import { DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMis
 import { IS_PUBLIC, ROLES } from '../../common/auth';
 import { CAPACITES_REQUISES } from '../../common/capacites';
 import { DeliveryAccessGuard } from './delivery-access.guard';
-import { DeliveryMissionsController, DeliveryCourierMissionsController } from './delivery-missions.controller';
+import { DeliveryMissionsController, DeliveryCourierMissionsController, DeliveryCourierHistoryController } from './delivery-missions.controller';
 import { DeliveryMissionsQuotaGuard } from './delivery-missions.quota';
 
 const operationId = '11111111-1111-4111-8111-111111111111';
@@ -21,6 +21,15 @@ describe('frontières HTTP des missions', () => {
     expect(Reflect.getMetadata('__guards__', DeliveryCourierMissionsController)).toEqual([DeliveryMissionsQuotaGuard, DeliveryAccessGuard]);
     expect(Reflect.getMetadata('__httpCode__', DeliveryCourierMissionsController.prototype.dispatch)).toBe(200);
     expect(Object.getOwnPropertyNames(DeliveryCourierMissionsController.prototype)).not.toContain('delivered');
+  });
+  it('historique : même quota et accès privé, aucune mutation exposée', () => {
+    expect(Reflect.getMetadata(IS_PUBLIC, DeliveryCourierHistoryController)).toBe(true);
+    expect(Reflect.getMetadata('__guards__', DeliveryCourierHistoryController)).toEqual([DeliveryMissionsQuotaGuard, DeliveryAccessGuard]);
+    const service = { historyCourier: vi.fn() };
+    const controller = new DeliveryCourierHistoryController(service as never);
+    expect(() => controller.list({} as never, {})).toThrow();
+    expect(service.historyCourier).not.toHaveBeenCalled();
+    expect(Object.getOwnPropertyNames(DeliveryCourierHistoryController.prototype)).toEqual(['constructor', 'list']);
   });
   it('un contrôleur livreur sans contexte ne délègue aucune lecture ni mutation', () => {
     const service = { listCourier: vi.fn(), getCourier: vi.fn(), dispatchCourier: vi.fn() };

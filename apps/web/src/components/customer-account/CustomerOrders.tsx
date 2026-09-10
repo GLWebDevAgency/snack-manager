@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { CustomerOrderDetail, CustomerOrderSummary } from '@sm/contracts';
 import { Icon } from '../ui/icons';
 import { Surface, Tap } from '../order/primitives';
+import type { MenuCategory } from '../order/api';
 import { euros } from '../order/helpers';
 import { customerAccountRequest, type CustomerAccountAccess } from './client';
 import { createCustomerOrdersClient } from './orders';
@@ -39,8 +40,8 @@ function ordersRuntime(slug: string, access: CustomerAccountAccess) {
 
 /** Mounted by an explicit account action. The parent drops this component as
  * soon as its displayed publication is invalidated, even for identical profiles. */
-export function CustomerOrders({ slug, access, onBack, currentAccess, onClose }: { slug: string; access: CustomerAccountAccess; onBack: () => void;
-  currentAccess?: () => CustomerAccountAccess | null; onClose?: () => void }) {
+export function CustomerOrders({ slug, access, onBack, currentAccess, onClose, onCatalogVerified }: { slug: string; access: CustomerAccountAccess; onBack: () => void;
+  currentAccess?: () => CustomerAccountAccess | null; onClose?: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const [reorderId, setReorderId] = useState<string | null>(null);
   const runtime = useMemo(() => ordersRuntime(slug, access), [slug, access]);
@@ -65,7 +66,7 @@ export function CustomerOrders({ slug, access, onBack, currentAccess, onClose }:
   const backToList = () => { client.back(); if (!client.getSnapshot().orders.length) void client.load(); };
   const retry = () => { if (state.orderId) void client.open(state.orderId); else void client.load(); };
   if (reorderId && currentAccess && onClose) return <ReorderFlow slug={slug} orderId={reorderId} access={access} currentAccess={currentAccess}
-    onBack={() => { setReorderId(null); void client.open(reorderId); }} onClose={onClose} />;
+    onBack={() => { setReorderId(null); void client.open(reorderId); }} onClose={onClose} onCatalogVerified={onCatalogVerified} />;
   return <section aria-label="Commandes de votre compte" className="space-y-4">
     <Tap className={action + ' w-full justify-start'} onClick={state.orderId ? backToList : onBack}><Icon name="arrow" size={14} className="rotate-180" />{state.orderId ? 'Revenir à mes commandes' : 'Revenir à mon compte'}</Tap>
     <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">Compte personnel</p><h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-xl font-extrabold tracking-tight outline-none">{state.orderId ? state.detail ? `Commande n° ${state.detail.number}` : 'Détail de la commande' : 'Mes commandes'}</h3>

@@ -90,6 +90,7 @@ import { StripeCard, type ApparenceStripe, type StripePaymentOutcome } from "./S
 import { TurnstileCheck } from "./TurnstileCheck";
 import { DeliveryFee, DeliveryFields, FreeDeliveryHint } from "./DeliveryFields";
 import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, checkoutPaymentDecision, requestCounterPayment, requestExistingOrderPayment } from "./checkout-payment";
+import { OrderReadyNotification } from "./OrderReadyNotification";
 import { CounterPaymentAction } from "./CounterPaymentAction";
 import type { CheckoutRecovery } from "./useCheckoutRecovery";
 import {
@@ -214,7 +215,9 @@ export function Checkout({
   onClose,
   onBrowse,
   onEditLine,
+  recommendations,
 }: {
+  recommendations?: ReactNode;
   open: boolean;
   recovery: CheckoutRecovery;
   slug: string;
@@ -307,6 +310,8 @@ export function Checkout({
   const [slotsState, setSlotsState] = useState<"idle" | "loading" | "error">("loading");
   const [slotsRetry, setSlotsRetry] = useState(0);
   const [slotIso, setSlotIso] = useState<string | null>(null);
+  const [slotChoice, setSlotChoice] = useState<"asap" | "scheduled">("asap");
+  const slotChoiceRef = useRef<"asap" | "scheduled">("asap");
 
   const [wanted, setWanted] = useState<"online" | "counter">("online");
   const [probe, setProbe] = useState<"ready" | "off" | "unknown">("unknown");
@@ -410,14 +415,15 @@ export function Checkout({
         setSlots(res);
         setSlotsState("idle");
         setSlotIso((prev) =>
-          prev && res.slots.some((s) => s.iso === prev && !s.full) ? prev : null,
+          !isDelivery && slotChoiceRef.current === "asap" ? res.slots.find(s => !s.full)?.iso ?? null
+            : prev && res.slots.some((s) => s.iso === prev && !s.full) ? prev : null,
         );
       })
       .catch(() => { if (!controller.signal.aborted) setSlotsState("error"); });
     // Les réessais appartiennent au même cycle : aucune ancienne réponse ne
     // réactive une grille après sortie, changement de date ou de livraison.
     return () => controller.abort();
-  }, [open, step, date, api, slug, fulfillment, slotsRetry]);
+  }, [open, step, date, api, slug, fulfillment, slotsRetry, isDelivery]);
 
   function navigateStep(next: Step) {
     if (requestInFlightRef.current) return;
@@ -470,6 +476,8 @@ export function Checkout({
     bankProcessingRef.current = false;
     setError(null);
     setSlotIso(null);
+    setSlotChoice("asap");
+    slotChoiceRef.current = "asap";
     setDate(null);
     setTurnstileToken(null);
     setTurnstileReset((value) => value + 1);
@@ -714,8 +722,8 @@ export function Checkout({
   // (En démonstration, `armeFunnel` n'a posé aucun contexte : ce jalon est
   // alors un no-op par construction.)
   useEffect(() => {
-    if (open && step === "customer") jalonFunnel("coordonnees");
-  }, [open, step]);
+    if (open && (isDelivery ? step === "customer" : step === "pay")) jalonFunnel("coordonnees");
+  }, [open, step, isDelivery]);
 
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter", previous?: PendingCheckoutAttempt) {
@@ -874,7 +882,7 @@ export function Checkout({
 
   const stepIndex = Math.max(
     0,
-    STEPS.findIndex((s) => s.id === visibleStep),
+    STEPS.filter(s => isDelivery || s.id !== "customer").findIndex((s) => s.id === visibleStep),
   );
   const finished = visibleStep === "done" || visibleStep === "card" || visibleStep === "recovery";
 
@@ -890,7 +898,7 @@ export function Checkout({
 
   const back: Partial<Record<Step, Step>> = {
     customer: "cart",
-    slot: "customer",
+    slot: isDelivery ? "customer" : "cart",
     pay: "slot",
   };
   const backTo = back[visibleStep];
@@ -972,6 +980,7 @@ export function Checkout({
           )}
           <CartStep
             cart={cart}
+            recommendations={recommendations}
             onBrowse={onBrowse}
             onEditLine={onEditLine}
             promoCode={promoCode}
@@ -1009,6 +1018,11 @@ export function Checkout({
             tenantName={isDelivery ? "Votre adresse de livraison" : tenantName}
             tenantAddress={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : tenantAddress}
             delivery={isDelivery}
+            choice={slotChoice}
+            onChoice={next => {
+              slotChoiceRef.current = next; setSlotChoice(next);
+              setSlotIso(next === "asap" && slotsReady ? slots?.slots.find(slot => !slot.full)?.iso ?? null : null);
+            }}
           />
         )}
 
@@ -1028,6 +1042,9 @@ export function Checkout({
               quote={deliveryQuote}
               total={checkoutTotal}
               address={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : null}
+              customerFields={!isDelivery ? <><CustomerStep customer={customer} provenance={customerDetails.provenance}
+                onChange={customerDetails.change} touched={touched} onBlur={() => setTouched(true)} tenantName={tenantName} />
+                {!demo && <CustomerMemoryControls details={customerDetails} />}</> : null}
             />
             {!demo && (
               <TurnstileCheck
@@ -1118,7 +1135,7 @@ export function Checkout({
           <CounterPaymentAction disabled={busy} busy={switchingCounter} onConfirm={switchCounterPayment} />
         )}
 
-        {visibleStep === "done" && order && (
+        {visibleStep === "done" && order && <>
           <DoneStep
             order={order}
             status={status}
@@ -1128,7 +1145,10 @@ export function Checkout({
             demoCard={demo && method === "online"}
             loyalty={loyalty}
           />
-        )}
+          {!demo && !embed && <div className="space-y-3 px-4 pb-5">
+            <OrderReadyNotification slug={slug} orderId={order._id} trackingToken={order.trackingToken} disabled={!currentAuthority(authority) || status === "delivered" || status === "cancelled"} />
+          </div>}
+        </>}
       </div>
     </Sheet>
   );
@@ -1158,7 +1178,7 @@ function Progress({
 }) {
   return (
     <ol className="mt-2.5 flex items-start gap-1.5">
-      {STEPS.map((entry, i) => {
+      {STEPS.filter(entry => delivery || entry.id !== "customer").map((entry, i) => {
         const done = i < index;
         const current = entry.id === step;
         return (
@@ -1289,9 +1309,9 @@ function Footer({
         amount={empty ? undefined : total ?? cart.subtotal}
         icon="arrow"
         mono={prixMono}
-        onClick={() => onNext("customer")}
+        onClick={() => onNext(fulfillment === "delivery" ? "customer" : "slot")}
       >
-        {empty ? "Votre panier est vide" : "Continuer"}
+        {empty ? "Votre panier est vide" : fulfillment === "delivery" ? "Choisir la livraison" : "Choisir le retrait"}
       </PrimaryAction>
     );
   }
@@ -1331,7 +1351,7 @@ function Footer({
       mono={prixMono}
       onClick={onSubmit}
     >
-      {!verified
+      {!contactOk ? "Nom et téléphone requis" : !verified
         ? "Vérification sécurisée…"
         : method === "online"
           ? "Payer"
@@ -1346,6 +1366,7 @@ function Footer({
 
 function CartStep({
   cart,
+  recommendations,
   onBrowse,
   onEditLine,
   promoCode,
@@ -1354,6 +1375,7 @@ function CartStep({
   delivery,
   quote,
 }: {
+  recommendations?: ReactNode;
   cart: CartApi;
   onBrowse: () => void;
   onEditLine: (line: CartLine) => void;
@@ -1408,6 +1430,7 @@ function CartStep({
         ))}
       </div>
 
+      {recommendations}
       <section className="flex flex-col gap-2.5">
         {/*
           Le titre de section NOMME le champ (`aria-labelledby`). Le
@@ -1525,17 +1548,17 @@ function CartRow({
 }) {
   const summary = lineSummary(line);
   return (
-    <article className="overflow-hidden rounded-panel border border-ink/6 bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_80px)] p-3 shadow-card">
+    <article className="sm-order-cart-row border-b border-ink/8 py-3">
       <div className="flex items-start gap-3">
         {/* Même plateau que la carte : le plat se reconnaît d'un écran à
             l'autre, et une photo morte n'y laisse jamais un cadre cassé. */}
-        <Plate
+        {line.photoUrl && <Plate
           photoUrl={line.photoUrl}
           name={line.name}
           mono={17}
           pad="p-[4%]"
-          className="size-[58px]"
-        />
+          className="size-[56px]"
+        />}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -1724,7 +1747,11 @@ function SlotStep({
   tenantName,
   tenantAddress,
   delivery = false,
+  choice,
+  onChoice,
 }: {
+  choice: "asap" | "scheduled";
+  onChoice: (choice: "asap" | "scheduled") => void;
   slots: SlotsResponse | null;
   state: "idle" | "loading" | "error";
   selected: string | null;
@@ -1779,6 +1806,13 @@ function SlotStep({
         </div>
       </div>
 
+      {!delivery && !slots.closedToday && !slots.paused && <RadioGroup label="Quand passez-vous ?" className="flex flex-col gap-3">
+        <ChoiceCard on={choice === "asap"} tabIndex={choice === "asap" ? 0 : -1} icon="clock" title="Au plus tôt"
+          sub={slots.slots.find(slot => !slot.full) ? `Prêt vers ${hhmm(slots.slots.find(slot => !slot.full)!.iso)} · ~${slots.leadTimeMin} min de préparation` : "Aucun créneau disponible"}
+          onClick={() => onChoice("asap")} disabled={state !== "idle" || !slots.slots.some(slot => !slot.full)} />
+        <ChoiceCard on={choice === "scheduled"} tabIndex={choice === "scheduled" ? 0 : -1} icon="clock" title="Choisir une heure" sub="Sélectionner un créneau disponible"
+          onClick={() => onChoice("scheduled")} disabled={state !== "idle"} />
+      </RadioGroup>}
       {dates.length > 1 && (
         <div className="flex gap-2">
           {dates.map((ymd) => (
@@ -1827,7 +1861,7 @@ function SlotStep({
             vous attend chaude, pas depuis une heure.
           </Banner>
 
-          {[...byService.entries()].map(([service, list]) => (
+          {(delivery || choice === "scheduled") && [...byService.entries()].map(([service, list]) => (
             <section key={service} className="flex flex-col gap-2.5">
               <SectionLabel hint={`${list.filter((s) => !s.full).length} libres`}>
                 {SERVICE_LABELS[service] ?? service}
@@ -1903,7 +1937,9 @@ function PayStep({
   total,
   address,
   disabled,
+  customerFields,
 }: {
+  customerFields?: ReactNode;
   cart: CartApi;
   customer: Customer;
   slotLabel: string | null;
@@ -1955,6 +1991,7 @@ function PayStep({
         {delivery && <p className="mt-2 text-[12px] leading-relaxed text-mut">Devis indicatif : prix et disponibilité de l’offre revérifiés à la validation.</p>}
       </section>
 
+      {customerFields}
       <section className="flex flex-col gap-2.5">
         <SectionLabel>Mode de paiement</SectionLabel>
         {delivery ? (

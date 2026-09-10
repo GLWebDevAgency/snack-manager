@@ -1,5 +1,6 @@
 export * from './schemas';
 export * from './invoice-issuance.schema';
+export * from './order-ready-notification.schema';
 export * from './order-capacity.schema';
 export * from './delivery-operator.schema';
 export * from './delivery-handoff.schema';

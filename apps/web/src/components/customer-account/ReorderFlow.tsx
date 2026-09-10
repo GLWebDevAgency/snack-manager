@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { Icon } from '../ui/icons';
 import { Surface, Tap } from '../order/primitives';
 import { euros } from '../order/helpers';
-import { httpTransport, orderingApi } from '../order/api';
+import { httpTransport, orderingApi, type MenuCategory } from '../order/api';
 import { CHECKOUT_MAX_LINES, canSubmitCartLines, indexMenu, lineSummary, useCart } from '../order/cart';
 import { readCheckoutRecovery } from '../order/checkout-attempt';
 import { customerAccountRequest, type CustomerAccountAccess } from './client';
@@ -13,9 +13,9 @@ import { createReorderClient, type ReorderState } from './reorder-client';
 
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:opacity-40';
 type Props = { slug: string; orderId: string; access: CustomerAccountAccess;
-  currentAccess: () => CustomerAccountAccess | null; onBack: () => void; onClose: () => void };
+  currentAccess: () => CustomerAccountAccess | null; onBack: () => void; onClose: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void };
 
-function runtime(props: Pick<Props, 'slug' | 'orderId' | 'access' | 'currentAccess'>) {
+function runtime(props: Pick<Props, 'slug' | 'orderId' | 'access' | 'currentAccess' | 'onCatalogVerified'>) {
   let alive = false;
   const client = createReorderClient({ ...props, request: customerAccountRequest(props.slug),
     active: () => alive && document.visibilityState === 'visible' && navigator.onLine !== false,
@@ -35,9 +35,9 @@ function runtime(props: Pick<Props, 'slug' | 'orderId' | 'access' | 'currentAcce
   return { client, start: () => { alive = true; }, stop: () => { alive = false; client.invalidate(); } };
 }
 
-export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onClose }: Props) {
+export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onClose, onCatalogVerified }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const run = useMemo(() => runtime({ slug, orderId, access, currentAccess }), [slug, orderId, access, currentAccess]);
+  const run = useMemo(() => runtime({ slug, orderId, access, currentAccess, onCatalogVerified }), [slug, orderId, access, currentAccess, onCatalogVerified]);
   const state = useSyncExternalStore(run.client.subscribe, run.client.getSnapshot, run.client.getServerSnapshot);
   useEffect(() => {
     run.start(); void run.client.load(); heading.current?.focus();

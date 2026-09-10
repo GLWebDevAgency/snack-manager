@@ -6,7 +6,7 @@ import { DeliveryOperatorsService } from './delivery-operators.service';
 import { DeliveryAccessController } from './delivery-access.controller';
 import { DeliveryAccessService } from './delivery-access.service';
 import { DeliveryAccessGuard } from './delivery-access.guard';
-import { DeliveryMissionsController, DeliveryCourierMissionsController } from './delivery-missions.controller';
+import { DeliveryMissionsController, DeliveryCourierMissionsController, DeliveryCourierHistoryController } from './delivery-missions.controller';
 import { DeliveryMissionsService } from './delivery-missions.service';
 import { DeliveryMissionsQuotaGuard } from './delivery-missions.quota';
 import { DeliveryHandoffService } from './delivery-handoff.service';
@@ -14,7 +14,7 @@ import { DeliveryHandoffController, DeliveryCourierHandoffController, DeliveryCu
 
 @Module({
   controllers: [DeliveryController, DeliveryOperatorsController, DeliveryAccessController, DeliveryMissionsController, DeliveryCourierMissionsController,
-    DeliveryHandoffController, DeliveryCourierHandoffController, DeliveryCustomerProofController],
+    DeliveryHandoffController, DeliveryCourierHandoffController, DeliveryCustomerProofController, DeliveryCourierHistoryController],
   providers: [DeliveryService, DeliveryOperatorsService, DeliveryAccessService, DeliveryAccessGuard, DeliveryMissionsService, DeliveryMissionsQuotaGuard,
     DeliveryHandoffService, DeliveryProofQuotaGuard],
   exports: [DeliveryService],

@@ -65,10 +65,7 @@ scenario(
     const fiche = page.getByRole('dialog', { name: PRODUIT });
     const carteProduit = page
       .getByRole('region', { name: 'Sandwichs', exact: true })
-      .getByRole('article')
-      .filter({
-        has: page.getByRole('heading', { name: PRODUIT, level: 3, exact: true }),
-    });
+      .getByRole('article', { name: PRODUIT, exact: true });
     await cliquerJusqua(
       carteProduit.getByRole('button', { name: /composer$/ }),
       fiche,
@@ -97,23 +94,14 @@ scenario(
     }
 
     // ── Total nº 2 : le panier ──
-    const continuer = panier.getByRole('button', { name: new RegExp(`^Continuer.*${TOTAL.source}`) });
+    const continuer = panier.getByRole('button', { name: new RegExp(`^Choisir le retrait.*${TOTAL.source}`) });
     await continuer.waitFor({ state: 'visible' });
     await continuer.click();
-
-    // ── Le client, sans compte ──
-    const coordonnees = page.getByRole('dialog', { name: 'Vos coordonnées' });
-    await coordonnees.waitFor({ state: 'visible' });
-    await coordonnees.getByRole('textbox', { name: 'Prénom et nom' }).fill('Camille Durand');
-    await coordonnees.getByRole('textbox', { name: 'Téléphone' }).fill('0612345678');
-    // Le bouton s'appelle « Nom et téléphone requis » et reste désactivé tant
-    // que les deux champs ne sont pas remplis : attendre son autre libellé,
-    // c'est vérifier la validation du formulaire sans l'affirmer à part.
-    await coordonnees.getByRole('button', { name: 'Choisir le créneau' }).click();
 
     // ── Le créneau de retrait ──
     const retrait = page.getByRole('dialog', { name: 'Créneau de retrait' });
     await retrait.waitFor({ state: 'visible' });
+    await retrait.getByRole('radio', { name: /Choisir une heure/ }).click();
 
     // Un créneau libre porte l'heure et rien d'autre ; « 12:50 — complet » et
     // « 18:40 — créneau chargé » sont d'autres libellés, le premier désactivé.
@@ -142,6 +130,10 @@ scenario(
     await paiement.waitFor({ state: 'visible' });
     await attendreTexte(paiement, heure);
 
+    // Les coordonnées restent requises, sur la dernière étape du retrait.
+    await paiement.getByRole('textbox', { name: 'Prénom et nom' }).fill('Camille Durand');
+    await paiement.getByRole('textbox', { name: 'Téléphone' }).fill('0612345678');
+
     // ── Total nº 3 : le récapitulatif, dernier écran avant l'engagement ──
     const recapitulatif = (await paiement.textContent()) ?? '';
     assert.ok(
@@ -149,7 +141,7 @@ scenario(
       `le récapitulatif de paiement doit annoncer 9,00 € — lu : ${JSON.stringify(recapitulatif.slice(0, 300))}`,
     );
     assert.ok(
-      recapitulatif.includes('Camille Durand'),
+      await paiement.getByRole('textbox', { name: 'Prénom et nom' }).inputValue() === 'Camille Durand',
       'le récapitulatif doit rappeler au nom de qui la commande est passée',
     );
 

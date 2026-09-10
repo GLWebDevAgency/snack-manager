@@ -17,10 +17,11 @@ function fixture() {
   const site = { tenant: { slug: 'classfood' }, categories: [{ id: 'menu', name: 'Menu', products: [product] }], ordering: { paused: false, message: null } } as Site;
   const request = Object.assign(vi.fn(async () => structuredClone(response)), { selection: vi.fn(async () => current?.selection ?? null) }) as unknown as CustomerAccountRequest;
   const loadSite = vi.fn(async () => structuredClone(site));
+  const catalog = vi.fn<(categories: Site['categories']) => void>();
   const append = vi.fn<CartApi['appendIfUnchanged']>(async (_lines, allowed) => allowed());
   const client = createReorderClient({ slug: 'classfood', orderId: id, access, currentAccess: () => current, active: () => active,
-    request, loadSite, hasUnresolvedCheckout: async () => unresolved, lock: async job => job(), now: () => now });
-  return { client, access, response, site, product, request, loadSite, append,
+    request, loadSite, onCatalogVerified: catalog, hasUnresolvedCheckout: async () => unresolved, lock: async job => job(), now: () => now });
+  return { client, catalog, access, response, site, product, request, loadSite, append,
     revoke: () => { current = null; }, switch: () => { current = { ...access, selection: { ...access.selection, browserRef: randomUUID() } }; },
     expire: () => { now += 60_001; }, pause: () => { active = false; client.invalidate(); }, pending: () => { unresolved = true; } };
 }
@@ -33,6 +34,12 @@ describe('réachat privé — aperçu puis ajout explicite, sans création de co
     expect(f.request).toHaveBeenLastCalledWith('order-reorder', { orderId: id }, f.access.selection);
     expect(f.append).toHaveBeenCalledTimes(1); expect(f.client.getSnapshot()).toMatchObject({ status: 'done', snapshot: null });
     expect(await f.client.confirm(f.append)).toBe(false); expect(f.append).toHaveBeenCalledTimes(1);
+  });
+  it('synchronise la carte avant l’aperçu puis revérifie la publication privée', async () => {
+    const f = fixture(); await f.client.load(); expect(f.catalog).toHaveBeenCalledWith(f.site.categories);
+    f.catalog.mockImplementationOnce(() => f.revoke());
+    expect(await f.client.confirm(f.append)).toBe(false); expect(f.append).not.toHaveBeenCalled();
+    expect(f.client.getSnapshot()).toMatchObject({ status: 'error', snapshot: null });
   });
   it.each(['price', 'stock', 'selection'] as const)('requiert une nouvelle confirmation si %s change', async fault => {
     const f = fixture(); await f.client.load();

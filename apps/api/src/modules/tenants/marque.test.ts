@@ -1,6 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
-import { DIRECTIONS } from '@sm/contracts';
+import { DIRECTIONS, lireMarque, logoUrlDe, marqueEffective } from '@sm/contracts';
+import { TenantSchema } from '@sm/db';
+import mongoose from 'mongoose';
 import {
   avecLogoHerite,
   exigerAA,
@@ -16,6 +18,12 @@ const HOTES = hotesDImages('snackmanager.fr', 'localhost');
 const NOTRE_LOGO = 'https://api.snackmanager.fr/public/tenants/chez-lima/logo?v=17';
 
 describe('l’API ne fait pas confiance à l’éditeur', () => {
+  it('préserve les accroches omises par un ancien éditeur, et respecte leur retrait explicite', () => {
+    const previous = { tagline: 'Fait maison.', taglineSub: 'À emporter.' };
+    expect(masqueAEnregistrer(DIRECTIONS.nuit, null, HOTES, previous)).toMatchObject(previous);
+    expect(masqueAEnregistrer({ ...DIRECTIONS.nuit, tagline: null }, null, HOTES, previous))
+      .toMatchObject({ tagline: null, taglineSub: previous.taglineSub });
+  });
   it('laisse passer une direction dessinée', () => {
     expect(() => exigerAA(DIRECTIONS.marche)).not.toThrow();
   });
@@ -169,6 +177,41 @@ describe('un masque sans logo hérite du logo legacy', () => {
 });
 
 describe('masqueAEnregistrer — hérite AVANT de juger, rien ne s’écrit sans AA', () => {
+  it('respecte le retrait des quatre logos après une marque valide, même si le legacy existe encore', () => {
+    const previous = avecLogoHerite(DIRECTIONS.marche, NOTRE_LOGO);
+    const enregistre = masqueAEnregistrer(DIRECTIONS.marche, NOTRE_LOGO, HOTES, previous);
+    expect(enregistre.logo).toEqual(DIRECTIONS.marche.logo);
+    const tenant = { brand: enregistre, logoUrl: NOTRE_LOGO };
+    expect(lireMarque(tenant).repli).toBeNull();
+    expect(logoUrlDe(marqueEffective(tenant))).toBeNull();
+    // Une deuxième sauvegarde d'une marque déjà vide ne ressuscite pas le logo.
+    expect(masqueAEnregistrer(DIRECTIONS.marche, NOTRE_LOGO, HOTES, enregistre).logo).toEqual(enregistre.logo);
+  });
+
+  it('reconnaît également une marque valide hydratée par Mongoose', () => {
+    const Model = mongoose.model('BrandRemovalUnitFixture', TenantSchema);
+    try {
+      const tenant = new Model({ slug: 'fixture', name: 'Fixture', brand: avecLogoHerite(DIRECTIONS.marche, NOTRE_LOGO) });
+      expect(typeof Reflect.get(tenant.brand!, 'toObject')).toBe('function');
+      expect(masqueAEnregistrer(DIRECTIONS.marche, NOTRE_LOGO, HOTES, tenant.brand).logo).toEqual(DIRECTIONS.marche.logo);
+    } finally { mongoose.deleteModel('BrandRemovalUnitFixture'); }
+  });
+
+  it('un masque précédent invalide reste un cas de première pose avec héritage sûr', () => {
+    const previous = { ...DIRECTIONS.marche, logo: { ...DIRECTIONS.marche.logo, mark: { light: null, dark: 'javascript:invalid' } } };
+    expect(lireMarque({ brand: previous }).repli).toBe('invalide');
+    expect(masqueAEnregistrer(DIRECTIONS.marche, NOTRE_LOGO, HOTES, previous).logo.mark.dark).toBe(NOTRE_LOGO);
+    expect(masqueAEnregistrer(DIRECTIONS.marche, 'javascript:invalid', HOTES, previous).logo.mark.dark).toBeNull();
+  });
+
+  it('garde origine et AA obligatoires même après une marque valide', () => {
+    const previous = avecLogoHerite(DIRECTIONS.marche, NOTRE_LOGO);
+    const forbidden = { ...DIRECTIONS.marche, hero: 'https://foreign.example/hero.png' };
+    expect(() => masqueAEnregistrer(forbidden, NOTRE_LOGO, HOTES, previous)).toThrow(BadRequestException);
+    const pale = { ...DIRECTIONS.marche, palette: { ...DIRECTIONS.marche.palette, ink: '#9aa79e' } };
+    expect(() => masqueAEnregistrer(pale, NOTRE_LOGO, HOTES, previous)).toThrow(BadRequestException);
+  });
+
   it('hérite le logo legacy puis rejoue AA sur le résultat', () => {
     const enregistre = masqueAEnregistrer(DIRECTIONS.marche, NOTRE_LOGO, HOTES);
     expect(enregistre.logo.mark.dark).toBe(NOTRE_LOGO);

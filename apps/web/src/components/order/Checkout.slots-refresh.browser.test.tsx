@@ -108,26 +108,50 @@ async function reply(index: number, value = slots(), error = false) {
   await page.waitForFunction(index => window.checkoutSlotsFixture.settled.includes(index), index); await frames();
 }
 async function customer() {
-  await activate(page.getByRole("button", { name: /^Continuer/ }));
+  await activate(page.getByRole("button", { name: /^Choisir la livraison/ }));
   await page.getByRole("textbox", { name: "Prénom et nom", exact: true }).fill("Camille Recette");
   await page.getByRole("textbox", { name: "Téléphone", exact: true }).fill("0600000000");
 }
-async function enterSlots() { await customer(); await activate(page.getByRole("button", { name: "Choisir le créneau", exact: true })); await requestCount(1); }
+async function enterSlots() { await activate(page.getByRole("button", { name: /^Choisir le retrait/ })); await requestCount(1); }
+async function manual() { await activate(page.getByRole("radio", { name: /Choisir une heure/ })); }
 async function selectedReentry() {
-  await enterSlots(); await reply(0); await activate(slot()); await activate(next());
+  await enterSlots(); await reply(0); await manual(); await activate(slot()); await activate(next());
   await page.getByRole("dialog", { name: "Paiement", exact: true }).waitFor();
   await activate(page.getByRole("button", { name: /^Retrait — terminé/ })); await requestCount(2);
 }
 
 describe("actualisation des créneaux — vrai Checkout et HTTP local retenu", () => {
+  it("Au plus tôt utilise le premier créneau libre du serveur et garde les coordonnées au paiement", async () => {
+    await enterSlots(); expect(await next().isDisabled()).toBe(true);
+    await reply(0, slots(day, undefined, true));
+    expect(await next().textContent()).toContain("18:10");
+    expect(await page.getByRole("radio", { name: /Au plus tôt/ }).getAttribute("aria-checked")).toBe("true");
+    await activate(next());
+    expect(await page.getByRole("textbox", { name: "Prénom et nom", exact: true }).count()).toBe(1);
+    expect(await page.getByRole("textbox", { name: "Téléphone", exact: true }).count()).toBe(1);
+    expect(await page.getByRole("button", { name: /Nom et téléphone requis/ }).isDisabled()).toBe(true);
+  });
+  it("Au plus tôt n’autorise rien quand aucun créneau n’est disponible", async () => {
+    await enterSlots(); await reply(0, { ...slots(), slots: slots().slots.map(slot => ({ ...slot, full: true, remaining: 0, load: "full" })) });
+    expect(await next().isDisabled()).toBe(true);
+    expect(await page.getByRole("radio", { name: /Au plus tôt/ }).isDisabled()).toBe(true);
+  });
+  it("revenir à Au plus tôt utilise la dernière liste vérifiée sans refaire une requête", async () => {
+    await enterSlots(); await reply(0); await manual(); await activate(slot("18:10"));
+    await activate(page.getByRole("radio", { name: /Au plus tôt/ }));
+    expect(await next().textContent()).toContain("18:00"); expect(requests).toHaveLength(1);
+    await activate(next()); await activate(page.getByRole("button", { name: /^Retrait — terminé/ })); await requestCount(2);
+    expect(await next().isDisabled()).toBe(true); await reply(1, slots(day, ["18:20"]));
+    expect(await next().textContent()).toContain("18:20");
+  });
   it.each([320, 1440])("bloque l’ancienne grille et annonce l’actualisation à %i px", async width => {
     await page.setViewportSize({ width, height: 780 });
     await enterSlots();
-    expect(await slot().isDisabled()).toBe(true); expect(await next().isDisabled()).toBe(true);
+    expect(await slot().count()).toBe(0); expect(await next().isDisabled()).toBe(true);
     expect(await page.getByRole("status").filter({ hasText: "Actualisation des créneaux" }).count()).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     if (evidence) await page.screenshot({ path: join(evidence, `loading-${width}.png`) });
-    await reply(0); expect(await slot().isEnabled()).toBe(true); expect(await next().isDisabled()).toBe(true);
+    await reply(0); await manual(); expect(await slot().isEnabled()).toBe(true); expect(await next().isDisabled()).toBe(true);
   });
   it("bloque aussi Continuer avec une sélection antérieure tant que la relecture est retenue", async () => {
     await selectedReentry();
@@ -154,13 +178,13 @@ describe("actualisation des créneaux — vrai Checkout et HTTP local retenu", (
     await enterSlots(); await reply(0, slots(), true);
     await activate(page.getByRole("button", { name: "Réessayer", exact: true })); await requestCount(2);
     await activate(page.getByRole("button", { name: "Étape précédente", exact: true }));
-    await activate(page.getByRole("button", { name: "Choisir le créneau", exact: true })); await requestCount(3);
-    await reply(2, slots(day, ["18:10"])); await activate(slot("18:10"));
+    await activate(page.getByRole("button", { name: /^Choisir le retrait/ })); await requestCount(3);
+    await reply(2, slots(day, ["18:10"])); await manual(); await activate(slot("18:10"));
     await reply(1); expect(await slot("18:00").count()).toBe(0);
     expect(await slot("18:10").getAttribute("aria-pressed")).toBe("true");
   });
   it("une date demandée bloque l’ancienne grille et ne réutilise pas l’ISO d’un autre jour", async () => {
-    await enterSlots(); await reply(0, { ...slots(), nextOpenDate: tomorrow }); await activate(slot());
+    await enterSlots(); await reply(0, { ...slots(), nextOpenDate: tomorrow }); await manual(); await activate(slot());
     await activate(page.getByRole("button", { name: "Lun. 9 septembre", exact: true })); await requestCount(2);
     expect(requests[1]!.url.searchParams.get("date")).toBe(tomorrow);
     expect(await slot().isDisabled()).toBe(true); expect(await next().isDisabled()).toBe(true);
@@ -171,15 +195,15 @@ describe("actualisation des créneaux — vrai Checkout et HTTP local retenu", (
     await enterSlots(); await reply(0, slots(), true);
     await activate(page.getByRole("button", { name: "Réessayer", exact: true })); await requestCount(2);
     await activate(page.getByRole("button", { name: "Étape précédente", exact: true }));
-    await activate(page.getByRole("button", { name: "Choisir le créneau", exact: true })); await requestCount(3);
-    await reply(2, { ...slots(), nextOpenDate: tomorrow });
+    await activate(page.getByRole("button", { name: /^Choisir le retrait/ })); await requestCount(3);
+    await reply(2, { ...slots(), nextOpenDate: tomorrow }); await manual();
     await activate(page.getByRole("button", { name: "Lun. 9 septembre", exact: true })); await requestCount(4);
     await reply(3, slots(tomorrow, ["19:00"])); await activate(slot("19:00")); await reply(1);
     expect(await slot("18:00").count()).toBe(0); expect(await slot("19:00").getAttribute("aria-pressed")).toBe("true");
     await activate(next()); expect(await page.getByText("Lun. 9 septembre · 19:00", { exact: true }).count()).toBe(1);
   });
   it("une réponse ne correspondant pas à la date demandée ne rouvre pas la progression", async () => {
-    await enterSlots(); await reply(0, { ...slots(), nextOpenDate: tomorrow }); await activate(slot());
+    await enterSlots(); await reply(0, { ...slots(), nextOpenDate: tomorrow }); await manual(); await activate(slot());
     await activate(page.getByRole("button", { name: "Lun. 9 septembre", exact: true })); await requestCount(2);
     await reply(1, slots(day));
     expect(await page.getByText("Créneaux indisponibles", { exact: true }).count()).toBe(1);

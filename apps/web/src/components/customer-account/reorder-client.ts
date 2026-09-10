@@ -1,5 +1,5 @@
 import type { CustomerOrderReorderResponse } from '@sm/contracts';
-import type { Site } from '../order/api';
+import type { MenuCategory, Site } from '../order/api';
 import { indexMenu, type CartApi } from '../order/cart';
 import { CustomerAccountHttpError, type CustomerAccountAccess, type CustomerAccountRequest } from './client';
 import { sameOrderAccess } from './orders';
@@ -11,6 +11,7 @@ export type ReorderState = Readonly<{ status: 'idle' | 'loading' | 'ready' | 'ad
 const EMPTY: ReorderState = { status: 'idle', snapshot: null, message: null };
 type Port = { slug: string; orderId: string; access: CustomerAccountAccess; currentAccess: () => CustomerAccountAccess | null;
   active: () => boolean; request: CustomerAccountRequest; loadSite: () => Promise<Site | null>;
+  onCatalogVerified?: (categories: MenuCategory[]) => void;
   hasUnresolvedCheckout: () => Promise<boolean>; lock: (job: () => Promise<void>) => Promise<void>; now?: () => number };
 
 /** Private reads remain volatile. A confirmed import is a NEW local basket,
@@ -34,6 +35,8 @@ export function createReorderClient(port: Port) {
     const response = parseCustomerOrderReorder(raw, port.orderId, now(), access.expiresAt);
     if (!site || site.tenant.slug !== port.slug) throw new CustomerAccountHttpError(503);
     if (site.ordering.paused) throw new CustomerAccountHttpError(423);
+    port.onCatalogVerified?.(site.categories);
+    await port.lock(() => verify(run));
     return { response, site, preview: previewReorder(response.lines, indexMenu(site.categories)) };
   }
   function fail(run: number, cause: unknown) {

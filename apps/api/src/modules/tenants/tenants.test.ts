@@ -811,7 +811,7 @@ describe('le masque posé depuis le back-office restaurateur', () => {
     expect(vue.logoUrl).toBe(DOCUMENT.logoUrl);
   });
 
-  it('ne lit du tenant que le logo — une fiche complète n’a rien à faire ici', async () => {
+  it('ne lit que le logo et le masque complet nécessaire à distinguer héritage et retrait — aucune fiche complète', async () => {
     // `updateIdentity` ne lit que `brand`, `byId` la liste blanche : la
     // lecture non projetée était la seule qui restait dans ce fichier.
     const tenants = fakeTenants(DOCUMENT);
@@ -827,7 +827,34 @@ describe('le masque posé depuis le back-office restaurateur', () => {
       TENANT,
       DIRECTIONS.soleil,
     );
-    expect(lectures[0]).toEqual({ logoUrl: 1 });
+    expect(lectures[0]).toEqual({ logoUrl: 1, brand: 1 });
+  });
+
+  it('retire le logo persisté puis le garde absent dans PATCH, GET me et lecture publique', async () => {
+    const tenants = fakeTenants(DOCUMENT);
+    const model = { ...tenants.model, findOne: async () => tenants.etat() };
+    const svc = new TenantsService(model as never, testOriginesImages(), journalMuet());
+    await svc.updateMarque(TENANT, DIRECTIONS.soleil); // Première pose : hérite.
+    const removed = await svc.updateMarque(TENANT, DIRECTIONS.soleil); // Marque valide : retire.
+    expect(removed.logoUrl).toBeNull();
+    expect(removed.brand.logo).toEqual(DIRECTIONS.soleil.logo);
+    expect(tenants.etat().logoUrl).toBe(DOCUMENT.logoUrl); // Pas de suppression de fichier implicite.
+    expect((await svc.byId(TENANT)).logoUrl).toBeNull();
+    expect((await svc.publicBySlug(String(DOCUMENT.slug))).logoUrl).toBeNull();
+    expect((await svc.updateMarque(TENANT, DIRECTIONS.soleil)).logoUrl).toBeNull();
+  });
+
+  it('un changement identité/accent après retrait ne le réintroduit pas, mais un nouveau dépôt explicite le repose', async () => {
+    const tenants = fakeTenants({ ...DOCUMENT, brand: DIRECTIONS.soleil });
+    const svc = service(tenants);
+    await svc.updateMarque(TENANT, DIRECTIONS.soleil);
+    expect((await svc.updateIdentity(TENANT, { name: 'Nouveau nom', brandColor: '#287435' })).logoUrl).toBeNull();
+    const nouveauLogo = 'https://api.snackmanager.fr/public/tenants/chez-lima/logo?v=18';
+    // Le même fragment que LogoService.upload : le dépôt est une nouvelle intention explicite.
+    await tenants.model.findByIdAndUpdate(TENANT, {
+      $set: identiteAvecLogo(tenants.etat().brand, DOCUMENT.logoUrl as string, nouveauLogo),
+    }, { new: true });
+    expect((await svc.byId(TENANT)).logoUrl).toBe(nouveauLogo);
   });
 
   it('refuse en 400 un masque illisible, et n’écrit rien', async () => {
