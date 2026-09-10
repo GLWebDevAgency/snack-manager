@@ -41,9 +41,11 @@ export * from './order-refunds';
 export * from './order-counter';
 export * from './order-recovery';
 export * from './customer-orders';
+export * from './guest-order-reorder';
 export * from './customer-loyalty';
 export * from './menu-legacy-options';
 export * from './menu-featured';
+export * from './order-notifications';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -290,6 +292,9 @@ export const ProductCreateSchema = z.object({
   removables: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   isNew: z.boolean().default(false),
+  photoKind: z.enum(['cutout', 'cover']).optional(),
+  /** null/absent : classement des ventes ; booléen : choix du restaurateur. */
+  popularOverride: z.boolean().nullable().optional(),
   order: z.number().int().default(0),
   active: z.boolean().default(true),
 });
@@ -317,6 +322,8 @@ export const ProductUpdateSchema = z.object({
   removables: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   isNew: z.boolean().optional(),
+  photoKind: z.enum(['cutout', 'cover']).optional(),
+  popularOverride: z.boolean().nullable().optional(),
   // `photoUrl` absent, comme à la création — voir la note ci-dessus. La photo
   // se choisit par `PUT /products/:id/medias`, jamais par un champ de texte.
   order: z.number().int().optional(),

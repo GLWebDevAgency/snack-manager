@@ -15,8 +15,10 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { MediathequeModule } from './modules/mediatheque/mediatheque.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { OrderNotificationsModule } from './modules/order-notifications/order-notifications.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
 import { EncaissementModule } from './modules/encaissement/encaissement.module';
+import { PaymentDomainsModule } from './modules/payment-domains/payment-domains.module';
 import { SupplyDbModule } from './supply-db.module';
 import { PostgresModule } from './postgres.module';
 import { LoyaltyDbModule } from './loyalty-db.module';
@@ -94,6 +96,7 @@ import { validatePublicRelayEnvironment } from './common/verified-public-relay';
     MediathequeModule,
     MenuModule,
     OrdersModule,
+    OrderNotificationsModule,
     OrderingModule,
     /*
      * DÉCLARÉ ICI ALORS QU'`OrderingModule` L'IMPORTE DÉJÀ, ET C'EST VOLONTAIRE.
@@ -109,6 +112,7 @@ import { validatePublicRelayEnvironment } from './common/verified-public-relay';
      * Nest déduplique par référence : le déclarer deux fois ne coûte rien.
      */
     EncaissementModule,
+    PaymentDomainsModule,
     PostgresModule,
     SupplyDbModule,
     LoyaltyDbModule,

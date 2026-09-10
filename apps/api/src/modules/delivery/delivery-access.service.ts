@@ -16,6 +16,7 @@ import {
 } from '@sm/contracts';
 import type { DeliveryOperator, Staff, Tenant } from '@sm/db';
 import { SOUSCRIPTION_FIELDS } from '../../common/capacites';
+import { marqueObservee } from '../../common/marque-observee';
 
 /** Hash commun à l'émission gérant et à l'échange. Aucun secret brut en base. */
 export function hashDeliveryAccessSecret(secret: string): string {
@@ -56,6 +57,8 @@ type OperatorRow = {
 type TenantRow = SouscriptionLue & {
   name: string;
   slug: string;
+  brand?: unknown; brandColor?: string | null; logoUrl?: string | null;
+  address?: string; phones?: string[];
   account?: { status?: TenantAccountStatus };
 };
 
@@ -211,6 +214,9 @@ export class DeliveryAccessService {
         name: operator.name,
         restaurantName: tenant.name,
         restaurantSlug: tenant.slug,
+        brand: marqueObservee(tenant),
+        restaurantAddress: tenant.address ?? '',
+        restaurantPhones: (tenant.phones ?? []).slice(0, 10),
         expiresAt: new Date(session.expiresAt).toISOString(),
       },
     };
@@ -253,6 +259,7 @@ export class DeliveryAccessService {
 
     const tenant = await this.tenants.findById(operator.tenantId, {
       ...SOUSCRIPTION_FIELDS, name: 1, slug: 1, 'account.status': 1,
+      brand: 1, brandColor: 1, logoUrl: 1, address: 1, phones: 1,
     }).read('primary').readConcern('majority').maxTimeMS(10_000).lean<TenantRow | null>();
     if (!tenant || isAccessBlocked(tenant.account?.status) || !capacitesEffectives(tenant).includes('delivery')) {
       throw this.denied();

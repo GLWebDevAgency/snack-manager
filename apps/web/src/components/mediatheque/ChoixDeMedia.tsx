@@ -26,7 +26,7 @@
  * cette modale ne fait que montrer ce qu'on lui dit de montrer.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cadrageCss, estPublic, type MediaVue, type QuotaMedias } from "@sm/contracts";
 import { ApiError, envoiFichier } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -53,6 +53,8 @@ type Props = {
   onFerme: () => void;
   /** La médiathèque, mutualisée par l'écran : cinq emplacements, une requête. */
   chargerMediatheque: (forcer?: boolean) => Promise<Mediatheque>;
+  /** Autorité de l'écran source, vérifiée après les préparations asynchrones. */
+  canAct?: () => boolean;
 };
 
 export function ChoixDeMedia({
@@ -65,7 +67,12 @@ export function ChoixDeMedia({
   onChoisir,
   onFerme,
   chargerMediatheque,
+  canAct,
 }: Props) {
+  const alive = useRef(false), canActRef = useRef(canAct), uploading = useRef(false);
+  useLayoutEffect(() => { canActRef.current = canAct; }, [canAct]);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const current = () => alive.current && (canActRef.current?.() ?? true);
   const [bib, setBib] = useState<Mediatheque | null>(null);
   const [etat, setEtat] = useState<"chargement" | "prete" | "erreur">("chargement");
   const [envoi, setEnvoi] = useState(false);
@@ -103,16 +110,20 @@ export function ChoixDeMedia({
    * mégaoctets et serait refusé tel quel par l'API.
    */
   async function deposer(fichier: File) {
+    if (!current() || uploading.current) return;
+    uploading.current = true;
     setEnvoi(true);
     setRefus(null);
     setAvis(null);
     try {
       const reduction = await reduirePourEnvoi(fichier);
+      if (!current()) return;
       if (!reduction.ok) {
         setRefus(reduction.message);
         return;
       }
       const depot = await envoiFichier<Depot>("POST", "/medias", reduction.fichier);
+      if (!current()) return;
       setBib((b) => ({
         medias: [depot.media, ...(b?.medias ?? []).filter((m) => m.id !== depot.media.id)],
         quota: depot.quota,
@@ -127,6 +138,7 @@ export function ChoixDeMedia({
       }
       onChoisir(depot.media);
     } catch (e) {
+      if (!current()) return;
       setRefus(
         e instanceof ApiError
           ? e.status === 413
@@ -135,7 +147,8 @@ export function ChoixDeMedia({
           : "Envoi impossible — réessayez.",
       );
     } finally {
-      setEnvoi(false);
+      uploading.current = false;
+      if (current()) setEnvoi(false);
     }
   }
 

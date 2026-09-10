@@ -74,6 +74,8 @@ import {
 import { VIBRATION_PALIER, VIBRATION_SCAN, vibrer } from "./haptique";
 import { SignatureSnackManager } from "./SignatureSnackManager";
 import { CustomerAccountEntry } from "../customer-account/CustomerAccountEntry";
+import { OrderTabBar } from "../order/OrderTabBar";
+import { SMTabBarSpacer } from "../ui/SMTabBar";
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -864,6 +866,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         seuil AA contre le fond de CE restaurant.
       */}
       <SignatureSnackManager brand={catalog.restaurant.brand} />
+      <SMTabBarSpacer />
+      <OrderTabBar slug={slug} activeKey="loyalty" theme={catalog.restaurant.brand.mode}
+        loyaltyHref={`${cheminVitrine}/fidelite${slug === "demo" ? "?demo=1" : ""}`} demo={slug === "demo"} />
 
       {/*
         L'ANNONCE VISIBLE — dans le masque, jamais à côté.

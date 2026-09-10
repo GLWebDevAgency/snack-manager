@@ -75,6 +75,7 @@ export async function generateViewport({ params, searchParams }: Params): Promis
   return {
     width: "device-width",
     initialScale: 1,
+    viewportFit: "cover",
     themeColor: brand.palette.ground,
     colorScheme: brand.mode,
   };

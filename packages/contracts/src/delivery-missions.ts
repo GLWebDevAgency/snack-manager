@@ -33,6 +33,14 @@ export const DeliveryMissionViewSchema = z.object({
   revision,
   operator: z.object({ id, name: z.string().min(1).max(160) }).strict().nullable(),
   assignmentId: z.uuid().nullable(), assignedAt: at.nullable(), dispatchedAt: at.nullable(),
+  deliveredAt: at.nullable().optional(),
+  /** Read-only payment summary. No processor IDs, refund credentials or proof. */
+  paymentSummary: z.object({
+    totalCents: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    method: z.enum(['online', 'counter']),
+    status: z.enum(['pending', 'paid', 'refunded']),
+    tender: z.enum(['cash', 'card', 'meal_voucher', 'online']).nullable(),
+  }).strict().nullable().optional(),
   paymentReady: z.boolean(), canAssign: z.boolean(), canDispatch: z.boolean(),
   customer: z.object({ name: z.string().max(160), phone: z.string().max(40).nullable() }).strict(),
   address: DeliveryAddressSchema,
@@ -46,6 +54,13 @@ export const DeliveryMissionsViewSchema = z.object({
   nextCursor: id.nullable(),
 }).strict();
 export type DeliveryMissionsView = z.infer<typeof DeliveryMissionsViewSchema>;
+
+/** Kept separate from active missions: history never authorizes a new operation. */
+export const DeliveryHistoryViewSchema = z.object({
+  missions: z.array(DeliveryMissionViewSchema.extend({ orderStatus: z.literal('delivered'), deliveredAt: at }).strict()).max(DELIVERY_MISSION_PAGE_SIZE),
+  nextCursor: id.nullable(),
+}).strict();
+export type DeliveryHistoryView = z.infer<typeof DeliveryHistoryViewSchema>;
 
 export const DELIVERY_MISSION_REFUSAL_CODES = [
   'delivery.mission.invalid', 'delivery.mission.closed', 'delivery.mission.departed',

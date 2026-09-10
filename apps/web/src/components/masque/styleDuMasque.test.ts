@@ -37,6 +37,13 @@ const DECLAREES = [...ROOTS.matchAll(/^\s*(--(?:cf|sm)-[a-z0-9-]+)\s*:/gm)].map(
  * c'est le sujet : les repeindre à la couleur d'un restaurant serait le bug.
  */
 const FIXES = new Set([
+  // Navigation système et textes sur photographie : constantes partagées,
+  // séparées des surfaces/accent/typo propres à chaque établissement.
+  "--cf-nav-surface-dark", "--cf-nav-surface-light", "--cf-nav-line-dark", "--cf-nav-line-light",
+  "--cf-nav-shadow-dark", "--cf-nav-shadow-light", "--cf-nav-highlight-dark", "--cf-nav-highlight-light",
+  "--cf-nav-highlight-line-dark", "--cf-nav-highlight-line-light",
+  "--cf-photo-text", "--cf-photo-scrim", "--cf-photo-pill", "--cf-photo-line",
+
   // Le laiton Snack Manager et son encre : notre marque, sur nos surfaces.
   "--cf-gold",
   "--cf-on-gold",

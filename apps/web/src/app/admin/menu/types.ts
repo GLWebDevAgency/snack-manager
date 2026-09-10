@@ -57,6 +57,9 @@ export type Product = {
    * référence ne résout.
    */
   photoUrl: string | null;
+  photoKind?: "cutout" | "cover";
+  popularOverride?: boolean | null;
+  popular?: boolean;
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;

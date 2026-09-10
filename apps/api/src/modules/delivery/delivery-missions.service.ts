@@ -5,7 +5,7 @@ import { Model, Types } from 'mongoose';
 import type Redis from 'ioredis';
 import {
   DELIVERY_MISSION_MAX_OPERATIONS, DELIVERY_MISSION_PAGE_SIZE,
-  DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionsQuerySchema, DeliveryMissionRefusalCodeSchema, DeliveryMissionResultSchema,
+  DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionsQuerySchema, DeliveryMissionRefusalCodeSchema, DeliveryMissionResultSchema, DeliveryHistoryViewSchema,
   capacitesEffectives, isAccessBlocked, ordersChannel, WS_EVENTS,
   type DeliveryMissionAssign, type DeliveryMissionDispatch, type DeliveryMissionResult,
   type DeliveryMissionsQuery, type DeliveryMissionsView, type DeliveryMissionView, type JwtPayload,
@@ -119,6 +119,33 @@ export class DeliveryMissionsService {
   getManager(tenantId: string, id: string, actor: JwtPayload) { return this.get(tenantId, id, { kind: 'manager', actor }); }
   listCourier(access: DeliveryAccessSession, query: DeliveryMissionsQuery = {}) { return this.list(access.tenantId, { kind: 'courier', access }, query); }
   getCourier(access: DeliveryAccessSession, id: string) { return this.get(access.tenantId, id, { kind: 'courier', access }); }
+  /** Completed deliveries assigned to this identity, ordered by the server's delivery time.
+   * Cursor lookup has exactly the same scope as the page; a foreign ID is never an anchor. */
+  async historyCourier(access: DeliveryAccessSession, raw: DeliveryMissionsQuery = {}) {
+    const query = DeliveryMissionsQuerySchema.safeParse(raw);
+    if (!query.success) throw invalid();
+    const principal: Principal = { kind: 'courier', access };
+    await this.authorize(access.tenantId, principal);
+    const filter = { tenantId: access.tenantId, type: 'delivery', status: 'delivered',
+      'deliveryMission.assignment.operatorId': access.operatorId,
+      'delivery.deliveredAt': { $type: 'date' }, 'delivery.address': { $ne: null } };
+    let cursor = {};
+    if (query.data.after) {
+      const anchor = await this.orders.findOne({ ...filter, _id: query.data.after }, { 'delivery.deliveredAt': 1 })
+        .read('primary').readConcern('majority').maxTimeMS(10_000).lean<{ delivery?: { deliveredAt?: Date } } | null>();
+      if (!anchor?.delivery?.deliveredAt) throw invalid();
+      cursor = { $or: [{ 'delivery.deliveredAt': { $lt: anchor.delivery.deliveredAt } },
+        { 'delivery.deliveredAt': anchor.delivery.deliveredAt, _id: { $lt: query.data.after } }] };
+    }
+    const rows = await this.orders.find({ ...filter, ...cursor }, MISSION_PROJECTION)
+      .sort({ 'delivery.deliveredAt': -1, _id: -1 }).limit(DELIVERY_MISSION_PAGE_SIZE + 1)
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean<MissionOrder[]>();
+    const visible = rows.slice(0, DELIVERY_MISSION_PAGE_SIZE);
+    const result = DeliveryHistoryViewSchema.parse({ missions: visible.map(row => missionView(row, false, false)),
+      nextCursor: rows.length > DELIVERY_MISSION_PAGE_SIZE ? String(visible.at(-1)!._id) : null });
+    await this.authorize(access.tenantId, principal);
+    return result;
+  }
   assign(tenantId: string, id: string, input: DeliveryMissionAssign, actor: JwtPayload) { return this.mutate(tenantId, id, input, { kind: 'manager', actor }, true); }
   dispatchManager(tenantId: string, id: string, input: DeliveryMissionDispatch, actor: JwtPayload) { return this.mutate(tenantId, id, input, { kind: 'manager', actor }, false); }
   dispatchCourier(access: DeliveryAccessSession, id: string, input: DeliveryMissionDispatch) { return this.mutate(access.tenantId, id, input, { kind: 'courier', access }, false); }

@@ -39,6 +39,10 @@ beforeAll(async () => {
       // React runtime instead of bundling two physical copies in this renderer.
       alias: { react: fileURLToPath(new URL("../../../node_modules/react", import.meta.url)), "react-dom": fileURLToPath(new URL("../../../node_modules/react-dom", import.meta.url)) },
       plugins: [{ name: "provider-boundaries", setup(builder) {
+        // This renderer has no Next router. Its pathname adapter observes the
+        // same native history events as the real Storefront tab navigation.
+        builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: "navigation", namespace: "device-fixture" }));
+        builder.onLoad({ filter: /^navigation$/, namespace: "device-fixture" }, () => ({ contents: `import{useSyncExternalStore}from'react';const subscribe=cb=>{window.addEventListener('sm:order-navigation',cb);window.addEventListener('popstate',cb);return()=>{window.removeEventListener('sm:order-navigation',cb);window.removeEventListener('popstate',cb)}};export function usePathname(){return useSyncExternalStore(subscribe,()=>location.pathname,()=>'/storefront')}const navigate=(url,replace=false)=>{history[replace?'replaceState':'pushState']({},'',url);window.dispatchEvent(new Event('sm:order-navigation'))};export function useRouter(){return{push:url=>navigate(url),replace:url=>navigate(url,true)}}`, resolveDir: root }));
         builder.onResolve({ filter: /\/StripeCard$/ }, () => ({ path: "stripe", namespace: "device-fixture" }));
         builder.onLoad({ filter: /^stripe$/, namespace: "device-fixture" }, () => ({ contents: "export const apparenceStripeDe=()=>({});export function StripeCard(){return null}" }));
         builder.onResolve({ filter: /^next\/font\/google$/ }, () => ({ path: "font", namespace: "device-fixture" }));
@@ -208,11 +212,15 @@ describe("Mes commandes sur cet appareil — rendu et IndexedDB natifs", () => {
     expect(await page.getByText("Aucune commande enregistrée ici").count()).toBe(0);
   });
   it("raccorde le vrai Storefront indépendamment du panier et laisse la reprise disponible", async () => {
-    await page.goto(origin + "/storefront"); await page.getByRole("button", { name: "Mes commandes sur cet appareil" }).waitFor();
+    await page.goto(origin + "/storefront"); await page.getByRole("tab", { name: "Commandes", exact: true }).waitFor();
     await page.getByRole("region", { name: "Boissons", exact: true }).getByRole("button", { name: /Canette recette/ }).click();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("sm.cart.recette"))).toContain("Canette recette");
     const before = await page.evaluate(() => localStorage.getItem("sm.cart.recette"));
-    await seed(1, true); states.set(orderId(1), response(1)); await open(); await idle(); await page.keyboard.press("Escape"); await page.getByRole("dialog").waitFor({ state: "detached" });
+    await seed(1, true); states.set(orderId(1), response(1));
+    await page.getByRole("tab", { name: "Commandes", exact: true }).click(); await idle();
+    expect(await page.getByRole("dialog").count()).toBe(0);
+    await page.getByRole("region", { name: "Mes commandes", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Carte", exact: true }).click();
     expect(await page.evaluate(() => localStorage.getItem("sm.cart.recette"))).toBe(before);
     await page.getByRole("button", { name: /Ma commande en cours/ }).waitFor();
   });

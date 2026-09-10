@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as list } from "./route";
+import { GET as history } from "../history/route";
 import { GET as detail } from "./[id]/route";
 import { POST as dispatch } from "./[id]/depart/route";
 
@@ -21,6 +22,7 @@ const MISSION = {
   instructions: null, items: [{ name: "Menu de recette", variantName: null, qty: 1 }],
 };
 const LIST = { missions: [MISSION], nextCursor: ID };
+const HISTORY = { missions: [{ ...MISSION, orderStatus: "delivered", deliveredAt: "2026-09-07T11:00:00Z", canAssign: false, canDispatch: false }], nextCursor: null };
 const RESULT = { operationId: OPERATION, appliedRevision: 3, replay: false, outcome: "applied", refusalCode: null,
   mission: { ...MISSION, revision: 3, canDispatch: false, dispatchedAt: "2026-09-07T10:10:00Z" } };
 const fetchApi = vi.fn<typeof fetch>();
@@ -31,6 +33,7 @@ const endpoints = [
     run: (request: NextRequest) => detail(request, context()), view: MISSION },
   { name: "départ", method: "POST", path: `/livreur/missions/${ID}/depart`, upstream: `missions/${ID}/dispatch`,
     run: (request: NextRequest) => dispatch(request, context()), view: RESULT },
+  { name: "historique", method: "GET", path: "/livreur/history", upstream: "history", run: history, view: HISTORY },
 ] as const;
 type Endpoint = typeof endpoints[number];
 
@@ -178,7 +181,7 @@ describe("paramètres, contenu et preuve de départ", () => {
   });
 
   it("refuse tout paramètre de requête sur un détail ou une mutation", async () => {
-    for (const endpoint of endpoints.slice(1)) {
+    for (const endpoint of endpoints.slice(1, 3)) {
       for (const query of [`?after=${ID}`, "?id=first&id=second", "?extra="]) {
         expect((await endpoint.run(request(endpoint, { path: `${endpoint.path}${query}` }))).status).toBe(400);
       }
@@ -272,5 +275,24 @@ describe("paramètres, contenu et preuve de départ", () => {
       expect(result.headers.get("set-cookie")).toBeNull();
       expect((await result.json()).code).toBe(status === 409 ? "MISSION_CONFLICT" : "SERVICE_UNAVAILABLE");
     }
+  });
+});
+
+describe("historique privé livreur", () => {
+  it("refuse une mission active, sans heure serveur ou enrichie de secrets", async () => {
+    for (const mission of [MISSION, { ...HISTORY.missions[0], deliveredAt: null }, { ...HISTORY.missions[0], paymentSummary: { totalCents: 1500, method: "online", status: "paid", tender: "online", stripePaymentIntentId: PRIVATE } }]) {
+      fetchApi.mockResolvedValueOnce(Response.json({ missions: [mission], nextCursor: null }));
+      const result = await history(request(endpoints[3])); expect(result.status).toBe(503); expect(await result.text()).not.toContain(PRIVATE);
+    }
+  });
+  it("borne le curseur et refuse un filtre opérateur injecté", async () => {
+    fetchApi.mockResolvedValue(Response.json(HISTORY));
+    expect((await history(request(endpoints[3], { path: `/livreur/history?after=${ID}` }))).status).toBe(200);
+    expect(fetchApi.mock.calls[0]![0]).toBe(`https://api.example.test/delivery-access/history?after=${ID}`);
+    fetchApi.mockClear();
+    for (const suffix of [`?after=${ID}&after=${ID}`, `?operatorId=${ID}`, "?after=bad", `?after=${ID}&tenantId=${ID}`]) {
+      expect((await history(request(endpoints[3], { path: `/livreur/history${suffix}` }))).status).toBe(400);
+    }
+    expect(fetchApi).not.toHaveBeenCalled();
   });
 });

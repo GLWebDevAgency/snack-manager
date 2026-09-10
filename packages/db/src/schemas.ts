@@ -2,6 +2,7 @@ import { Schema, type InferSchemaType } from 'mongoose';
 import { customerOrderOwnerField } from './customer-order-owner.schema';
 import { customerSaleAttributionField } from './customer-sale-attribution.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
+import { OrderReadyNotificationSchema } from './order-ready-notification.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
 import { DeliveryHandoffSchema } from './delivery-handoff.schema';
@@ -173,6 +174,8 @@ export const BrandSub = new Schema(
       required: true,
     },
     hero: { type: String, default: null, ...IMAGE },
+    tagline: { type: String, trim: true, maxlength: 48 },
+    taglineSub: { type: String, trim: true, maxlength: 90 },
     preset: {
       type: String,
       enum: [...PRESET_KEYS, null],
@@ -831,6 +834,8 @@ export const ProductSchema = new Schema(
     removables: { type: [String], default: [] }, // modificateurs express « sans X »
     tags: { type: [String], default: [] },
     isNew: { type: Boolean, default: false },
+    photoKind: { type: String, enum: ['cutout', 'cover'], default: 'cutout' },
+    popularOverride: { type: Boolean, default: null },
     outOfStock: { type: Boolean, default: false }, // rupture 1-tap
     // 'manual' = coupé à la main · 'ingredient' = cascade rupture ingrédient (contexte supply)
     outOfStockSource: { type: String, enum: ['manual', 'ingredient', null], default: null },
@@ -1252,6 +1257,8 @@ export const OrderSchema = new Schema(
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
 OrderSchema.index({ tenantId: 1, type: 1, 'deliveryMission.assignment.operatorId': 1, _id: 1 });
+OrderSchema.index({ tenantId: 1, type: 1, 'deliveryMission.assignment.operatorId': 1, status: 1, 'delivery.deliveredAt': -1, _id: -1 },
+  { name: 'delivery_driver_history' });
 OrderSchema.index({ tenantId: 1, type: 1, _id: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
 OrderSchema.index({ tenantId: 1, 'customerOwner.parentRef': 1, 'customerOwner.accountId': 1, createdAt: -1, _id: -1 },
@@ -2233,6 +2240,7 @@ export const MODELS = {
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
   Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
+  OrderReadyNotification: { name: 'OrderReadyNotification', schema: OrderReadyNotificationSchema, collection: 'order_ready_notifications' },
   PublicOrderAdmission: { name: 'PublicOrderAdmission', schema: PublicOrderAdmissionSchema, collection: 'public_order_admissions' },
   OrderCapacityDay: { name: 'OrderCapacityDay', schema: OrderCapacityDaySchema, collection: 'order_capacity_days' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },

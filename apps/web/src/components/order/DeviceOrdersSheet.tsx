@@ -5,10 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { OrderStatusSchema, PaymentMethodSchema, PaymentStatusSchema } from "@sm/contracts";
 import { Icon } from "@/components/ui";
-import { loadTracking } from "./api";
+import { loadTracking, type MenuCategory } from "./api";
 import { CheckoutAttemptStorageError, forgetDeviceCheckoutReceipt, readDeviceCheckoutReceipts, subscribeCheckoutAttempts, type ReceivedCheckoutAttempt } from "./checkout-attempt";
 import { customerTrackingHref } from "./delivery-proof-access";
 import { GhostAction, PrimaryAction, Sheet, Surface, Tap } from "./primitives";
+import { ReorderDeviceFlow } from "./reorder-device-flow";
 
 const PAGE_SIZE = 8;
 const REFRESH_MS = 30_000;
@@ -40,7 +41,9 @@ export function deviceOrderSummary(raw: unknown, orderId: string): DeviceOrderSu
 }
 
 type Row = { saved: ReceivedCheckoutAttempt; summary: DeviceOrderSummary | null; checking: boolean };
-type Props = { open: boolean; slug: string; tenantName: string; embed?: boolean; onClose: () => void };
+type Props = { open: boolean; slug: string; tenantName: string; embed?: boolean; onClose: () => void;
+  presentation?: "sheet" | "page"; onNavigationLockedChange?: (locked: boolean) => void; onReordered?: () => void;
+  onCatalogVerified?: (categories: MenuCategory[]) => void };
 const canRead = () => document.visibilityState === "visible" && navigator.onLine !== false;
 const dateLabel = (at: number | string) => new Date(at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
@@ -49,7 +52,7 @@ export function DeviceOrdersSheet(props: Props) {
   return <DeviceOrdersSession key={props.slug} {...props} />;
 }
 
-function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }: Props) {
+function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose, presentation = "sheet", onNavigationLockedChange, onReordered, onCatalogVerified }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -60,11 +63,15 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }:
   const [message, setMessage] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [forgetting, setForgetting] = useState(false);
+  const [reordering, setReordering] = useState<ReceivedCheckoutAttempt | null>(null);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const navigationLocked = forgetting || reorderBusy;
   const active = useRef(false);
   const mutation = useRef(false);
   const refreshing = useRef(false);
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  useEffect(() => { onNavigationLockedChange?.(navigationLocked); return () => onNavigationLockedChange?.(false); }, [navigationLocked, onNavigationLockedChange]);
 
   const stop = useCallback(() => { generation.current++; controller.current?.abort(); refreshing.current = false; }, []);
   const refresh = useCallback(async () => {
@@ -149,14 +156,17 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }:
     { key: "unknown", label: "À vérifier", matches: (row: Row) => !row.summary },
     { key: "finished", label: "Terminées", matches: (row: Row) => row.summary?.section === "finished" },
   ];
-  return <Sheet open={open} onClose={() => { setConfirmId(null); setActionError(null); setMessage(null); onClose(); }} navigationLocked={forgetting} title="Mes commandes" maxHeight="92%" headerExtra={<p className="mt-1 truncate text-xs text-mut">Sur cet appareil · {tenantName}</p>}>
-    {open && <div className="space-y-5 px-4 py-5">
-      <p className="text-sm leading-6 text-mut">Retrouvez les commandes passées en invité depuis ce navigateur, pendant sept jours. Les commandes liées à votre compte se consultent dans Mon compte ; ces raccourcis invités ne sont pas synchronisés avec vos autres appareils.</p>
+  const close = () => { if (navigationLocked) return; setConfirmId(null); setActionError(null); setMessage(null); setReordering(null); onClose(); };
+  const compact = presentation === "page";
+  const content = open && <div className={compact ? "space-y-3 py-4" : "space-y-5 px-4 py-5"}>
+      {reordering ? <ReorderDeviceFlow slug={slug} receipt={reordering} onBusyChange={setReorderBusy}
+        onCatalogVerified={onCatalogVerified} onBack={() => setReordering(null)} onReordered={() => { setReordering(null); onReordered?.(); }} /> : <>
+      <p className={compact ? "text-[13px] leading-5 text-mut" : "text-sm leading-6 text-mut"}>{compact ? "Commandes invitées · sept jours. Votre compte conserve son propre historique." : "Retrouvez les commandes passées en invité depuis ce navigateur, pendant sept jours. Les commandes liées à votre compte se consultent dans Mon compte ; ces raccourcis invités ne sont pas synchronisés avec vos autres appareils."}</p>
       {error && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{error}</p>}
       {actionError && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{actionError}</p>}
       {message && <p role="status" className="text-sm leading-6 text-okt">{message}</p>}
       {!loaded && loading && <p role="status" className="py-6 text-sm text-mut">Recherche de vos commandes enregistrées…</p>}
-      {loaded && !loading && !error && total === 0 && <Surface className="p-5 text-center"><Icon name="ticket" size={26} className="mx-auto text-mut" /><h3 className="mt-3 text-lg font-bold">Aucune commande enregistrée ici</h3><p className="mt-2 text-sm leading-6 text-mut">Vos prochains liens de suivi apparaîtront ici. Si vous avez déjà commandé ailleurs, ouvrez le lien conservé sur cet autre navigateur.</p></Surface>}
+      {loaded && !loading && !error && total === 0 && <Surface className={compact ? "p-4 text-center" : "p-5 text-center"}><Icon name="ticket" size={compact ? 22 : 26} className="mx-auto text-mut" /><h3 className={compact ? "mt-2 text-base font-bold" : "mt-3 text-lg font-bold"}>Aucune commande enregistrée ici</h3><p className="mt-2 text-[13px] leading-5 text-mut">{compact ? "Vos prochains liens de suivi apparaîtront ici." : "Vos prochains liens de suivi apparaîtront ici. Si vous avez déjà commandé ailleurs, ouvrez le lien conservé sur cet autre navigateur."}</p></Surface>}
       {groups.map(group => {
         const entries = rows.filter(group.matches);
         return entries.length > 0 && <section key={group.key} aria-label={group.label}><h3 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-mut">{group.label} · {entries.length}</h3><ul className="space-y-3">{entries.map(row => {
@@ -168,13 +178,17 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose }:
             {row.summary?.slot && <p className="mt-1 text-xs text-mut">Créneau : {dateLabel(row.summary.slot)}</p>}
             {row.checking && row.summary && <p className="mt-1 text-xs text-mut">Dernier état connu · vérification en cours</p>}
             {confirmId === id ? <div className="mt-4 border-t border-line pt-4" role="group" aria-label="Confirmer l’oubli du raccourci"><h5 className="text-sm font-bold">Oublier ce raccourci ?</h5><p className="mt-2 text-sm leading-6 text-mut">Cela ne supprime ni la commande ni le paiement, et ne modifie pas son code de remise. Sans autre lien conservé, vous pourriez perdre l’accès à ce suivi. Une demande encore à vérifier ne sera jamais effacée ici.</p><div className="mt-3 flex flex-col gap-2"><Tap autoFocus className="min-h-12 rounded-pill border border-ink/12 bg-surface2 px-5 text-sm font-bold" disabled={forgetting} onClick={() => { setConfirmId(null); setActionError(null); }}>Garder le raccourci</Tap><PrimaryAction disabled={forgetting} loading={forgetting} onClick={() => void forget(id)}>Oublier le raccourci</PrimaryAction></div></div>
-              : <div className="mt-4 flex flex-col gap-2"><Link href={customerTrackingHref(id, row.saved.receipt.trackingToken, null, 0)} prefetch={false} target={embed ? "_blank" : undefined} rel="noreferrer" className="cf-press flex min-h-12 items-center justify-center gap-2 rounded-pill border border-accent/30 bg-accentwash px-4 text-sm font-bold text-accentink" aria-label={`Suivre la commande${number === undefined ? "" : ` n° ${number}`}`}>Ouvrir le suivi <Icon name="arrow" size={15} /></Link><Tap disabled={forgetting} className="min-h-11 rounded-pill px-3 text-xs font-semibold text-mut hover:text-ink" onClick={() => { setMessage(null); setConfirmId(id); }}>Oublier ce raccourci</Tap></div>}
+              : <div className={compact ? "mt-3 grid grid-cols-2 gap-2" : "mt-4 flex flex-col gap-2"}><Link href={customerTrackingHref(id, row.saved.receipt.trackingToken, null, 0)} prefetch={false} target={embed ? "_blank" : undefined} rel="noreferrer" className="cf-press flex min-h-12 items-center justify-center gap-2 rounded-pill border border-accent/30 bg-accentwash px-3 text-[13px] font-bold text-accentink" aria-label={`Suivre la commande${number === undefined ? "" : ` n° ${number}`}`}>{compact ? "Suivre" : "Ouvrir le suivi"}<Icon name="arrow" size={15} /></Link><Tap disabled={forgetting} className="min-h-12 rounded-pill bg-accent px-3 text-[13px] font-bold text-onaccent" onClick={() => setReordering(row.saved)}>Recommander</Tap><Tap disabled={forgetting} className={"min-h-11 rounded-pill px-3 text-xs font-semibold text-mut hover:text-ink" + (compact ? " col-span-2 justify-self-end" : "")} onClick={() => { setMessage(null); setConfirmId(id); }}>Oublier ce raccourci</Tap></div>}
           </Surface></li>;
         })}</ul></section>;
       })}
       {total > rows.length && <GhostAction disabled={loading || forgetting} onClick={() => setLimit(value => value + PAGE_SIZE)}>Afficher plus de commandes ({total - rows.length})</GhostAction>}
       <GhostAction disabled={loading || forgetting} onClick={() => void refresh()}>{loading ? "Vérification…" : "Actualiser les états"}</GhostAction>
-      <p className="text-xs leading-5 text-mut">Une demande interrompue se reprend depuis le panier. Effacer les données de ce navigateur supprime ses raccourcis, pas vos commandes auprès du restaurant.</p>
-    </div>}
-  </Sheet>;
+      {compact ? <details className="text-xs leading-5 text-mut"><summary className="min-h-11 cursor-pointer py-3 font-semibold">À propos des données de cet appareil</summary><p>Ces raccourcis invités ne sont pas synchronisés avec vos autres appareils. Les commandes liées à votre compte se consultent dans Mon compte.</p><p className="mt-2">Une demande interrompue se reprend depuis le panier. Effacer les données de ce navigateur supprime ses raccourcis, pas vos commandes auprès du restaurant.</p></details>
+        : <p className="text-xs leading-5 text-mut">Une demande interrompue se reprend depuis le panier. Effacer les données de ce navigateur supprime ses raccourcis, pas vos commandes auprès du restaurant.</p>}
+      </>}
+    </div>;
+  if (presentation === "page") return open ? <section aria-label="Mes commandes" className="mx-auto w-full max-w-3xl">
+    <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3 pt-6"><h2 className="text-[17px] font-extrabold uppercase tracking-[-.025em] text-accentink">Mes commandes</h2><p className="text-xs text-mut">Sur cet appareil</p></header>{content}</section> : null;
+  return <Sheet open={open} onClose={close} navigationLocked={navigationLocked} title="Mes commandes" maxHeight="92%" headerExtra={<p className="mt-1 truncate text-xs text-mut">Sur cet appareil · {tenantName}</p>}>{content}</Sheet>;
 }

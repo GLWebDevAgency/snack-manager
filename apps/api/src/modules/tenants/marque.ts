@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { BrandSchema, contraste, type Brand } from '@sm/contracts';
+import { BrandSchema, contraste, lireMarque, type Brand } from '@sm/contracts';
 import { imageAutorisee } from './origines-images';
 
 /**
@@ -75,8 +75,10 @@ export function avecLogoHerite(brand: Brand, logoUrl: string | null | undefined)
  *  1. Les ORIGINES d'abord, sur le masque tel qu'il a été ENVOYÉ : c'est le
  *     seul endroit où l'on juge une intention. Ce qui est refusé ici ne
  *     s'écrit pas, et l'appelant sait pourquoi.
- *  2. L'HÉRITAGE ensuite — mais le logo legacy n'est greffé que si le résultat
- *     reste un masque VALIDE et sur une origine admise. Ce logo-là vient de la
+ *  2. L'HÉRITAGE ensuite, uniquement si aucun masque valide n'est encore posé.
+ *     Sur une marque existante, quatre logos nulls sont un retrait explicite.
+ *     Le logo legacy n'est greffé que si le résultat reste un masque VALIDE
+ *     et sur une origine admise. Ce logo-là vient de la
  *     colonne plate, écrite par des chemins plus anciens que cette garde : le
  *     refuser bloquerait le restaurateur pour une URL qu'il n'a pas posée,
  *     alors qu'il suffit de ne pas la greffer (sinon `safeParse` échouerait à
@@ -87,9 +89,22 @@ export function masqueAEnregistrer(
   brand: Brand,
   logoUrl: string | null | undefined,
   hotes: readonly string[],
+  previous?: { tagline?: string | null; taglineSub?: string | null } | null,
 ): Brand {
+  // Un éditeur d'avant ces champs peut encore envoyer un masque complet.
+  // Absence = préserver ; null = retirer explicitement l'accroche.
+  const retainedTagline = brand.tagline === undefined && previous?.tagline !== undefined;
+  const retainedSub = brand.taglineSub === undefined && previous?.taglineSub !== undefined;
+  if (retainedTagline || retainedSub) brand = {
+    ...brand,
+    ...(retainedTagline ? { tagline: previous!.tagline } : {}),
+    ...(retainedSub ? { taglineSub: previous!.taglineSub } : {}),
+  };
   exigerOriginesImages(brand, hotes);
-  const herite = avecLogoHerite(brand, logoUrl);
+  // Même lecture que les surfaces publiques, y compris un sous-document
+  // Mongoose hydraté : la présence d'un objet partiel ne prouve pas une marque.
+  const dejaPose = lireMarque({ brand: previous }).repli === null;
+  const herite = dejaPose ? brand : avecLogoHerite(brand, logoUrl);
   const greffable = BrandSchema.safeParse(herite).success && toutesImagesAutorisees(herite, hotes);
   const valide = greffable ? herite : brand;
   exigerAA(valide);

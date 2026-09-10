@@ -455,14 +455,12 @@ export class TenantsService {
    * et ses champs plats dérivés du masque qu'on vient d'enregistrer.
    */
   async updateMarque(tenantId: string, brand: Brand, actor?: JwtPayload) {
-    // Seul le logo legacy sert ici (l'héritage de `masqueAEnregistrer`) : on
-    // ne lit que lui, comme `updateIdentity` ne lit que `brand`. Une lecture
-    // non projetée dans un fichier qui érige la projection en doctrine se
-    // paierait sur la première fiche client volumineuse.
-    const tenant = await this.tenants.findById(tenantId, { logoUrl: 1 });
+    // Le masque complet distingue la première pose legacy d'un retrait de
+    // logo explicite. Il conserve aussi les accroches des anciens éditeurs.
+    const tenant = await this.tenants.findById(tenantId, { logoUrl: 1, brand: 1 });
     if (!tenant) throw new NotFoundException('Tenant introuvable');
     const vue = await this.vueMe(tenantId, {
-      brand: masqueAEnregistrer(brand, tenant.logoUrl, this.origines.hotes),
+      brand: masqueAEnregistrer(brand, tenant.logoUrl, this.origines.hotes, tenant.brand),
     });
     /*
      * LE MÊME GESTE DES DEUX CÔTÉS DOIT LAISSER LA MÊME TRACE.

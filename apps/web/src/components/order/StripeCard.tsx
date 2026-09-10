@@ -13,21 +13,25 @@
  * `PaymentIntent` confirmé côté Stripe.
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type CSSProperties } from "react";
 import { fallbackDe, TYPE_PAIRS, type Brand } from "@sm/contracts";
 import { Banner, PrimaryAction, Spinner } from "./primitives";
 
 // ─── Surface minimale de Stripe.js réellement utilisée ───
 
+type WalletConfirmEvent = { paymentFailed?: (payload: { reason: 'fail'; message?: string }) => void };
+type StripeElementEvent = WalletConfirmEvent & { complete?: boolean; availablePaymentMethods?: Record<string, boolean> | null;
+  paymentMethods?: Record<string, { available: boolean }> };
 type StripeElement = {
   mount(target: HTMLElement): void;
   unmount(): void;
   destroy(): void;
-  on(event: string, handler: (event: { complete?: boolean }) => void): void;
+  on(event: string, handler: (event: StripeElementEvent) => void): void;
 };
 
 type StripeElements = {
-  create(type: "payment", options?: Record<string, unknown>): StripeElement;
+  create(type: "payment" | "expressCheckout", options?: Record<string, unknown>): StripeElement;
+  submit(): Promise<{ error?: { message?: string } }>;
 };
 
 type ConfirmResult = {
@@ -152,7 +156,11 @@ export function apparenceStripeDe(masque: CSSProperties, brand: Brand) {
   };
 }
 
-export function StripeCard({
+export function StripeCard(props: ComponentProps<typeof StripeCardSession>) {
+  return <StripeCardSession key={`${props.publishableKey}:${props.stripeAccount}:${props.clientSecret}`} {...props} />;
+}
+
+function StripeCardSession({
   publishableKey,
   clientSecret,
   stripeAccount,
@@ -193,19 +201,26 @@ export function StripeCard({
   onConfirmEnd?: (outcome: StripePaymentOutcome) => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const walletMountRef = useRef<HTMLDivElement>(null);
+  const walletConfirmRef = useRef<((event: WalletConfirmEvent) => Promise<void>) | null>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const confirmingRef = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [walletAvailable, setWalletAvailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let element: StripeElement | null = null;
+    let wallet: StripeElement | null = null;
+    const destroy = (item: StripeElement | null) => { try { item?.destroy(); } catch { /* A failed SDK cleanup must not prevent the other element's cleanup. */ } };
 
     loadStripeJs()
       .then(() => {
@@ -220,6 +235,30 @@ export function StripeCard({
         element.mount(mountRef.current);
         stripeRef.current = stripe;
         elementsRef.current = elements;
+        // Both surfaces confirm the SAME admitted order and PaymentIntent on
+        // the restaurant's Connect account. Stripe decides wallet support.
+        if (walletMountRef.current) {
+          try {
+            wallet = elements.create("expressCheckout", {
+              buttonHeight: 52,
+              layout: { maxColumns: 2, maxRows: 1 },
+            });
+            wallet.on("ready", event => {
+              if (!cancelled) setWalletAvailable(Object.values(event.availablePaymentMethods ?? {}).some(Boolean));
+            });
+            wallet.on("availablepaymentmethodschange", event => {
+              if (!cancelled) setWalletAvailable(Object.values(event.paymentMethods ?? {}).some(method => method.available));
+            });
+            wallet.on("confirm", event => {
+              if (!cancelled) void walletConfirmRef.current?.(event);
+            });
+            wallet.mount(walletMountRef.current);
+          } catch {
+            // A wallet is optional: the existing secure card form remains.
+            destroy(wallet); wallet = null;
+            setWalletAvailable(false);
+          }
+        }
         setStatus("ready");
       })
       .catch(() => {
@@ -228,32 +267,49 @@ export function StripeCard({
 
     return () => {
       cancelled = true;
-      try {
-        element?.destroy();
-      } catch {
-        /* démontage best-effort */
-      }
+      stripeRef.current = null;
+      elementsRef.current = null;
+      destroy(element); destroy(wallet);
     };
   }, [publishableKey, clientSecret, stripeAccount, apparence, attempt]);
 
-  async function pay() {
+  async function pay(wallet?: WalletConfirmEvent) {
+    const failWallet = (message: string) => {
+      try { wallet?.paymentFailed?.({ reason: "fail", message }); } catch { /* Preserve the local payment guard even if the native sheet has closed. */ }
+    };
     const stripe = stripeRef.current;
     const elements = elementsRef.current;
-    if (!stripe || !elements || disabled || confirmingRef.current || paying || processing || status !== "ready") return;
-    if (onConfirmStart && !onConfirmStart()) return;
+    if (!alive.current || confirmingRef.current || paying) return;
+    if (!stripe || !elements || disabled || processing || status !== "ready") {
+      failWallet("Ce paiement n’est pas disponible. Consultez le suivi de votre commande."); return;
+    }
+    if (onConfirmStart && !onConfirmStart()) {
+      failWallet("La commande doit être vérifiée avant de régler. Consultez son suivi."); return;
+    }
     confirmingRef.current = true;
     let outcome: StripePaymentOutcome = "idle";
     setPaying(true);
     setError(null);
     try {
+      if (wallet) {
+        const submitted = await elements.submit();
+        if (!alive.current || elementsRef.current !== elements) return;
+        if (submitted.error) {
+          const message = submitted.error.message ?? "Le portefeuille n’a pas pu être validé. Réessayez sur cette commande.";
+          setError(message); failWallet(message);
+          return;
+        }
+      }
       const result = await stripe.confirmPayment({
         elements,
         confirmParams: { return_url: returnUrl },
         // `if_required` évite un aller-retour de page quand le 3-DS n’est pas exigé.
         redirect: "if_required",
       });
+      if (!alive.current || elementsRef.current !== elements) return;
       if (result.error) {
-        setError(result.error.message ?? "La confirmation bancaire n’a pas été reçue. Consultez le suivi avant tout autre règlement.");
+        const message = result.error.message ?? "La confirmation bancaire n’a pas été reçue. Consultez le suivi avant tout autre règlement.";
+        setError(message); failWallet(message);
         return;
       }
       const state = result.paymentIntent?.status;
@@ -267,15 +323,20 @@ export function StripeCard({
         setProcessing(true);
         return;
       }
-      setError("La confirmation bancaire n’a pas été reçue. Réessayez sur ce paiement ou consultez le suivi. Ne payez pas une deuxième fois.");
+      const message = "La confirmation bancaire n’a pas été reçue. Réessayez sur ce paiement ou consultez le suivi. Ne payez pas une deuxième fois.";
+      setError(message); failWallet(message);
     } catch {
-      setError("La réponse bancaire n’a pas été reçue. Consultez le suivi ou réessayez sur ce paiement, sans régler une deuxième fois.");
+      if (!alive.current || elementsRef.current !== elements) return;
+      const message = "La réponse bancaire n’a pas été reçue. Consultez le suivi ou réessayez sur ce paiement, sans régler une deuxième fois.";
+      setError(message); failWallet(message);
     } finally {
       confirmingRef.current = false;
-      setPaying(false);
-      onConfirmEnd?.(outcome);
+      if (alive.current) { setPaying(false); onConfirmEnd?.(outcome); }
     }
   }
+
+  // Event listeners outlive renders; use the current authority/disabled guard.
+  useEffect(() => { walletConfirmRef.current = event => pay(event); });
 
   if (status === "failed") {
     return (
@@ -294,6 +355,10 @@ export function StripeCard({
   return (
     <div className="flex flex-col gap-4" inert={disabled || undefined}>
       {processing && <Banner tone="prep" icon="clock" title="Confirmation bancaire en cours">Ne payez pas une deuxième fois. <a href={returnUrl} className="font-bold underline underline-offset-4">Suivre la confirmation de votre commande</a>.</Banner>}
+      <div aria-label="Paiement express" aria-hidden={!walletAvailable || undefined} inert={!walletAvailable || paying || processing || undefined} style={{ height: walletAvailable ? undefined : 0, overflow: "hidden" }}>
+        <div ref={walletMountRef} />
+        {walletAvailable && <p className="mt-3 text-center text-xs text-mut">ou payer par carte</p>}
+      </div>
       <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
           <p className="flex items-center gap-2.5 py-6 text-[14px] text-mut">
@@ -311,7 +376,7 @@ export function StripeCard({
       )}
 
       <PrimaryAction
-        onClick={pay}
+        onClick={() => void pay()}
         disabled={disabled || status !== "ready" || processing}
         loading={paying}
         icon="check"

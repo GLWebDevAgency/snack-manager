@@ -24,6 +24,9 @@ import { hhmm } from "./helpers";
 import { Banner, Dot, Money, Prix, PrimaryAction, Surface } from "./primitives";
 import { CounterPaymentAction } from "./CounterPaymentAction";
 import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, paymentSummaryLabel, requestCounterPayment } from "./checkout-payment";
+import "./order-v2.css";
+import { OrderInstall } from "./OrderInstall";
+import { OrderReadyNotification } from "./OrderReadyNotification";
 import { CustomerDeliveryProof } from "./CustomerDeliveryProof";
 import { DeliveryPaymentReturnError, prepareDeliveryPaymentReturn } from "./delivery-payment-return";
 import { readDeliveryProofAccessFragment } from "./delivery-proof-access";
@@ -241,44 +244,26 @@ export function Tracking({
       style={masque}
       // `clip` et non `hidden` : `overflow-x: hidden` ferait de cette racine
       // un conteneur de défilement (voir Storefront).
-      className={cx(classesPolices, "font-body min-h-dvh overflow-x-clip bg-bg pb-16 text-ink")}
+      className={cx(classesPolices, "sm-order-tracking font-body min-h-dvh overflow-x-clip bg-bg pb-16 text-ink")}
     >
       {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
           et contrôles natifs — voir `FeuilleDuMasque`. */}
       <FeuilleDuMasque brand={brand} />
-      <header className="border-b border-ink/6 bg-surface px-4 pb-6 pt-6">
-        <div className="mx-auto w-full max-w-[520px]">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-            {ticket?.header.tenantName ?? "Commande en ligne"}
-          </p>
-          {/*
-            LE TITRE EST LA RÉGION VIVANTE (4.1.3).
-
-            Le statut change par sondage — « Commande en cours » devient
-            « Votre commande est prête » — et rien ne l'annonçait : le seul
-            `aria-live` de la page entourait une phrase FIXE (« Statut
-            actualisé toutes les 10 secondes »), qui ne change jamais et
-            n'émet donc jamais rien. Un utilisateur de lecteur d'écran ne
-            savait pas que son plat l'attendait au comptoir. `aria-atomic`
-            parce que la phrase entière fait sens, pas le mot qui a changé.
-          */}
-          <h1
-            aria-live="polite"
-            aria-atomic="true"
-            className="font-display mt-1 text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em] text-ink"
-          >
-            {title}
-          </h1>
-        </div>
+      <header className="sm-order-tracking-header"><div><span>{ticket?.header.tenantName ?? "Commande en ligne"}</span><b>Commande n° {pickupNumber}</b></div>
+        {ticket?.header.slug && <a href={`/r/${encodeURIComponent(ticket.header.slug)}`} className="sm-order-icon" aria-label="Retour au restaurant"><Icon name="close" size={18} /></a>}
       </header>
-
-      <div className="mx-auto flex w-full max-w-[520px] flex-col gap-4 px-4 pt-5">
+      <div className={cx("sm-order-tracking-hero", status === "cancelled" || awaitingPayment || refundedDelivery ? "bg-surface2 text-ink" : "bg-accent text-onaccent")}>
+        <span className="sm-order-tracking-seal" aria-hidden><Icon name={status === "cancelled" ? "close" : awaitingPayment || refundedDelivery ? "clock" : "check"} size={34} /></span>
+        <h1 aria-live="polite" aria-atomic="true">{title}</h1>
+        <p>{payment ? paymentSummaryLabel(payment, ticket?.payment) : "Consultez l’avancement de votre commande."}</p>
+      </div>
+      <div className="sm-order-tracking-body mx-auto flex w-full max-w-[520px] flex-col gap-4 px-4">
         {/* ── Numéro de retrait : l’information à voir de loin ── */}
-        <Surface className="px-5 py-6 text-center">
+        <Surface className="sm-order-tracking-number relative px-5 py-6 text-center">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             {delivery ? "Numéro de commande" : "Numéro de retrait"}
           </p>
-          <p className="font-display mt-1 text-[clamp(3.5rem,3rem+2vw,4.25rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
+          <p className="font-display mt-1 text-[72px] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {pickupNumber}
           </p>
           <p className="mt-3 flex items-center justify-center gap-2 text-[14px] text-mut">
@@ -318,7 +303,7 @@ export function Tracking({
                     vient de la pastille (verte contre `bg-ink/10`) et de
                     l'encre atténuée du libellé, qui reste AA.
                   */
-                  <li key={step.status} aria-current={current ? "step" : undefined} className="flex items-center gap-3.5 py-2.5">
+                  <li key={step.status} aria-current={current ? "step" : undefined} className="grid grid-cols-[32px_minmax(0,1fr)] gap-x-3.5 gap-y-1 py-2.5 min-[380px]:flex min-[380px]:items-center min-[380px]:gap-3.5">
                     <span
                       aria-hidden
                       className={cx(
@@ -357,7 +342,7 @@ export function Tracking({
                       <span className="block text-[13px] text-mut">{reached ? step.hint : step.upcomingHint}</span>
                     </span>
                     {current && (
-                      <span className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]", waiting ? "border-prep/40 text-prept" : "border-ok/40 text-okt")}>
+                      <span className={cx("col-start-2 inline-flex shrink-0 items-center justify-self-start gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]", waiting ? "border-prep/40 text-prept" : "border-ok/40 text-okt")}>
                         <Dot tone={waiting ? "prep" : "ok"} />
                         {waiting ? "À confirmer" : "En cours"}
                       </span>
@@ -466,6 +451,10 @@ export function Tracking({
         </Surface>
         )}
 
+        {ticket?.header.slug && <>
+          {!finished && <OrderReadyNotification slug={ticket.header.slug} orderId={orderId} trackingToken={trackingToken} disabled={awaitingPayment || refundedDelivery} />}
+          <OrderInstall key={ticket.header.slug} slug={ticket.header.slug} name={ticket.header.tenantName} />
+        </>}
         {/* ── Où récupérer ── */}
         {ticket && (
         <Surface className="p-4">

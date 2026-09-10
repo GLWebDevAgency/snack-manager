@@ -126,7 +126,7 @@ export function FideliteVitrine({
   return (
     <section
       aria-labelledby="fidelite-vitrine"
-      className={cx("pt-9", className)}
+      className={cx("sm-order-loyalty pt-9", className)}
     >
       <div className="relative overflow-hidden rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 shadow-card sm:p-6">
         <div

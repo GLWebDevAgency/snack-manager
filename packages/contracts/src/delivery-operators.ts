@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BrandSchema } from './marque';
 
 const objectId = z.string().regex(/^[a-f0-9]{24}$/);
 const name = z.string().trim().min(2, 'Indiquez au moins 2 caractères').max(80);
@@ -67,6 +68,10 @@ export const DeliverySessionViewSchema = z.object({
   name: z.string().min(1).max(160),
   restaurantName: z.string().min(1).max(160),
   restaurantSlug: z.string().min(1).max(100),
+  /** Public restaurant identity only; access credentials never enter this view. */
+  brand: BrandSchema.optional(),
+  restaurantAddress: z.string().max(200).optional(),
+  restaurantPhones: z.array(z.string().max(40)).max(10).optional(),
   expiresAt: z.iso.datetime(),
 }).strict();
 export type DeliverySessionView = z.infer<typeof DeliverySessionViewSchema>;

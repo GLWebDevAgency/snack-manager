@@ -32,13 +32,14 @@
  * porte encore, ce qu'un refus veut dire), pour que ça se prouve.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DIRECTIONS,
   TYPE_PAIRS,
   TYPE_PAIR_KEYS,
   contraste,
   marqueEffective,
+  masquePourFond,
   modePourFond,
   type PresentationEntete,
   type Brand,
@@ -55,6 +56,10 @@ import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { ChoixDeMedia } from "@/components/mediatheque/ChoixDeMedia";
 import type { Mediatheque } from "@/components/mediatheque/photos";
+import { clearBrandDraft, readBrandDraft, writeBrandDraft, type BrandDraft } from "../site/brand-draft";
+import { useSiteEditScope } from "../site/site-scope";
+import { useDraftNavigation } from "../site/useDraftNavigation";
+import pilotage from "../site/pilotage.module.css";
 import { ApercuDeMarque } from "./ApercuDeMarque";
 import { ApercuInstalle } from "./ApercuInstalle";
 import { ApercuEcransTV } from "./ApercuEcransTV";
@@ -106,12 +111,16 @@ const MASQUES_DIRECTIONS = Object.fromEntries(
 /** Le cadre d'une vignette qui porte SON propre masque. */
 const VIGNETTE = `${classesPolices} font-body block rounded-card bg-bg p-3 text-left text-ink`;
 
-export function EditeurDeMarque({
+export function EditeurDeMarque(props: Parameters<typeof BrandEditor>[0]) { return <BrandEditor key={props.me._id} {...props} />; }
+
+function BrandEditor({
   me,
   onEnregistre,
+  commande,
 }: {
   me: TenantMe;
   onEnregistre: (t: TenantMe) => void;
+  commande?: { dirty?: boolean; busy?: boolean; identity?: ReactNode; preview: (brand: Brand) => ReactNode; carte: (active: boolean) => ReactNode };
 }) {
   /*
    * `marqueEffective` et non `me.brand` NU — c'est l'adaptateur de lecture
@@ -124,6 +133,9 @@ export function EditeurDeMarque({
    * et le logo du restaurant : exactement ce que ses clients voient déjà.
    */
   /** Ce qui est EN LIGNE — la référence de « rien à enregistrer ». */
+  const scope = useSiteEditScope();
+  const scopeRef = useRef(scope);
+  const [draftReady, setDraftReady] = useState(false);
   const [pose, setPose] = useState<Brand>(() => marqueEffective(me));
   const [brand, setBrand] = useState<Brand>(() => marqueEffective(me));
   const [busy, setBusy] = useState(false);
@@ -131,10 +143,17 @@ export function EditeurDeMarque({
   const [ouvert, setOuvert] = useState<CleEmplacement | null>(null);
   const [previewTab, setPreviewTab] = useState<"web" | "tv">("web");
   const previewId = useId();
+  const [section, setSection] = useState<"identite" | "accueil" | "carte" | "avance">("identite");
+  const [saved, setSaved] = useState(false);
+  const [recovery, setRecovery] = useState<BrandDraft | null>(null);
+  const [restored, setRestored] = useState(false);
+  const mounted = useRef(false), saving = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   /** Toute retouche repose `preset` sur ce qui est vraiment peint. */
   const poser = useCallback((suivant: Brand) => {
-    setRefus(null);
+    if (saving.current || !mounted.current || !scopeRef.current.current()) return;
+    setRefus(null); setSaved(false);
     setBrand(retouche(suivant));
   }, []);
 
@@ -157,10 +176,24 @@ export function EditeurDeMarque({
    * changement réel.
    */
   const dirty = useMemo(() => JSON.stringify(brand) !== JSON.stringify(pose), [brand, pose]);
+  const navigation = useDraftNavigation(dirty || !!commande?.dirty, busy || !!commande?.busy);
+  useEffect(() => {
+    let alive = true;
+    void Promise.resolve().then(() => {
+      if (!alive) return; setDraftReady(true); const stored = readBrandDraft(me._id); if (!stored) return;
+      if (JSON.stringify(stored.base) === JSON.stringify(marqueEffective(me))) { setBrand(stored.draft); setRestored(true); }
+      else setRecovery(stored);
+    });
+    return () => { alive = false; };
+    // L'identifiant remonte l'éditeur ; une modification du nom ne réinitialise pas le brouillon.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me._id]);
+  useEffect(() => { if (!draftReady || recovery) return; if (dirty) writeBrandDraft(me._id, pose, brand); else clearBrandDraft(me._id); }, [brand, dirty, me._id, pose, draftReady, recovery]);
 
   // ── La médiathèque : une requête pour les cinq emplacements ──
   const mediathequeRef = useRef<Promise<Mediatheque> | null>(null);
   const chargerMediatheque = useCallback((forcer = false) => {
+    if (!scopeRef.current.current()) return Promise.reject(new Error("La session a changé."));
     if (forcer) mediathequeRef.current = null;
     mediathequeRef.current ??= api.get<Mediatheque>("/medias").catch((e: unknown) => {
       mediathequeRef.current = null; // un échec ne doit pas être mis en cache
@@ -182,8 +215,8 @@ export function EditeurDeMarque({
     // logo trop petit ne s'avoue qu'à l'instant où on le choisit, et plus
     // jamais ensuite — un rechargement de page effacerait l'avertissement.
     void chargerMediatheque()
-      .then((m) => setMedias(m.medias))
-      .catch(() => setMedias([]));
+      .then((m) => { if (mounted.current) setMedias(m.medias); })
+      .catch(() => { if (mounted.current) setMedias([]); });
   }, [chargerMediatheque]);
 
   const parAdresse = useMemo(() => {
@@ -197,7 +230,8 @@ export function EditeurDeMarque({
   const emplacementOuvert = EMPLACEMENTS.find((e) => e.cle === ouvert) ?? null;
 
   async function enregistrer() {
-    if (busy || !dirty || !verdict.ok) return;
+    if (saving.current || !dirty || !verdict.ok || !scopeRef.current.current()) return;
+    saving.current = true;
     setBusy(true);
     setRefus(null);
     try {
@@ -206,11 +240,15 @@ export function EditeurDeMarque({
       // n'en portait aucun (`avecLogoHerite`). Reposer `brand` tel qu'on l'a
       // envoyé rendrait « rien à enregistrer » faux dès l'enregistrement
       // suivant, et l'écran afficherait un logo que la base ne porte plus.
+      if (!mounted.current || !scopeRef.current.current()) return;
       const enregistre = marqueEffective(suivant);
       setPose(enregistre);
       setBrand(enregistre);
+      clearBrandDraft(me._id); setRestored(false); setRecovery(null);
+      setSaved(true);
       onEnregistre(suivant);
     } catch (e) {
+      if (!mounted.current || !scopeRef.current.current()) return;
       /*
        * Le refus du serveur est écrit pour être compris : il nomme les couples
        * en échec ou les adresses hors liste. `messageDuRefus` le traduit — un
@@ -223,14 +261,60 @@ export function EditeurDeMarque({
           : "Enregistrement impossible — vérifiez votre connexion et réessayez.",
       );
     } finally {
-      setBusy(false);
+      saving.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
 
+  if (!scope.valid) return <p role="status" className="p-4 text-sm text-mut">La session a changé. Rechargez la page pour personnaliser le restaurant courant.</p>;
   return (
-    <div className="flex max-w-[1040px] flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="flex min-w-0 flex-col gap-4">
+    <div className={commande ? "flex min-w-0 flex-col gap-4" : "flex max-w-[1040px] flex-col gap-4"}>
+      {navigation}
+      {restored && dirty && <p role="status" className="rounded-card border border-line p-3 text-sm text-mut">Votre brouillon a été retrouvé dans cet onglet. Il n’est pas encore publié.</p>}
+      {recovery && <Panel title="Un brouillon a été retrouvé" sub="La marque en ligne a changé depuis sa création. Reprendre ce brouillon remplace toute l’apparence, y compris les couleurs, images et polices modifiées depuis. Rien n’est publié sans enregistrement."><div className="flex flex-wrap gap-2">
+        <Btn variant="ghost" onClick={() => { clearBrandDraft(me._id); setRecovery(null); }}>Garder la version en ligne</Btn>
+        <Btn onClick={() => { poser(recovery.draft); setRecovery(null); setRestored(true); }}>Remplacer toute l’apparence par ce brouillon</Btn>
+      </div></Panel>}
+      {commande && <nav className={pilotage.steps} role="tablist" aria-label="Personnaliser la commande">
+        {([['identite', 'Identité', 'user'], ['accueil', 'Accueil', 'home'], ['carte', 'Carte', 'grid'], ['avance', 'Style avancé', 'gear']] as const).map(([key, label, icon], index, options) =>
+          <button key={key} type="button" role="tab" id={`${previewId}-edit-${key}`} aria-controls={`${previewId}-edit-panel-${key}`} aria-selected={section === key} tabIndex={section === key ? 0 : -1}
+            onClick={() => setSection(key)} onKeyDown={event => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault(); const next = options[event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + options.length) % options.length]![0];
+              setSection(next); document.getElementById(`${previewId}-edit-${next}`)?.focus();
+            }}><Icon name={icon} size={18} />{label}</button>)}
+      </nav>}
+      <div className={commande ? pilotage.workspace : "grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start"}>
+        <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4 border-0 p-0 m-0">
+          <div hidden={!!commande && section !== "accueil"} role={commande ? "tabpanel" : undefined} id={`${previewId}-edit-panel-accueil`} aria-labelledby={commande ? `${previewId}-edit-accueil` : undefined}>
+          <Panel title="Accueil de la commande" sub="Votre thème et vos mots, partagés par votre site et votre page de commande.">
+            <div className="mb-4 grid grid-cols-2 gap-2" role="group" aria-label="Thème de la marque">
+              {(["dark", "light"] as const).map((mode) => (
+                <button key={mode} type="button" disabled={busy} aria-pressed={brand.mode === mode}
+                  className={cx("cf-press flex min-h-16 items-center justify-center gap-2 rounded-card border-2 px-3 font-semibold", brand.mode === mode ? "border-accent bg-surface2 text-ink" : "border-line text-mut")}
+                  onClick={() => { if (mode !== brand.mode) poser(masquePourFond(brand, mode)); }}>
+                  <Icon name={mode === "dark" ? "moon" : "sun"} size={22} />
+                  {mode === "dark" ? "Sombre" : "Clair"}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <Field label="Accroche (facultative)" htmlFor={`${previewId}-tagline`}>
+                <Input id={`${previewId}-tagline`} value={brand.tagline ?? ""} maxLength={48} disabled={busy}
+                  onChange={(event) => poser({ ...brand, tagline: event.target.value || null })}
+                  aria-describedby={`${previewId}-tagline-count`} placeholder="Votre cuisine, en quelques mots" />
+                <p id={`${previewId}-tagline-count`} className="mt-1 text-xs text-mut">{(brand.tagline ?? "").length}/48 caractères</p>
+              </Field>
+              <Field label="Sous-accroche (facultative)" htmlFor={`${previewId}-tagline-sub`}>
+                <Input id={`${previewId}-tagline-sub`} value={brand.taglineSub ?? ""} maxLength={90} disabled={busy}
+                  onChange={(event) => poser({ ...brand, taglineSub: event.target.value || null })}
+                  aria-describedby={`${previewId}-tagline-sub-count`} placeholder="Un détail qui donne envie" />
+                <p id={`${previewId}-tagline-sub-count`} className="mt-1 text-xs text-mut">{(brand.taglineSub ?? "").length}/90 caractères</p>
+              </Field>
+            </div>
+          </Panel>
+          </div>
+          <div hidden={!!commande && section !== "avance"} role={commande ? "tabpanel" : undefined} id={`${previewId}-edit-panel-avance`} aria-labelledby={commande ? `${previewId}-edit-avance` : undefined} className="space-y-4">
           <SectionDirections direction={direction} onChoisir={(cle) => poser(appliquerDirection(brand, cle))} />
 
           <SectionCouleurs
@@ -265,8 +349,12 @@ export function EditeurDeMarque({
           />
 
           <SectionTypographie brand={brand} onBrand={poser} />
+          </div>
 
+          <div hidden={!!commande && section !== "identite"} role={commande ? "tabpanel" : undefined} id={`${previewId}-edit-panel-identite`} aria-labelledby={commande ? `${previewId}-edit-identite` : undefined}>
+          {commande?.identity && <div className="mb-4">{commande.identity}</div>}
           <SectionImages
+            scope={commande ? "logo" : "all"}
             brand={brand}
             parAdresse={parAdresse}
             cotesConnues={medias !== null}
@@ -274,11 +362,17 @@ export function EditeurDeMarque({
             onRetirer={(cle) => poser(poserEmplacement(brand, cle, null))}
             onPresentation={(entete) => poser({ ...brand, entete })}
           />
-        </div>
+          </div>
+          {commande && <>
+            <div hidden={section !== "accueil"}><SectionImages scope="hero" brand={brand} parAdresse={parAdresse} cotesConnues={medias !== null} onOuvrir={setOuvert}
+              onRetirer={cle => poser(poserEmplacement(brand, cle, null))} onPresentation={entete => poser({ ...brand, entete })} /></div>
+            <div hidden={section !== "carte"} role="tabpanel" id={`${previewId}-edit-panel-carte`} aria-labelledby={`${previewId}-edit-carte`}>{commande.carte(section === "carte")}</div>
+          </>}
+        </fieldset>
 
         {/* L'aperçu colle en haut de l'écran large : régler une couleur en
             perdant de vue son effet, c'est régler à l'aveugle. */}
-        <Panel
+        {commande ? commande.preview(brand) : <Panel
           title="Votre vitrine"
           sub={previewTab === "web" ? "Votre identité en cours d’édition, appliquée à votre page de commande. Les deux plats sont des exemples." : "Votre identité en cours d’édition, appliquée à votre vraie carte sur un écran de salle."}
           className="lg:sticky lg:top-4"
@@ -319,18 +413,20 @@ export function EditeurDeMarque({
             s&apos;arrête pour ne pas repeindre votre back-office.
           </p>
           </div>}
-        </Panel>
+        </Panel>}
       </div>
 
       <BarreEnregistrement
+        saved={saved}
+        label={commande ? "Enregistrer l’apparence" : undefined}
         dirty={dirty}
-        busy={busy}
+        busy={busy || !!commande?.busy}
         contrasteOk={verdict.ok}
         echecs={posables.filter((v) => !v.ok).length + deriveEnEchec.length}
         refus={refus}
         onAnnuler={() => {
           setRefus(null);
-          setBrand(pose);
+          setBrand(pose); clearBrandDraft(me._id); setRestored(false);
         }}
         onEnregistrer={() => void enregistrer()}
       />
@@ -353,6 +449,7 @@ export function EditeurDeMarque({
           }}
           onFerme={() => setOuvert(null)}
           chargerMediatheque={chargerMediatheque}
+          canAct={() => mounted.current && scopeRef.current.current()}
         />
       )}
     </div>
@@ -753,6 +850,7 @@ function SectionImages({
   onOuvrir,
   onRetirer,
   onPresentation,
+  scope = "all",
 }: {
   brand: Brand;
   parAdresse: ReadonlyMap<string, MediaVue>;
@@ -760,6 +858,7 @@ function SectionImages({
   onOuvrir: (cle: CleEmplacement) => void;
   onRetirer: (cle: CleEmplacement) => void;
   onPresentation: (entete: PresentationEntete) => void;
+  scope?: "all" | "logo" | "hero";
 }) {
   /*
    * DEUX PANNEAUX, ET LE LOGO D'ABORD.
@@ -792,7 +891,7 @@ function SectionImages({
 
   return (
     <>
-      <Panel
+      {scope !== "hero" && <Panel
         title="Votre logo"
         sub="Déposez-le une fois : il sert votre page de commande, votre carte de fidélité et l’icône installée sur le téléphone de vos clients. Il se choisit dans votre médiathèque — celle des photos de plats — ou s’y dépose."
         bodyClassName="flex flex-col gap-2.5"
@@ -826,15 +925,15 @@ function SectionImages({
           dessous, on vous le dit — et on enregistre quand même : une image un peu petite
           s&apos;affiche, elle est seulement molle sur un grand écran.
         </p>
-      </Panel>
+      </Panel>}
 
-      <Panel
+      {scope !== "logo" && <Panel
         title="Photo d’accueil"
         sub="La photo qui ouvre votre page de commande. Ce n’est pas votre logo : c’est une image de votre salle, d’un plat, de votre devanture."
         bodyClassName="flex flex-col gap-2.5"
       >
         {photos.map(rangee)}
-      </Panel>
+      </Panel>}
     </>
   );
 }
@@ -963,11 +1062,11 @@ function RangeeImage({
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[min(100%,160px)] flex-[1_1_160px]">
         <div className="text-[13px] font-bold text-ink">{emplacement.nom}</div>
         <p className="mt-0.5 text-[12px] leading-snug text-mut">{emplacement.aide}</p>
         {url === null ? (
-          <p className="mt-0.5 text-[12px] text-mut">Aucune image — rien ne s&apos;affichera ici.</p>
+          <p className="mt-0.5 text-[12px] text-mut">{emplacement.cle === "hero" ? "Sans photo dédiée, la page utilise la photo d’un produit mis en avant, si disponible." : "Sans image, votre marque utilise son nom ou une autre version du logo."}</p>
         ) : media === null ? (
           <p className="mt-0.5 text-[12px] text-mut">
             {cotesConnues
@@ -981,7 +1080,7 @@ function RangeeImage({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center gap-2">
         {/* `min-h-[44px]` : la taille `sm` du design system mesure 38 px, et
             ces deux commandes sont les seules de l'écran qu'on presse au
             pouce, sur une rangée dense de cinq emplacements. */}
@@ -1003,6 +1102,8 @@ function RangeeImage({
 // ─────────────────────────────────────────────────────────────
 
 function BarreEnregistrement({
+  saved = false,
+  label,
   dirty,
   busy,
   contrasteOk,
@@ -1011,6 +1112,8 @@ function BarreEnregistrement({
   onAnnuler,
   onEnregistrer,
 }: {
+  saved?: boolean;
+  label?: string;
   dirty: boolean;
   busy: boolean;
   contrasteOk: boolean;
@@ -1035,7 +1138,7 @@ function BarreEnregistrement({
           disabled={!dirty || busy || !contrasteOk}
           onClick={onEnregistrer}
         >
-          {busy ? "Enregistrement…" : "Enregistrer l'identité visuelle"}
+          {busy ? "Enregistrement…" : label ?? "Enregistrer l'identité visuelle"}
         </Btn>
         {dirty && (
           <Btn variant="ghost" disabled={busy} onClick={onAnnuler}>
@@ -1047,12 +1150,12 @@ function BarreEnregistrement({
           masque illisible (400), et laisser cliquer pour se faire refuser
           serait lui faire porter une explication qu'on a déjà sous la main.
         */}
-        <span className="text-[12.5px] text-mut">
+        <span role="status" className="text-[12.5px] text-mut">
           {!contrasteOk
             ? `${echecs === 1 ? "Un couple ne se lit pas" : `${echecs} couples ne se lisent pas`} — corrigez-les d'abord, le serveur refuserait ce masque.`
             : dirty
               ? "Vos clients verront le changement à leur prochaine visite."
-              : "Rien à enregistrer."}
+              : saved ? "Modifications enregistrées. Votre page publique les reprend lors de ses prochains chargements." : "Aucune modification en attente."}
         </span>
       </div>
       {refus && (

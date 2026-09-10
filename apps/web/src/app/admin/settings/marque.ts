@@ -248,7 +248,7 @@ export function directionPortee(brand: Brand): PresetKey | null {
  */
 export function appliquerDirection(brand: Brand, cle: PresetKey): Brand {
   const d = DIRECTIONS[cle];
-  return { ...d, logo: brand.logo, hero: brand.hero, preset: cle };
+  return { ...d, logo: brand.logo, hero: brand.hero, tagline: brand.tagline, taglineSub: brand.taglineSub, preset: cle };
 }
 
 /**

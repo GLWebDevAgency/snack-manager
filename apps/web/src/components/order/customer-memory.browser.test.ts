@@ -57,6 +57,8 @@ beforeAll(async () => {
   alias: { react: fileURLToPath(new URL("../../../node_modules/react", import.meta.url)), "react-dom": fileURLToPath(new URL("../../../node_modules/react-dom", import.meta.url)) },
   // Real Storefront/Checkout/hooks; only third-party SDK/font providers are inert.
   plugins: [{ name: "provider-boundaries", setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
+      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ contents: `export const usePathname=()=>window.location.pathname;export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
     builder.onResolve({ filter: /\/StripeCard$/ }, () => ({ path: "stripe", namespace: "memory-fixture" }));
     builder.onLoad({ filter: /^stripe$/, namespace: "memory-fixture" }, () => ({ contents: "export const apparenceStripeDe=()=>({});export function StripeCard(){return null}" }));
     builder.onResolve({ filter: /^next\/font\/google$/ }, () => ({ path: "font", namespace: "memory-fixture" }));
@@ -226,8 +228,10 @@ describe("coordonnées du compte : vrai hook et réponses HTTP locales, sans fou
     await page.getByRole("button", { name: /Voir mon panier/ }).click();
     // This boundary fixture does not compile Tailwind or assert layout. Use the
     // native keyboard path inside the real modal, whose body scroll is locked.
-    const next = page.getByRole("dialog", { name: "Votre commande", exact: true }).getByRole("button", { name: /^Continuer/ });
+    const next = page.getByRole("dialog", { name: "Votre commande", exact: true }).getByRole("button", { name: /^Choisir le retrait/ });
     await expect.poll(() => next.isEnabled()).toBe(true); await next.focus(); await next.press("Enter");
+    const toPay = page.getByRole("button", { name: /^Continuer · retrait/ });
+    await expect.poll(() => toPay.isEnabled()).toBe(true); await toPay.focus(); await toPay.press("Enter");
     await page.getByRole("textbox", { name: "Prénom et nom", exact: true }).fill("Commande invitée embed");
     await page.getByRole("textbox", { name: "Téléphone", exact: true }).fill("0600000000");
     const save = page.getByRole("button", { name: "Mémoriser ces coordonnées" });

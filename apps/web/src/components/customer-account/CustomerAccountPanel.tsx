@@ -5,6 +5,7 @@ import { useCallback, useId, useRef, useState } from 'react';
 import type { BrandMode, CustomerAccountView } from '@sm/contracts';
 import { Icon } from '../ui/icons';
 import { Field, Input } from '../ui/fields';
+import type { MenuCategory } from '../order/api';
 import { Sheet, Tap } from '../order/primitives';
 import type { useCustomerAccount } from './useCustomerAccount';
 import { CustomerEnrollment } from './CustomerEnrollment';
@@ -82,10 +83,10 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
   </div>;
 }
 
-export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, account, slug, mode = 'light', returnLabel = 'Revenir au menu' }: {
+export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, onDevicePreferences, onCatalogVerified, account, slug, mode = 'light', returnLabel = 'Revenir au menu' }: {
   open: boolean; onClose: () => void; restaurantName: string; loyaltyHref?: string | undefined;
-  onDeviceOrders?: (() => void) | undefined; account: Account;
-  slug?: string; mode?: BrandMode;
+  onDeviceOrders?: (() => void) | undefined; onDevicePreferences?: (() => void) | undefined; account: Account;
+  slug?: string; mode?: BrandMode; onCatalogVerified?: (categories: MenuCategory[]) => void;
   returnLabel?: 'Revenir au menu' | 'Revenir à la fidélité' | undefined;
 }) {
   const { state, refresh } = account;
@@ -123,7 +124,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
     <div className="space-y-4 p-4 pb-5 sm:p-5">
       {readingLoyalty && loyaltyAccess && slug && view ? <CustomerLoyalty slug={slug} access={loyaltyAccess} currentAccess={account.currentAccess}
         restaurantName={restaurantName} profileName={view.profile.name} onBack={leaveLoyalty} onProfile={completeProfile} />
-        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} /> : <>
+        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} onCatalogVerified={onCatalogVerified} /> : <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
       {view ? <>{slug && <Tap ref={ordersTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><Icon name="ticket" size={18} /><span className="flex-1 text-left">Commandes de mon compte</span><Icon name="arrow" size={14} /></Tap>}
         {slug && <Tap ref={loyaltyTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setLoyaltyAccess(access); }}><Icon name="gift" size={18} /><span className="flex-1 text-left">Fidélité de mon compte</span><Icon name="arrow" size={14} /></Tap>}
@@ -147,12 +148,14 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
       {open && !view && !state.busy && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
         smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={refresh} onActivity={activity} />}
       {!view && !loading && <p className="text-xs leading-5 text-mut">La carte fidélité ne donne pas accès à ce compte.</p>}
-      {(onDeviceOrders || loyaltyHref) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
+      {(onDeviceOrders || loyaltyHref || onDevicePreferences) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
         <h3 className="mb-3 text-sm font-bold">Autres accès</h3>
         {onDeviceOrders && <Tap disabled={state.busy} onClick={() => { onClose(); onDeviceOrders(); }}
           aria-label="Mes commandes sur cet appareil" className={secondary + ' w-full justify-start text-left'}>
           <Icon name="ticket" size={18} /><span className="min-w-0 flex-1"><span className="block font-bold">Mes commandes</span><span className="block text-xs font-normal text-mut">Sur cet appareil uniquement</span></span><Icon name="arrow" size={15} />
         </Tap>}
+        {onDevicePreferences && <Tap disabled={state.busy} onClick={() => { closePanel(); onDevicePreferences(); }}
+          className={secondary + ' w-full justify-start text-left'}><Icon name="gear" size={18} /><span className="flex-1">Préférences de cet appareil</span><Icon name="arrow" size={15} /></Tap>}
         {loyaltyHref && (state.busy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Fidélité du restaurant</span>
           : <Link href={loyaltyHref} prefetch={false} onClick={onClose} className={secondary + ' w-full justify-start'}><Icon name="gift" size={18} /><span className="flex-1">Fidélité du restaurant</span><Icon name="arrow" size={15} /></Link>)}
       </nav>}

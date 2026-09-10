@@ -92,6 +92,9 @@ import {
   brandColorDe,
   contraste,
   logoUrlDe,
+  TenantIdentityUpdateSchema,
+  textePosableSur,
+  RESTAURANT_TZ,
 } from "@sm/contracts";
 import { loyalty as loyaltyDomain, Money } from "@sm/domain";
 import { defaultDemoScreenPlaylist, previewDemoScreen } from "./screen-preview";
@@ -109,6 +112,8 @@ import {
   summaryLive,
   timeseries,
   topProducts,
+  serviceClock,
+  isoDay,
   CNAME_TARGET,
   DOMAIN_PROVIDER,
   SITE_SUBDOMAIN,
@@ -213,6 +218,39 @@ const menuView = (w: DemoWorld) => ({
     })),
   uncategorized: w.products.filter((p) => p.categoryId === null),
 });
+
+/** L'aperçu BO relit son monde courant, jamais la fixture séparée du checkout.
+ * Aucune réservation n'est simulée par ce transport : loadSite accepte slots:null. */
+const siteView = (w: DemoWorld) => {
+  const tenant = w.tenant, now = serviceClock(tenant, w.bootAt);
+  const todayHours = tenant.hours.find(day => day.day === isoDay(now)) ?? null;
+  const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const popular = new Set(topProducts(w, '30d', 6).map(product => product.name));
+  return {
+    tenant: { slug: tenant.slug, name: tenant.name, websiteUrl: tenant.websiteUrl ?? null, brand: tenant.brand,
+      logoUrl: tenant.logoUrl, brandColor: tenant.brandColor, address: tenant.address, phones: tenant.phones, hours: tenant.hours },
+    menu: {
+      featuredConfigured: w.categories.some(category => category.featuredProductIds !== undefined),
+      categories: menuView(w).categories.filter(category => category.active).map(category => ({
+        _id: category._id, name: category.name, featuredProductIds: featuredProductIdsOf(category.featuredProductIds), featuredConfigured: category.featuredProductIds !== undefined,
+        products: category.products.filter(product => product.active).map(product => {
+          const presentation = product as typeof product & { photoKind?: string; popularOverride?: boolean | null };
+          return { _id: product._id, name: product.name, description: product.description, price: product.price, variants: product.variants,
+            optionGroups: product.optionGroups, removables: product.removables, supplements: product.supplements, tags: product.tags,
+            isNew: product.isNew, outOfStock: product.outOfStock, photoUrl: product.photoUrl, medias: [],
+            photoKind: presentation.photoKind === 'cover' ? 'cover' : 'cutout', photoCover: presentation.photoKind === 'cover',
+            popular: Boolean(product.photoUrl) && (presentation.popularOverride ?? popular.has(product.name)) };
+        }),
+      })),
+    },
+    medias: [], slots: null,
+    reviews: { count: w.reviews.length, avg: w.reviews.length ? Math.round(w.reviews.reduce((sum, review) => sum + review.rating, 0) / w.reviews.length * 10) / 10 : 0,
+      latest: w.reviews.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(review => ({ _id: review._id, author: review.author, rating: review.rating, text: review.text, createdAt: review.createdAt, reply: review.reply ? { text: review.reply.text, at: review.reply.at } : null })) },
+    ordering: { paused: tenant.settings.onlineOrderingPaused ?? false, message: tenant.settings.pauseMessage ?? null },
+    openNow: Boolean(todayHours && [todayHours.lunch, todayHours.dinner].some(slot => slot && clock >= slot.open && clock <= slot.close)),
+    todayHours, timezone: RESTAURANT_TZ,
+  };
+};
 
 /**
  * Dernier battement d'un appareil allumé : toujours il y a une poignée de
@@ -787,6 +825,18 @@ function dispatch(
   // ─── Établissement ───
 
   if (path === "/tenants/me" && method === "GET") return ok(w.tenant);
+
+  if (path === "/tenants/me/identity" && method === "PATCH") {
+    const patch = parseDemoBody(TenantIdentityUpdateSchema, b);
+    Object.assign(w.tenant, patch);
+    if (patch.brandColor !== undefined) w.tenant.brand = { ...w.tenant.brand, palette: { ...w.tenant.brand.palette, accent: patch.brandColor, onAccent: textePosableSur(patch.brandColor) } };
+    return ok(w.tenant);
+  }
+
+  if (method === "GET" && seg.length === 4 && seg[0] === "public" && seg[1] === "tenants" && seg[3] === "site") {
+    if (seg[2] !== encodeURIComponent(w.tenant.slug)) throw new Refusal(404, "Restaurant introuvable");
+    return ok(siteView(w));
+  }
 
   /*
    * LA MÉDIATHÈQUE EN DÉMONSTRATION — VIDE, ET C'EST LA VÉRITÉ.

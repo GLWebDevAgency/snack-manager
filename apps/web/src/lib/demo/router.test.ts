@@ -32,6 +32,7 @@ import {
 } from "@sm/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { demoWorld, resetDemoWorld, routeDemo } from "./router";
+import { orderingApi } from "../../components/order/api";
 
 beforeEach(() => resetDemoWorld());
 
@@ -85,6 +86,7 @@ const READS: [string, string][] = [
   // Shell
   ["GET", "/auth/me"],
   ["GET", "/tenants/me"],
+  ["GET", "/public/tenants/le-comptoir/site?preview=123"],
   ["GET", "/orders?status=new"],
   ["GET", "/orders/count?status=new"],
   // Tableau de bord
@@ -192,6 +194,55 @@ describe("lectures", () => {
     const count = routeDemo("GET", "/orders/count?status=new");
 
     expect(count.body).toEqual({ total: list.total });
+  });
+});
+
+describe("pilotage du site en démonstration", () => {
+  const load = () => orderingApi({ send: async ({ path }) => routeDemo("GET", `${path}?preview=123`) }).loadSite(demoWorld().tenant.slug);
+  it("alimente le vrai lecteur de site depuis le menu courant, sans données privées", async () => {
+    const world = demoWorld(), site = await load();
+    expect(site?.tenant.name).toBe(world.tenant.name);
+    const product = world.products.find(item => item.active && world.categories.some(category => category.active && category._id === item.categoryId))!;
+    const projected = site?.categories.flatMap(category => category.products).find(item => item.id === product._id);
+    expect(projected).toMatchObject({ name: product.name, price: product.price, photoUrl: product.photoUrl });
+    expect(projected?.removables).toEqual(product.removables);
+    expect(site?.categories.length).toBeGreaterThan(0); expect(site?.slots).toBeNull();
+    const raw = routeDemo("GET", `/public/tenants/${world.tenant.slug}/site`).body as { tenant: Record<string, unknown>; menu: { categories: { products: Record<string, unknown>[] }[] } };
+    expect(raw.tenant).not.toHaveProperty("account"); expect(raw.tenant).not.toHaveProperty("capacites");
+    expect(raw.menu.categories.flatMap(category => category.products).every(item => !("tenantId" in item) && !("outOfStockSource" in item))).toBe(true);
+  });
+  it("reflète prix, présentation, sélection et pause sans modifier le menu source", async () => {
+    const world = demoWorld(), category = world.categories.find(item => item.active)!, product = world.products.find(item => item.categoryId === category._id && item.active)!;
+    routeDemo("PATCH", `/products/${product._id}`, { price: 1234, photoKind: "cover", popularOverride: true });
+    routeDemo("PUT", `/categories/${category._id}/featured`, { productIds: [product._id], expectedRevision: 0 });
+    routeDemo("PATCH", "/tenants/me/settings", { onlineOrderingPaused: true, pauseMessage: "Pause de recette" });
+    const site = await load(), projected = site?.categories.flatMap(item => item.products).find(item => item.id === product._id);
+    expect(projected).toMatchObject({ price: 1234, photoCover: true });
+    expect(site?.categories.find(item => item.id === category._id)?.featuredProductIds).toEqual([product._id]);
+    expect(site?.ordering).toEqual({ paused: true, message: "Pause de recette" });
+    expect(world.products.find(item => item._id === product._id)?.price).toBe(1234);
+  });
+  it("écarte les produits et catégories non publiés et refuse un autre restaurant", async () => {
+    const world = demoWorld(), category = world.categories.find(item => item.active)!, product = world.products.find(item => item.categoryId !== category._id && item.active)!;
+    routeDemo("PATCH", `/categories/${category._id}`, { active: false }); routeDemo("PATCH", `/products/${product._id}`, { active: false });
+    const site = await load(); expect(site?.categories.some(item => item.id === category._id)).toBe(false);
+    expect(site?.categories.flatMap(item => item.products).some(item => item.id === product._id)).toBe(false);
+    expect(routeDemo("GET", "/public/tenants/autre-restaurant/site?preview=456").status).toBe(404);
+  });
+  it("valide le nom, puis le renvoie dans me et l’aperçu sans toucher les autres données", async () => {
+    const before = structuredClone(demoWorld().tenant);
+    expect(routeDemo("PATCH", "/tenants/me/identity", { name: "  Nouveau Comptoir  " }).status).toBe(200);
+    expect(demoWorld().tenant).toEqual({ ...before, name: "Nouveau Comptoir" });
+    expect((await load())?.tenant.name).toBe("Nouveau Comptoir");
+    for (const name of ["", " ", "x".repeat(81)]) expect(routeDemo("PATCH", "/tenants/me/identity", { name }).status).toBe(400);
+    expect(demoWorld().tenant.name).toBe("Nouveau Comptoir");
+  });
+  it("limite le patch aux champs du contrat et conserve la cohérence de l’accent", () => {
+    const before = structuredClone(demoWorld().tenant);
+    expect(routeDemo("PATCH", "/tenants/me/identity", { name: "Nom sûr", account: { status: "suspended" }, slug: "autre", brandColor: "#AABBCC" }).status).toBe(200);
+    expect(demoWorld().tenant.slug).toBe(before.slug); expect(demoWorld().tenant.account).toEqual(before.account);
+    expect(demoWorld().tenant.brandColor).toBe("#aabbcc"); expect(demoWorld().tenant.brand.palette.accent).toBe("#aabbcc");
+    expect(demoWorld().tenant.brand.palette.onAccent).toMatch(/^#[a-f0-9]{6}$/);
   });
 });
 

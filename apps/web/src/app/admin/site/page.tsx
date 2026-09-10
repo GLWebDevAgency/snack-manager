@@ -14,7 +14,7 @@
  * API : GET/POST /site/domains · POST /site/domains/:id/check · DELETE /site/domains/:id
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
@@ -33,7 +33,9 @@ import {
 import { CopyBtn, DnsInstructionCard, DomainStatusBadge } from "./parts";
 import { apexSuggestion, type DomainView, type SiteAddresses } from "./types";
 import { WebsitePanel } from "./WebsitePanel";
-import { useAdminCapabilities } from "../access";
+import { useSitePermissions } from "./site-access";
+import { MarqueDuSite } from "./MarqueDuSite";
+import { SiteEditScopeContext, useAdminScopeToken, useSiteEditScope } from "./site-scope";
 
 /** Lien externe stylé en bouton fantôme (les `Btn` sont des `<button>`). */
 function OpenLink({ url, label }: { url: string; label: string }) {
@@ -51,9 +53,12 @@ function OpenLink({ url, label }: { url: string; label: string }) {
   );
 }
 
-export default function SitePage() {
+function SiteAddressesPanel() {
+  const scope = useSiteEditScope(), scopeRef = useRef(scope);
+  const alive = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const toast = useToast();
-  const online = useAdminCapabilities().includes("online");
+  const online = useSitePermissions().online;
 
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">(
     "loading",
@@ -73,12 +78,14 @@ export default function SitePage() {
   // `loading` est déjà l'état initial : le chargement ne le repositionne pas,
   // sinon l'effet écrirait un état de façon synchrone à chaque montage.
   const load = useCallback(async () => {
-    if (!online) return;
+    if (!online || !scopeRef.current.current()) return;
     try {
-      setData(await api.get<SiteAddresses>("/site/domains"));
+      const next = await api.get<SiteAddresses>("/site/domains");
+      if (!alive.current || !scopeRef.current.current()) return;
+      setData(next);
       setLoadState("ready");
     } catch {
-      setLoadState("error");
+      if (alive.current && scopeRef.current.current()) setLoadState("error");
     }
   }, [online]);
 
@@ -97,18 +104,22 @@ export default function SitePage() {
 
   async function addDomain() {
     const hostname = draft.trim();
-    if (!hostname || adding) return;
+    if (!hostname || adding || !scope.current()) return;
     setAdding(true);
     setFormError(null);
     try {
       await api.post<{ domain: DomainView }>("/site/domains", { hostname });
+      if (!alive.current || !scope.current()) return;
       setDraft("");
       // Rechargement complet : l'ajout change aussi le domaine « principal ».
-      setData(await api.get<SiteAddresses>("/site/domains"));
+      const next = await api.get<SiteAddresses>("/site/domains");
+      if (!alive.current || !scope.current()) return;
+      setData(next);
       toast("Domaine ajouté — posez maintenant l'enregistrement DNS", {
         icon: "check",
       });
     } catch (e) {
+      if (!alive.current || !scope.current()) return;
       // Le message de l'API est déjà rédigé pour le restaurateur (il vient de
       // la règle métier) : on l'affiche tel quel plutôt que de le reformuler.
       setFormError(
@@ -117,17 +128,18 @@ export default function SitePage() {
           : "Ajout impossible — réessayez",
       );
     } finally {
-      setAdding(false);
+      if (alive.current && scope.current()) setAdding(false);
     }
   }
 
   async function checkDomain(domain: DomainView) {
-    if (checkingId) return;
+    if (checkingId || !scope.current()) return;
     setCheckingId(domain.id);
     try {
       const updated = await api.post<DomainView>(
         `/site/domains/${domain.id}/check`,
       );
+      if (!alive.current || !scope.current()) return;
       setData((prev) =>
         prev
           ? {
@@ -145,19 +157,21 @@ export default function SitePage() {
         { icon: updated.status === "active" ? "check" : undefined },
       );
     } catch (e) {
+      if (!alive.current || !scope.current()) return;
       toast(
         e instanceof Error ? e.message : "Vérification impossible — réessayez",
       );
     } finally {
-      setCheckingId(null);
+      if (alive.current && scope.current()) setCheckingId(null);
     }
   }
 
   async function confirmDelete() {
-    if (!toDelete || deleting) return;
+    if (!toDelete || deleting || !scope.current()) return;
     setDeleting(true);
     try {
       await api.del(`/site/domains/${toDelete.id}`);
+      if (!alive.current || !scope.current()) return;
       setData((prev) =>
         prev
           ? { ...prev, domains: prev.domains.filter((d) => d.id !== toDelete.id) }
@@ -166,11 +180,12 @@ export default function SitePage() {
       toast(`« ${toDelete.hostname} » détaché`, { icon: "check" });
       setToDelete(null);
     } catch (e) {
+      if (!alive.current || !scope.current()) return;
       toast(
         e instanceof Error ? e.message : "Suppression impossible — réessayez",
       );
     } finally {
-      setDeleting(false);
+      if (alive.current && scope.current()) setDeleting(false);
     }
   }
 
@@ -455,4 +470,19 @@ export default function SitePage() {
       </Modal>
     </div>
   );
+}
+
+/** Le pilotage ne dépend pas du chargement des DNS. */
+export default function SitePage() {
+  const scope = useAdminScopeToken();
+  const permissions = useSitePermissions();
+  const online = permissions.online;
+  if (!online) return <SiteEditScopeContext.Provider value={scope}><div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel key={scope} /></div></SiteEditScopeContext.Provider>;
+  return <SiteEditScopeContext.Provider value={scope}><div className="flex min-w-0 flex-col gap-8 p-4 md:p-[26px]">
+    <MarqueDuSite />
+    <details className="rounded-panel border border-line bg-surface">
+      <summary className="cf-press flex min-h-16 cursor-pointer flex-col justify-center gap-1 px-5 py-4 text-sm font-semibold"><span>Adresses et mise en ligne</span><span className="text-xs font-normal text-mut">Lien public, site vitrine et nom de domaine personnalisé</span></summary>
+      {permissions.brand ? <SiteAddressesPanel key={scope} /> : <p className="px-5 pb-5 text-sm text-mut">La configuration des adresses est réservée au gérant et au propriétaire.</p>}
+    </details>
+  </div></SiteEditScopeContext.Provider>;
 }

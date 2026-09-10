@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { ajusterJusquaAA, logoUrlDe } from "@sm/contracts";
+import { LogoMark } from "@/components/brand/Logo";
+import { DeliveryPowered, deliveryInitials } from "./delivery-presentation";
+import { useDeliveryPreferences } from "./delivery-preferences";
 import { Btn } from "@/components/ui/Btn";
-import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
 import { createDeliveryAccessClient, type AccessState } from "./access-client";
 import { DeliveryMissions } from "./delivery-missions";
@@ -27,6 +30,8 @@ function expiryLabel(iso: string) {
 
 export function DeliveryAccess() {
   const [access] = useState(() => createDeliveryAccessClient());
+  const appearance = useDeliveryPreferences();
+  const [tab, setTab] = useState("tour");
   const state = useSyncExternalStore(access.subscribe, access.getSnapshot, access.getServerSnapshot);
 
   useEffect(() => {
@@ -58,66 +63,70 @@ export function DeliveryAccess() {
               : state.signedOut ? "Vous êtes déconnecté."
                 : "Votre accès livreur.";
 
-  return (
-    <main className="min-h-dvh bg-bg px-5 pb-[max(28px,env(safe-area-inset-bottom))] pt-[max(28px,env(safe-area-inset-top))] text-ink sm:px-8">
-      <div className="mx-auto flex min-h-[calc(100dvh-64px)] w-full max-w-[460px] flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-line pb-5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-card border border-accent/25 bg-accentwash text-accentink"><Icon name="truck" size={21} /></span>
-            <div><p className="text-[14px] font-bold tracking-[-0.025em]">SM Livreur</p><p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-mut">Accès restaurant</p></div>
-          </div>
-          <span className="flex items-center gap-1.5 text-xs text-mut"><span aria-hidden className={`size-1.5 rounded-full ${state.online ? "bg-accent" : "bg-prep"}`} />{state.online ? "Vérification en ligne" : "Hors connexion"}</span>
-        </header>
-
-        <section className={`pb-8 ${hasSession ? "pt-6" : "pt-11 sm:pt-16"}`} aria-labelledby="delivery-access-title" aria-busy={busy}>
-          {!hasSession && <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-accentink">Votre téléphone · votre accès</p>}
-          <h1 id="delivery-access-title" className={`max-w-[390px] font-semibold leading-[1.08] tracking-[-0.055em] ${hasSession ? "text-2xl" : "text-[clamp(30px,8.7vw,42px)]"}`}>{title}</h1>
-          {!state.reason && <p className={`${hasSession ? "mt-2 text-sm leading-6" : "mt-5 text-[15px] leading-7"} text-mut`}>
-            {connected ? "Votre restaurant vous reconnaît sur ce téléphone."
-              : state.phase === "associating" ? "Attendez la confirmation du restaurant."
-                : state.phase === "disconnecting" ? "Le restaurant retire la session de ce téléphone."
-                  : state.phase === "checking" ? "Nous vérifions la connexion avec votre restaurant."
-                    : state.hasInvitation ? "Le restaurant vous a confié un accès personnel. Confirmez l’association sur le téléphone que vous utiliserez."
-                      : state.signedOut ? "L’accès de ce téléphone a bien été retiré. Un nouveau lien sera nécessaire pour vous reconnecter."
-                        : "Pour commencer, ouvrez sur ce téléphone le lien d’invitation transmis par votre restaurant."}
-          </p>}
-
-          <div role={state.reason ? "alert" : "status"} aria-live={state.reason ? "assertive" : "polite"} aria-atomic="true">
-            {state.reason && <div className="mt-6 flex items-start gap-3 rounded-card border border-prep/30 bg-prep/8 p-4 text-[14px] leading-6 text-prept"><Icon name="alert" className="mt-1 shrink-0" /><p>{MESSAGES[state.reason]}</p></div>}
-            {!state.reason && <span className="sr-only">{title}</span>}
-          </div>
-
-          {state.session && <Card className="mt-4 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mut">{connected ? "Votre identité livreur" : "Dernier accès vérifié"}</span>
-              {connected && <span className="flex items-center gap-1.5 text-xs font-semibold text-okt"><Icon name="check" size={15} />Associé</span>}
-            </div>
-            <p className="mt-3 break-words text-xl font-semibold tracking-[-0.04em]">{state.session.name}</p>
-            <p className="mt-1 break-words text-[15px] text-mut">{state.session.restaurantName}</p>
-            <details className="mt-3 border-t border-line pt-3 text-xs leading-5 text-mut"><summary className="cursor-pointer">Validité de cet accès</summary><p className="mt-2">Accès valable jusqu’au {expiryLabel(state.session.expiresAt)}, sauf retrait par le restaurant.</p></details>
-          </Card>}
-
-          {state.session && <DeliveryMissions key={`${state.session.restaurantSlug}:${state.session.operatorId}`} session={state.session} available={connected && !state.logoutPending} onRevoked={access.accessRejected} />}
-          {state.session && state.hasInvitation && <p className="mt-5 text-[13px] leading-6 text-prept">Vous avez ouvert une nouvelle invitation. Déconnectez cet accès avant d’associer le nouveau lien.</p>}
-
-          <div className="mt-8 space-y-3">
-            {state.hasInvitation && !state.session && <Btn block className="min-h-12 whitespace-normal" iconRight="arrow" disabled={busy || !state.online} onClick={() => void access.associate()}>
-              {state.phase === "associating" ? "Association en cours…" : state.exchangePending ? "Vérifier l’association" : "Associer ce téléphone"}
-            </Btn>}
-            {!state.hasInvitation && !state.session && !busy && <Btn block variant="ghost" className="min-h-12 whitespace-normal" disabled={!state.online || state.reason === "invalid" || state.reason === "browser" || state.reason === "expired-link"} onClick={() => void access.refresh()}>Vérifier mon accès</Btn>}
-            {state.session && <>
-              <Btn block variant="ghost" className="min-h-12 whitespace-normal" disabled={busy || !state.online || state.logoutPending} onClick={() => void access.refresh()}>Vérifier mon accès</Btn>
-              <Btn block variant="ghost" className="min-h-12 whitespace-normal border-transparent text-mut" icon="logout" disabled={busy || !state.online} onClick={() => void access.logout()}>{state.phase === "disconnecting" ? "Déconnexion en cours…" : state.logoutPending ? "Confirmer la déconnexion" : "Déconnecter cet accès"}</Btn>
-            </>}
-          </div>
-
+  const brand = state.session?.brand;
+  const accent = brand?.palette.accent ?? "#c9a15a";
+  const surfaceColors = appearance.theme === "light" ? ["#ececea", "#fff", "#f2f1ee", "#e6e4df"] : ["#000", "#111", "#1a1a1a", "#242424"];
+  const style = {
+    "--lv-accent": accent,
+    "--lv-accent-text": ajusterJusquaAA(accent, surfaceColors).couleur,
+    "--lv-on-accent": ajusterJusquaAA(brand?.palette.onAccent ?? "#12100d", [accent]).couleur,
+    "--cf-accent-hover": accent,
+    "--lv-tint": `color-mix(in srgb, ${accent} 12%, transparent)`,
+  } as CSSProperties;
+  const logo = brand ? logoUrlDe(brand) : null;
+  const identity = state.session && <section className="lv-idcard" aria-label="Votre identité livreur">
+    <div className="lv-idcard-top"><span className="lv-label">{connected ? "Identité livreur" : "Dernier accès vérifié"}</span>{connected && <span className="lv-associated"><Icon name="check" size={15} />Associé</span>}</div>
+    <h2>{state.session.name}</h2>
+    <div className="lv-id-restaurant"><BrandTile name={state.session.restaurantName} logo={logo} /><span>{state.session.restaurantName}</span></div>
+    <p className="lv-expiry">Accès valable jusqu’au {expiryLabel(state.session.expiresAt)}, sauf retrait par le restaurant.</p>
+  </section>;
+  const accessActions = <div className="lv-access-actions">
+    {state.hasInvitation && !state.session && <Btn block iconRight="arrow" disabled={busy || !state.online} onClick={() => void access.associate()}>
+      {state.phase === "associating" ? "Association en cours…" : state.exchangePending ? "Vérifier l’association" : "Associer ce téléphone"}
+    </Btn>}
+    {!state.hasInvitation && !state.session && !busy && <Btn block variant="ghost" disabled={!state.online || state.reason === "invalid" || state.reason === "browser" || state.reason === "expired-link"} onClick={() => void access.refresh()}>Vérifier mon accès</Btn>}
+    {state.session && <>
+      <Btn block variant="ghost" disabled={busy || !state.online || state.logoutPending} onClick={() => void access.refresh()}>Vérifier mon accès</Btn>
+      <Btn block variant="ghost" className="lv-logout" icon="logout" disabled={busy || !state.online} onClick={() => void access.logout()}>{state.phase === "disconnecting" ? "Déconnexion en cours…" : state.logoutPending ? "Confirmer la déconnexion" : "Déconnecter cet accès"}</Btn>
+      <p className="lv-copy">Un nouveau lien d’invitation sera nécessaire pour vous reconnecter.</p>
+    </>}
+  </div>;
+  return <main className="lv-app" data-theme={appearance.theme} style={style}>
+    <div className="lv-shell">
+      <header className="lv-top">
+        <div className="lv-brand"><BrandTile name={state.session?.restaurantName} logo={logo} /><div className="lv-brand-copy"><b>{state.session?.restaurantName ?? "SM Livreur"}</b><small>{state.session ? "Livraison" : "Votre accès restaurant"}</small></div></div>
+        {hasSession ? <button type="button" className="lv-who" onClick={() => setTab("account")} aria-label="Mon accès et paramètres"><span className="lv-who-copy"><b>{state.session!.name}</b><span className="lv-online"><span className={`lv-dot${!connected ? " off" : ""}`} />{connected ? "Accès vérifié" : state.online ? "À vérifier" : "Hors connexion"}</span></span><span className="lv-avatar">{deliveryInitials(state.session!.name)}</span></button>
+          : <span className="lv-online"><span className={`lv-dot${!state.online ? " off" : ""}`} />{state.online ? "En ligne" : "Hors connexion"}</span>}
+      </header>
+      {!state.online && hasSession && <p role="status" className="lv-banner off"><Icon name="alert" size={16} />Hors connexion — aucun départ ni remise ne peut être confirmé.</p>}
+      <div className={hasSession ? "lv-access-state" : "lv-access"} aria-busy={busy}>
+        {!hasSession && <p className="lv-eyebrow">{state.reason === "revoked" ? "Accès retiré" : "Votre téléphone · votre accès"}</p>}
+        <h1 id="delivery-access-title" className={hasSession ? "sr-only" : undefined}>{title}</h1>
+        {!hasSession && !state.reason && <p className="lv-copy">{state.phase === "associating" ? "Attendez la confirmation du restaurant." : state.phase === "checking" ? "Nous vérifions la connexion avec votre restaurant." : state.hasInvitation ? "Le restaurant vous a confié un accès personnel. Confirmez l’association sur le téléphone que vous utiliserez en tournée." : state.signedOut ? "L’accès de ce téléphone a bien été retiré. Un nouveau lien sera nécessaire pour vous reconnecter." : "Pour commencer, ouvrez sur ce téléphone le lien d’invitation transmis par votre restaurant."}</p>}
+        {state.reason && <div role="alert" aria-live="assertive" className={`lv-msg ${state.reason === "revoked" ? "bad" : "warn"}`}><Icon name="alert" size={17} /><p>{MESSAGES[state.reason]}</p></div>}
+        {!hasSession && <>
+          {state.hasInvitation && <div className="lv-idcard"><div className="lv-idcard-top"><span className="lv-label">Invitation</span><span className="lv-label">Valable 10 min</span></div><p className="lv-copy">Un téléphone personnel. Un accès confié par votre restaurant — révocable à tout moment.</p></div>}
+          {accessActions}
           <DeliveryInvitation state={state} canImport={access.canImportInvitation()} onImport={access.importInvitation} />
-          {!state.session && !busy && <div className="mt-7 flex items-start gap-2.5 text-xs leading-5 text-mut"><Icon name="clock" size={16} className="mt-0.5 shrink-0" /><p>{state.hasInvitation ? "Le lien est valable 10 minutes. Gardez cette page ouverte jusqu’à la confirmation." : "Une invitation est personnelle et valable 10 minutes. Votre restaurant peut vous en fournir une nouvelle."}</p></div>}
-        </section>
-
-        <DeliveryInstall associated={hasSession} />
-        <footer className="mt-auto border-t border-line pt-5 text-[11px] leading-5 text-mut">Un téléphone personnel. Un accès confié par votre restaurant.</footer>
+          {!busy && <p className="lv-expiry">{state.hasInvitation ? "Le lien est valable 10 minutes. Gardez cette page ouverte jusqu’à la confirmation." : "Une invitation est personnelle et valable 10 minutes. Votre restaurant peut vous en fournir une nouvelle."}</p>}
+          <DeliveryInstall associated={false} />
+        </>}
       </div>
-    </main>
-  );
+      {state.session && <DeliveryMissions key={`${state.session.restaurantSlug}:${state.session.operatorId}`} session={state.session} available={connected && !state.logoutPending} onRevoked={access.accessRejected}
+        tab={tab} onTab={setTab} appearance={appearance} accountIdentity={identity} account={<>
+          {state.hasInvitation && <p className="lv-msg warn">Vous avez ouvert une nouvelle invitation. Déconnectez cet accès avant d’associer le nouveau lien.</p>}
+          {accessActions}<DeliveryInstall associated />
+        </>} />}
+      {!hasSession && <DeliveryPowered />}
+    </div>
+  </main>;
+}
+
+function BrandTile({ name, logo }: { name?: string; logo: string | null }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  return <span className="lv-brand-tile">{logo && logo !== failed ? (
+    // Tenant media hosts are validated by the API; Next image hosts cannot be fixed at build time.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={logo} alt="" onError={() => setFailed(logo)} style={{ width: "75%", height: "75%", objectFit: "contain" }} />
+  ) : name ? name.trim().charAt(0).toUpperCase() : <LogoMark size={25} />}</span>;
 }

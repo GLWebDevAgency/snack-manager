@@ -74,6 +74,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   return {
     ...restaurantMetadata(site.tenant.slug),
+    manifest: `/r/${site.tenant.slug}/manifest.webmanifest`,
+    icons: { ...restaurantMetadata(site.tenant.slug).icons as object, apple: [{ url: `/r/${site.tenant.slug}/icon.png?size=180`, sizes: "180x180", type: "image/png" }] },
+    appleWebApp: { capable: true, title: site.tenant.name, statusBarStyle: "default" },
     title,
     description,
     alternates: { canonical: url },
@@ -115,6 +118,7 @@ export async function generateViewport({ params }: Params): Promise<Viewport> {
   return {
     width: "device-width",
     initialScale: 1,
+    viewportFit: "cover",
     ...(site
       ? {
           themeColor: site.tenant.brand.palette.ground,

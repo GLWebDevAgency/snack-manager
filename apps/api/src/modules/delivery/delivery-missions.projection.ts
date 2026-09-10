@@ -23,17 +23,19 @@ export interface MissionOrder {
   delivery?: { address?: { line1: string; line2?: string; postalCode: string; city: string; country?: string };
     instructions?: string | null; dispatchedAt?: Date | null; deliveredAt?: Date | null } | null;
   lines: { name: string; variantName?: string | null; qty: number }[];
-  payment: { status: string; refundedCents?: number; pendingRefundCents?: number };
+  payment: { status: string; method?: string; tender?: string | null; refundedCents?: number; pendingRefundCents?: number };
+  totals?: { total: number };
   paymentFlow?: { phase?: string } | null;
   deliveryMission?: MissionRecord | null;
 }
 
-/** Projection positive : aucun prix, token, PI, note libre cuisine ou meta. */
+/** Positive projection: only the receipt amount/method, never processor IDs, tokens or kitchen notes. */
 export const MISSION_PROJECTION = {
   _id: 1, tenantId: 1, __v: 1, number: 1, createdAt: 1, type: 1, status: 1,
   pickup: 1, 'delivery.address': 1, 'delivery.instructions': 1, 'delivery.dispatchedAt': 1,
   'delivery.deliveredAt': 1, 'lines.name': 1, 'lines.variantName': 1, 'lines.qty': 1,
   'payment.status': 1, 'payment.refundedCents': 1, 'payment.pendingRefundCents': 1,
+  'payment.method': 1, 'payment.tender': 1, 'totals.total': 1,
   'paymentFlow.phase': 1, deliveryMission: 1,
 } as const;
 
@@ -58,6 +60,10 @@ export function missionView(row: MissionOrder, canAssign: boolean, operatorAvail
     assignmentId: assignment?.assignmentId ?? null,
     assignedAt: assignment ? new Date(assignment.assignedAt).toISOString() : null,
     dispatchedAt: row.delivery?.dispatchedAt ? new Date(row.delivery.dispatchedAt).toISOString() : null,
+    deliveredAt: row.delivery?.deliveredAt ? new Date(row.delivery.deliveredAt).toISOString() : null,
+    paymentSummary: row.totals && ['online', 'counter'].includes(row.payment.method ?? '') ? {
+      totalCents: row.totals.total, method: row.payment.method, status: row.payment.status, tender: row.payment.tender ?? null,
+    } : null,
     paymentReady: ordering.deliveryPaymentReady(state),
     canAssign: canAssign && ordering.canAssignDeliveryMission(state).ok,
     canDispatch: operatorAvailable && ordering.canDispatchDeliveryMission(state).ok,

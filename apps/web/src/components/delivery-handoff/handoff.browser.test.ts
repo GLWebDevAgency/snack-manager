@@ -38,12 +38,12 @@ beforeAll(async () => {
       window.__handoffFixtureTracks=()=>scanStream?.getTracks().map(track=>track.readyState)??[];
       const manager=location.pathname==='/manager',customer=location.pathname==='/customer';
       const scope=manager?'bo:${tenantId}:user:${operatorId}':'driver:recette:${operatorId}';
-      createRoot(document.getElementById('root')).render(<React.StrictMode><main style={customer?styleDuMasque(marqueDeRepli(null,null)):undefined} className="min-h-dvh bg-bg text-ink p-4"><div className="mx-auto max-w-[460px]">
+      createRoot(document.getElementById('root')).render(<React.StrictMode><main style={customer?styleDuMasque(marqueDeRepli(null,null)):undefined} className={location.pathname==='/driver'?'lv-app min-h-dvh p-4':'min-h-dvh bg-bg text-ink p-4'}><div className="mx-auto max-w-[460px]">
       <h1 className="text-2xl font-semibold">{customer?'Suivi de commande':'Mission n°12'}</h1>
       {location.pathname==='/tracking'?<Tracking orderId='${id}' trackingToken='tracking-fixture' initial={${JSON.stringify(tracking)}} brand={marqueDeRepli(null,null)} ticket={{type:'delivery',header:{slug:'recette',tenantName:'Restaurant de recette',phones:[]},lines:[],totals:{total:1500},payment:{paid:false}}}/>
       :customer?<CustomerDeliveryProof orderId='${id}' tenant='recette' ready={new URLSearchParams(location.search).get('ready')!=='0'} finished={false}/>
       :location.pathname==='/recovery'?<DeliveryHandoffRecoveries scope={scope} available selectedMission={null} onRevoked={()=>{document.title='Access revoked'}}/>
-      :<DeliveryHandoffPanel missionId='${id}' scope={scope} path='/handoff' available manager={manager} onRevoked={()=>{document.title='Access revoked'}}/>}
+      :<DeliveryHandoffPanel missionId='${id}' scope={scope} path='/handoff' available manager={manager} driver={location.pathname==='/driver'} onRevoked={()=>{document.title='Access revoked'}}/>}
       </div></main></React.StrictMode>);`, resolveDir: root, sourcefile: "handoff-fixture.tsx", loader: "tsx" },
     outdir: "/virtual-handoff-fixture", bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
     // Only the external provider boundary is substituted: Tracking, recovery,
@@ -60,7 +60,7 @@ beforeAll(async () => {
     readFile(cssPath, "utf8").then(source => postcss([tailwind({ base: fileURLToPath(new URL("../../..", import.meta.url)) })]).process(source, { from: cssPath })),
   ]);
   const js = bundle.outputFiles.find(file => file.path.endsWith(".js"))!.text;
-  const styles = css.css + (bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "");
+  const styles = css.css + await readFile(fileURLToPath(new URL("../../app/livreur/livreur.css", import.meta.url)), "utf8") + (bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "");
   server = createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const path = new URL(req.url ?? "/", origin).pathname;
@@ -138,6 +138,7 @@ describe("remise livraison rendue, navigateur et stockage natifs", () => {
   it("code confirmé, clavier, pas de double POST ni secret persistant et aucun débordement à 320px", async () => {
     await open(); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (evidence) await page.screenshot({ path: join(evidence, "driver-320.png"), fullPage: true });
+    await page.getByLabel("Code de remise à six chiffres").fill("654321"); expect(posts).toEqual([]);
     hold = true; await confirm(); await expect.poll(() => posts.length).toBe(1);
     expect(await stored()).not.toContain("654321"); expect(await stored()).not.toContain('"proof"');
     await page.keyboard.press("Enter"); expect(posts).toHaveLength(1);
@@ -183,7 +184,7 @@ describe("remise livraison rendue, navigateur et stockage natifs", () => {
     await open();
     const draw = (raw: string) => page.evaluate(raw => (window as unknown as { __handoffFixtureQr: (value: string) => Promise<void> }).__handoffFixtureQr(raw), raw);
     await draw(`sm-handoff:v1:${"e".repeat(24)}:${proofId}:${qrToken}`);
-    await page.getByRole("button", { name: "Scanner le QR du client" }).click();
+    await page.getByRole("button", { name: "Scanner", exact: true }).click();
     try { await page.getByText("Ce QR ne correspond pas", { exact: false }).waitFor({ timeout: 6_000 }); }
     catch { throw new Error(JSON.stringify(await page.evaluate(() => { const video = document.querySelector("video"); return { video: video && { width: video.videoWidth, height: video.videoHeight, ready: video.readyState, paused: video.paused }, tracks: (window as unknown as { __handoffFixtureTracks: () => string[] }).__handoffFixtureTracks() }; }))); }
     expect(posts).toEqual([]);

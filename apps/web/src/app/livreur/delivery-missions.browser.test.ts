@@ -25,6 +25,7 @@ let revoked: boolean, lossOnce: boolean, removed: Set<string>, refuseNext: boole
 let held: { response: ServerResponse; result: DeliveryMissionResult } | null;
 let heldRead: { response: ServerResponse; mission: DeliveryMissionView } | null;
 let proofs: Map<string, DeliveryMissionResult>;
+let handoffEnabled: boolean;
 let evidenceDir: string | undefined;
 const token = (role = "owner", sub = actorId) => `fixture.${Buffer.from(JSON.stringify({ tenantId, sub, kind: role === "caisse" ? "staff" : "user", role })).toString("base64url")}.fixture`;
 
@@ -37,15 +38,17 @@ beforeAll(async () => {
       const bo = location.pathname.startsWith('/admin');
       createRoot(document.getElementById('root')).render(<React.StrictMode>{bo ? <main className="p-6"><h1>Commandes du restaurant</h1><DeliveryMissionModal order={{_id:'${id}',number:12}} onClose={()=>{}} onUpdated={()=>{}} /></main> : <DeliveryAccess />}</React.StrictMode>);`,
     resolveDir: root, sourcefile: "missions-test-entry.tsx", loader: "tsx" },
-    bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
+    outdir: "/virtual-delivery-missions", bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", jsx: "automatic",
     define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_API_URL": '"/api"' } }),
     readFile(cssPath, "utf8").then(source => postcss([tailwind({ base: fileURLToPath(new URL("../..", import.meta.url)) })]).process(source, { from: cssPath })),
   ]);
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js"))!.text;
+  const styles = css.css + await readFile(fileURLToPath(new URL("./livreur.css", import.meta.url)), "utf8") + (bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "");
   server = createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     if (req.url === "/missions.js" || req.url === "/missions.css") {
       res.setHeader("Content-Type", req.url.endsWith(".js") ? "text/javascript" : "text/css");
-      res.end(req.url.endsWith(".js") ? bundle.outputFiles[0].text : css.css); return;
+      res.end(req.url.endsWith(".js") ? script : styles); return;
     }
     if (req.url === "/livreur" || req.url?.startsWith("/admin/orders")) {
       res.setHeader("Content-Type", "text/html");
@@ -64,8 +67,9 @@ beforeAll(async () => {
       }
       if (path.startsWith("/livreur/missions") && revoked) { json({ code: "ACCESS_UNAVAILABLE" }, 401); return; }
       if (req.method === "GET" && /^\/(?:api\/delivery|livreur)\/missions\/[a-f0-9]{24}\/handoff$/.test(path)) {
-        json({ missionId: id, revision: 0, missionRevision: missions[0]?.revision ?? 0, orderStatus: "ready", proof: null, incident: null,
-          canHandoff: false, canOverride: false, canRotate: false }); return;
+        json({ missionId: id, revision: 0, missionRevision: missions[0]?.revision ?? 0, orderStatus: "ready",
+          proof: handoffEnabled ? { id: "ef456803-9d2b-4184-8ed5-b134c5412a1c", expiresAt: "2030-09-14T10:00:00.000Z", locked: false } : null,
+          incident: null, canHandoff: handoffEnabled, canOverride: false, canRotate: false }); return;
       }
       if (path === "/livreur/missions") { json({ missions: missions.filter(value => !removed.has(value.id) && value.operator?.id === operatorId), nextCursor: null }); return; }
       const match = /^\/(?:api\/delivery|livreur)\/missions\/([a-f0-9]{24})(?:\/(assignment|dispatch|depart))?$/.exec(path);
@@ -109,7 +113,7 @@ beforeAll(async () => {
   if (process.env.QA_DELIVERY_MISSIONS_CAPTURE === "1") evidenceDir = await mkdtemp(join(tmpdir(), "sm-delivery-missions-"));
 }, 30_000);
 beforeEach(async () => {
-  missions = [structuredClone(initial)]; posts = []; errors = []; remote = []; reads = []; revoked = false; lossOnce = false; removed = new Set(); refuseNext = false; holdNext = false; directoryPaged = false; changedOnce = false; holdRecovery = false; held = null; heldRead = null; proofs = new Map();
+  missions = [structuredClone(initial)]; posts = []; errors = []; remote = []; reads = []; revoked = false; lossOnce = false; removed = new Set(); refuseNext = false; holdNext = false; directoryPaged = false; changedOnce = false; holdRecovery = false; held = null; heldRead = null; proofs = new Map(); handoffEnabled = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: "reduce", serviceWorkers: "block" });
   await context.route("**/*", route => {
     if (new URL(route.request().url()).origin === origin) return route.continue();
@@ -179,6 +183,52 @@ async function openBo(role = "owner") {
   await page.getByText("10 rue de la Recette", { exact: false }).waitFor();
 }
 describe("missions livreur et affectation BO rendues", () => {
+  it.each([
+    { close: 'bouton', delayed: false }, { close: 'Échap', delayed: false },
+    { close: 'bouton', delayed: true }, { close: 'Échap', delayed: true },
+  ])('fermeture $close : arrête la caméra de remise, permission tardive=$delayed, et réouvre sans action métier', async ({ close, delayed }) => {
+    handoffEnabled = true;
+    missions[0] = { ...initial, dispatchedAt: '2026-09-07T10:10:00.000Z', canDispatch: false };
+    await context.addInitScript(delayFirstPermission => {
+      const streams: MediaStream[] = [];
+      let requests = 0, release: (() => void) | null = null;
+      const camera = { streams, requests: () => requests, release: () => { release?.(); release = null; } };
+      Object.assign(window, { fixtureCamera: camera });
+      navigator.mediaDevices.getUserMedia = async () => {
+        const index = requests++;
+        if (delayFirstPermission && index === 0) await new Promise<void>(resolve => { release = resolve; });
+        // Flux vidéo natif local, sans caméra matérielle ni décodeur remplacé.
+        const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+        const paint = canvas.getContext('2d')!; paint.fillStyle = '#000'; paint.fillRect(0, 0, 64, 64);
+        const stream = canvas.captureStream(10); streams.push(stream); return stream;
+      };
+    }, delayed);
+    await page.goto(`${origin}/livreur`);
+    await page.getByRole('button', { name: /^En route/ }).click();
+    await detail();
+    await page.getByRole('button', { name: 'Remettre au client', exact: true }).click();
+    await page.getByRole('button', { name: 'Scanner', exact: true }).click();
+    await page.waitForFunction(() => (window as unknown as { fixtureCamera: { requests(): number } }).fixtureCamera.requests() === 1);
+    if (!delayed) await page.waitForFunction(() => {
+      const stream = (window as unknown as { fixtureCamera: { streams: MediaStream[] } }).fixtureCamera.streams[0];
+      return stream?.getVideoTracks()[0]?.readyState === 'live' && !document.querySelector<HTMLVideoElement>('video')?.paused;
+    });
+    if (close === 'Échap') await page.keyboard.press('Escape');
+    else await page.getByRole('button', { name: 'Fermer la remise', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Remise au client · n°12', exact: true }).waitFor({ state: 'hidden' });
+    await page.evaluate(() => (window as unknown as { fixtureCamera: { release(): void } }).fixtureCamera.release());
+    await expect.poll(() => page.evaluate(() => (window as unknown as { fixtureCamera: { streams: MediaStream[] } }).fixtureCamera.streams.map(stream => stream.getVideoTracks().map(track => track.readyState))), { timeout: 1000 }).toEqual([['ended']]);
+    expect(await page.getByRole('button', { name: 'Remettre au client', exact: true }).evaluate(node => document.activeElement === node)).toBe(true);
+    await page.getByRole('button', { name: 'Remettre au client', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Code de remise à six chiffres', exact: true }).waitFor();
+    expect(await page.getByRole('textbox', { name: 'Code de remise à six chiffres', exact: true }).inputValue()).toBe('');
+    await page.getByRole('button', { name: 'Scanner', exact: true }).click();
+    await page.waitForFunction(() => (window as unknown as { fixtureCamera: { streams: MediaStream[] } }).fixtureCamera.streams.length === 2);
+    await page.getByRole('button', { name: 'Fermer la remise', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { fixtureCamera: { streams: MediaStream[] } }).fixtureCamera.streams.every(stream => stream.getTracks().every(track => track.readyState === 'ended')))).toBe(true);
+    expect(posts).toEqual([]);
+    expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  });
   it("liste sans modale en 320px et bureau : contenu utile, sans débordement ni mouvement imposé", async () => {
     await page.setViewportSize({ width: 320, height: 844 }); await openDriver();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -186,6 +236,16 @@ describe("missions livreur et affectation BO rendues", () => {
     await expectReducedMotionSettled();
     await capture("mobile-320-list.png");
     await page.setViewportSize({ width: 1440, height: 1000 }); await capture("desktop-driver-list.png");
+  });
+  it("réactive la navigation après fermeture du détail et ne laisse aucune action derrière la modale", async () => {
+    await openDriver(); await detail();
+    expect(await page.getByRole("tab", { name: "Compte", exact: true }).count()).toBe(0);
+    await page.getByRole("button", { name: "Retour à la tournée", exact: true }).click();
+    await page.getByRole("tab", { name: "Compte", exact: true }).click();
+    await page.getByRole("heading", { name: "Mon compte", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Tournée", exact: true }).click();
+    await page.getByRole("button", { name: "Voir la mission n°12", exact: true }).waitFor();
+    expect(posts).toEqual([]);
   });
   it.each(["longue", "ralentie", "infinie", "bloquée"] as const)("le contrôle du mouvement refuse une animation %s, sans attendre qu’elle disparaisse pour l’oublier", async kind => {
     await openDriver(); await expectReducedMotionSettled();

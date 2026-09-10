@@ -370,6 +370,11 @@ export interface PublicSiteProduct {
    * reprises. Prêt à peindre : l'usage « carte » est déjà résolu ici.
    */
   photoUrl: string | null;
+  /** Présentation de l'image, indépendante du cadrage de la médiathèque. */
+  photoKind?: 'cutout' | 'cover';
+  photoCover?: boolean;
+  /** Choix manuel ou classement des quantités payées sur les 30 derniers jours. */
+  popular?: boolean;
   /**
    * Les identifiants des médias du produit, dans l'ordre — le premier est la
    * photo principale. Le détail vit UNE FOIS dans `PublicSiteResponse.medias`,

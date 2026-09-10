@@ -132,6 +132,11 @@ describe("la direction qu'un masque porte", () => {
 describe("poser une direction", () => {
   const depart: Brand = { ...DIRECTIONS.nuit, logo: LOGOS, hero: "https://sm.test/h.jpg" };
 
+  it("préserve les accroches lorsque la direction change", () => {
+    const brand = { ...depart, tagline: "Fait maison.", taglineSub: "À emporter." };
+    expect(appliquerDirection(brand, "soleil")).toMatchObject({ tagline: brand.tagline, taglineSub: brand.taglineSub, hero: brand.hero });
+  });
+
   it("remplace le masque entier", () => {
     const apres = appliquerDirection(depart, "marche");
     expect(apres.palette).toEqual(DIRECTIONS.marche.palette);

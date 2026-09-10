@@ -109,6 +109,13 @@ describe("politique anti-cadrage", () => {
     expectSameOrigin(response);
   });
 
+  it.each(["carte", "recherche", "commandes", "sw.js", "manifest.webmanifest", "icon.png"])("sert la surface Commande %s uniquement pour le bon restaurant", async suffix => {
+    resolvesTo("classfood");
+    const allowed = await proxy(request(`/r/classfood/${suffix}`, `commande-${suffix.replaceAll('.', '-')}.example`, { "sec-fetch-mode": "cors" }));
+    expect(allowed.status).toBe(200); expect(isRewrite(allowed)).toBe(false); expectSameOrigin(allowed);
+    const denied = await proxy(request(`/r/concurrent/${suffix}`, `commande-refus-${suffix.replaceAll('.', '-')}.example`, { "sec-fetch-mode": "cors" }));
+    expect(denied.status).toBe(404);
+  });
   it.each([
     "/r/classfood/fidelite",
     "/r/classfood/fidelite/",

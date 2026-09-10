@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DeliveryAccess } from "./delivery-access";
 import { INVITATION_BOOTSTRAP } from "./invitation-bootstrap";
+import "./livreur.css";
 
 export const metadata: Metadata = {
   title: "SM Livreur",

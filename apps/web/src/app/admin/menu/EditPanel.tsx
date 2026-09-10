@@ -110,6 +110,8 @@ export function EditPanel({
   );
   const [desc, setDesc] = useState(product?.description ?? "");
   const [isNew, setIsNew] = useState(product?.isNew ?? false);
+  const [photoKind, setPhotoKind] = useState<"cutout" | "cover">(product?.photoKind ?? "cutout");
+  const [popularOverride, setPopularOverride] = useState<boolean | null>(product?.popularOverride ?? null);
 
   /**
    * Tailles et options — l'écran ne savait pas les éditer, alors que le
@@ -314,6 +316,8 @@ export function EditPanel({
           description: desc.trim(),
           tags: nextTags(),
           isNew,
+          photoKind,
+          popularOverride,
         });
         onSaved("Produit créé");
         return;
@@ -322,6 +326,8 @@ export function EditPanel({
 
       const patch: Record<string, unknown> = {};
       if (isNew !== product.isNew) patch.isNew = isNew;
+      if (photoKind !== (product.photoKind ?? "cutout")) patch.photoKind = photoKind;
+      if (popularOverride !== (product.popularOverride ?? null)) patch.popularOverride = popularOverride;
       if (trimmed !== product.name) patch.name = trimmed;
       if (desc.trim() !== product.description) patch.description = desc.trim();
       if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
@@ -384,11 +390,15 @@ export function EditPanel({
     mode === "create"
       ? name.trim() !== "" ||
         isNew ||
+        photoKind !== "cutout" ||
+        popularOverride !== null ||
         desc.trim() !== "" ||
         catId !== (createCategoryId ?? "") ||
         tagsChanged()
       : name !== (product?.name ?? "") ||
         isNew !== (product?.isNew ?? false) ||
+        photoKind !== (product?.photoKind ?? "cutout") ||
+        popularOverride !== (product?.popularOverride ?? null) ||
         desc !== (product?.description ?? "") ||
         catId !== (product?.categoryId ?? "") ||
         tagsChanged() ||
@@ -507,6 +517,25 @@ export function EditPanel({
       </div>
 
       {/* ─── Photos ─── */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <Field label="Photo dans la carte" htmlFor={`photo-kind-${product?._id ?? "new"}`}>
+          <Select id={`photo-kind-${product?._id ?? "new"}`} value={photoKind} disabled={busy}
+            onChange={(event) => setPhotoKind(event.target.value === "cover" ? "cover" : "cutout")}>
+            <option value="cutout">Détourée · produit entier</option>
+            <option value="cover">Plein cadre · photo avec décor</option>
+          </Select>
+          <p className="mt-1 text-xs text-mut">Le fichier et son point d’intérêt sont conservés.</p>
+        </Field>
+        <Field label="Badge Populaire" htmlFor={`popular-${product?._id ?? "new"}`}>
+          <Select id={`popular-${product?._id ?? "new"}`} value={popularOverride === null ? "auto" : String(popularOverride)} disabled={busy}
+            onChange={(event) => setPopularOverride(event.target.value === "auto" ? null : event.target.value === "true")}>
+            <option value="auto">Automatique · ventes des 30 derniers jours</option>
+            <option value="true">Toujours afficher</option>
+            <option value="false">Ne pas afficher</option>
+          </Select>
+          <p className="mt-1 text-xs text-mut">Les 8 plats avec photo les plus vendus, actualisés chaque minute. La mise en avant reste indépendante.</p>
+        </Field>
+      </div>
       {mode !== "create" && product && (
         <PhotosDuPlat
           // Le nom EN COURS DE SAISIE et non celui enregistré : c'est le repli

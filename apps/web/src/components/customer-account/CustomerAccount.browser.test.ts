@@ -53,6 +53,8 @@ beforeAll(async () => {
     async function start(){let node;if(location.pathname==='/loyalty'){node=<LoyaltyCardApp catalog={catalog}/>;}else{const raw=demoSite(new Date(),()=>0);raw.tenant.slug='recette';raw.tenant.brand=brand;raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};const site=await orderingApi({send:async()=>({status:200,body:raw})}).loadSite('recette');node=<Storefront site={site} loyalty={{chemin:'/r/recette/fidelite',programme:catalog.program.name,uniteSingulier:'point',unitePluriel:'points',premiere:null}}/>;}createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
     define: { ...options.define, 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
     plugins: [{ name: 'local-navigation-provider-boundaries', setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
+      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ contents: `export const usePathname=()=>window.location.pathname;export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
       // Navigation only: no checkout/payment or Next font download is exercised.
       builder.onResolve({ filter: /\/StripeCard$/ }, () => ({ path: 'stripe', namespace: 'account-navigation' }));
       builder.onLoad({ filter: /^stripe$/, namespace: 'account-navigation' }, () => ({ contents: 'export const apparenceStripeDe=()=>({});export function StripeCard(){return null}' }));
@@ -70,7 +72,7 @@ beforeAll(async () => {
     if (request.url === '/app.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
     if (request.url === '/real.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(realBundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
     if (request.url === '/navigation.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(navigationBundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
-    if (request.url === '/style.css') { response.setHeader('Content-Type', 'text/css'); response.end(css.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '')); return; }
+    if (request.url === '/style.css') { response.setHeader('Content-Type', 'text/css'); response.end(css.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '') + (navigationBundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '')); return; }
     if (request.url === '/favicon.ico') { response.writeHead(204).end(); return; }
     if (['/', '/real', '/storefront', '/loyalty'].includes(request.url ?? '')) { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer account UI fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/${request.url === '/real' ? 'real' : request.url === '/' ? 'app' : 'navigation'}.js"></script></html>`); return; }
     if (request.url === '/api/public/funnel') { response.writeHead(204).end(); return; }
@@ -125,7 +127,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
     phase('storefront-navigation');
     const requests = await navigationFixture(false); await page.goto(`${origin}/storefront`);
     phase('ordering-entry');
-    await page.getByRole('button', { name: 'Commander maintenant', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Commander', exact: true }).waitFor();
     // Storefront recovery now checks account capability while restoring C01.
     // With no selected browser/publication, it must not request a private
     // session, orders, or establish any browser/identity capability.
@@ -137,9 +139,9 @@ describe('customer entry placement — real Storefront and loyalty components', 
     const phase = navigationDiagnostic(`geometry-${width}`);
     const requests = await openStorefrontNavigation(phase);
     phase('viewport'); await page.setViewportSize({ width, height: 900 });
-    const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
+    const primary = page.getByRole('button', { name: 'Commander', exact: true });
     const entry = page.getByRole('button', { name: 'Mon compte', exact: true });
-    const deviceOrders = page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true });
+    const deviceOrders = page.getByRole('tab', { name: 'Commandes', exact: true });
     phase('atomic-geometry'); const geometry = await accountNavigationGeometry();
     try { assertAccountNavigationAligned(geometry, width); }
     catch (error) {
@@ -175,8 +177,10 @@ describe('customer entry placement — real Storefront and loyalty components', 
     phase('navigation-viewport'); await page.setViewportSize({ width: 1440, height: 900 });
     phase('account-open');
     await open(); await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
-    phase('device-orders-open');
+    phase('device-orders-click');
+
     await page.getByRole('dialog', { name: 'Mon compte' }).getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).click();
+    phase('device-orders-visible');
     await page.getByRole('dialog', { name: 'Mes commandes', exact: true }).waitFor();
     phase('single-dialog');
     await expect.poll(() => page.getByRole('dialog').count()).toBe(1);
@@ -188,8 +192,8 @@ describe('customer entry placement — real Storefront and loyalty components', 
   });
   it('isolates the reflow counterexample in one browser turn and rejects a displaced sibling', async () => {
     await navigationFixture(false); await page.goto(`${origin}/storefront`);
-    await page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).waitFor();
-    const nav = page.getByRole('navigation', { name: 'Vos accès personnels', exact: true });
+    await page.locator('.sm-order-header-actions').waitFor();
+    const nav = page.locator('.sm-order-header-actions');
     const { current: initial, scenario } = await nav.evaluate(sampleAccountNavigation, true);
     expect(scenario).not.toBeNull();
     expect(Math.abs(initial.account.y - scenario!.moved.orders.y)).toBe(44.78125);
@@ -370,7 +374,7 @@ const calls = () => page.evaluate(() => window.customerAccountUiFixture.calls);
 
 function sampleAccountNavigation(nav: Element, simulateReflow: boolean) {
   const account = nav.querySelector('[aria-label="Mon compte"]');
-  const orders = nav.querySelector('[aria-label="Mes commandes sur cet appareil"]');
+  const orders = nav.querySelector('a[href^="tel:"]');
   if (!(nav instanceof HTMLElement) || !account || !(orders instanceof HTMLElement)) throw new Error('Customer navigation controls missing');
   const read = () => ({ width: innerWidth, scrollY, fonts: document.fonts.status, display: getComputedStyle(nav).display,
     account: account.getBoundingClientRect().toJSON(), orders: orders.getBoundingClientRect().toJSON() });
@@ -396,7 +400,7 @@ async function accountNavigationGeometry() {
   });
   // Read both siblings in the SAME browser turn. Separate boundingBox RPCs
   // could compare opposite sides of a resize/reflow that moves their parent.
-  return (await page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).evaluate(sampleAccountNavigation, false)).current;
+  return (await page.locator('.sm-order-header-actions').evaluate(sampleAccountNavigation, false)).current;
 }
 function assertAccountNavigationAligned(geometry: Awaited<ReturnType<typeof accountNavigationGeometry>>, width: number) {
   const diagnostic = JSON.stringify({ expectedWidth: width, ...geometry });
