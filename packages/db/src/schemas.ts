@@ -1018,7 +1018,7 @@ export const OrderSchema = new Schema(
     loyaltyDeviceRef: { type: String, default: null, select: false },
     loyaltyEarnState: {
       type: String,
-      enum: ['pending', 'processing', 'completed', 'failed', 'cancelled', null],
+      enum: ['pending', 'processing', 'completed', 'failed', 'cancelled', 'reconciliation_required', null],
       default: null,
       select: false,
     },

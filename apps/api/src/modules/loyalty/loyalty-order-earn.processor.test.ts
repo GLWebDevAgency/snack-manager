@@ -1,8 +1,9 @@
 import type { Order } from '@sm/db';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import type { LoyaltyMemberService } from './loyalty-member.service';
+import { LOYALTY_POS_TICKET_NOT_ELIGIBLE_CODE } from './loyalty-purchase-verifier';
 import {
   LoyaltyOrderEarnProcessor,
   loyaltyEarnRetryDelayMs,
@@ -28,11 +29,13 @@ function claimed(attempts = 1) {
     loyaltyDeviceRef: DEVICE_ID,
     loyaltyEarnAttempts: attempts,
     loyaltyEarnLeaseUntil: LEASE_UNTIL,
+    status: 'delivered',
+    payment: { status: 'paid' },
     totals: { total: 1_850 },
   };
 }
 
-function harness(claims: unknown[], earn = vi.fn().mockResolvedValue({})) {
+function harness(claims: unknown[], earn = vi.fn().mockResolvedValue({}), receipt = vi.fn().mockResolvedValue({ kind: 'not_observed' })) {
   const findOneAndUpdate = vi.fn().mockImplementation(() => ({
     select: vi.fn().mockResolvedValue(claims.shift() ?? null),
   }));
@@ -43,13 +46,13 @@ function harness(claims: unknown[], earn = vi.fn().mockResolvedValue({})) {
   };
   const processor = new LoyaltyOrderEarnProcessor(
     orders as unknown as Model<Order>,
-    { earn } as unknown as LoyaltyMemberService,
+    { earn, readEarnReceipt: receipt } as unknown as LoyaltyMemberService,
   );
-  return { earn, findOneAndUpdate, orders, processor };
+  return { earn, receipt, findOneAndUpdate, orders, processor };
 }
 
 describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
-  it('ne réclame que les ventes livrées et payées, puis crédite une fois', async () => {
+  it('réclame les ventes éligibles et les reprises inéligibles, mais ne crédite que la vente éligible', async () => {
     const { processor, earn, findOneAndUpdate, orders } = harness([claimed(), null]);
 
     await expect(processor.drain(new Date('2026-09-01T08:00:00Z'))).resolves.toEqual({
@@ -57,13 +60,19 @@ describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
       completed: 1,
       failed: 0,
       retried: 0,
+      reviewRequired: 0,
     });
 
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         loyaltyEarnState: 'pending',
-        status: 'delivered',
-        'payment.status': 'paid',
+        $and: expect.arrayContaining([
+          { $or: [
+            { status: 'delivered', 'payment.status': 'paid' },
+            { status: 'cancelled' },
+            { 'payment.status': 'refunded' },
+          ] },
+        ]),
       }),
       expect.objectContaining({
         $set: expect.objectContaining({ loyaltyEarnState: 'processing' }),
@@ -115,6 +124,51 @@ describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
     );
   });
 
+  it('rapproche le gain déjà enregistré après réponse perdue puis remboursement, sans recréditer', async () => {
+    const receipt = vi.fn().mockResolvedValue({ kind: 'recorded', awardedUnits: 18, operationId: OPERATION_ID });
+    const { processor, orders, earn } = harness([{ ...claimed(2), payment: { status: 'refunded' } }, null], undefined, receipt);
+    await expect(processor.drain()).resolves.toMatchObject({ completed: 0, reviewRequired: 1 });
+    expect(earn).not.toHaveBeenCalled();
+    expect(receipt).toHaveBeenCalledWith({ tenantRef: TENANT, clientId: CLIENT_ID, memberId: MEMBER_ID, operationId: OPERATION_ID });
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.objectContaining({ loyaltyEarnOperationId: OPERATION_ID }),
+      expect.objectContaining({ $set: expect.objectContaining({ loyaltyEarnState: 'reconciliation_required', loyaltyEarnLastError: 'recorded_gain_sale_ineligible' }) }));
+    expect(orders.updateMany.mock.calls.some(([, update]) => update.$set.loyaltyEarnState === 'cancelled')).toBe(false);
+  });
+
+  it('ne confond pas reçu encore invisible et absence définitive de gain', async () => {
+    const { processor, orders, earn } = harness([{ ...claimed(2), status: 'cancelled' }, null]);
+    await expect(processor.drain()).resolves.toMatchObject({ retried: 1, completed: 0 });
+    expect(earn).not.toHaveBeenCalled();
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      $set: expect.objectContaining({ loyaltyEarnState: 'pending', loyaltyEarnLastError: 'sale_ineligible_unsettled' }),
+    }));
+  });
+
+  it('reconnaît aussi le reçu de zéro point sans rappeler le calcul courant', async () => {
+    const receipt = vi.fn().mockResolvedValue({ kind: 'recorded', awardedUnits: 0, operationId: OPERATION_ID });
+    const { processor, earn } = harness([claimed(2), null], undefined, receipt);
+    await expect(processor.drain()).resolves.toMatchObject({ completed: 1 });
+    expect(earn).not.toHaveBeenCalled();
+  });
+
+  it('met un reçu canonique divergent à rapprocher sans appeler le writer', async () => {
+    const { processor, earn, orders } = harness([claimed(), null], undefined, vi.fn().mockResolvedValue({ kind: 'conflict' }));
+    await expect(processor.drain()).resolves.toMatchObject({ reviewRequired: 1 });
+    expect(earn).not.toHaveBeenCalled();
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      $set: expect.objectContaining({ loyaltyEarnState: 'reconciliation_required', loyaltyEarnLastError: 'earn_receipt_conflict' }),
+    }));
+  });
+
+  it('ne prétend pas avoir acquitté après changement de paiement ou perte du bail', async () => {
+    const { processor, orders } = harness([claimed(), null]);
+    orders.updateOne.mockResolvedValue({ modifiedCount: 0 });
+    await expect(processor.drain()).resolves.toMatchObject({ completed: 0, retried: 1 });
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'delivered', 'payment.status': 'paid', loyaltyEarnAttempts: 1,
+    }), expect.anything());
+  });
+
   it('ne peut pas écraser le bail repris par un autre worker', async () => {
     const { processor, orders } = harness([claimed(), null]);
 
@@ -128,6 +182,50 @@ describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
       loyaltyEarnState: 'processing',
       loyaltyEarnLeaseUntil: LEASE_UNTIL,
     });
+  });
+
+  it('réessaie si la vente devient inéligible pendant la vérification du writer', async () => {
+    const earn = vi.fn().mockRejectedValue(new ConflictException({ code: LOYALTY_POS_TICKET_NOT_ELIGIBLE_CODE }));
+    const { processor, orders } = harness([claimed(), null], earn);
+    await expect(processor.drain()).resolves.toMatchObject({ retried: 1, failed: 0, reviewRequired: 0 });
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      $set: expect.objectContaining({ loyaltyEarnState: 'pending', loyaltyEarnLastError: LOYALTY_POS_TICKET_NOT_ELIGIBLE_CODE }),
+    }));
+  });
+
+  it('ne déduit pas l’absence de gain d’un refus permanent après validation de l’intention', async () => {
+    const { processor, orders } = harness([claimed(), null], vi.fn().mockRejectedValue(new NotFoundException()));
+    await expect(processor.drain()).resolves.toMatchObject({ failed: 0, reviewRequired: 1 });
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.objectContaining({ status: 'delivered', 'payment.status': 'paid' }), expect.objectContaining({
+      $set: expect.objectContaining({ loyaltyEarnState: 'reconciliation_required', loyaltyEarnLastError: 'earn_confirmation_rejected' }),
+    }));
+  });
+
+  it('ne crédite pas si la lecture du reçu est indisponible', async () => {
+    const { processor, earn, orders } = harness([claimed(), null], undefined, vi.fn().mockRejectedValue(new Error('secret de dépendance')));
+    await expect(processor.drain()).resolves.toMatchObject({ retried: 1, completed: 0 });
+    expect(earn).not.toHaveBeenCalled();
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      $set: expect.objectContaining({ loyaltyEarnLastError: 'dependency_unavailable' }),
+    }));
+  });
+
+  it('ne compte pas un rapprochement si un autre bail a gagné', async () => {
+    const { processor, orders } = harness([claimed(), null], undefined, vi.fn().mockResolvedValue({ kind: 'conflict' }));
+    orders.updateOne.mockResolvedValue({ modifiedCount: 0 });
+    await expect(processor.drain()).resolves.toMatchObject({ retried: 1, reviewRequired: 0 });
+    expect(orders.updateOne).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: TENANT, loyaltyEarnAttempts: 1, loyaltyEarnLeaseUntil: LEASE_UNTIL,
+      status: 'delivered', 'payment.status': 'paid',
+    }), expect.anything());
+  });
+
+  it('ne compte pas une intention invalide comme fermée après perte du bail', async () => {
+    const { processor, earn, receipt, orders } = harness([{ ...claimed(), tenantId: 'invalid' }, null]);
+    orders.updateOne.mockResolvedValue({ modifiedCount: 0 });
+    await expect(processor.drain()).resolves.toMatchObject({ retried: 1, failed: 0 });
+    expect(earn).not.toHaveBeenCalled();
+    expect(receipt).not.toHaveBeenCalled();
   });
 
   it('ferme une intention corrompue sans appeler le ledger', async () => {

@@ -1,8 +1,9 @@
 # Attribution fidélité immuable à une vente protégée
 
-État au 10 septembre 2026 : raccord implémenté sur `feat/customer-sale-attribution`,
-après le socle de calcul [#160](GAINS-VENTE-REMBOURSEMENTS.md). Recette locale
-réussie ; PR, CI et staging de ce raccord restent à recevoir. **Aucun crédit web,
+État au 10 septembre 2026 : raccord fusionné dans [#161](https://github.com/GLWebDevAgency/snack-manager/pull/161),
+après le socle de calcul [#160](GAINS-VENTE-REMBOURSEMENTS.md), et inclus dans la
+[réception staging #168](https://github.com/GLWebDevAgency/snack-manager/pull/168#issuecomment-5620914049).
+La recette locale ci-dessous ne vaut pas recette privée du compte. **Aucun crédit web,
 débit, consommation, migration ou ouverture du pilote dans ce lot.**
 
 ## Ce qui devient durable

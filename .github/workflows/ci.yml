@@ -205,6 +205,16 @@ jobs:
           pnpm --filter @sm/loyalty exec vitest run src/canonical-sale.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
 
+      - name: Tests MongoDB et PostgreSQL réels — reprise des gains fidélité
+        env:
+          LOYALTY_CANONICAL_SALE_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_earn
+        run: >-
+          pnpm --filter @sm/api exec vitest run
+          src/modules/loyalty/loyalty-earn-receipt.reader.integration.test.ts
+          src/modules/loyalty/loyalty-order-earn.processor.integration.test.ts
+          --maxWorkers=1 --no-file-parallelism
+
       - name: Tests PostgreSQL réels — identité client et quotas durables
         env:
           # Base de connexion déjà créée par le service PostgreSQL ; la fixture
