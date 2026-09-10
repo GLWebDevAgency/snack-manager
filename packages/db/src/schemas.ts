@@ -3,6 +3,7 @@ import { customerOrderOwnerField } from './customer-order-owner.schema';
 import { customerSaleAttributionField } from './customer-sale-attribution.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { OrderReadyNotificationSchema } from './order-ready-notification.schema';
+import { OrderRefundFlowSchema } from './order-refund-flow.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
 import { DeliveryHandoffSchema } from './delivery-handoff.schema';
@@ -77,6 +78,7 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnNextAttemptAt;
   delete returned.loyaltyEarnLeaseUntil;
   delete returned.paymentFlow;
+  delete returned.refundFlow;
   delete returned.counterCollection;
   delete returned.publicRecovery;
   delete returned.deliveryMission;
@@ -1179,6 +1181,7 @@ export const OrderSchema = new Schema(
       default: null,
       select: false,
     },
+    refundFlow: { type: OrderRefundFlowSchema, default: null, select: false },
     status: {
       type: String,
       enum: ['new', 'preparing', 'ready', 'delivered', 'cancelled'],

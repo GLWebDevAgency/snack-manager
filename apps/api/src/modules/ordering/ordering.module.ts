@@ -14,7 +14,8 @@ import { OrderCapacityAvailabilityService } from './order-capacity-availability.
 import { TicketService } from './ticket.service';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { ConfigService } from '@nestjs/config';
-import { OrderRefundsService, STRIPE_REFUND_CLIENT, type RefundStripeClient } from './order-refunds.service';
+import { OrderRefundsService, STRIPE_REFUND_CLIENT } from './order-refunds.service';
+import { createRefundClientFactory } from './order-refund-client.factory';
 
 /**
  * Commande en ligne : créneaux de retrait, paiement Stripe optionnel,
@@ -37,18 +38,7 @@ import { OrderRefundsService, STRIPE_REFUND_CLIENT, type RefundStripeClient } fr
   providers: [SlotsService, OrderCapacityAvailabilityService, PaymentsService, OrderPaymentLifecycleService, TicketService, SiteService, OrderRefundsService, {
     provide: STRIPE_REFUND_CLIENT,
     inject: [ConfigService],
-    useFactory: (config: ConfigService) => {
-      let client: RefundStripeClient | null = null;
-      return async () => {
-        const key = config.get<string>('STRIPE_SECRET_KEY');
-        if (!key) return null;
-        if (client) return client;
-        const moduleName = 'stripe';
-        const { default: Stripe } = await import(moduleName);
-        client = new Stripe(key) as RefundStripeClient;
-        return client;
-      };
-    },
+    useFactory: (config: ConfigService) => createRefundClientFactory(key => config.get<string>(key)),
   }],
   exports: [SlotsService, TicketService, PaymentsService, OrderRefundsService],
 })
