@@ -14,7 +14,7 @@ import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 // Only server data is simulated; this does not claim Next/BFF/Nest/SQL coverage.
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
 let faults: string[], calls: Record<string, unknown>[], expiry: number, registered: boolean, name: string | null;
-let outcome: 'normal' | 'terms' | 'collision' | 'unavailable' | 'lost' | 'held', release: (() => void) | null;
+let outcome: 'normal' | 'terms' | 'collision' | 'unavailable' | 'refused' | 'lost' | 'held', release: (() => void) | null;
 let version: number, captures: string;
 let failures: { request: BrowserRequest; error: string | undefined; closing: boolean }[], discardedErrors: Set<BrowserRequest>;
 let inflight: Set<BrowserRequest>, closing: boolean, sequence: number, session: CDPSession;
@@ -77,14 +77,22 @@ function rejectedForIdentity(failure: Failure, wire: Wire | undefined, observed:
     && new URL(proof.profileRequest.url()).pathname === paths.session
     && !!profileWire && completedApplicationRead({ request: proof.profileRequest, error: 'net::ERR_ABORTED', closing: false }, profileWire, observed, ui);
 }
-declare global { interface Window { loyaltyFixtureRead: (metadata: string) => void; validateLoyaltyFixture: (value: unknown, path: string, body: unknown) => boolean } }
+declare global { interface Window { loyaltyFixtureRead: (metadata: string) => void; validateLoyaltyFixture: (value: unknown, path: string, body: unknown) => boolean;
+  prepareLoyaltyCamera: (value: string, held: boolean) => Promise<void>; releaseLoyaltyCamera: () => void;
+  loyaltyCameraRequested: boolean; loyaltyCameraTracks: () => string[] } }
 const program = () => ({ id: '50000000-0000-4000-8000-000000000005', version, name: 'Les habitués du Comptoir', mechanism: 'points',
   termsSummary: 'Cumulez vos points au comptoir. Récompenses selon les conditions du restaurant.', unitLabelSingular: 'point', unitLabelPlural: 'points' });
 const member = { id: '60000000-0000-4000-8000-000000000006', joinedAt: '2026-09-09T12:00:00.000Z', qrGeneration: 1, balanceUnits: 25, unitLabelSingular: 'point', unitLabelPlural: 'points' };
 beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url)), cssPath = fileURLToPath(new URL('../../app/globals.css', import.meta.url));
   const bundle = await build({ stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';import{CustomerAccountEntry}from'./CustomerAccountEntry';import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
-    import{CustomerLoyaltyResponseSchema,CustomerLoyaltyRequestSchema,CustomerAccountResponses,CustomerAccountViewSchema}from'@sm/contracts';
+    import{CustomerLoyaltyResponseSchema,CustomerLoyaltyRequestSchema,CustomerAccountResponses,CustomerAccountViewSchema}from'@sm/contracts';import QRCode from'qrcode';
+    let cameraStream;window.loyaltyCameraRequested=false;window.loyaltyCameraTracks=()=>cameraStream?.getTracks().map(track=>track.readyState)??[];
+    window.prepareLoyaltyCamera=async(value,held)=>{const canvas=document.createElement('canvas');await QRCode.toCanvas(canvas,value,{width:400,margin:4});
+      navigator.mediaDevices.getUserMedia=()=>new Promise(resolve=>{window.loyaltyCameraRequested=true;
+        const start=()=>{cameraStream=canvas.captureStream(0);const timer=setInterval(()=>{if(cameraStream.getTracks().every(track=>track.readyState==='ended'))clearInterval(timer);
+          else{const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1,1);cameraStream.getVideoTracks().forEach(track=>track.requestFrame?.());}},50);resolve(cameraStream);};
+        if(held)window.releaseLoyaltyCamera=start;else start();});};
     window.validateLoyaltyFixture=(value,path,body)=>{if(path==='/r/recette/compte/capacites')return CustomerAccountResponses.status.safeParse(value).success;
       if(path==='/r/recette/compte/session')return CustomerAccountViewSchema.safeParse(value).success;
       if(path!=='/r/recette/compte/fidelite')return false;
@@ -117,10 +125,11 @@ beforeAll(async () => {
         }
         // Simulated relay failure AFTER the isolated writer committed. Empty
         // error body: the production transport intentionally discards errors.
-        if (input.step === 'join' && outcome === 'lost') { registered = true; outcome = 'normal'; res.writeHead(503, { 'x-sm-fixture-fault': 'join-committed-relay-failure' }).end(); return; }
-        if (input.step === 'join' && outcome === 'terms') { outcome = 'normal'; version++; json({ state: 'terms_changed', expiresAt: expiry, program: program(), profileReady: !!name }); return; }
+        if ((input.step === 'join' || input.step === 'attach') && outcome === 'lost') { registered = true; outcome = 'normal'; res.writeHead(503, { 'x-sm-fixture-fault': `${input.step}-committed-relay-failure` }).end(); return; }
+        if ((input.step === 'join' || input.step === 'attach') && outcome === 'terms') { outcome = 'normal'; version++; json({ state: 'terms_changed', expiresAt: expiry, program: program(), profileReady: !!name }); return; }
+        if (outcome === 'refused') { json({ state: 'attachment_refused', expiresAt: expiry }); return; }
         if (outcome === 'collision' || outcome === 'unavailable') { json({ state: outcome === 'collision' ? 'existing_card' : 'unavailable', expiresAt: expiry }); return; }
-        if (input.step === 'join') registered = true;
+        if (input.step === 'join' || input.step === 'attach') registered = true;
         if (registered) { json({ state: input.step === 'card' ? 'card' : 'member', member, expiresAt: expiry, ...(input.step === 'card' ? { qrToken: 'A'.repeat(43) } : {}) }); return; }
         json({ state: 'available', expiresAt: expiry, program: program(), profileReady: !!name });
       };
@@ -200,9 +209,9 @@ beforeEach(async () => {
     }
     // Exact controlled response, not a URL/status-only exemption. The shared
     // transport intentionally cancels every non-OK body before throwing.
-    if (response.status() === 503 && response.headers()['x-sm-fixture-fault'] === 'join-committed-relay-failure'
+    if (response.status() === 503 && response.headers()['x-sm-fixture-fault'] === `${calls[1]?.step}-committed-relay-failure`
       && request.method() === 'POST' && request.url() === `${origin}/r/recette/compte/fidelite`
-      && request.postData() === JSON.stringify(calls[1]) && calls[1]?.step === 'join') discardedErrors.add(request);
+      && request.postData() === JSON.stringify(calls[1]) && (calls[1]?.step === 'join' || calls[1]?.step === 'attach')) discardedErrors.add(request);
   });
   page.on('requestfailed', request => { inflight.delete(request); failures.push({ request, error: request.failure()?.errorText, closing }); });
   await page.goto(origin); await seedCustomerBrowserFixture(page, 'recette');
@@ -255,7 +264,7 @@ async function markUI(path: string, state?: string) {
   if (state) expect(own.some(mark => mark.event === `state-${state}`)).toBe(true);
   rendered.add(wire!.id);
 }
-async function verifyLoyalty(state: 'available' | 'terms_changed' | 'member' | 'card' | 'existing_card' | 'unavailable') {
+async function verifyLoyalty(state: 'available' | 'terms_changed' | 'member' | 'card' | 'existing_card' | 'attachment_refused' | 'unavailable') {
   if (state === 'available' || state === 'terms_changed') {
     await page.getByText('Les habitués du Comptoir', { exact: true }).waitFor();
     if (name) await page.getByRole('checkbox').waitFor(); else await page.getByRole('button', { name: 'Compléter mon profil', exact: true }).waitFor();
@@ -264,10 +273,32 @@ async function verifyLoyalty(state: 'available' | 'terms_changed' | 'member' | '
     await page.getByText('25 points', { exact: true }).waitFor();
     if (state === 'card') await page.getByRole('img', { name: 'QR de votre carte fidélité' }).waitFor();
     else await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).waitFor();
-  } else await page.getByText(state === 'existing_card' ? /présentez votre carte existante/i : /fidélité n’est pas disponible/).waitFor();
+  } else await page.getByText(state === 'existing_card' ? /présentez votre carte existante/i : state === 'attachment_refused' ? /Cette carte ne peut pas être rattachée/ : /fidélité n’est pas disponible/).waitFor();
   await markUI(paths.loyalty, state);
 }
 async function accept() { await page.getByRole('checkbox').check(); await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).click(); }
+async function openAttachment() {
+  await openLoyalty(); await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).click();
+  await page.getByRole('heading', { name: 'Rattacher ma carte', exact: true }).waitFor();
+}
+async function attach() {
+  await page.getByLabel('Code de votre carte', { exact: true }).fill('A'.repeat(43));
+  await page.getByRole('checkbox').check(); await page.getByRole('button', { name: 'Rattacher cette carte', exact: true }).click();
+}
+async function privateQrPersisted() {
+  return page.evaluate(async () => {
+    const values: unknown[] = [Object.entries(localStorage), Object.entries(sessionStorage)];
+    for (const { name } of await indexedDB.databases()) {
+      if (!name) continue;
+      const db = await new Promise<IDBDatabase>((resolve, reject) => { const open = indexedDB.open(name); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(new Error('Fixture storage read failed')); });
+      try { for (const name of db.objectStoreNames) values.push(await new Promise<unknown>((resolve, reject) => {
+        const tx = db.transaction(name, 'readonly'), read = tx.objectStore(name).getAll();
+        tx.oncomplete = () => resolve(read.result); tx.onerror = () => reject(new Error('Fixture storage read failed'));
+      })); } finally { db.close(); }
+    }
+    return JSON.stringify(values).includes('A'.repeat(43));
+  });
+}
 async function journalSelection(): Promise<Selection> {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { const open = indexedDB.open('sm-customer-preparation-v1', 1);
@@ -282,6 +313,134 @@ async function journalSelection(): Promise<Selection> {
   });
 }
 describe('account loyalty — native UI with isolated HTTP', () => {
+  it('pastes an existing card without a name and requires a separate explicit attachment consent', async () => {
+    name = null; await openLoyalty();
+    expect(await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).count()).toBe(1);
+    await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).click();
+    await page.getByRole('heading', { name: 'Rattacher ma carte', exact: true }).waitFor();
+    const code = page.getByLabel('Code de votre carte', { exact: true });
+    await code.fill('A'.repeat(43));
+    const submit = page.getByRole('button', { name: 'Rattacher cette carte', exact: true });
+    expect(await submit.isDisabled()).toBe(true); expect(calls.map(call => call.step)).toEqual(['view']);
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
+    await page.getByRole('checkbox').check(); await submit.click(); await verifyLoyalty('member');
+    expect(calls[1]).toMatchObject({ step: 'attach', qrToken: 'A'.repeat(43), termsAccepted: true,
+      termsNoticeVersion: 'customer-loyalty-attach-2026-09' });
+    expect(calls.map(call => call.step)).toEqual(['view', 'attach']);
+    expect(await page.getByRole('img', { name: 'QR de votre carte fidélité' }).count()).toBe(0);
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).count()).toBe(0);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(await privateQrPersisted()).toBe(false);
+  });
+  it('never navigates pasted links and refuses foreign-restaurant or noncanonical codes', async () => {
+    await openAttachment();
+    const input = page.getByLabel('Code de votre carte', { exact: true }), submit = page.getByRole('button', { name: 'Rattacher cette carte', exact: true });
+    for (const value of ['invalid', 'A'.repeat(42) + 'B', `https://outside.invalid/r/other/fidelite#card=${'A'.repeat(43)}`, `javascript:${'A'.repeat(43)}`]) {
+      await input.fill(value); await page.getByRole('checkbox').check(); expect(await submit.isDisabled()).toBe(true);
+    }
+    expect(page.url()).toBe(`${origin}/`); expect(calls).toEqual([{ step: 'view' }]);
+    await input.fill(`https://outside.invalid/r/recette/fidelite#card=${'A'.repeat(43)}`);
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); await page.getByRole('checkbox').check(); await submit.click();
+    await verifyLoyalty('member'); expect(calls[1]?.qrToken).toBe('A'.repeat(43)); expect(page.url()).toBe(`${origin}/`);
+  });
+  it('retries the identical attachment after a lost reply and reloads by view without the old QR', async () => {
+    await openAttachment(); outcome = 'lost'; await attach();
+    await page.getByText(/rattachement n’est pas confirmée/).waitFor(); const first = structuredClone(calls[1]);
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).count()).toBe(0);
+    expect(await privateQrPersisted()).toBe(false); expect(calls).toHaveLength(2);
+    await page.getByRole('button', { name: 'Reprendre mon rattachement', exact: true }).click(); await verifyLoyalty('member');
+    expect(calls[2]).toEqual(first); expect(discardedErrors.size).toBe(1);
+    await page.reload(); await openLoyalty(); expect(calls[3]).toEqual({ step: 'view' });
+    expect(await page.getByRole('img').count()).toBe(0); expect(await privateQrPersisted()).toBe(false);
+  });
+  it('requires a fresh code and consent after attachment terms changed', async () => {
+    await openAttachment(); outcome = 'terms'; await attach(); await verifyLoyalty('terms_changed');
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
+    expect(await page.getByRole('button', { name: 'Rattacher cette carte', exact: true }).isDisabled()).toBe(true);
+    await attach(); await verifyLoyalty('member'); expect(calls[2]?.rulesVersion).toBe(2);
+    expect(calls[2]?.operationId).not.toBe(calls[1]?.operationId);
+  });
+  it('rereads real terms explicitly after a uniform attachment refusal', async () => {
+    await openAttachment(); outcome = 'refused'; await attach(); await verifyLoyalty('attachment_refused');
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('checkbox').count()).toBe(0); expect(await page.getByText('25 points', { exact: true }).count()).toBe(0);
+    expect(calls).toHaveLength(2); outcome = 'normal'; version++;
+    await page.getByRole('button', { name: 'Relire les conditions pour rattacher ma carte', exact: true }).click();
+    await verifyLoyalty('available'); expect(calls[2]).toEqual({ step: 'view' });
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); expect(await privateQrPersisted()).toBe(false);
+  });
+  it('decodes a real QR from synthetic video without sending it and stops camera before consent', async () => {
+    await openAttachment(); await page.evaluate(() => window.prepareLoyaltyCamera('A'.repeat(43), false));
+    await page.getByRole('button', { name: 'Scanner ma carte', exact: true }).click();
+    await expect.poll(() => page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('A'.repeat(43));
+    await expect.poll(() => page.evaluate(() => window.loyaltyCameraTracks())).toEqual(['ended']);
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); expect(calls).toEqual([{ step: 'view' }]);
+    expect(await privateQrPersisted()).toBe(false);
+    await page.getByRole('checkbox').check(); await page.getByRole('button', { name: 'Rattacher cette carte', exact: true }).click();
+    await verifyLoyalty('member'); expect(calls[1]?.step).toBe('attach'); expect(await page.getByRole('img').count()).toBe(0);
+  });
+  it('cancels an awaiting camera permission and stops its late synthetic stream without restoring the QR', async () => {
+    await openAttachment(); await page.evaluate(() => window.prepareLoyaltyCamera('A'.repeat(43), true));
+    await page.getByRole('button', { name: 'Scanner ma carte', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.loyaltyCameraRequested)).toBe(true);
+    await page.getByRole('button', { name: 'Annuler le scan', exact: true }).click();
+    expect(await page.locator('video').count()).toBe(0);
+    await page.evaluate(() => window.releaseLoyaltyCamera());
+    await expect.poll(() => page.evaluate(() => window.loyaltyCameraTracks())).toEqual(['ended']);
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); expect(calls).toEqual([{ step: 'view' }]);
+  });
+  it.each(['offline', 'hidden'] as const)('clears code and a live camera on %s, then rereads without any automatic attachment', async reason => {
+    await openAttachment(); await page.getByLabel('Code de votre carte', { exact: true }).fill('A'.repeat(43));
+    await page.getByRole('checkbox').check();
+    await page.evaluate(() => window.prepareLoyaltyCamera('not-a-loyalty-code', false));
+    await page.getByRole('button', { name: 'Scanner ma carte', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.loyaltyCameraTracks())).toEqual(['live']);
+    if (reason === 'offline') await context.setOffline(true);
+    else await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+    await expect.poll(() => page.getByLabel('Code de votre carte', { exact: true }).count()).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.loyaltyCameraTracks())).toEqual(['ended']);
+    expect(await page.locator('video').count()).toBe(0); expect(calls).toEqual([{ step: 'view' }]);
+    if (reason === 'offline') await context.setOffline(false);
+    else await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+    await verifyLoyalty('available'); await markUI(paths.caps); await markUI(paths.session);
+    await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).click();
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); expect(calls).toEqual([{ step: 'view' }, { step: 'view' }]);
+    expect(await privateQrPersisted()).toBe(false);
+  });
+  it('keeps paste available after camera denial and cancel erases the entered code and consent', async () => {
+    await openAttachment(); await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Denied', 'NotAllowedError'); }; });
+    await page.getByRole('button', { name: 'Scanner ma carte', exact: true }).click(); await page.getByText(/caméra n’est pas disponible/).waitFor();
+    await page.getByRole('button', { name: 'Annuler le scan', exact: true }).click();
+    expect(await page.getByRole('button', { name: 'Scanner ma carte', exact: true }).evaluate(node => node === document.activeElement)).toBe(true);
+    await page.getByLabel('Code de votre carte', { exact: true }).fill('A'.repeat(43)); await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Annuler le rattachement', exact: true }).click();
+    expect(await page.getByRole('heading', { name: 'Ma fidélité', exact: true }).evaluate(node => node === document.activeElement)).toBe(true);
+    await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).click();
+    expect(await page.getByLabel('Code de votre carte', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false); expect(calls).toEqual([{ step: 'view' }]);
+  });
+  it.each([320, 390, 1440])('keeps attachment consent and controls reachable at %ipx', async width => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 }); await openAttachment();
+    expect(await page.getByRole('heading', { name: 'Rattacher ma carte', exact: true }).evaluate(node => node === document.activeElement)).toBe(true);
+    await page.getByLabel('Code de votre carte', { exact: true }).fill('A'.repeat(43));
+    await page.getByRole('checkbox').check(); await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const dialog = page.getByRole('dialog', { name: 'Mon compte', exact: true });
+    const controls = [...await dialog.getByRole('button').all(), page.getByLabel('Code de votre carte', { exact: true }), page.getByRole('checkbox').locator('..')];
+    for (const control of controls) {
+      await control.scrollIntoViewIfNeeded(); const bounds = await control.boundingBox(); expect(bounds?.height).toBeGreaterThanOrEqual(44);
+      expect(await control.evaluate(node => { const box = node.getBoundingClientRect(); const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); return hit !== null && node.contains(hit); })).toBe(true);
+    }
+    await page.getByRole('heading', { name: 'Rattacher ma carte', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(captures, `loyalty-attachment-${width}.png`) });
+    await page.getByRole('button', { name: 'Rattacher cette carte', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(captures, `loyalty-attachment-consent-${width}.png`) });
+    expect(calls).toEqual([{ step: 'view' }]); expect(await privateQrPersisted()).toBe(false);
+  });
   it('requires the exact held request and post-EOF disposal proof, never merely a closed screen', () => {
     const request = { method: () => 'POST', url: () => `${origin}${paths.loyalty}`, postData: () => JSON.stringify({ step: 'view' }) } as BrowserRequest;
     const other = { method: () => 'POST', url: () => `${origin}${paths.loyalty}`, postData: () => JSON.stringify({ step: 'view' }) } as BrowserRequest;
@@ -418,9 +577,11 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     expect(rejectedAfterDisposal({ request: heldRequest, error: 'net::ERR_ABORTED', closing: false }, wire, marks, proof)).toBe(true);
     await section!.dispose();
   });
-  it('an inter-tab publication change masks the old card and drops its held result', async () => {
+  it.each(['view', 'attach'] as const)('an inter-tab publication change masks the old card and drops its held %s result', async step => {
     const before = await journalSelection();
-    outcome = 'held'; await openLoyalty(); await expect.poll(() => release !== null).toBe(true);
+    if (step === 'attach') { await openAttachment(); outcome = 'held'; await attach(); }
+    else { outcome = 'held'; await openLoyalty(); }
+    await expect.poll(() => release !== null).toBe(true);
     const other = await context.newPage(); await other.goto(origin); name = 'Morgan Recette';
     await other.evaluate(async () => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => { const open = indexedDB.open('sm-customer-preparation-v1', 1); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(new Error('Fixture unavailable')); });
@@ -435,8 +596,9 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     registered = true; release?.(); release = null;
     await expect.poll(() => inflight.size, { timeout: 1000 }).toBe(0);
     await session.send('Runtime.evaluate', { expression: 'void 0' });
-    const wire = [...wires.values()].find(value => new URL(value.request.url()).pathname === paths.loyalty)!;
+    const wire = [...wires.values()].filter(value => new URL(value.request.url()).pathname === paths.loyalty).at(-1)!;
     expect(wire).toBeDefined(); expect(requestSelection(wire.request)).toEqual(before);
+    expect(JSON.parse(wire.request.postData()!).step).toBe(step);
     expect(marks.filter(mark => mark.id === wire.id && mark.event === 'eof')).toEqual([{ id: wire.id, event: 'eof', bytes: wire.bytes }]);
     expect(marks.some(mark => mark.id === wire.id && mark.event === 'contract-valid')).toBe(true);
     const current = await journalSelection(); expect(current).toEqual(after); expect(after).not.toEqual(before);
