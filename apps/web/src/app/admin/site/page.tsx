@@ -35,7 +35,6 @@ import { apexSuggestion, type DomainView, type SiteAddresses } from "./types";
 import { WebsitePanel } from "./WebsitePanel";
 import { useSitePermissions } from "./site-access";
 import { MarqueDuSite } from "./MarqueDuSite";
-import { useAdminCapabilities } from "../access";
 import { SiteEditScopeContext, useAdminScopeToken, useSiteEditScope } from "./site-scope";
 
 /** Lien externe stylé en bouton fantôme (les `Btn` sont des `<button>`). */
@@ -59,7 +58,7 @@ function SiteAddressesPanel() {
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const toast = useToast();
-  const online = useAdminCapabilities().includes("online");
+  const online = useSitePermissions().online;
 
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">(
     "loading",
@@ -477,7 +476,7 @@ function SiteAddressesPanel() {
 export default function SitePage() {
   const scope = useAdminScopeToken();
   const permissions = useSitePermissions();
-  const online = useAdminCapabilities().includes("online");
+  const online = permissions.online;
   if (!online) return <SiteEditScopeContext.Provider value={scope}><div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel key={scope} /></div></SiteEditScopeContext.Provider>;
   return <SiteEditScopeContext.Provider value={scope}><div className="flex min-w-0 flex-col gap-8 p-4 md:p-[26px]">
     <MarqueDuSite />
