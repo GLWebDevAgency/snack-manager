@@ -1,7 +1,8 @@
+import { useTheme } from './theme';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { euros } from '@sm/client-core';
-import { S, palette, sheet, type, type Brand } from './theme';
+import { S, type Brand } from './theme';
 import { Btn, Overlay, PanelHead } from './ui';
 import type { PhoneOrderAttempt, PhoneOrderReceipt } from './phone-order-attempt';
 
@@ -10,6 +11,7 @@ export function PhoneOrderNotice({ attempt, error, busy, brand, onResume, onAban
   attempt: PhoneOrderAttempt | null; error: string | null; busy: boolean; brand: Brand;
   onResume: () => void; onAbandon: () => void; onRelease: () => void; onFinish: () => void;
 }) {
+  const { palette, type } = useTheme();
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   if (!attempt && !error) return null;
   const received = attempt?.state === 'received';
@@ -42,6 +44,7 @@ export function PhoneOrderNotice({ attempt, error, busy, brand, onResume, onAban
 export function PhoneOrderConfirmed({ receipt, brand, onClose, onCollect }: {
   receipt: PhoneOrderReceipt; brand: Brand; onClose: () => void; onCollect: () => void;
 }) {
+  const { type, sheet } = useTheme();
   const canCollect = receipt.payment.status === 'pending' && ['new', 'preparing', 'ready'].includes(receipt.status);
   return <Overlay onClose={onClose} accessibilityLabel="Réservation téléphone confirmée" width={480}>
     <PanelHead title={receipt.status === 'cancelled' ? 'Commande annulée' : 'Créneau confirmé'} sub="État confirmé par le restaurant" onClose={onClose} />

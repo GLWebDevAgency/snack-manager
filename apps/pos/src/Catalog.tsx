@@ -1,5 +1,5 @@
 /**
- * Zones B et C — rail des catégories et grille produits.
+ * Catalogue des trois dispositions : rail, onglets, grille et liste dense.
  *
  * La grille mesure sa largeur réelle (`onLayout`) puis demande à `useLayout()`
  * combien de colonnes y tiennent : 3 sur une petite tablette, 4 sur la
@@ -7,42 +7,28 @@
  * pourcentage n'existent pas en RN, et un nombre figé donnerait soit des
  * cartes étirées, soit des noms tronqués.
  *
- * ─── LA VIGNETTE ───
- *
- * Une tuile qui a une photo la porte en CARRÉ, en tête de la rangée du nom.
- * Une tuile qui n'en a pas reste ce qu'elle était : nom, badge, prix, sur
- * toute la largeur. C'est un parti pris, et il tient à la géométrie — un
- * réceptacle vide posé sur chaque tuile volerait la moitié de la largeur du
- * nom des quatre-vingts pour cent de produits qui n'auront jamais de photo,
- * pour ne rien montrer. La régularité de la grille est portée par la HAUTEUR
- * commune des tuiles, qui elle ne bouge pas.
+ * La présentation conserve le prix partagé, la disponibilité du serveur et
+ * le cadrage des médias. Ajouter/configurer restent des actions du POS.
  */
-import { useMemo, useState } from 'react';
-import { Image, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
-import { basePrice, euros, palette, type Category, type Product } from '@sm/client-core';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Animated, Easing, Image, Platform, ScrollView, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { basePrice, euros, type Category, type Product } from '@sm/client-core';
 import { catalogueMedias, estPublic, mediasDuProduit, POINT_CENTRE, type MediaVue } from '@sm/contracts';
 import { photoDuPoste, monogramme } from './photo';
-import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
-import { EmptyState, Field, Press, Sheen } from './ui';
+import { FONT, R, S, useTheme, withAlpha, type Brand } from './theme';
+import { EmptyState, Press, Sheen, useReducedMotion } from './ui';
+import { CategoryTabs, categoryIcon, railLabel } from './CategoryTabs';
+import { Icon } from './Icon';
+import { PoweredBy } from './PoweredBy';
 import {
   cadrageVignette,
   cardWidth,
   columnsFor,
   useLayout,
-  vignetteTient,
   type Layout,
 } from './useLayout';
 import type { ParkedTicket } from './pos-state';
-
-/** Étiquette courte du rail : « Compose ton Tacos » → « Tacos ». */
-export function railLabel(name: string): string {
-  return name
-    .replace(/^Compose ton\s+/i, '')
-    .replace(/^Gourmets?\s+/i, '')
-    .replace(/^Les\s+/i, '')
-    .replace(/\s+à Partager$/i, '')
-    .trim();
-}
+export { railLabel } from './CategoryTabs';
 
 /** Comparaison insensible à la casse et aux accents. */
 function norm(s: string): string {
@@ -61,16 +47,19 @@ export function CategoryRail({
   activeId,
   onSelect,
   brand,
+  dense = false,
 }: {
   categories: Category[];
   activeId: string | null;
   onSelect: (id: string) => void;
   brand: Brand;
+  dense?: boolean;
 }) {
   const L = useLayout();
+  const { palette } = useTheme();
   return (
-    <View style={{ width: L.railW, backgroundColor: '#0a0a0a', borderRightWidth: 1, borderRightColor: palette.line2 }}>
-      <ScrollView contentContainerStyle={{ paddingVertical: S.sm, paddingHorizontal: 6, gap: 5 }}>
+    <View style={{ width: dense ? L.railDenseW : L.railW, backgroundColor: palette.railBg, borderRightWidth: 1, borderRightColor: palette.line2, minHeight: 0 }}>
+      <ScrollView accessibilityRole="tablist" accessibilityLabel="Catégories" contentContainerStyle={{ paddingVertical: S.sm, paddingHorizontal: L.sp(!dense && L.railCompactBrand ? 3 : 6), gap: L.sp(5) }}>
         {categories.map((cat) => {
           const on = cat._id === activeId;
           return (
@@ -82,25 +71,28 @@ export function CategoryRail({
               accessibilityLabel={cat.name}
               scale={0.96}
               style={{
-                minHeight: L.touch(62),
+                minHeight: dense ? L.touch() : L.touch(62),
                 borderRadius: R.card,
-                paddingVertical: 9,
-                paddingHorizontal: 8,
-                justifyContent: 'center',
+                paddingVertical: L.sp(9),
+                paddingHorizontal: dense ? L.sp(14) : L.sp(L.railCompactBrand ? 2 : 6),
+                flexDirection: dense ? 'row' : 'column',
+                alignItems: dense ? 'center' : 'stretch',
+                justifyContent: dense ? 'space-between' : 'center',
+                gap: dense ? L.sp(6) : L.sp(3),
                 backgroundColor: on ? palette.surface2 : 'transparent',
                 borderWidth: 1,
                 borderColor: on ? palette.line : 'transparent',
                 overflow: 'hidden',
               }}
-              activeStyle={{ backgroundColor: '#181818' }}
+              activeStyle={{ backgroundColor: palette.press }}
             >
               {on ? (
                 <View
                   style={{
                     position: 'absolute',
                     left: 0,
-                    top: 12,
-                    bottom: 12,
+                    top: L.sp(dense ? 10 : 12),
+                    bottom: L.sp(dense ? 10 : 12),
                     width: 3,
                     borderTopRightRadius: 3,
                     borderBottomRightRadius: 3,
@@ -108,28 +100,29 @@ export function CategoryRail({
                   }}
                 />
               ) : null}
+              {!dense && L.railIcons ? <View style={{ alignItems: 'center', marginBottom: L.sp(2) }}><Icon name={categoryIcon(cat.name)} size={L.fs(18)} color={on ? brand.accent : palette.mut} /></View> : null}
               <Text
-                numberOfLines={2}
+                numberOfLines={dense ? 1 : 2}
                 style={{
+                  flex: dense ? 1 : undefined,
                   fontFamily: FONT,
-                  color: on ? palette.text : '#8d8d8d',
+                  color: on ? palette.text : palette.mut,
                   fontSize: L.railFs,
                   fontWeight: on ? '700' : '600',
                   lineHeight: L.railFs + 3,
                   letterSpacing: -0.1,
-                  textAlign: 'center',
+                  textAlign: dense ? 'left' : 'center',
                 }}
               >
-                {railLabel(cat.name)}
+                {dense ? cat.name : railLabel(cat.name)}
               </Text>
               <Text
                 style={{
                   fontFamily: FONT,
-                  color: on ? brand.accent : '#757575',
+                  color: on ? brand.accent : palette.dimText,
                   fontSize: Math.max(11, L.railFs - 1.5),
                   fontWeight: '700',
-                  textAlign: 'center',
-                  marginTop: 3,
+                  textAlign: dense ? 'right' : 'center',
                   fontVariant: ['tabular-nums'],
                 }}
               >
@@ -139,6 +132,7 @@ export function CategoryRail({
           );
         })}
       </ScrollView>
+      <PoweredBy compact={!dense && L.railCompactBrand} />
     </View>
   );
 }
@@ -163,19 +157,19 @@ function mediaDeTete(
   return null;
 }
 
+type CatalogEntry = { product: Product; categoryName: string };
+type CatalogFilter = 'popular' | 'new' | null;
+
+/** Un libellé commercial ne se déduit jamais d'un prix ou d'une image. */
+function isPopular(product: Product): boolean {
+  return (product.tags ?? []).some((tag) => ['populaire', 'populaires', 'popular'].includes(norm(tag.trim())));
+}
+
 export function ProductArea({
-  categories,
-  medias,
-  activeId,
-  brand,
-  parked,
-  onPick,
-  onRecall,
-  query,
-  onQuery,
+  categories, medias, activeId, brand, parked, onPick, onRecall, query, onQuery,
+  layoutId = 'A', onSelectCategory, onQuickAdd,
 }: {
   categories: Category[];
-  /** Les médias du restaurant, à plat — voir `Menu.medias`. */
   medias?: MediaVue[];
   activeId: string | null;
   brand: Brand;
@@ -184,164 +178,154 @@ export function ProductArea({
   onRecall: (ticket: ParkedTicket) => void;
   query: string;
   onQuery: (q: string) => void;
+  layoutId?: 'A' | 'B' | 'C';
+  onSelectCategory?: (id: string) => void;
+  onQuickAdd?: (product: Product, categoryName: string) => void;
 }) {
   const L = useLayout();
+  const { palette, type, sheet, semanticText } = useTheme();
+  const reducedMotion = useReducedMotion();
   const [gridWidth, setGridWidth] = useState(0);
-  // Indexé UNE FOIS par charge de carte, pas une fois par tuile : une
-  // recherche affiche jusqu'à cent produits d'un coup.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filter, setFilter] = useState<CatalogFilter>(null);
   const catalogue = useMemo(() => catalogueMedias(medias ?? []), [medias]);
+  const allProducts = useMemo(() => categories.flatMap((category) => category.products.map((product) => ({ product, categoryName: category.name }))), [categories]);
+  const hasPopular = allProducts.some(({ product }) => isPopular(product));
+  const activeCat = categories.find((category) => category._id === activeId) ?? categories[0];
+  const tabs = !!onSelectCategory && (layoutId === 'B' || (layoutId === 'C' && L.compact));
+  const list = layoutId === 'C';
+  const q = norm(query.trim());
+  useEffect(() => setFilter(null), [activeId]);
 
-  const activeCat = categories.find((c) => c._id === activeId) ?? categories[0];
-
-  const results = useMemo(() => {
-    const q = norm(query.trim());
-    if (!q) return null;
-    const out: { product: Product; categoryName: string }[] = [];
-    for (const cat of categories) {
-      for (const p of cat.products) {
-        if (norm(p.name).includes(q) || norm(p.description ?? '').includes(q)) {
-          out.push({ product: p, categoryName: cat.name });
-        }
-      }
-    }
-    return out;
-  }, [categories, query]);
-
-  const shown: { product: Product; categoryName: string }[] =
-    results ?? (activeCat?.products ?? []).map((p) => ({ product: p, categoryName: activeCat?.name ?? '' }));
-
-  // Colonnes déduites de la largeur RÉELLEMENT disponible (rail et ticket déjà
-  // déduits par le flex) : 3 sur petite tablette, 4 à 1280, 5 à 6 sur un grand
-  // écran de comptoir. Jamais un nombre figé.
-  const gap = L.gridGap;
-  const cols = columnsFor(gridWidth, L);
-  const cardW = cardWidth(gridWidth, cols, gap);
+  const shown: CatalogEntry[] = useMemo(() => {
+    if (q) return allProducts.filter(({ product }) => norm(product.name).includes(q) || norm(product.description ?? '').includes(q));
+    if (filter === 'popular') return allProducts.filter(({ product }) => isPopular(product));
+    if (filter === 'new') return allProducts.filter(({ product }) => product.isNew);
+    return (activeCat?.products ?? []).map((product) => ({ product, categoryName: activeCat?.name ?? '' }));
+  }, [activeCat, allProducts, filter, q]);
+  const title = q ? 'Résultats' : filter === 'popular' ? 'Populaires' : filter === 'new' ? 'Nouveautés' : activeCat?.name ?? 'Catalogue';
+  const cols = list ? L.listColumnsFor(gridWidth) : columnsFor(gridWidth, L);
+  const cardW = cardWidth(gridWidth, cols, L.gridGap);
+  const selectCategory = (id: string) => {
+    setFilter(null);
+    onQuery('');
+    onSelectCategory?.(id);
+  };
+  const selectFilter = (value: Exclude<CatalogFilter, null>) => {
+    onQuery('');
+    setFilter((previous) => previous === value ? null : value);
+  };
+  const filters = !L.compact || filter ? (
+    <View style={{ flexDirection: 'row', gap: L.sp(8), flexShrink: 0 }}>
+      {hasPopular ? <FilterChip label="Populaires" icon="star" selected={filter === 'popular'} onPress={() => selectFilter('popular')} brand={brand} /> : null}
+      <FilterChip label="Nouveautés" selected={filter === 'new'} onPress={() => selectFilter('new')} brand={brand} />
+    </View>
+  ) : null;
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Recherche + tickets en attente */}
-      <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: S.md }}>
-        <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
-          <Field
-            value={query}
-            onChangeText={onQuery}
-            placeholder="Rechercher un produit…"
-            accent={brand.accent}
-            style={{ flex: 1 }}
-          />
-          {query ? (
-            <Press
-              onPress={() => onQuery('')}
-              accessibilityLabel="Effacer la recherche"
-              style={{
-                width: L.touch(),
-                height: L.touch(),
-                borderRadius: R.pill,
-                backgroundColor: palette.surface2,
-                borderWidth: 1,
-                borderColor: palette.line2,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              activeStyle={{ backgroundColor: '#282828' }}
-            >
-              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 16 }}>✕</Text>
-            </Press>
-          ) : null}
-        </View>
-
+    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+      <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: L.sp(10) }}>
+        {tabs ? (
+          <View style={{ flexDirection: 'row', gap: L.sp(8), alignItems: 'center' }}>
+            <CategoryTabs categories={categories} activeId={activeCat?._id ?? null} onSelect={selectCategory} brand={brand} />
+            {L.catalogWideSearch ? (
+              <View style={{ width: L.sp(210) }}><SearchField query={query} onQuery={onQuery} brand={brand} compactPlaceholder /></View>
+            ) : (
+              <Press onPress={() => setSearchOpen((open) => !open)} accessibilityLabel="Rechercher un produit" selected={searchOpen || !!query} style={{ width: L.touch(), height: L.touch(), alignItems: 'center', justifyContent: 'center', borderRadius: R.pill, backgroundColor: palette.surface2, borderWidth: 1, borderColor: searchOpen || query ? withAlpha(brand.accent, 0.5) : palette.line2 }}>
+                <Icon name="search" size={L.fs(17)} color={searchOpen || query ? brand.accent : palette.mut} />
+              </Press>
+            )}
+          </View>
+        ) : null}
+        {!tabs || (!L.catalogWideSearch && (searchOpen || !!query)) || filters ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: L.sp(8), alignItems: 'center', justifyContent: 'flex-end' }}>
+            {!tabs || (!L.catalogWideSearch && (searchOpen || !!query)) ? (
+              <View style={{ flex: 1, minWidth: L.sp(160) }}><SearchField query={query} onQuery={onQuery} brand={brand} autoFocus={tabs && searchOpen} /></View>
+            ) : null}
+            {filters}
+          </View>
+        ) : null}
         {parked.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: S.sm }}>
-            <View style={{ justifyContent: 'center' }}>
-              <Text style={[type.eyebrow, { color: palette.amber }]}>En attente</Text>
-            </View>
-            {parked.map((t) => {
-              const total = t.lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
-              const items = t.lines.reduce((n, l) => n + l.qty, 0);
+            <View style={{ justifyContent: 'center' }}><Text style={[type.eyebrow, { color: semanticText.warning }]}>En attente</Text></View>
+            {parked.map((ticket) => {
+              const total = ticket.lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
+              const items = ticket.lines.reduce((sum, line) => sum + line.qty, 0);
               return (
-                <Press
-                  key={t.code}
-                  onPress={() => onRecall(t)}
-                  accessibilityLabel={`Rappeler le ticket ${t.code}, ${items} articles, ${euros(total)}`}
-                  style={{
-                    minHeight: L.touch(),
-                    paddingHorizontal: 14,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 9,
-                    borderRadius: R.pill,
-                    borderWidth: 1,
-                    borderColor: withAlpha(palette.amber, 0.4),
-                    backgroundColor: withAlpha(palette.amber, 0.09),
-                  }}
-                  activeStyle={{ backgroundColor: withAlpha(palette.amber, 0.2) }}
-                >
-                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
-                  <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(14), fontWeight: '700' }}>
-                    {t.code}
-                    {t.customerName ? ` · ${t.customerName}` : ''}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONT,
-                      color: palette.amber,
-                      fontSize: L.fs(13),
-                      fontWeight: '700',
-                      fontVariant: ['tabular-nums'],
-                    }}
-                  >
-                    {items} art. · {euros(total)}
-                  </Text>
+                <Press key={ticket.code} onPress={() => onRecall(ticket)} accessibilityLabel={`Rappeler le ticket ${ticket.code}, ${items} articles, ${euros(total)}`}
+                  style={{ minHeight: L.touch(), paddingHorizontal: L.sp(14), flexDirection: 'row', alignItems: 'center', gap: L.sp(9), borderRadius: R.pill, borderWidth: 1, borderColor: withAlpha(palette.amber, 0.4), backgroundColor: withAlpha(palette.amber, 0.09) }}
+                  activeStyle={{ backgroundColor: withAlpha(palette.amber, 0.2) }}>
+                  <View style={{ width: L.sp(7), height: L.sp(7), borderRadius: R.pill, backgroundColor: palette.amber }} />
+                  <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(14), fontWeight: '700' }}>{ticket.code}{ticket.customerName ? ` · ${ticket.customerName}` : ''}</Text>
+                  <Text style={{ fontFamily: FONT, color: semanticText.warning, fontSize: L.fs(13), fontWeight: '700', fontVariant: ['tabular-nums'] }}>{items} art. · {euros(total)}</Text>
                 </Press>
               );
             })}
           </ScrollView>
         ) : null}
       </View>
-
-      {/* Grille */}
-      <ScrollView
-        style={{ flex: 1, marginTop: S.md }}
-        contentContainerStyle={{ paddingHorizontal: L.gridPad, paddingBottom: S.xl }}
-      >
-        <View style={[sheet.between, { marginBottom: S.md }]}>
-          <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>
-            {results ? 'Résultats' : (activeCat?.name ?? 'Catalogue')}
-          </Text>
-          <Text style={[type.mut, { fontSize: L.fs(12.5) }]}>
-            {shown.length} produit{shown.length > 1 ? 's' : ''}
-          </Text>
+      <ScrollView style={{ flex: 1, marginTop: S.md }} contentContainerStyle={{ paddingHorizontal: L.gridPad, paddingBottom: S.xl }} keyboardShouldPersistTaps="handled">
+        <View style={[sheet.between, { marginBottom: S.md, gap: L.sp(8) }]}>
+          <Text style={[type.eyebrow, { fontSize: L.fs(12), flex: 1 }]}>{title}</Text>
+          <Text style={[type.mut, { fontSize: L.fs(12.5) }]}>{shown.length} produit{shown.length > 1 ? 's' : ''}</Text>
         </View>
-
-        <View
-          onLayout={(e: LayoutChangeEvent) => setGridWidth(e.nativeEvent.layout.width)}
-          style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}
-        >
+        <View onLayout={(event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: L.gridGap, rowGap: list ? L.sp(6) : L.gridGap }}>
           {shown.length === 0 ? (
-            <View style={{ width: '100%' }}>
-              <EmptyState
-                title={results ? 'Aucun produit ne correspond' : 'Catégorie vide'}
-                sub={results ? 'Essayez un autre mot, ou parcourez le rail à gauche.' : undefined}
-              />
-            </View>
-          ) : (
-            cardW > 0 &&
-            shown.map(({ product, categoryName }) => (
-              <ProductCard
-                key={product._id}
-                product={product}
-                catalogue={catalogue}
-                width={cardW}
-                layout={L}
-                brand={brand}
-                onPress={() => onPick(product, categoryName)}
-              />
-            ))
-          )}
+            <View style={{ width: '100%' }}><EmptyState title={q ? 'Aucun produit ne correspond' : filter ? 'Aucun produit dans cette sélection' : 'Catégorie vide'} sub={q ? 'Essayez un autre mot, ou parcourez les catégories.' : undefined} /></View>
+          ) : cardW > 0 ? shown.map(({ product, categoryName }, index) => (
+            <CatalogEntryMotion key={product._id} width={cardW} index={index} reducedMotion={reducedMotion}>
+              {list ? <ProductRow product={product} catalogue={catalogue} width={cardW} layout={L} brand={brand} onPress={() => onPick(product, categoryName)} onAdd={() => (onQuickAdd ?? onPick)(product, categoryName)} /> : <ProductCard product={product} catalogue={catalogue} width={cardW} layout={L} brand={brand} onPress={() => onPick(product, categoryName)} />}
+            </CatalogEntryMotion>
+          )) : null}
         </View>
       </ScrollView>
     </View>
   );
+}
+
+function FilterChip({ label, icon, selected, onPress, brand }: {
+  label: string; icon?: 'star'; selected: boolean; onPress: () => void; brand: Brand;
+}) {
+  const L = useLayout();
+  const { palette } = useTheme();
+  const color = selected ? brand.onAccent : palette.text;
+  return (
+    <Press onPress={onPress} selected={selected} accessibilityRole="checkbox" accessibilityLabel={label}
+      style={{ minHeight: L.touch(), paddingHorizontal: L.sp(14), borderRadius: R.pill, borderWidth: 1, borderColor: selected ? brand.accent : palette.line2, backgroundColor: selected ? brand.accent : palette.surface2, flexDirection: 'row', alignItems: 'center', gap: L.sp(7) }} activeStyle={{ opacity: 0.82 }}>
+      {icon ? <Icon name={icon} size={L.fs(14)} color={color} /> : null}
+      <Text style={{ fontFamily: FONT, fontSize: L.fs(13.5), fontWeight: '600', color }}>{label}</Text>
+    </Press>
+  );
+}
+
+function SearchField({ query, onQuery, brand, autoFocus, compactPlaceholder }: {
+  query: string; onQuery: (query: string) => void; brand: Brand; autoFocus?: boolean; compactPlaceholder?: boolean;
+}) {
+  const L = useLayout();
+  const { palette } = useTheme();
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={{ minHeight: L.touch(), borderRadius: R.card, backgroundColor: palette.surface2, borderWidth: 1, borderColor: focused ? brand.accent : palette.line2, flexDirection: 'row', alignItems: 'center', paddingLeft: L.sp(14), gap: L.sp(10) }}>
+      <Icon name="search" size={L.fs(17)} color={palette.mut} />
+      <TextInput value={query} onChangeText={onQuery} accessibilityLabel="Rechercher un produit" placeholder={compactPlaceholder ? 'Rechercher…' : 'Rechercher un produit…'} placeholderTextColor={palette.mut} autoFocus={autoFocus} autoCorrect={false} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{ flex: 1, minWidth: 0, minHeight: L.touch(), paddingVertical: L.sp(8), paddingRight: query ? 0 : L.sp(14), fontFamily: FONT, fontSize: L.fs(15), fontWeight: '500', color: palette.text }} />
+      {query ? <Press onPress={() => onQuery('')} accessibilityLabel="Effacer la recherche" style={{ minHeight: L.touch(), width: L.touch(), alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={L.fs(16)} color={palette.mut} /></Press> : null}
+    </View>
+  );
+}
+
+/** Une apparition par montage, jamais au changement de quantité du ticket. */
+function CatalogEntryMotion({ children, width, index, reducedMotion }: {
+  children: ReactNode; width: number; index: number; reducedMotion: boolean;
+}) {
+  const progress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reducedMotion) { progress.setValue(1); return; }
+    const animation = Animated.timing(progress, { toValue: 1, duration: 300, delay: Math.min(index, 11) * 14, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: Platform.OS !== 'web' });
+    animation.start();
+    return () => animation.stop();
+  }, [index, progress, reducedMotion]);
+  return <Animated.View style={{ width, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }), transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }}>{children}</Animated.View>;
 }
 
 /**
@@ -378,6 +362,7 @@ function Vignette({ uri, cote, media, nom }: {
   media: MediaVue | null;
   nom: string;
 }) {
+  const { palette } = useTheme();
   const [etat, setEtat] = useState({ uri, casse: false });
   if (etat.uri !== uri) setEtat({ uri, casse: false });
   const point = media?.point ?? POINT_CENTRE;
@@ -390,7 +375,8 @@ function Vignette({ uri, cote, media, nom }: {
       style={{
         width: cote,
         height: cote,
-        borderRadius: R.ctrl,
+        borderRadius: 10,
+        flexShrink: 0,
         overflow: 'hidden',
         backgroundColor: palette.surface2,
         borderWidth: 1,
@@ -430,14 +416,7 @@ function Vignette({ uri, cote, media, nom }: {
   );
 }
 
-function ProductCard({
-  product,
-  catalogue,
-  width,
-  layout: L,
-  brand,
-  onPress,
-}: {
+function ProductCard({ product, catalogue, width, layout: L, brand, onPress }: {
   product: Product;
   catalogue: ReadonlyMap<string, MediaVue>;
   width: number;
@@ -445,147 +424,85 @@ function ProductCard({
   brand: Brand;
   onPress: () => void;
 }) {
+  const { palette, shadow } = useTheme();
+  const [priceWidth, setPriceWidth] = useState(0);
   const out = !!product.outOfStock;
-  const hasVariants = !!product.variants?.length;
-  const price = basePrice(product, product.variants?.[0]?.key ?? null);
-  /** Un groupe obligatoire signale une carte qui exigera un choix. */
-  const required = (product.optionGroups ?? []).some((g) => (g.min ?? 0) > 0);
-  // `photoUrl` est déjà DÉRIVÉ par le serveur (usage « vignette ») : la caisse
-  // ne refait pas la résolution, elle rend seulement le chemin hérité du
-  // pilote atteignable depuis SON origine (`photo.ts`). Et la tuile doit avoir
-  // les moyens de la vignette : sur le téléphone du gérant, elle mangerait le
-  // nom du plat, qui est l'information de travail.
-  const photo = vignetteTient(width, L) ? photoDuPoste(product.photoUrl) : null;
-
+  const required = (product.optionGroups ?? []).some((group) => (group.min ?? 0) > 0);
+  const photo = photoDuPoste(product.photoUrl);
+  // Le nom occupe désormais toute la rangée haute. La vignette ne peut
+  // prendre la place du prix, y compris sur une petite carte de téléphone.
+  const photoFits = width - L.sp(13) * 2 - priceWidth >= L.sp(46);
   return (
-    <Press
-      onPress={out ? undefined : onPress}
-      disabled={out}
-      accessibilityLabel={
-        out ? `${product.name}, en rupture` : `${product.name}, ${euros(price)}${hasVariants ? ' et plus' : ''}`
-      }
-      scale={0.97}
-      style={[
-        {
-          width,
-          // Hauteur commune à toutes les cartes : une grille de tuiles
-          // régulières se balaie du regard, une grille en escalier non.
-          height: L.cardH,
-          borderRadius: R.card,
-          backgroundColor: palette.surface,
-          borderWidth: 1,
-          borderColor: palette.line2,
-          padding: L.sp(13),
-          justifyContent: 'space-between',
-          overflow: 'hidden',
-        },
-        out ? { opacity: 0.42 } : shadow(1),
-      ]}
-      activeStyle={{ backgroundColor: '#1c1c1c', borderColor: withAlpha(brand.accent, 0.5) }}
-    >
+    <Press onPress={out ? undefined : onPress} disabled={out}
+      accessibilityLabel={out ? `${product.name}, en rupture` : `${product.name}, ${euros(basePrice(product, product.variants?.[0]?.key ?? null))}${product.variants?.length ? ' et plus' : ''}`}
+      style={[{ width, height: L.cardH, borderRadius: R.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line2, padding: L.sp(13), justifyContent: 'space-between', overflow: 'hidden' }, out ? { opacity: 0.42 } : shadow(1)]}
+      activeStyle={{ backgroundColor: palette.press, borderColor: withAlpha(brand.accent, 0.5) }}>
       {!out ? <Sheen /> : null}
-
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
-        {/* Pas de réceptacle vide quand il n'y a pas de photo : la tuile
-            garde alors toute sa largeur pour le nom, exactement comme avant
-            la médiathèque. */}
-        {photo ? (
-          <Vignette
-            uri={photo}
-            cote={L.vignette}
-            media={mediaDeTete(product, catalogue)}
-            nom={product.name}
-          />
-        ) : null}
-        <Text
-          numberOfLines={2}
-          style={{
-            flex: 1,
-            fontFamily: FONT,
-            color: palette.text,
-            fontSize: L.fs(14.5),
-            fontWeight: '700',
-            lineHeight: L.fs(18),
-            letterSpacing: -0.2,
-          }}
-        >
-          {product.name}
-        </Text>
-        {required && !out ? (
-          // Pastille discrète : ce produit ouvrira une configuration obligatoire.
-          <View
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              marginTop: 6,
-              backgroundColor: withAlpha(brand.accent, 0.85),
-            }}
-          />
-        ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: L.sp(6) }}>
+        <Text numberOfLines={2} style={{ flex: 1, fontFamily: FONT, color: palette.text, fontSize: L.fs(14.5), fontWeight: '700', lineHeight: L.fs(18), letterSpacing: -0.2 }}>{product.name}</Text>
+        {product.isNew && !out ? <ProductBadge kind="new" /> : required && !out ? <View style={{ width: L.sp(6), height: L.sp(6), borderRadius: R.pill, marginTop: L.sp(6), backgroundColor: brand.accent }} /> : null}
       </View>
-
-      {/* LE BADGE « NOUV. » A CHANGÉ DE RANGÉE, ET CE N'EST PAS UN DÉTAIL.
-          Il partageait la rangée du nom, où il coûtait une cinquantaine de
-          pixels sur les cent-cinquante d'une tuile de référence. Avec la
-          vignette en tête de cette rangée, il ne restait plus que trois ou
-          quatre caractères au nom d'une nouveauté illustrée : « Galette
-          Burrata » devenait « Galet… ». La rangée du prix, elle, avait sa
-          moitié droite VIDE. Le badge y descend donc, pour toutes les tuiles
-          et pas seulement les illustrées — deux tuiles voisines qui posent la
-          même information à deux endroits différents se lisent mal. Les tuiles
-          sans photo y gagnent la largeur que le badge leur prenait. */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10 }}>
-        {out ? (
-          <View
-            style={{
-              paddingHorizontal: 9,
-              paddingVertical: 4,
-              borderRadius: R.pill,
-              backgroundColor: withAlpha(palette.red, 0.18),
-            }}
-          >
-            <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(12.5), fontWeight: '800' }}>
-              RUPTURE
-            </Text>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-            {hasVariants ? (
-              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(11.5), fontWeight: '700' }}>
-                dès
-              </Text>
-            ) : null}
-            <Text
-              style={{
-                fontFamily: FONT,
-                color: palette.text,
-                fontSize: L.fs(19),
-                fontWeight: '800',
-                letterSpacing: -0.7,
-                fontVariant: ['tabular-nums'],
-              }}
-            >
-              {euros(price)}
-            </Text>
-          </View>
-        )}
-
-        {product.isNew && !out ? (
-          <View
-            style={{
-              paddingHorizontal: 7,
-              paddingVertical: 3,
-              borderRadius: R.pill,
-              backgroundColor: withAlpha(palette.green, 0.14),
-            }}
-          >
-            <Text style={{ fontFamily: FONT, color: palette.green, fontSize: L.fs(11), fontWeight: '800' }}>
-              NOUV.
-            </Text>
-          </View>
-        ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: L.sp(6) }}>
+        <View onLayout={(event) => setPriceWidth(event.nativeEvent.layout.width)}>
+          {out ? <ProductBadge kind="out" /> : <ProductPrice product={product} layout={L} />}
+        </View>
+        {photo && photoFits ? <Vignette uri={photo} cote={L.sp(40)} media={mediaDeTete(product, catalogue)} nom={product.name} /> : null}
       </View>
     </Press>
+  );
+}
+
+/** Deux cibles voisines : configurer la ligne ou demander l'ajout standard.
+ * Le callback d'ajout est toujours contrôlé par PosScreen et ses règles.
+ */
+function ProductRow({ product, catalogue, width, layout: L, brand, onPress, onAdd }: {
+  product: Product;
+  catalogue: ReadonlyMap<string, MediaVue>;
+  width: number;
+  layout: Layout;
+  brand: Brand;
+  onPress: () => void;
+  onAdd: () => void;
+}) {
+  const { palette } = useTheme();
+  const out = !!product.outOfStock;
+  const photo = photoDuPoste(product.photoUrl);
+  return (
+    <View style={{ width, flex: 1, minHeight: L.touch(52), borderRadius: R.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line2, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
+      <Press onPress={out ? undefined : onPress} disabled={out} accessibilityLabel={out ? `${product.name}, en rupture` : `Configurer ${product.name}, ${euros(basePrice(product, product.variants?.[0]?.key ?? null))}`}
+        style={{ flex: 1, minWidth: 0, minHeight: L.touch(52), flexDirection: 'row', alignItems: 'center', gap: L.sp(12), paddingVertical: L.sp(7), paddingLeft: L.sp(14), paddingRight: L.sp(12) }}
+        activeStyle={{ backgroundColor: palette.press }}>
+        {photo ? <Vignette uri={photo} cote={L.sp(44)} media={mediaDeTete(product, catalogue)} nom={product.name} /> : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: L.sp(8) }}>
+            <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: FONT, color: palette.text, fontSize: L.fs(14.5), fontWeight: '700', letterSpacing: -0.2 }}>{product.name}</Text>
+            {out ? <ProductBadge kind="out" /> : product.isNew ? <ProductBadge kind="new" /> : null}
+          </View>
+          {product.description && L.catalogDescriptions ? <Text numberOfLines={1} style={{ fontFamily: FONT, fontSize: L.fs(12.5), color: palette.mut, marginTop: L.sp(2) }}>{product.description}</Text> : null}
+        </View>
+        <ProductPrice product={product} layout={L} dense />
+      </Press>
+      {!out ? <Press onPress={onAdd} accessibilityLabel={`Ajouter ${product.name}`} style={{ width: L.touch(), height: L.touch(), marginRight: L.sp(7), borderRadius: R.pill, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }} activeStyle={{ backgroundColor: brand.tint, borderColor: brand.accent }}><Icon name="plus" size={L.fs(18)} color={palette.text} strokeWidth={2.2} /></Press> : null}
+    </View>
+  );
+}
+
+function ProductPrice({ product, layout: L, dense = false }: { product: Product; layout: Layout; dense?: boolean }) {
+  const { palette } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: L.sp(4), flexShrink: 0 }}>
+      {product.variants?.length ? <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(11.5), fontWeight: '700' }}>dès</Text> : null}
+      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(dense ? 17 : 19), fontWeight: '800', letterSpacing: dense ? -0.5 : -0.7, fontVariant: ['tabular-nums'] }}>{euros(basePrice(product, product.variants?.[0]?.key ?? null))}</Text>
+    </View>
+  );
+}
+
+function ProductBadge({ kind }: { kind: 'new' | 'out' }) {
+  const L = useLayout();
+  const { palette, semanticText } = useTheme();
+  return (
+    <View style={{ alignSelf: 'flex-start', flexShrink: 0, paddingHorizontal: L.sp(7), paddingVertical: L.sp(3), borderRadius: R.pill, backgroundColor: withAlpha(kind === 'out' ? palette.red : palette.green, 0.14) }}>
+      <Text style={{ fontFamily: FONT, color: kind === 'out' ? semanticText.danger : semanticText.positive, fontSize: L.fs(11), fontWeight: '800' }}>{kind === 'out' ? 'RUPTURE' : 'NOUV.'}</Text>
+    </View>
   );
 }

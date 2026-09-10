@@ -355,3 +355,35 @@ describe('Recadrage sur le point d’intérêt — le pendant RN d’object-posi
     expect(cadrageVignette(0, 1600, 900, 0.5, 0.5)).toBeNull();
   });
 });
+
+
+describe('dispositions visuelles v2', () => {
+  it('conserve les ancres et borne le configurateur latéral', () => {
+    const tablet = computeLayout(1280, 800);
+    expect([tablet.railW, tablet.ticketW, tablet.topbarH, tablet.scale]).toEqual([108, 384, 66, 1]);
+    expect(tablet.cfgW).toBe(346);
+    expect(tablet.railDenseW).toBe(168);
+    expect(computeLayout(1920, 1080).cfgW).toBe(420);
+  });
+  it('ne densifie la liste que si sa largeur utile le permet', () => {
+    const layout = computeLayout(1920, 1080);
+    expect(layout.listColumnsFor(1039)).toBe(1);
+    expect(layout.listColumnsFor(1040)).toBe(2);
+  });
+});
+
+
+it('garde un catalogue exploitable à côté du configurateur et replie sinon', () => {
+  for (const id of ['B', 'C'] as const) {
+    expect(computeLayout(900, 800).configInlineFor(id)).toBe(false);
+    expect(computeLayout(1280, 800).configInlineFor(id)).toBe(true);
+  }
+  expect(computeLayout(1920, 1080).configInlineFor('A')).toBe(false);
+});
+
+
+it('ne réduit jamais le plancher tactile demandé pour encaisser', () => {
+  for (const [w, h] of [[320, 568], [390, 844], [820, 1180], [1280, 800], [1920, 1080]]) {
+    expect(computeLayout(w, h).touch(52)).toBeGreaterThanOrEqual(52);
+  }
+});
