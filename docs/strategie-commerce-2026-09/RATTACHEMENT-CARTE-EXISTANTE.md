@@ -1,12 +1,18 @@
 # Rattacher une carte existante au compte client
 
-État au 10 septembre 2026 : PR #158 fusionnée dans `develop` au commit
-`db9c739c408e0286b7fead32b2e82d85fd37c472`, après CI réussie. Le
-[déploiement 34454486357](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34454486357)
-a échoué dans les tests avant les migrations et la mise en ligne ; ce lot
-n'est donc pas encore reçu sur staging. #157 reste la dernière version
-servie vérifiée. [Reprise CI ciblée](REPRISE-CI-SEEDS.md). Aucun pilote,
-fournisseur ni budget supplémentaire n'est ouvert. Production inchangée.
+État au 10 septembre 2026 : **PR #158 reçue sur staging via le correctif #159**,
+révision `b8dd285857aeb802c4b7a20d471cfb896fd6e683`. Le premier déploiement
+avait échoué avant les migrations ; la [reprise CI ciblée](REPRISE-CI-SEEDS.md)
+est désormais reçue. [Déploiement 34462162794](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34462162794) :
+sept jobs verts, bootstrap 96 objets avant/après, trois migrateurs et quatre
+services réussis, révision API exacte, smoke indépendant **8/8**.
+[E2E 34464095176](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34464095176) :
+12 démonstrations réussies, quatre parcours authentifiés ignorés faute
+d'identifiants ; checkout effectif exact dans les deux jobs. Cela ne valide
+ni le parcours privé staging ni un OTP réel. Capacités compte Classfood
+toujours fermées sur les deux domaines. Aucun pilote, fournisseur ni budget
+supplémentaire ouvert. Production inchangée.
+Suite : [gains sur vente et remboursements](GAINS-VENTE-REMBOURSEMENTS.md).
 
 ## Parcours et preuve de propriété
 

@@ -9,8 +9,9 @@ a échoué pendant `Tests`, dans le refus d'une base servie par `seed.ts` :
 le sous-processus Node/tsx a atteint son plafond de 10 000 ms (`ETIMEDOUT`).
 Le signal et le statut du processus ne figuraient pas dans ce diagnostic.
 
-Les migrations et les déploiements ont été ignorés. #157, révision
-`1f50f66ec49471cfe11d15ba4686400330e02dc2`, reste la dernière version reçue.
+Les migrations et les déploiements ont été ignorés lors de cet incident. #157,
+révision `1f50f66ec49471cfe11d15ba4686400330e02dc2`, était alors la dernière
+version reçue ; la réception du correctif #159 figure ci-dessous.
 Le délai n'a pas été reproduit par le test ciblé local original (18/18).
 Le chargement prématuré des dépendances est établi dans le code ; une cause
 unique de contention du runner n'est pas démontrée.
@@ -92,7 +93,17 @@ pas la nouvelle CI GitHub ni ses suites de données natives. Le dernier
 `pnpm verify` avant publication réussit **51/51**, intégralement en cache après
 ces recettes ; il n'est pas présenté comme 51 nouvelles exécutions.
 
-La nouvelle tête de PR et son déploiement restent à recevoir. Exiger la CI verte,
-les étapes de migrations, les quatre services Railway, la révision API
-attendue, le smoke et les E2E effectivement exécutés. Une fusion ne remplace
-aucune de ces preuves. Aucun GO production, fournisseur ou pilote n'est déduit.
+La tête finale `1f3e67b031e8f37359a9fa562d75d7defc4ab019` a passé la
+[CI 34460853266](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34460853266)
+et le contrôle secrets, puis a été fusionnée par PR #159 au squash
+`b8dd285857aeb802c4b7a20d471cfb896fd6e683` ; leurs arbres sont identiques.
+Le [déploiement 34462162794](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34462162794)
+a réussi ses sept jobs : bootstrap **96 objets avant/après**, trois migrateurs,
+quatre services Railway, santé et révision API attendue. Smoke indépendant **8/8**.
+Les [E2E 34464095176](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34464095176)
+ont exécuté **12 démonstrations réussies**, avec **quatre parcours authentifiés
+ignorés** faute d'identifiants. Le checkout effectif exact a été confirmé dans
+les deux jobs, sans se fier à la métadonnée `main` du déclencheur.
+[Reçu et empreintes](https://github.com/GLWebDevAgency/snack-manager/pull/159#issuecomment-5616993544).
+Le pilote reste fermé sur les deux domaines Classfood. Aucun GO production,
+fournisseur ou pilote n'est déduit de cette réception.
