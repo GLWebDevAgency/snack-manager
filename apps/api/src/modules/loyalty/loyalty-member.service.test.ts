@@ -47,6 +47,25 @@ const POS: LoyaltyActorContext = {
 };
 
 describe('LoyaltyMemberService — validations avant transaction', () => {
+  it.each(['earn_receipts_tenant_canonical_sale_uq', 'ledger_earn_canonical_sale_uq'])('traduit seulement une collision de vente canonique prouvée (%s)', async constraint => {
+    const { service, transaction } = harness();
+    transaction.mockRejectedValueOnce({ cause: { code: '23505', constraint } });
+    await expect(service.earn('tenant-test', randomUUID(), {
+      operationId: randomUUID(), purchaseCents: 1_000, externalRef: `pos-order:${randomUUID()}`,
+    }, POS)).rejects.toMatchObject({ status: 409, message: 'Ce ticket a déjà été traité en fidélité' });
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ code: '23503', constraint: 'earn_receipts_tenant_canonical_sale_uq' },
+    { code: '23505', constraint: 'unrelated_unique_constraint' }])('ne transforme pas une erreur SQL différente en doublon de vente (%j)', async databaseError => {
+    const { service, transaction } = harness();
+    const error = { cause: databaseError };
+    transaction.mockRejectedValueOnce(error);
+    await expect(service.earn('tenant-test', randomUUID(), {
+      operationId: randomUUID(), purchaseCents: 1_000, externalRef: `pos-order:${randomUUID()}`,
+    }, POS)).rejects.toBe(error);
+  });
+
   it('ne traduit en doublon téléphone que la contrainte PostgreSQL exacte', () => {
     expect(
       isUniqueConstraint(

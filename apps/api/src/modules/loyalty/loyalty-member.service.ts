@@ -1862,7 +1862,9 @@ export class LoyaltyMemberService {
     } catch (error) {
       if (
         isUniqueConstraint(error, 'earn_receipts_tenant_source_external_ref_uq') ||
-        isUniqueConstraint(error, 'ledger_earn_external_ref_uq')
+        isUniqueConstraint(error, 'ledger_earn_external_ref_uq') ||
+        isUniqueConstraint(error, 'earn_receipts_tenant_canonical_sale_uq') ||
+        isUniqueConstraint(error, 'ledger_earn_canonical_sale_uq')
       ) {
         throw new ConflictException('Ce ticket a déjà été traité en fidélité');
       }
