@@ -117,7 +117,7 @@ export class AuditService {
 
   /** Idempotent append ONLY for a durable order operation receipt. The receipt
    * remains the recovery source if this append fails; no audit update/upsert. */
-  async logOnce(entry: { tenantId: string; action: 'order.collect' | 'order.assign' | 'order.dispatch' | 'order.handoff' | 'order.delivery_incident' | 'order.delivery_override' | 'order.delivery_proof_rotate'; targetId: string; actor: AuditActor; meta: unknown }, operationId: string): Promise<void> {
+  async logOnce(entry: { tenantId: string; action: 'order.refund' | 'order.collect' | 'order.assign' | 'order.dispatch' | 'order.handoff' | 'order.delivery_incident' | 'order.delivery_override' | 'order.delivery_proof_rotate'; targetId: string; actor: AuditActor; meta: unknown }, operationId: string): Promise<void> {
     const key = JSON.stringify([entry.tenantId, entry.action, entry.targetId, operationId]);
     const id = new Types.ObjectId(createHash('sha256').update(key).digest('hex').slice(0, 24));
     const fingerprint = createHash('sha256').update(canonical(entry)).digest('hex');

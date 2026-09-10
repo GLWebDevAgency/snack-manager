@@ -1,34 +1,34 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { isDeepStrictEqual } from 'node:util';
 import { Model, Types } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order } from '@sm/db';
-import { orderAccessScope, ordersChannel, WS_EVENTS, type OrderRefundRequest, type OrderRefundSummary } from '@sm/contracts';
+import { orderAccessScope, ordersChannel, WS_EVENTS, OrderRefundRequestSchema, type OrderRefundRequest, type OrderRefundSummary } from '@sm/contracts';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
-import { refundSummary, type ProviderRefund } from './order-refunds.policy';
+import { refundSummary } from './order-refunds.policy';
+import { assertRefundProof, MAX_REFUND_OPERATIONS, REFUND_RECOVERY_WINDOW_MS, refundProjection, refundUnavailable,
+  type RefundOperation, type RefundProof, type RefundSnapshot } from './order-refund-flow.policy';
 import { CapacitesService } from '../../common/capacites';
 import { AuditService } from '../audit/audit.module';
 
 export const STRIPE_REFUND_CLIENT = Symbol('STRIPE_REFUND_CLIENT');
 type Options = { stripeAccount?: string; idempotencyKey?: string };
 export interface RefundStripeClient {
+  environment: 'test' | 'live';
   refunds: {
-    list(params: { payment_intent: string; limit: number; starting_after?: string }, options: Options): Promise<{ data: ProviderRefund[]; has_more: boolean }>;
-    create(params: { payment_intent: string; amount: number; metadata: Record<string, string> }, options: Options): Promise<ProviderRefund>;
+    list(params: { payment_intent: string; limit: number; starting_after?: string }, options: Options): Promise<{ data: RefundProof[]; has_more: boolean }>;
+    create(params: { payment_intent: string; amount: number; metadata: Record<string, string> }, options: Options): Promise<RefundProof>;
   };
   charges: { retrieve(id: string, options: Options): Promise<{ payment_intent?: string | { id: string } | null }> };
 }
 export type RefundClientFactory = () => Promise<RefundStripeClient | null>;
-
-type RefundOrder = {
-  _id: unknown; tenantId: unknown;
-  totals: { total: number };
-  payment: {
-    method: string; status: string; stripePaymentIntentId?: string | null; stripeAccountId?: string | null;
-    refundSyncVersion?: number; refundedCents?: number; pendingRefundCents?: number;
-  };
-};
+const DURABLE_WRITE = { w: 'majority' as const, j: true, wtimeout: 10_000 };
+const MAX_RETRIES = 8;
+const valueAt = (object: unknown, path: string): unknown => path.split('.').reduce<unknown>(
+  (value, key) => value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined, object,
+);
 
 @Injectable()
 export class OrderRefundsService {
@@ -42,166 +42,257 @@ export class OrderRefundsService {
 
   private async client(): Promise<RefundStripeClient> {
     const client = await this.clientFactory();
-    if (!client) throw new ServiceUnavailableException('Remboursements en ligne indisponibles.');
+    if (!client || !['test', 'live'].includes(client.environment)) throw new ServiceUnavailableException('Remboursements en ligne indisponibles.');
     return client;
   }
 
-  private async order(tenantId: string, orderId: string): Promise<RefundOrder> {
+  private async read(filter: Record<string, unknown>): Promise<RefundSnapshot | null> {
+    return await this.orders.findOne(filter).select('+refundFlow +paymentFlow').read('primary')
+      .readConcern('majority').maxTimeMS(10_000).lean() as RefundSnapshot | null;
+  }
+
+  private async order(tenantId: string, orderId: string): Promise<RefundSnapshot> {
     if (!Types.ObjectId.isValid(orderId)) throw new NotFoundException('Commande introuvable.');
     const scope = orderAccessScope(await this.capacites.pourTenant(tenantId));
     if (scope === 'none') throw new NotFoundException('Commande introuvable.');
-    const order = await this.orders.findOne({ _id: orderId, tenantId, ...(scope === 'online' ? { channel: 'online' } : {}) }).lean();
+    const order = await this.read({ _id: orderId, tenantId, ...(scope === 'online' ? { channel: 'online' } : {}) });
     if (!order) throw new NotFoundException('Commande introuvable.');
-    return order as RefundOrder;
+    return order;
   }
 
-  private options(order: RefundOrder): Options {
-    // Historical platform charges keep their original account, too.
+  private async fresh(order: RefundSnapshot): Promise<RefundSnapshot> {
+    const latest = await this.read({ _id: order._id, tenantId: order.tenantId });
+    if (!latest) refundUnavailable();
+    return latest;
+  }
+
+  private context(order: RefundSnapshot, client: RefundStripeClient): void {
+    if (order.payment.method !== 'online' || !order.payment.stripePaymentIntentId) {
+      throw new ConflictException('Cette commande ne porte pas de paiement Stripe.');
+    }
+    if ((order.paymentFlow?.attempt && order.paymentFlow.attempt.environment !== client.environment)
+      || order.refundFlow?.operations.some((operation) => operation.environment !== client.environment
+        || operation.paymentIntentId !== order.payment.stripePaymentIntentId
+        || operation.accountId !== (order.payment.stripeAccountId ?? null))) refundUnavailable();
+  }
+
+  /** Every financial mutation fences hydrated saves, dispatch and handoff.
+   * After a lost response, only the exact majority-committed CAS proves success. */
+  private async change(order: RefundSnapshot, set: Record<string, unknown> = {}): Promise<RefundSnapshot | null> {
+    const filter = { _id: order._id, tenantId: order.tenantId, __v: order.__v ?? { $exists: false },
+      'payment.method': order.payment.method, 'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
+      'payment.stripeAccountId': order.payment.stripeAccountId ?? null };
+    try {
+      return await this.orders.findOneAndUpdate(filter, { $set: set, $inc: { __v: 1, 'payment.refundSyncVersion': 1 } },
+        { new: true, writeConcern: DURABLE_WRITE, runValidators: true }).select('+refundFlow +paymentFlow').read('primary').lean() as RefundSnapshot | null;
+    } catch {
+      const observed = await this.fresh(order).catch(() => null);
+      if (observed && observed.__v === (order.__v ?? 0) + 1
+        && observed.payment.refundSyncVersion === (order.payment.refundSyncVersion ?? 0) + 1
+        && observed.payment.method === order.payment.method
+        && observed.payment.stripePaymentIntentId === order.payment.stripePaymentIntentId
+        && (observed.payment.stripeAccountId ?? null) === (order.payment.stripeAccountId ?? null)
+        && Object.entries(set).every(([path, value]) => isDeepStrictEqual(valueAt(observed, path), value))) return observed;
+      return refundUnavailable();
+    }
+  }
+
+  private options(order: RefundSnapshot): Options {
     return order.payment.stripeAccountId ? { stripeAccount: order.payment.stripeAccountId } : {};
   }
 
-  private async allRefunds(client: RefundStripeClient, order: RefundOrder): Promise<ProviderRefund[]> {
-    const intent = order.payment.stripePaymentIntentId;
-    if (!intent || order.payment.method !== 'online') throw new ConflictException('Cette commande ne porte pas de paiement Stripe.');
-    const rows: ProviderRefund[] = [];
+  private async allRefunds(client: RefundStripeClient, order: RefundSnapshot): Promise<RefundProof[]> {
+    this.context(order, client);
+    const rows: RefundProof[] = [];
     let cursor: string | undefined;
     for (;;) {
-      const page = await client.refunds.list({ payment_intent: intent, limit: 100, ...(cursor ? { starting_after: cursor } : {}) }, this.options(order));
+      const page = await client.refunds.list({ payment_intent: order.payment.stripePaymentIntentId!, limit: 100,
+        ...(cursor ? { starting_after: cursor } : {}) }, this.options(order));
       rows.push(...page.data);
       if (!page.has_more) return rows;
       const next = page.data.at(-1)?.id;
-      if (!next || next === cursor || rows.length >= 10_000) {
-        throw new ServiceUnavailableException('Historique des remboursements incomplet.');
-      }
+      if (!next || next === cursor || rows.length >= 10_000) throw new ServiceUnavailableException('Historique des remboursements incomplet.');
       cursor = next;
     }
   }
 
+  private projectedSet(order: RefundSnapshot, incoming: readonly RefundProof[] = []): Record<string, unknown> {
+    const projection = refundProjection(order, incoming);
+    const set: Record<string, unknown> = { 'payment.refundedCents': projection.summary.refundedCents,
+      'payment.pendingRefundCents': projection.summary.pendingRefundCents, 'payment.refunds': projection.rows };
+    if (projection.flow) set.refundFlow = projection.flow;
+    if (projection.summary.refundedCents >= order.totals.total && order.totals.total > 0) set['payment.status'] = 'refunded';
+    else if (order.payment.status === 'refunded') set['payment.status'] = 'paid';
+    return set;
+  }
+
+  private async publish(order: RefundSnapshot): Promise<void> {
+    const payload = { ...order } as Record<string, unknown>;
+    for (const key of ['paymentFlow', 'refundFlow', 'counterCollection', 'publicRecovery', 'deliveryMission', 'deliveryHandoff', 'customerOwner', 'customerSaleAttribution']) delete payload[key];
+    for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
+    await publishRedisBestEffort(this.redis, ordersChannel(String(order.tenantId)), JSON.stringify({ event: WS_EVENTS.orderUpdated, payload }));
+  }
+
+  private async auditReceipt(order: RefundSnapshot, operation: RefundOperation): Promise<void> {
+    if (!operation.refund) return;
+    // Status can evolve; the immutable request + provider ID are the receipt.
+    await this.audit.logOnce({ tenantId: String(order.tenantId),
+      actor: { sub: operation.actorId, kind: 'user', role: 'owner' }, action: 'order.refund', targetId: String(order._id),
+      meta: { amountCents: operation.amountCents, reason: operation.reason, operationId: operation.operationId,
+        refundId: operation.refund.id, stripeAccountId: operation.accountId, environment: operation.environment },
+    }, operation.operationId);
+  }
+
+  /** Missing provider rows never release a local amount. Both observation and
+   * projection are fenced; a stale list cannot erase a concurrent intent. */
+  private async reconcile(initial: RefundSnapshot, client: RefundStripeClient): Promise<RefundSnapshot> {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const order = await this.fresh(initial);
+      this.context(order, client);
+      const reserved = await this.change(order);
+      if (!reserved) continue;
+      const rows = await this.allRefunds(client, reserved);
+      const updated = await this.change(reserved, this.projectedSet(reserved, rows));
+      if (!updated) continue;
+      await this.publish(updated);
+      for (const operation of updated.refundFlow?.operations ?? []) await this.auditReceipt(updated, operation);
+      return updated;
+    }
+    return refundUnavailable();
+  }
+
   async summary(tenantId: string, orderId: string): Promise<OrderRefundSummary> {
     const order = await this.order(tenantId, orderId);
-    // A canceled intent is retained as evidence after switching to counter;
-    // it must never be mistaken for money collected by Stripe.
     if (order.payment.method !== 'online') return refundSummary(0, []);
     if (!order.payment.stripePaymentIntentId) return refundSummary(order.totals.total, []);
-    return this.reconcile(order, await this.client());
+    return refundProjection(await this.reconcile(order, await this.client())).summary;
+  }
+
+  private match(operation: RefundOperation, actorId: string, body: OrderRefundRequest): void {
+    if (operation.amountCents !== body.amountCents || operation.reason !== body.reason || operation.actorId !== actorId) {
+      throw new ConflictException('Cette opération désigne déjà un autre remboursement.');
+    }
+  }
+
+  private result(order: RefundSnapshot, operation: RefundOperation): OrderRefundSummary {
+    if (!operation.refund) refundUnavailable();
+    if (['failed', 'canceled'].includes(operation.refund.status!)) {
+      throw new ConflictException('Ce remboursement a échoué ou a été annulé. Vérifiez le paiement puis ouvrez une nouvelle demande si nécessaire.');
+    }
+    return refundProjection(order).summary;
+  }
+
+  private async review(initial: RefundSnapshot, operationId: string, reason: string): Promise<void> {
+    for (let retry = 0; retry < MAX_RETRIES; retry++) {
+      const order = await this.fresh(initial);
+      const flow = structuredClone(order.refundFlow);
+      const operation = flow?.operations.find((entry) => entry.operationId === operationId);
+      if (!operation || operation.refund) return;
+      operation.state = 'review_required'; operation.reviewReason = reason;
+      if (await this.change(order, { refundFlow: flow })) return;
+    }
+    refundUnavailable();
   }
 
   async request(tenantId: string, orderId: string, actorId: string, body: OrderRefundRequest): Promise<OrderRefundSummary> {
-    const order = await this.order(tenantId, orderId);
-    if (!Number.isSafeInteger(body.amountCents) || body.amountCents <= 0) {
+    let order = await this.order(tenantId, orderId);
+    const parsed = OrderRefundRequestSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Demande de remboursement invalide.');
+    body = { ...parsed.data, operationId: parsed.data.operationId.toLowerCase() };
+    // Mongo accepts hexadecimal IDs in either case; Stripe metadata and the
+    // idempotency key must use the canonical stored identity on every retry.
+    orderId = String(order._id); tenantId = String(order.tenantId);
+    if (!Number.isSafeInteger(body.amountCents) || body.amountCents <= 0 || body.amountCents > 100_000_000) {
       throw new BadRequestException('Le remboursement doit être un montant positif en centimes.');
     }
     if (order.payment.method !== 'online' || !order.payment.stripePaymentIntentId || !['paid', 'refunded'].includes(order.payment.status)) {
       throw new ConflictException('Aucun paiement Stripe confirmé à rembourser.');
     }
+    const previous = order.refundFlow?.operations.find((entry) => entry.operationId === body.operationId);
+    if (previous) this.match(previous, actorId, body);
     const client = await this.client();
-    const rows = await this.allRefunds(client, order);
-    // Provider metadata survives Stripe's idempotency-key retention. A retry
-    // after a lost HTTP response must never create another refund tomorrow.
-    const existing = rows.find((row) => row.metadata?.operationId === body.operationId);
-    if (existing) {
-      if (existing.amount !== body.amountCents || existing.metadata?.reason !== body.reason) {
-        throw new ConflictException('Cette opération désigne déjà un autre remboursement.');
+    order = await this.reconcile(order, client);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      this.context(order, client);
+      if (!['paid', 'refunded'].includes(order.payment.status)) refundUnavailable();
+      const flow = structuredClone(order.refundFlow ?? { version: 1 as const, operations: [] });
+      let operation = flow.operations.find((entry) => entry.operationId === body.operationId);
+      if (!operation) {
+        // Do not fabricate a pre-dispatch receipt for an older binary's call.
+        if (order.payment.refunds?.some((row) => row.operationId?.toLowerCase() === body.operationId)) {
+          throw new ConflictException('Cette opération historique existe déjà. Consultez son remboursement sans la recréer.');
+        }
+        if (flow.operations.some((entry) => !entry.refund) || flow.operations.length >= MAX_REFUND_OPERATIONS) refundUnavailable();
+        if (body.amountCents > refundProjection(order).summary.remainingCents) {
+          throw new ConflictException('Le remboursement dépasse le montant restant disponible.');
+        }
+        operation = { operationId: body.operationId, amountCents: body.amountCents, reason: body.reason, actorId,
+          environment: client.environment, paymentIntentId: order.payment.stripePaymentIntentId!,
+          accountId: order.payment.stripeAccountId ?? null, idempotencyKey: 'order-refund:' + orderId + ':' + body.operationId,
+          preparedAt: new Date(), requestStartedAt: null, state: 'prepared' };
+        flow.operations.push(operation);
+        await this.change(order, this.projectedSet({ ...order, refundFlow: flow }));
+        order = await this.fresh(order); continue;
       }
-      await this.audit.log({
-        tenantId, actor: { sub: actorId, kind: 'user', role: 'owner' }, action: 'order.refund', targetId: orderId,
-        meta: { amountCents: body.amountCents, reason: body.reason, operationId: body.operationId,
-          refundId: existing.id, status: existing.status, replay: true },
-      });
-      return this.requestResult(order, client, existing.id);
-    }
-    const summary = refundSummary(order.totals.total, rows);
-    if (body.amountCents > summary.remainingCents) {
-      throw new ConflictException('Le remboursement dépasse le montant restant disponible.');
-    }
-    let created: ProviderRefund;
-    try {
-      created = await client.refunds.create({
-        payment_intent: order.payment.stripePaymentIntentId,
-        amount: body.amountCents,
-        metadata: { operationId: body.operationId, orderId, tenantId, requestedBy: actorId, reason: body.reason },
-      }, { ...this.options(order), idempotencyKey: `order-refund:${orderId}:${body.operationId}` });
-    } catch (error) {
-      const providerError = error as { type?: string; code?: string };
-      if (providerError.type === 'StripeInvalidRequestError') {
-        throw new ConflictException('Stripe a refusé ce remboursement. Actualisez le paiement avant de réessayer.');
+      this.match(operation, actorId, body);
+      if (operation.refund) { await this.auditReceipt(order, operation); return this.result(order, operation); }
+      if (operation.state === 'review_required') refundUnavailable();
+      if (!operation.requestStartedAt) {
+        operation.requestStartedAt = new Date(); operation.state = 'creating';
+        await this.change(order, { refundFlow: flow });
+        order = await this.fresh(order); continue;
       }
-      throw new ServiceUnavailableException('La confirmation Stripe n’a pas été reçue. Réessayez la même opération : aucun double remboursement ne sera créé.');
+      const started = new Date(operation.requestStartedAt).getTime();
+      if (!Number.isFinite(started) || started > Date.now() || started + REFUND_RECOVERY_WINDOW_MS <= Date.now()) {
+        await this.review(order, operation.operationId, 'provider_creation_recovery_window_elapsed');
+        refundUnavailable();
+      }
+      let created: RefundProof;
+      try {
+        created = await client.refunds.create({ payment_intent: operation.paymentIntentId, amount: operation.amountCents,
+          metadata: { operationId: operation.operationId, orderId, tenantId, requestedBy: operation.actorId, reason: operation.reason },
+        }, { ...(operation.accountId ? { stripeAccount: operation.accountId } : {}), idempotencyKey: operation.idempotencyKey });
+      } catch (error) {
+        if ((error as { type?: string }).type === 'StripeInvalidRequestError') {
+          await this.review(order, operation.operationId, 'provider_request_refused');
+        }
+        return refundUnavailable();
+      }
+      try { assertRefundProof(order, created, operation); }
+      catch { await this.review(order, operation.operationId, 'provider_proof_conflict'); return refundUnavailable(); }
+      // The response is evidence before the list catches up. Never replace a
+      // later observation with an older cached create response on a retry.
+      for (let retry = 0; retry < MAX_RETRIES; retry++) {
+        const latest = await this.fresh(order); this.context(latest, client);
+        const stored = latest.refundFlow?.operations.find((entry) => entry.operationId === body.operationId);
+        if (!stored) refundUnavailable();
+        this.match(stored, actorId, body);
+        assertRefundProof(latest, created, stored);
+        if (stored.refund) { await this.auditReceipt(latest, stored); return this.result(latest, stored); }
+        const saved = await this.change(latest, this.projectedSet(latest, [created]));
+        if (!saved) continue;
+        await this.publish(saved);
+        const receipt = saved.refundFlow!.operations.find((entry) => entry.operationId === body.operationId)!;
+        await this.auditReceipt(saved, receipt);
+        return this.result(saved, receipt);
+      }
+      return refundUnavailable();
     }
-    await this.audit.log({
-      tenantId, actor: { sub: actorId, kind: 'user', role: 'owner' }, action: 'order.refund', targetId: orderId,
-      meta: { amountCents: body.amountCents, reason: body.reason, operationId: body.operationId,
-        refundId: created.id, status: created.status, stripeAccountId: order.payment.stripeAccountId ?? null },
-    });
-    return this.requestResult(order, client, created.id);
+    return refundUnavailable();
   }
 
-  private async requestResult(order: RefundOrder, client: RefundStripeClient, refundId: string): Promise<OrderRefundSummary> {
-    const summary = await this.reconcile(order, client);
-    const requested = summary.refunds.find((refund) => refund.id === refundId);
-    if (!requested) throw new ServiceUnavailableException('Confirmation du remboursement en attente. Réessayez la même opération.');
-    if (requested.status === 'failed' || requested.status === 'canceled') {
-      throw new ConflictException('Ce remboursement a échoué ou a été annulé. Vérifiez le paiement puis ouvrez une nouvelle demande si nécessaire.');
-    }
-    return summary;
-  }
-
-  /** Re-read current Stripe state, never apply an old event's amount/status. */
-  async webhook(event: { account?: string; type: string; data: { object: unknown } }): Promise<void> {
-    const object = event.data.object as { id?: string; payment_intent?: string | { id: string } | null; charge?: string | null };
+  async webhook(event: { account?: string; livemode?: boolean; type: string; data: { object: unknown } }): Promise<void> {
+    const client = await this.client();
+    if (typeof event.livemode === 'boolean' && event.livemode !== (client.environment === 'live')) return;
+    const object = event.data.object as { payment_intent?: string | { id: string } | null; charge?: string | null };
     let intent = typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id;
-    const client = await this.client();
     if (!intent && object.charge) {
       const charge = await client.charges.retrieve(object.charge, event.account ? { stripeAccount: event.account } : {});
       intent = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
     }
     if (!intent) return;
-    // The account is part of identity; metadata supplied by a merchant cannot
-    // select a competitor's order or a platform invoice.
-    const order = await this.orders.findOne({
-      'payment.method': 'online',
-      'payment.stripePaymentIntentId': intent,
-      'payment.stripeAccountId': event.account ?? null,
-    }).lean();
-    if (!order) return;
-    await this.reconcile(order as RefundOrder, client);
-  }
-
-  private async reconcile(order: RefundOrder, client: RefundStripeClient): Promise<OrderRefundSummary> {
-    const reserved = await this.orders.findOneAndUpdate({
-      _id: order._id, tenantId: order.tenantId,
-      'payment.method': 'online',
-      'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
-      'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
-    }, { $inc: { 'payment.refundSyncVersion': 1, __v: 1 } }, { new: true }).lean();
-    if (!reserved) throw new ConflictException('Paiement modifié, actualisez la commande.');
-    const version = (reserved as RefundOrder).payment.refundSyncVersion;
-    const rows = await this.allRefunds(client, order);
-    const summary = refundSummary(order.totals.total, rows);
-    const set: Record<string, unknown> = {
-      'payment.refundedCents': summary.refundedCents,
-      'payment.pendingRefundCents': summary.pendingRefundCents,
-      'payment.refunds': rows.map((row) => ({
-        id: row.id, amountCents: row.amount, status: row.status ?? 'pending',
-        operationId: row.metadata?.operationId ?? null, reason: row.metadata?.reason ?? '',
-      })),
-    };
-    if (summary.refundedCents >= order.totals.total && order.totals.total > 0) set['payment.status'] = 'refunded';
-    else if (reserved.payment.status === 'refunded') set['payment.status'] = 'paid';
-    const updated = await this.orders.findOneAndUpdate({
-      _id: order._id, tenantId: order.tenantId, 'payment.refundSyncVersion': version,
-      'payment.method': 'online',
-      'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
-      'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
-    }, { $set: set, $inc: { __v: 1 } }, { new: true }).lean();
-    if (updated) {
-      const payload = { ...updated } as Record<string, unknown>;
-      delete payload.paymentFlow;
-      delete payload.customerOwner;
-      delete payload.customerSaleAttribution;
-      for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
-      await publishRedisBestEffort(this.redis, ordersChannel(String(order.tenantId)), JSON.stringify({ event: WS_EVENTS.orderUpdated, payload }));
-    }
-    return summary;
+    const order = await this.read({ 'payment.method': 'online', 'payment.stripePaymentIntentId': intent,
+      'payment.stripeAccountId': event.account ?? null });
+    if (order) await this.reconcile(order, client);
   }
 }
