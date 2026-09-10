@@ -9,7 +9,7 @@ self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 // Aucun fetch handler, aucun cache : tickets, comptes et preuves restent au réseau.
 self.addEventListener('push',event=>{
   event.waitUntil(self.registration.showNotification('Votre commande est prête',{
-    body:'Consultez vos commandes pour la récupérer.',tag:'sm-order-ready',
+    body:'Consultez le suivi de votre commande.',tag:'sm-order-ready',
     icon:SCOPE+'icon.png?size=192',data:{path:TARGET}
   }));
 });
