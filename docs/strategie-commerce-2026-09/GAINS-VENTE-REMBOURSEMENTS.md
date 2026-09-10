@@ -1,7 +1,7 @@
 # Fidélité sur vente et remboursement — socle de calcul
 
-État au 10 septembre 2026 : lot suivant #158, après réception de la reprise #159, sur
-`feat/loyalty-sale-entitlement`. Deux fonctions pures sont implémentées dans
+État au 10 septembre 2026 : socle reçu sur staging dans [#160](https://github.com/GLWebDevAgency/snack-manager/pull/160),
+révision `f93980ea30b44abf5be7847fac7e4ea6bdddba8c`. Deux fonctions pures sont implémentées dans
 `@sm/domain`, sans writer, worker supplémentaire, migration ou activation.
 Elles ne rendent pas encore les gains web disponibles.
 
@@ -78,6 +78,17 @@ distant n'est utilisé. Le code domaine est inchangé par cette synchronisation.
 Ces tests ne sont ni une preuve bancaire ni une recette Mongo→PostgreSQL.
 Il reste à éprouver deux workers concurrents, la réponse perdue après commit,
 le remboursement avant/après crédit, le changement de règle et le passage
-web → comptoir dans le writer réellement raccordé. CI et staging du nouveau
-lot restent à recevoir ; le pilote, les fournisseurs et la production sont
-inchangés.
+web → comptoir dans le writer réellement raccordé.
+
+Réception #160 : [déploiement 34466899824](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34466899824)
+réussi, sept jobs et quatre services verts, bootstrap 96 objets avant/après,
+trois migrateurs, révision API exacte et smoke indépendant **8/8**.
+[E2E 34468642094](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34468642094) :
+**12 démos réussies, quatre parcours authentifiés ignorés**, checkout effectif
+`f93980e` vérifié. [Reçu détaillé](https://github.com/GLWebDevAgency/snack-manager/pull/160#issuecomment-5617645905).
+Ce reçu ne valide ni paiement ni OTP réel ; le pilote et la production restent inchangés.
+
+Le [lot d'attribution à la vente](ATTRIBUTION-FIDELITE-VENTE.md) raccorde ensuite
+l'assiette aux prix serveur et conserve le membre et la règle dans le journal
+de la commande. Ce raccord reste distinct du crédit, de la consommation et
+du writer de compensation : ne pas les annoncer disponibles par déduction.
