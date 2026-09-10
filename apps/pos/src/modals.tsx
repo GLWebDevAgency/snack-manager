@@ -1,3 +1,4 @@
+import { useTheme } from './theme';
 /**
  * Surcouches de la caisse : encaissement espèces, confirmation d'envoi,
  * remise (PIN), aperçu du ticket, récapitulatif local du poste.
@@ -7,8 +8,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, ScrollView, Text, View } from 'react-native';
-import { TOUCH_MIN, euros, palette, type RejectedEntry } from '@sm/client-core';
-import { FONT, R, S, TABULAR, sheet, type, withAlpha, type Brand } from './theme';
+import { TOUCH_MIN, euros, type RejectedEntry } from '@sm/client-core';
+import { FONT, R, S, TABULAR, withAlpha, type Brand } from './theme';
 import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMotion } from './ui';
 import { useLayout } from './useLayout';
 import {
@@ -44,6 +45,7 @@ export function CashModal({
   onClose: () => void;
   onValidate: (received: number, change: number) => void;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   const [received, setReceived] = useState(0);
   const change = received - total;
@@ -104,7 +106,7 @@ export function CashModal({
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
-                    activeStyle={{ backgroundColor: '#2b2b2b' }}
+                    activeStyle={{ backgroundColor: palette.press2 }}
                     scale={0.95}
                   >
                     <Text
@@ -194,6 +196,7 @@ export function SentOverlay({
   onPrint: () => void;
   onDiscount: () => void;
 }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   const reduced = useReducedMotion();
   const pulse = useRef(new Animated.Value(0)).current;
@@ -416,6 +419,7 @@ export function DiscountModal({
   onClose: () => void;
   onApply: (amountCents: number, reason: string, pin: string) => Promise<string | null>;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   const [pin, setPin] = useState('');
   const [reason, setReason] = useState('');
@@ -674,6 +678,7 @@ export function TicketPreview({
   fetchTicket: (orderId: string, token: string | null | undefined) => Promise<OrderTicketDto>;
   onClose: () => void;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   const [ticket, setTicket] = useState<OrderTicketDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -892,6 +897,7 @@ export function CloseModal({
   onOpenTicket: (entry: DayEntry) => void;
   onOpenDiscount: (entry: DayEntry) => void;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   const [tab, setTab] = useState<'recap' | 'orders'>('recap');
   const resetSafety = {
@@ -1073,6 +1079,7 @@ function OrderRow({
   onTicket: (e: DayEntry) => void;
   onDiscount: (e: DayEntry) => void;
 }) {
+  const { sheet, type, palette } = useTheme();
   const L = useLayout();
   const time = new Date(entry.at);
   const hm = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
@@ -1141,6 +1148,7 @@ function OrderRow({
 }
 
 function MiniAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const { palette } = useTheme();
   const L = useLayout();
   return (
     <Press
@@ -1154,7 +1162,7 @@ function MiniAction({ label, onPress }: { label: string; onPress: () => void }) 
         borderWidth: 1,
         borderColor: palette.line,
       }}
-      activeStyle={{ backgroundColor: '#262626' }}
+      activeStyle={{ backgroundColor: palette.press2 }}
     >
       <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13), fontWeight: '600' }}>{label}</Text>
     </Press>
@@ -1162,6 +1170,7 @@ function MiniAction({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 function StatRow({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   return (
     <View
@@ -1174,6 +1183,7 @@ function StatRow({ label, value, tone }: { label: string; value: string; tone?: 
 }
 
 function Counter({ label, value }: { label: string; value: number }) {
+  const { type } = useTheme();
   const L = useLayout();
   return (
     <View style={{ alignItems: 'center', flex: 1 }}>
@@ -1184,6 +1194,7 @@ function Counter({ label, value }: { label: string; value: number }) {
 }
 
 export function Notice({ tone, title, body }: { tone: string; title: string; body: string }) {
+  const { palette } = useTheme();
   const L = useLayout();
   return (
     <View
@@ -1232,6 +1243,7 @@ export function RejetsModal({
   onClose: () => void;
   onAcquitter: (ids: readonly string[]) => void;
 }) {
+  const { palette } = useTheme();
   const heure = (ms: number) =>
     new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const idsAffiches = useMemo(() => rejectedSnapshotIds(rejets), [rejets]);

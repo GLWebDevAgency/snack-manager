@@ -21,9 +21,10 @@
  * Les deux seuils sont dans `layout.ts`, seul décideur de dimension du poste,
  * et la tablette de RÉFÉRENCE (1280 × 800) garde donc sa barre sur une ligne.
  */
-import { Pressable, Text, View } from 'react-native';
-import { palette } from '@sm/client-core';
-import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
+import { useState } from 'react';
+import { Image, Text, View } from 'react-native';
+import { FONT, R, S, useTheme, withAlpha, type Brand } from './theme';
+import { Icon } from './Icon';
 import { MODE_LABEL, type Mode } from './pos-state';
 import { Press, Segmented, Sheen } from './ui';
 import { useLayout } from './useLayout';
@@ -35,6 +36,7 @@ export type Vue = 'vente' | 'service';
 export function TopBar({
   brand,
   staffName,
+  deviceName,
   vue,
   onVue,
   serviceBadge,
@@ -49,9 +51,11 @@ export function TopBar({
   now,
   onRecap,
   onLock,
+  onSettings,
 }: {
   brand: Brand;
   staffName: string;
+  deviceName?: string;
   vue: Vue;
   onVue: (v: Vue) => void;
   /**
@@ -76,7 +80,9 @@ export function TopBar({
   now: number;
   onRecap: () => void;
   onLock: () => void;
+  onSettings?: () => void;
 }) {
+  const { palette, sheet, shadow, type, semanticText } = useTheme();
   const L = useLayout();
   const d = new Date(now);
   const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -86,6 +92,12 @@ export function TopBar({
   const split = L.topbarSelectorsSplit;
   /** Sous 560 px, l'identité textuelle cède la place aux actions. */
   const showIdentityText = L.width >= 560;
+  // Les deux sélecteurs métier restent entiers sur la tablette ; les actions
+  // secondaires gardent leurs noms accessibles quand elles passent en icônes.
+  const actionLabels = L.width >= 1500;
+  const modeIcons = L.width >= 520;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const logoUrl = brand.logoUrl && brand.logoUrl !== failedLogoUrl ? brand.logoUrl : null;
 
   /**
    * LA BASCULE DE VUE, ET SA PASTILLE.
@@ -129,9 +141,9 @@ export function TopBar({
       onAccent={brand.onAccent}
       flex={stacked}
       options={[
-        { key: 'surplace', label: MODE_LABEL.surplace },
-        { key: 'emporter', label: MODE_LABEL.emporter },
-        { key: 'tel', label: MODE_LABEL.tel },
+        { key: 'surplace', label: MODE_LABEL.surplace, icon: modeIcons ? 'home' : undefined },
+        { key: 'emporter', label: MODE_LABEL.emporter, icon: modeIcons ? 'bag' : undefined },
+        { key: 'tel', label: MODE_LABEL.tel, icon: modeIcons ? 'phone' : undefined },
       ]}
     />
   );
@@ -148,7 +160,7 @@ export function TopBar({
    */
   const rejetes =
     rejets > 0 ? (
-      <Pressable
+      <Press
         onPress={onRejets}
         accessibilityRole="button"
         accessibilityLabel={`${rejets} vente${rejets > 1 ? 's' : ''} refusée${rejets > 1 ? 's' : ''} — à ressaisir`}
@@ -157,7 +169,7 @@ export function TopBar({
           alignItems: 'center',
           gap: 8,
           paddingHorizontal: 12,
-          minHeight: 36,
+          minHeight: L.touch(),
           borderRadius: R.pill,
           backgroundColor: withAlpha(palette.red, 0.14),
           borderWidth: 1,
@@ -165,10 +177,10 @@ export function TopBar({
         }}
       >
         <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.red }} />
-        <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(13), fontWeight: '700' }}>
+        <Text style={{ fontFamily: FONT, color: semanticText.danger, fontSize: L.fs(13), fontWeight: '700' }}>
           {rejets} refusée{rejets > 1 ? 's' : ''}
         </Text>
-      </Pressable>
+      </Press>
     ) : null;
 
   const status =
@@ -187,7 +199,7 @@ export function TopBar({
         }}
       >
         <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
-        <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13), fontWeight: '700' }}>
+        <Text style={{ fontFamily: FONT, color: semanticText.warning, fontSize: L.fs(13), fontWeight: '700' }}>
           {pending > 0 ? `${pending}${compact ? '' : ' en attente'}${syncing ? ' · envoi…' : ''}` : 'Hors ligne'}
         </Text>
       </View>
@@ -198,7 +210,7 @@ export function TopBar({
       style={[
         {
           flexDirection: 'column',
-          paddingHorizontal: S.lg,
+          paddingHorizontal: compact ? S.md : S.lg,
           paddingVertical: stacked ? S.sm : 0,
           gap: stacked ? S.sm : 0,
           backgroundColor: palette.surface,
@@ -212,7 +224,7 @@ export function TopBar({
 
       <View style={{ height: L.topbarH, flexDirection: 'row', alignItems: 'center', gap: compact ? S.sm : S.lg }}>
         {/* Identité */}
-        <View style={[sheet.row, { gap: 11 }]}>
+        <View style={[sheet.row, { gap: 11, minWidth: 0, flexShrink: 1 }]}>
           <View
             style={{
               width: L.sp(38),
@@ -221,19 +233,26 @@ export function TopBar({
               backgroundColor: brand.accent,
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <Text style={{ fontFamily: FONT, color: brand.onAccent, fontSize: L.fs(19), fontWeight: '800' }}>
+            {logoUrl ? <Image
+              source={{ uri: logoUrl }}
+              resizeMode="contain"
+              style={{ width: '70%', height: '70%' }}
+              accessible={false}
+              onError={() => setFailedLogoUrl(logoUrl)}
+            /> : <Text style={{ fontFamily: FONT, color: brand.onAccent, fontSize: L.fs(19), fontWeight: '800' }}>
               {brand.initial}
-            </Text>
+            </Text>}
           </View>
           {showIdentityText ? (
-            <View>
+            <View style={{ minWidth: 0, maxWidth: L.width < 1500 ? 154 : 220 }}>
               <Text style={[type.h2, { fontSize: L.fs(16) }]} numberOfLines={1}>
                 {brand.name}
               </Text>
               <Text style={[type.mut, { fontSize: L.fs(12.5), marginTop: 1 }]} numberOfLines={1}>
-                Poste 1 · {staffName}
+                {deviceName ?? 'Poste 1'} · {staffName}
               </Text>
             </View>
           ) : null}
@@ -253,8 +272,8 @@ export function TopBar({
           {stacked ? null : segmented}
         </View>
 
-        {rejetes}
-        {status}
+        {stacked ? null : rejetes}
+        {stacked ? null : status}
 
         {/* Horloge — les secondes sautent en premier quand la place manque */}
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -269,9 +288,17 @@ export function TopBar({
           reste sur la bascule de vue et inclut aussi le web ; aucune fermeture
           comptable ou globale n'est promise ici.
         */}
-        <BarButton label={compact ? 'Récap' : 'Récapitulatif'} accessibilityLabel="Récapitulatif local du poste" onPress={onRecap} />
-        <BarButton label={compact ? 'Verrou' : 'Verrouiller'} accessibilityLabel="Verrouiller" onPress={onLock} />
+        {onSettings ? <BarButton label="Paramètres du poste" icon="gear" iconOnly onPress={onSettings} /> : null}
+        <BarButton label="Récapitulatif" icon="receipt" iconOnly={!actionLabels} accessibilityLabel="Récapitulatif local du poste" onPress={onRecap} />
+        <BarButton label="Verrouiller" icon="lock" iconOnly={!actionLabels} onPress={onLock} />
       </View>
+
+      {stacked && (rejets > 0 || pending > 0 || offline) ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
+          {rejetes}
+          {status}
+        </View>
+      ) : null}
 
       {/* Seconde rangée : les deux sélecteurs se partagent la largeur, sauf
           sous 560 px où « À emporter » se ferait couper en plein mot. */}
@@ -295,17 +322,22 @@ export function TopBar({
 /**
  * Action de barre. Elle portait une pastille numérique optionnelle, qui ne
  * servait qu'au compteur « Service · N » — un compteur qui mentait, et qui vit
- * désormais sur la bascule de vue. Deux boutons, deux libellés, rien de plus.
+ * désormais sur la bascule de vue. Chaque icône conserve son nom accessible.
  */
 function BarButton({
   label,
   onPress,
   accessibilityLabel,
+  icon,
+  iconOnly,
 }: {
   label: string;
   onPress: () => void;
   accessibilityLabel?: string;
+  icon: string;
+  iconOnly?: boolean;
 }) {
+  const { palette } = useTheme();
   const L = useLayout();
   return (
     <Press
@@ -313,18 +345,22 @@ function BarButton({
       accessibilityLabel={accessibilityLabel ?? label}
       style={{
         minHeight: L.touch(),
-        paddingHorizontal: L.compact ? 11 : 14,
+        width: iconOnly ? L.touch() : undefined,
+        paddingHorizontal: iconOnly ? 0 : 12,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
         gap: 8,
         borderRadius: R.pill,
         borderWidth: 1,
         borderColor: palette.line,
         backgroundColor: palette.surface2,
       }}
-      activeStyle={{ backgroundColor: '#282828' }}
+      activeStyle={{ backgroundColor: palette.press2 }}
     >
-      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13.5), fontWeight: '600' }}>{label}</Text>
+      <Icon name={icon} size={iconOnly ? 18 : 16} color={palette.text} />
+      {iconOnly ? null : <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13.5), fontWeight: '600' }}>{label}</Text>}
     </Press>
   );
 }

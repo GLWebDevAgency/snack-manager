@@ -1,3 +1,5 @@
+import { palette as statusPalette } from '@sm/client-core';
+import { useTheme } from './theme';
 /**
  * LA VUE DU SERVICE — ce qui se passe en cuisine après qu'on a validé.
  *
@@ -34,20 +36,14 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import {
-  TIMER_THRESHOLDS,
-  euros,
-  palette,
-  timerColor,
-  type OrderStatus,
-} from '@sm/client-core';
+import { TIMER_THRESHOLDS, euros, timerColor, type OrderStatus } from '@sm/client-core';
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   PAYMENT_TENDER_LABELS,
   ORDER_STATUS_LABELS,
 } from '@sm/contracts';
-import { FONT, R, S, TABULAR, sheet, shadow, type, withAlpha, type Brand } from './theme';
+import { FONT, R, S, TABULAR, withAlpha, type Brand } from './theme';
 import { Btn, EmptyState, Overlay, PanelHead, Press } from './ui';
 import { serviceColumns, useLayout } from './useLayout';
 import {
@@ -72,11 +68,11 @@ import type {
  * prise en main. Elle n'est JAMAIS personnalisée par l'accent du restaurant.
  */
 const TON: Record<OrderStatus, string> = {
-  ready: palette.green,
-  preparing: palette.amber,
-  new: palette.red,
-  delivered: palette.mut,
-  cancelled: palette.mut,
+  ready: statusPalette.green,
+  preparing: statusPalette.amber,
+  new: statusPalette.red,
+  delivered: statusPalette.mut,
+  cancelled: statusPalette.mut,
 };
 
 export function ServicePanel({
@@ -113,6 +109,7 @@ export function ServicePanel({
   onCollectPayment?: (row: ServerOrderRow) => void;
   offline?: boolean;
 }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   // L'identité reste stable ; le contenu est redérivé à chaque photo afin que
   // statut, paiement et historique bougent aussi dans une modale déjà ouverte.
@@ -249,6 +246,7 @@ function Bandeau({
   failedStatuses: ActiveOrderStatus[];
   truncatedStatuses: ActiveOrderStatus[];
 }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   const ton = perimee || servicePartial ? palette.amber : palette.mut;
   const count = loaded ? statusCountLabel(activeCount, activeCountExact) : '—';
@@ -299,6 +297,7 @@ function Bandeau({
 }
 
 function EnTeteGroupe({ label, count, tone }: { label: string; count: string; tone: string }) {
+  const { palette } = useTheme();
   const L = useLayout();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -353,6 +352,7 @@ function Carte({
   width: number;
   onOpen: () => void;
 }) {
+  const { palette, shadow, type, sheet } = useTheme();
   const L = useLayout();
   const secondes = Math.max(0, (now - commande.createdAtMs) / 1000);
   const minuteur = timerColor(secondes / 60);
@@ -477,6 +477,7 @@ export function DetailCommande({
   onCollectPayment?: (row: ServerOrderRow) => void;
   offline?: boolean;
 }) {
+  const { sheet, type, palette } = useTheme();
   const L = useLayout();
   const row = commande.row;
   const secondes = Math.max(0, (now - commande.createdAtMs) / 1000);
@@ -724,6 +725,7 @@ function Ligne({
   tone?: string;
   fort?: boolean;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   return (
     <View

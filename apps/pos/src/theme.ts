@@ -7,8 +7,9 @@
  * et ne sont jamais personnalisées : un équipier qui change de restaurant doit
  * lire l'écran de la même façon.
  */
+import { createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
-import { palette, radius } from '@sm/client-core';
+import { PALETTES, palette, radius, type ColorTheme, type Palette } from '@sm/client-core';
 import { ratioContraste } from '@sm/contracts';
 
 /**
@@ -19,14 +20,15 @@ import { ratioContraste } from '@sm/contracts';
  * 4,1:1 pour le rouge métier) et garde donc les petits libellés d'alerte au
  * niveau AA, y compris sans graisse typographique.
  */
-export const semanticText = {
-  danger: '#ff776b',
-} as const;
+export function makeSemanticText(p: Palette) {
+  return { danger: p.redText, positive: p.greenText, success: p.greenText, warning: p.amberText };
+}
+export const semanticText = makeSemanticText(palette);
 
-/** Pile de polices : Inter si présente sur le poste, sinon la police système. */
+/** Inter est embarquée et chargée par usePosFonts ; pile système en secours web. */
 export const FONT: string = Platform.select({
   web: 'Inter, "SF Pro Display", -apple-system, "Segoe UI", Roboto, system-ui, sans-serif',
-  default: 'System',
+  default: 'Inter',
 }) as string;
 
 export const DUR = { fast: 200, base: 260, slow: 340 } as const;
@@ -88,9 +90,10 @@ export interface Brand {
   tintStrong: string;
   name: string;
   initial: string;
+  logoUrl?: string | null;
 }
 
-export function makeBrand(name: string, accentHex?: string | null): Brand {
+export function makeBrand(name: string, accentHex?: string | null, logoUrl?: string | null): Brand {
   const accent = accentHex && /^#?[0-9a-fA-F]{3,8}$/.test(accentHex) ? accentHex : palette.gold;
   return {
     accent,
@@ -99,16 +102,17 @@ export function makeBrand(name: string, accentHex?: string | null): Brand {
     tintStrong: withAlpha(accent, 0.22),
     name,
     initial: (name.trim()[0] ?? 'S').toUpperCase(),
+    logoUrl,
   };
 }
 
 // ─── Ombres (elevation Android + shadow iOS/web) ───
 
-export function shadow(level: 1 | 2 | 3): ViewStyle {
+function themedShadow(theme: ColorTheme, level: 1 | 2 | 3): ViewStyle {
   const conf = {
-    1: { h: 2, r: 8, o: 0.35, e: 2 },
-    2: { h: 10, r: 24, o: 0.5, e: 8 },
-    3: { h: 24, r: 56, o: 0.65, e: 20 },
+    1: { h: 2, r: 8, o: theme === 'light' ? 0.08 : 0.35, e: 2 },
+    2: { h: 10, r: 24, o: theme === 'light' ? 0.14 : 0.5, e: 8 },
+    3: { h: 24, r: 56, o: theme === 'light' ? 0.22 : 0.65, e: 20 },
   }[level];
   // Sur le web, react-native-web déprécie les props `shadow*` au profit de
   // `boxShadow` ; sur mobile on garde elevation (Android) + shadow (iOS).
@@ -124,11 +128,13 @@ export function shadow(level: 1 | 2 | 3): ViewStyle {
   };
 }
 
+export const shadow = (level: 1 | 2 | 3): ViewStyle => themedShadow('dark', level);
+
 // ─── Typographie ───
 
 const tab: TextStyle = { fontVariant: ['tabular-nums'] };
 
-export const type = StyleSheet.create({
+export const makeType = (palette: Palette) => StyleSheet.create({
   /** Grands nombres : prix, totaux, n° de retrait. */
   display: {
     fontFamily: FONT,
@@ -159,7 +165,7 @@ export const TABULAR: TextStyle = tab;
 
 // ─── Surfaces ───
 
-export const sheet = StyleSheet.create({
+export const makeSheet = (palette: Palette, shadow: (level: 1 | 2 | 3) => ViewStyle) => StyleSheet.create({
   /** Niveau 2 : carte posée sur le fond. */
   card: {
     backgroundColor: palette.surface,
@@ -191,4 +197,27 @@ export const sheet = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
 });
 
+/** Exports historiques pour les consommateurs pas encore sous provider. */
+export const type = makeType(palette);
+export const sheet = makeSheet(palette, shadow);
+
+function makeTheme(theme: ColorTheme) {
+  const palette = PALETTES[theme];
+  const shadow = (level: 1 | 2 | 3) => themedShadow(theme, level);
+  return { theme, palette, type: makeType(palette), sheet: makeSheet(palette, shadow), shadow, semanticText: makeSemanticText(palette) };
+}
+
+const ThemeContext = createContext(makeTheme('dark'));
+
+/** Valeur locale au poste : aucune mutation de la palette partagée avec le KDS. */
+export function ThemeProvider({ theme = 'dark', children }: { theme?: ColorTheme; children: ReactNode }) {
+  const value = useMemo(() => makeTheme(theme), [theme]);
+  return createElement(ThemeContext.Provider, { value }, children);
+}
+
+export function useTheme() {
+  return useContext(ThemeContext);
+}
+
 export { palette, radius };
+export type { Palette, ColorTheme };

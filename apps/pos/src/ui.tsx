@@ -6,6 +6,8 @@
  *    `pressed` de Pressable, sans animation différée ;
  *  - cibles ≥ 44 px (TOUCH_MIN) — cuisiniers gantés, écrans gras.
  */
+import { Icon } from './Icon';
+import { useTheme } from './theme';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
@@ -21,9 +23,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { TOUCH_MIN, palette } from '@sm/client-core';
-import { DUR, FONT, R, S, TABULAR, semanticText, sheet, shadow, type, withAlpha } from './theme';
+import { TOUCH_MIN } from '@sm/client-core';
+import { DUR, FONT, R, S, TABULAR, withAlpha } from './theme';
 import { useLayout } from './useLayout';
+import { ModalSurface } from './ModalSurface';
 
 // ─── Mouvement ───
 
@@ -66,7 +69,7 @@ export function Pop({
       duration: DUR.base,
       delay,
       easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [delay, reduced, v]);
   return (
@@ -88,6 +91,8 @@ export function Pop({
  * pur : on empile trois bandes translucides).
  */
 export function Sheen({ intensity = 1 }: { intensity?: number }) {
+  const { palette } = useTheme();
+  if (Platform.OS === 'web') return <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none', opacity: intensity, backgroundImage: `linear-gradient(180deg, ${palette.sheen}, transparent 60%)` } as ViewStyle]} />;
   return (
     <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <View style={{ flex: 1, backgroundColor: `rgba(255,255,255,${0.05 * intensity})` }} />
@@ -110,7 +115,7 @@ export interface PressProps {
   scale?: number;
   children: ReactNode;
   accessibilityLabel?: string;
-  accessibilityRole?: 'button' | 'tab' | 'checkbox' | 'radio';
+  accessibilityRole?: 'button' | 'tab' | 'checkbox' | 'radio' | 'switch';
   selected?: boolean;
   testID?: string;
 }
@@ -136,8 +141,10 @@ export function Press({
       disabled={disabled}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
+      aria-checked={accessibilityRole === 'checkbox' || accessibilityRole === 'radio' || accessibilityRole === 'switch' ? !!selected : undefined}
+      aria-selected={accessibilityRole === 'tab' ? !!selected : undefined}
       accessibilityState={
-        accessibilityRole === 'checkbox' || accessibilityRole === 'radio'
+        accessibilityRole === 'checkbox' || accessibilityRole === 'radio' || accessibilityRole === 'switch'
           ? { disabled: !!disabled, checked: !!selected }
           : { disabled: !!disabled, selected }
       }
@@ -169,6 +176,7 @@ export function Btn({
   size = 'md',
   style,
   glyph,
+  icon,
   accessibilityLabel,
 }: {
   label: string;
@@ -182,8 +190,10 @@ export function Btn({
   size?: 'sm' | 'md' | 'lg';
   style?: StyleProp<ViewStyle>;
   glyph?: string;
+  icon?: string;
   accessibilityLabel?: string;
 }) {
+  const { palette, semanticText, shadow } = useTheme();
   const L = useLayout();
   // La hauteur suit l'écran mais ne passe jamais sous TOUCH_MIN : c'est
   // `touch()` qui porte cette garantie, pas l'appelant.
@@ -194,7 +204,7 @@ export function Btn({
     kind === 'primary'
       ? (accent ?? palette.gold)
       : kind === 'solid'
-        ? palette.surface2
+        ? palette.btnDark
         : kind === 'danger'
           ? withAlpha(palette.red, 0.16)
           : kind === 'positive'
@@ -207,10 +217,10 @@ export function Btn({
       : kind === 'danger'
         ? semanticText.danger
         : kind === 'positive'
-          ? palette.green
+          ? palette.greenText
           : kind === 'quiet'
             ? palette.mut
-            : palette.text;
+            : kind === 'solid' ? '#ffffff' : palette.text;
 
   const border =
     kind === 'ghost'
@@ -248,13 +258,14 @@ export function Btn({
       ]}
       activeStyle={{ opacity: 0.86 }}
     >
+      {icon ? <Icon name={icon} size={L.fs(16)} color={fg} /> : null}
       {glyph ? (
         <Text style={{ fontFamily: FONT, color: fg, fontSize: fs + 2, fontWeight: '700' }}>{glyph}</Text>
       ) : null}
-      <View style={{ alignItems: 'center' }}>
+      <View style={{ alignItems: 'center', flexShrink: 1, minWidth: 0 }}>
         <Text
-          numberOfLines={1}
-          style={{ fontFamily: FONT, color: fg, fontSize: fs, fontWeight: '700', letterSpacing: -0.2 }}
+          numberOfLines={2}
+          style={{ fontFamily: FONT, color: fg, fontSize: fs, fontWeight: '700', letterSpacing: -0.2, textAlign: 'center', flexShrink: 1 }}
         >
           {label}
         </Text>
@@ -270,6 +281,7 @@ export function Btn({
 
 /** Bouton rond « fermer » — 44 px de zone tactile au minimum pour un glyphe de 16. */
 export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; label?: string }) {
+  const { palette } = useTheme();
   const L = useLayout();
   return (
     <Press
@@ -285,7 +297,7 @@ export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; l
         alignItems: 'center',
         justifyContent: 'center',
       }}
-      activeStyle={{ backgroundColor: '#242424' }}
+      activeStyle={{ backgroundColor: palette.press2 }}
     >
       <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(17), fontWeight: '600', lineHeight: L.fs(20) }}>
         ✕
@@ -319,6 +331,7 @@ export function Chip({
   minHeight?: number;
   accessibilityRole?: 'checkbox' | 'radio' | 'tab';
 }) {
+  const { palette, semanticText } = useTheme();
   const L = useLayout();
   const activeBg =
     tone === 'red' ? withAlpha(palette.red, 0.18) : tone === 'neutral' ? '#efefef' : (accent ?? palette.gold);
@@ -342,7 +355,7 @@ export function Chip({
         alignItems: 'center',
         gap: 7,
       }}
-      activeStyle={{ backgroundColor: on ? activeBg : '#262626' }}
+      activeStyle={{ backgroundColor: on ? activeBg : palette.press2 }}
     >
       <Text
         style={{
@@ -395,7 +408,7 @@ export function Segmented<T extends string>({
   badge,
 }: {
   value: T;
-  options: { key: T; label: string; detail?: string }[];
+  options: { key: T; label: string; detail?: string; icon?: string }[];
   onChange: (key: T) => void;
   accent: string;
   onAccent: string;
@@ -403,6 +416,7 @@ export function Segmented<T extends string>({
   flex?: boolean;
   badge?: string;
 }) {
+  const { palette } = useTheme();
   const L = useLayout();
   const h = L.touch(height);
   return (
@@ -429,8 +443,8 @@ export function Segmented<T extends string>({
             accessibilityLabel={opt.detail ? `${opt.label}, ${opt.detail}` : opt.label}
             scale={0.98}
             style={{
-              minHeight: h - 6,
-              paddingHorizontal: L.sp(opt.detail ? 12 : 16),
+              minHeight: h,
+              paddingHorizontal: opt.detail ? Math.min(L.segmentPadX, L.sp(12)) : L.segmentPadX,
               borderRadius: R.pill,
               backgroundColor: on ? accent : 'transparent',
               flexDirection: 'row',
@@ -439,8 +453,9 @@ export function Segmented<T extends string>({
               gap: 7,
               flex: flex ? 1 : undefined,
             }}
-            activeStyle={{ backgroundColor: on ? accent : '#2a2a2a' }}
+            activeStyle={{ backgroundColor: on ? accent : palette.press2 }}
           >
+            {opt.icon ? <Icon name={opt.icon} size={L.fs(16)} color={on ? onAccent : palette.mut} /> : null}
             <Text
               numberOfLines={1}
               style={{
@@ -501,6 +516,7 @@ export function Stepper({
   max?: number;
   compact?: boolean;
 }) {
+  const { palette } = useTheme();
   const L = useLayout();
   const size = L.touch(compact ? TOUCH_MIN : 48);
   const btn: ViewStyle = {
@@ -526,7 +542,7 @@ export function Stepper({
         disabled={qty <= min}
         accessibilityLabel="Moins"
         style={btn}
-        activeStyle={{ backgroundColor: '#2c2c2c' }}
+        activeStyle={{ backgroundColor: palette.press2 }}
       >
         <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(20), fontWeight: '700' }}>−</Text>
       </Press>
@@ -548,7 +564,7 @@ export function Stepper({
         disabled={qty >= max}
         accessibilityLabel="Plus"
         style={btn}
-        activeStyle={{ backgroundColor: '#2c2c2c' }}
+        activeStyle={{ backgroundColor: palette.press2 }}
       >
         <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(20), fontWeight: '700' }}>+</Text>
       </Press>
@@ -596,6 +612,7 @@ export function Field({
   onSubmitEditing?: () => void;
   disabled?: boolean;
 }) {
+  const { type, palette } = useTheme();
   const L = useLayout();
   const [focus, setFocus] = useState(false);
   return (
@@ -605,7 +622,7 @@ export function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#6b6b6b"
+        placeholderTextColor={palette.placeholder}
         keyboardType={keyboardType}
         autoFocus={autoFocus}
         maxLength={maxLength}
@@ -624,7 +641,7 @@ export function Field({
           paddingHorizontal: L.sp(14),
           paddingVertical: L.sp(10),
           borderRadius: R.ctrl,
-          backgroundColor: palette.surface2,
+          backgroundColor: palette.field,
           borderWidth: 1,
           borderColor: invalid ? palette.red : focus ? (accent ?? palette.gold) : palette.line2,
           color: palette.text,
@@ -963,13 +980,15 @@ function useWebModalLayer(
  * sur une 10" en portrait, la config express garde son pied et son bouton
  * d'ajout visibles, le contenu défile.
  */
+const viewportLayer = { position: 'fixed' } as unknown as ViewStyle;
+
 export function Overlay({
   onClose,
   children,
   accessibilityLabel,
   width = 520,
   align = 'center',
-  dim = 0.66,
+  dim,
   initialFocus = 'first',
   focusKey,
 }: {
@@ -984,6 +1003,7 @@ export function Overlay({
   /** Repositionne le focus lorsqu'une étape remplace le contenu du dialogue. */
   focusKey?: string | number;
 }) {
+  const { sheet, palette } = useTheme();
   const L = useLayout();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
@@ -995,11 +1015,12 @@ export function Overlay({
       toValue: 1,
       duration: reduced ? 0 : DUR.fast,
       easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [reduced, v]);
 
   return (
+    <ModalSurface compact={L.compact} onClose={requestClose}>
     <View
       ref={(node) => {
         modalRoot.current = node as unknown as HTMLElement | null;
@@ -1012,6 +1033,7 @@ export function Overlay({
       accessibilityViewIsModal
       style={[
         StyleSheet.absoluteFill,
+        L.compact && Platform.OS === 'web' ? viewportLayer : null,
         { alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', zIndex: 70 },
       ]}
     >
@@ -1023,7 +1045,7 @@ export function Overlay({
         importantForAccessibility="no"
         accessibilityElementsHidden
         onPress={requestClose}
-        style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${dim})` }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: dim === undefined ? palette.scrim : `rgba(0,0,0,${dim})` }]}
       />
       <Animated.View
         style={{
@@ -1042,6 +1064,7 @@ export function Overlay({
         </View>
       </Animated.View>
     </View>
+    </ModalSurface>
   );
 }
 
@@ -1058,12 +1081,16 @@ export function Drawer({
   children,
   width,
   accessibilityLabel = 'Ticket en cours',
+  side = 'right',
 }: {
   onClose: () => void;
   children: ReactNode;
   width: number;
   accessibilityLabel?: string;
+  side?: 'left' | 'right';
 }) {
+  const { shadow, palette } = useTheme();
+  const L = useLayout();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const drawerRoot = useRef<HTMLElement | null>(null);
@@ -1074,11 +1101,12 @@ export function Drawer({
       toValue: 1,
       duration: reduced ? 0 : DUR.fast,
       easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [reduced, v]);
 
   return (
+    <ModalSurface compact={L.compact} onClose={requestClose}>
     <View
       ref={(node) => {
         drawerRoot.current = node as unknown as HTMLElement | null;
@@ -1089,7 +1117,7 @@ export function Drawer({
       aria-label={accessibilityLabel}
       accessibilityLabel={accessibilityLabel}
       accessibilityViewIsModal
-      style={[StyleSheet.absoluteFill, { flexDirection: 'row', justifyContent: 'flex-end', zIndex: 60 }]}
+      style={[StyleSheet.absoluteFill, L.compact && Platform.OS === 'web' ? viewportLayer : null, { flexDirection: 'row', justifyContent: side === 'left' ? 'flex-start' : 'flex-end', zIndex: 60 }]}
     >
       <Pressable
         tabIndex={-1}
@@ -1097,7 +1125,7 @@ export function Drawer({
         importantForAccessibility="no"
         accessibilityElementsHidden
         onPress={requestClose}
-        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: palette.scrim }]}
       />
       <Animated.View
         style={[
@@ -1105,7 +1133,7 @@ export function Drawer({
             width,
             maxWidth: '100%',
             opacity: v,
-            transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [width, 0] }) }],
+            transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [side === 'left' ? -width : width, 0] }) }],
           },
           shadow(3),
         ]}
@@ -1113,7 +1141,42 @@ export function Drawer({
         {children}
       </Animated.View>
     </View>
+    </ModalSurface>
   );
+}
+
+/** Panneau non modal : le catalogue et le ticket restent utilisables. */
+export function InlinePanel({ children, width, onClose, label }: {
+  children: ReactNode;
+  width: number;
+  onClose: () => void;
+  label: string;
+}) {
+  const { palette } = useTheme();
+  const reduced = useReducedMotion();
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: 1, duration: reduced ? 0 : 300,
+      easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, reduced]);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const close = (event: KeyboardEvent) => {
+      // Une vraie modale (espèces, fidélité...) conserve la priorité Échap.
+      if (event.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onClose();
+    };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [onClose]);
+  return <Animated.View accessibilityLabel={label} role="region" style={{
+    width, minHeight: 0, backgroundColor: palette.surface,
+    borderLeftWidth: 1, borderLeftColor: palette.line,
+    opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+  }}>{children}</Animated.View>;
 }
 
 /** En-tête standard des surcouches : titre + sous-titre + bouton fermer. */
@@ -1128,6 +1191,7 @@ export function PanelHead({
   onClose?: () => void;
   right?: ReactNode;
 }) {
+  const { sheet, type } = useTheme();
   const L = useLayout();
   return (
     <View
@@ -1168,12 +1232,13 @@ export function useToasts() {
 }
 
 function ToastHost({ items }: { items: Toast[] }) {
+  const { palette, shadow } = useTheme();
   const L = useLayout();
   if (items.length === 0) return null;
   return (
     <View
-      pointerEvents="none"
       style={{
+        pointerEvents: 'none',
         position: 'absolute',
         left: 0,
         right: 0,
@@ -1208,7 +1273,7 @@ function ToastHost({ items }: { items: Toast[] }) {
                   paddingHorizontal: 18,
                   paddingVertical: 13,
                   borderRadius: R.pill,
-                  backgroundColor: '#171717',
+                  backgroundColor: palette.surface2,
                   borderWidth: 1,
                   borderColor: palette.line,
                 },
@@ -1230,6 +1295,7 @@ function ToastHost({ items }: { items: Toast[] }) {
 // ─── États transverses ───
 
 export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: string; glyph?: string }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   return (
     <View
@@ -1244,9 +1310,9 @@ export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: 
     >
       <View
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: 18,
+          width: L.sp(64),
+          height: L.sp(64),
+          borderRadius: L.sp(20),
           borderWidth: 1,
           borderColor: palette.line,
           alignItems: 'center',
@@ -1254,11 +1320,11 @@ export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: 
           marginBottom: 14,
         }}
       >
-        <Text style={{ fontFamily: FONT, color: '#4a4a4a', fontSize: 24, fontWeight: '300' }}>{glyph}</Text>
+        <Text style={{ fontFamily: FONT, color: palette.dimText, fontSize: 24, fontWeight: '300' }}>{glyph}</Text>
       </View>
-      <Text style={[type.strong, { color: palette.mut, textAlign: 'center', fontSize: L.fs(15) }]}>{title}</Text>
+      <Text style={[type.strong, { color: palette.text, textAlign: 'center', fontSize: L.fs(16) }]}>{title}</Text>
       {sub ? (
-        <Text style={[type.mut, { textAlign: 'center', marginTop: 5, color: '#6f6f6f', fontSize: L.fs(13) }]}>
+        <Text style={[type.mut, { textAlign: 'center', marginTop: 5, color: palette.mut, fontSize: L.fs(13) }]}>
           {sub}
         </Text>
       ) : null}
@@ -1268,14 +1334,15 @@ export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: 
 
 /** Barre d'attente indéterminée (chargement du menu). */
 export function Loading({ label }: { label: string }) {
+  const { palette, type } = useTheme();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (reduced) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(v, { toValue: 1, duration: 700, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: 700, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(v, { toValue: 1, duration: 700, easing: Easing.out(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(v, { toValue: 0, duration: 700, easing: Easing.in(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
       ]),
     );
     loop.start();
@@ -1298,4 +1365,5 @@ export function Loading({ label }: { label: string }) {
   );
 }
 
-export { ScrollView, Text, View, sheet, type, palette, S, R };
+export { ScrollView, Text, View, S, R };
+export { sheet, type, palette } from './theme';

@@ -15,12 +15,12 @@
  * l'équipier se déconnecte tous les soirs, la tablette reste appairée pour la
  * vie du restaurant.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { activateKeepAwakeAsync } from 'expo-keep-awake';
 import { DEVICE_HEARTBEAT_INTERVAL_MS } from '@sm/contracts';
-import { palette, useSyncState } from '@sm/client-core';
+import { useSyncState } from '@sm/client-core';
 import {
   DeviceError,
   KEYS,
@@ -38,11 +38,18 @@ import { PairingScreen, PinScreen } from './src/PinScreen';
 import { PosScreen } from './src/PosScreen';
 import { createSaleInFlightGate } from './src/pos-safety';
 import { Loading, Press } from './src/ui';
+import { usePosFonts } from './src/FontLoader';
+import { ThemeProvider, useTheme } from './src/theme';
+import { PrefsProvider, usePrefs } from './src/usePrefs';
+import { Splash } from './src/Splash';
 
 /** Le jeton staff vit 12 h ; au-delà, on redemande le PIN sans rien perdre. */
 const SESSION_TTL = 11 * 60 * 60 * 1000;
 
 export default function App() {
+  usePosFonts();
+  const [splashDone, setSplashDone] = useState(false);
+  const finishSplash = useCallback(() => setSplashDone(true), []);
   const [device, setDevice] = useState<PairedDevice | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
@@ -251,60 +258,63 @@ export default function App() {
 
   const protectActiveSale = session !== null && saleInFlight.active;
   const posScreen = session ? (
-    <PosScreen key={session.tenantSlug} session={session} onLock={onLock} saleInFlight={saleInFlight} />
+    <PosScreen key={session.tenantSlug} session={session} onLock={onLock} saleInFlight={saleInFlight} logoUrl={device?.tenant.logoUrl} deviceName={device?.device.name} />
   ) : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.bg }}>
-      <StatusBar style="light" hidden />
-      {/*
-        Le retour à la vitrine, en démonstration UNIQUEMENT.
+    <PrefsProvider scope={device ? (device.queueScope ?? device.device.id) : null}>
+      <Appearance ready={restored} unpaired={!device} splashDone={splashDone} finishSplash={finishSplash} deviceName={device?.device.name}>
+        <View style={{ flex: 1 }}>
+          {/*
+            Le retour à la vitrine, en démonstration UNIQUEMENT.
 
-        Il est posé ici, au-dessus des trois écrans, pour deux raisons. D'abord
-        il ne dépend d'aucun d'eux : le visiteur doit pouvoir repartir depuis
-        l'écran de vente comme depuis un chargement. Ensuite les surcouches de
-        la caisse (tiroir du ticket, modales d'encaissement) se positionnent en
-        absolu DANS `PosScreen` — elles ne peuvent donc pas venir couvrir la
-        barre, et le retour reste atteignable même une modale ouverte.
-      */}
-      <DemoBanner />
-      {protectActiveSale ? (
-        posScreen
-      ) : !restored ? (
-        <Loading label="Ouverture du poste…" />
-      ) : restoreError ? (
-        <RestoreError
-          message={restoreError}
-          onRetry={() => setRestoreAttempt((attempt) => attempt + 1)}
-        />
-      ) : !sync.scopeValid ? (
-        <RestoreError
-          message="L’appairage a changé dans une autre fenêtre. Les données de cette fenêtre ont été verrouillées."
-          onRetry={() => globalThis.location?.reload()}
-        />
-      ) : !device ? (
-        <PairingScreen onPaired={setDevice} />
-      ) : device.suspended ? (
-        // Abonnement suspendu : l'écran se verrouille AVANT qu'une vente
-        // n'échoue devant un client (contrat `DeviceHeartbeatResult`). La
-        // tablette reste appairée et continue de battre — le support la voit
-        // vivante ; la réactivation la rouvre au battement suivant, seule.
-        <SuspendedScreen name={device.tenant.name} />
-      ) : session ? (
-        posScreen
-      ) : (
-        <PinScreen
-          onSession={onSession}
-          device={device}
-          onUnpair={onUnpair}
-          notice={lockNotice}
-        />
-      )}
-    </View>
+            Il est posé ici, au-dessus des trois écrans, pour deux raisons. D'abord
+            il ne dépend d'aucun d'eux : le visiteur doit pouvoir repartir depuis
+            l'écran de vente comme depuis un chargement. En compact, les surcouches
+            utilisent toute la fenêtre pour garder leurs commandes accessibles ;
+            il suffit de les fermer pour retrouver ce retour à la vitrine.
+          */}
+          <DemoBanner />
+          {protectActiveSale ? (
+            posScreen
+          ) : !restored ? (
+            <Loading label="Ouverture du poste…" />
+          ) : restoreError ? (
+            <RestoreError
+              message={restoreError}
+              onRetry={() => setRestoreAttempt((attempt) => attempt + 1)}
+            />
+          ) : !sync.scopeValid ? (
+            <RestoreError
+              message="L’appairage a changé dans une autre fenêtre. Les données de cette fenêtre ont été verrouillées."
+              onRetry={() => globalThis.location?.reload()}
+            />
+          ) : !device ? (
+            <PairingScreen onPaired={setDevice} />
+          ) : device.suspended ? (
+            // Abonnement suspendu : l'écran se verrouille AVANT qu'une vente
+            // n'échoue devant un client (contrat `DeviceHeartbeatResult`). La
+            // tablette reste appairée et continue de battre — le support la voit
+            // vivante ; la réactivation la rouvre au battement suivant, seule.
+            <SuspendedScreen name={device.tenant.name} />
+          ) : session ? (
+            posScreen
+          ) : (
+            <PinScreen
+              onSession={onSession}
+              device={device}
+              onUnpair={onUnpair}
+              notice={lockNotice}
+            />
+          )}
+        </View>
+      </Appearance>
+    </PrefsProvider>
   );
 }
 
 function RestoreError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { palette } = useTheme();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
       <Text style={{ color: palette.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }}>
@@ -340,6 +350,7 @@ function RestoreError({ message, onRetry }: { message: string; onRetry: () => vo
  * clients de la salle, pas de jargon — qui appeler, et c'est tout.
  */
 function SuspendedScreen({ name }: { name: string }) {
+  const { palette } = useTheme();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
       <Text style={{ color: palette.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }}>
@@ -351,4 +362,21 @@ function SuspendedScreen({ name }: { name: string }) {
       </Text>
     </View>
   );
+}
+
+/** Les préférences habillent les écrans sans remonter l'état de vente. */
+function Appearance({ ready, unpaired, children, splashDone, finishSplash, deviceName }: { deviceName?: string; ready: boolean; unpaired: boolean; children: ReactNode; splashDone: boolean; finishSplash: () => void }) {
+  const { prefs, ready: prefsReady } = usePrefs();
+  useEffect(() => { if (prefsReady && !prefs.splash) finishSplash(); }, [prefsReady, prefs.splash, finishSplash]);
+  return <ThemeProvider theme={prefs.theme}>
+    <AppearanceFrame>{children}</AppearanceFrame>
+    {(prefsReady || (ready && unpaired)) && prefs.splash && !splashDone ? <Splash ready={ready} onDone={finishSplash} deviceName={deviceName} /> : null}
+  </ThemeProvider>;
+}
+function AppearanceFrame({ children }: { children: ReactNode }) {
+  const { palette, theme } = useTheme();
+  return <View style={{ flex: 1, backgroundColor: palette.bg }}>
+    <StatusBar style={theme === 'light' ? 'dark' : 'light'} hidden />
+    {children}
+  </View>;
 }

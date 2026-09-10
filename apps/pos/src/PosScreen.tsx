@@ -1,5 +1,5 @@
 /**
- * Écran principal de la caisse (V1) et orchestration des surcouches.
+ * Composition visuelle de la caisse et orchestration des surcouches.
  *
  * Invariants tenus ici :
  *  - ventes sans créneau : file offline persistée, UUID idempotent ;
@@ -7,6 +7,9 @@
  *    du créneau et encaissement d'une commande existante ;
  *  - les montants sont en CENTIMES partout, jamais en flottants.
  */
+import { usePrefs } from './usePrefs';
+import { SettingsModal } from './SettingsModal';
+import { useTheme } from './theme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
 import type { CollectOrderPayment, OrderLoyaltyEarnStatus } from '@sm/contracts';
@@ -16,6 +19,7 @@ import {
   cartTotal,
   creerDebounce,
   euros,
+  missingRequired,
   fraicheur,
   normalizeOrdersWindow,
   pollCadenceMs,
@@ -32,7 +36,7 @@ import {
 } from '@sm/client-core';
 import { API_URL } from './config';
 import { DEMO, KEYS, client, TENANT_SLUG, type Session } from './client';
-import { S, makeBrand, palette } from './theme';
+import { S, makeBrand, withAlpha } from './theme';
 import { Btn, Drawer, Loading, useToasts } from './ui';
 import { useLayout } from './useLayout';
 import { siteConfigure } from './demo-retour';
@@ -112,14 +116,19 @@ export function PosScreen({
   session,
   onLock,
   saleInFlight,
+  logoUrl,
+  deviceName,
 }: {
   session: Session;
   onLock: (reason?: string) => void;
   saleInFlight: SaleInFlightGate;
+  logoUrl?: string | null;
+  deviceName?: string;
 }) {
+  const { palette } = useTheme();
   const brand = useMemo(
-    () => makeBrand(session.tenantName, session.brandColor),
-    [session.brandColor, session.tenantName],
+    () => makeBrand(session.tenantName, session.brandColor, logoUrl),
+    [session.brandColor, session.tenantName, logoUrl],
   );
 
   /**
@@ -127,6 +136,10 @@ export function PosScreen({
    * échelle typographique et bascule compacte. Aucun écran ne décide seul.
    */
   const layout = useLayout();
+  const { prefs } = usePrefs();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const ticketSide = prefs.layout === 'B' ? 'left' : 'right';
+  const inlineConfig = layout.configInlineFor(prefs.layout);
 
   const { menu, error: menuError, offline, reload } = useMenu(client, TENANT_SLUG);
   const sync = useSyncState(client);
@@ -165,8 +178,29 @@ export function PosScreen({
   const [vue, setVue] = useState<Vue>('vente');
 
   // ─── Surcouches ───
-  const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
+  const [config, setConfig] = useState<{
+    product: Product;
+    categoryName: string;
+    initial?: ConfigDraft;
+    /** Référence immuable de la ligne au début de l’édition. */
+    sourceLine?: CartLine;
+  } | null>(null);
   const [cashOpen, setCashOpen] = useState(false);
+  useEffect(() => {
+    setTicketOpen(false);
+  }, [prefs.layout]);
+  useEffect(() => {
+    const editing = config?.initial;
+    if (editing?.lineId && lines.find((line) => line.lineId === editing.lineId) !== config?.sourceLine) {
+      setConfig(null);
+      push('La ligne a changé dans le ticket. Rouvrez-la pour poursuivre la modification.', 'warn');
+    }
+  }, [config, lines, push]);
+  const configurationCommitted = useCallback(() => {
+    if (!config) return true;
+    push('Validez ou fermez la configuration du produit avant de confirmer le ticket.', 'warn');
+    return false;
+  }, [config, push]);
   const [collectionTarget, setCollectionTarget] = useState<{ id: string; number: number } | null>(null);
   const [closeOpen, setCloseOpen] = useState(false);
   /**
@@ -756,6 +790,7 @@ export function PosScreen({
   );
 
   const resetTicket = useCallback(() => {
+    setConfig(null);
     setLines([]);
     setNote('');
     setCustomerName('');
@@ -799,6 +834,7 @@ export function PosScreen({
     && phone.slots?.slots.some((slot) => slot.iso === slotIso && !slot.full) === true;
   const submitPhone = () => {
     if (!phoneCanSubmit || mode !== 'tel' || !slotIso || busy || journalResetGate.current) return;
+    if (!configurationCommitted()) return;
     const { clientId: _unused, ...body } = buildOrderBody({ clientId: '00000000-0000-4000-8000-000000000000',
       mode: 'tel', lines, note, customerName, customerPhone, slotIso, method: 'retrait' });
     setTicketOpen(false);
@@ -876,6 +912,7 @@ export function PosScreen({
             setConfig({
               product,
               categoryName: cat.name,
+              sourceLine: line,
               initial: {
                 lineId: line.lineId,
                 variantKey: line.variantKey,
@@ -898,16 +935,23 @@ export function PosScreen({
     (draft: ConfigDraft) => {
       mutateTicket(() => {
         if (!config) return;
+        if (draft.lineId && lines.find((line) => line.lineId === draft.lineId) !== config.sourceLine) {
+          setConfig(null);
+          push('La ligne a changé dans le ticket. Rouvrez-la pour poursuivre la modification.', 'warn');
+          return;
+        }
         const line = draftToLine(config.product, draft, draft.lineId ?? uuid());
         if (draft.lineId) {
-          setLines((cur) => cur.map((l) => (l.lineId === draft.lineId ? line : l)));
+          // Le contrôle reste aussi dans l’updater : une mutation déjà en file
+          // ne doit jamais être écrasée par un brouillon issu de l’ancien rendu.
+          setLines((cur) => cur.map((l) => (l.lineId === draft.lineId && l === config.sourceLine ? line : l)));
         } else {
           addLine(line);
         }
         setConfig(null);
       });
     },
-    [addLine, config, mutateTicket],
+    [addLine, config, lines, mutateTicket, push],
   );
 
   // ─── Tickets en attente ───
@@ -971,6 +1015,7 @@ export function PosScreen({
   const send = useCallback(
     async (method: PayMethod, cash?: { received: number; change: number }) => {
       if (lines.length === 0 || busy) return;
+      if (!configurationCommitted()) return;
       if (mode === 'tel') {
         push('Confirmez d’abord le créneau téléphone. L’encaissement se fait ensuite sur la commande confirmée.', 'warn');
         return;
@@ -1076,6 +1121,7 @@ export function PosScreen({
       applyDayLog,
       customerName,
       customerPhone,
+      configurationCommitted,
       dayLogWriter,
       lines,
       loyaltyMember,
@@ -1093,13 +1139,14 @@ export function PosScreen({
     (method: PayMethod) => {
       if (saleInFlight.active) return;
       if (mode === 'tel') return;
+      if (!configurationCommitted()) return;
       // En compact, l'encaissement se déclenche depuis la barre d'accès comme
       // depuis le tiroir : on referme le tiroir pour rendre la main à la vue.
       setTicketOpen(false);
       if (method === 'especes') setCashOpen(true);
       else void send(method);
     },
-    [mode, saleInFlight, send],
+    [configurationCommitted, mode, saleInFlight, send],
   );
 
   // ─── Remise (PIN) ───
@@ -1353,6 +1400,8 @@ export function PosScreen({
   /** Le ticket, identique en colonne ancrée et en tiroir : un seul composant. */
   const ticket = (collapse?: () => void) => (
     <TicketPanel
+      side={ticketSide}
+      powered={prefs.layout === 'B'}
       lines={lines}
       mode={mode}
       brand={brand}
@@ -1404,6 +1453,7 @@ export function PosScreen({
       <TopBar
         brand={brand}
         staffName={session.staffName}
+        deviceName={deviceName}
         vue={vue}
         onVue={setVue}
         serviceBadge={serviceBadge}
@@ -1422,6 +1472,7 @@ export function PosScreen({
         now={now}
         onRecap={() => void openRecap()}
         onLock={() => onLock()}
+        onSettings={() => setSettingsOpen(true)}
       />
 
       <PhoneOrderNotice key={phone.attempt?.clientId ?? 'none'} attempt={phone.attempt} error={phone.error}
@@ -1455,15 +1506,16 @@ export function PosScreen({
           />
         ) : (
           <>
-            <CategoryRail categories={menu.categories} activeId={catId} onSelect={setCatId} brand={brand} />
+            {!layout.compact && prefs.layout === 'B' ? ticket() : null}
+            {prefs.layout === 'A' || (prefs.layout === 'C' && !layout.compact) ? <CategoryRail dense={prefs.layout === 'C'} categories={menu.categories} activeId={catId} onSelect={setCatId} brand={brand} /> : null}
 
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               {offline ? (
                 <View
                   style={{
                     paddingHorizontal: S.lg,
                     paddingVertical: 7,
-                    backgroundColor: '#161104',
+                    backgroundColor: withAlpha(palette.amber, 0.1),
                     borderBottomWidth: 1,
                     borderBottomColor: palette.line2,
                   }}
@@ -1474,6 +1526,17 @@ export function PosScreen({
                 </View>
               ) : null}
               <ProductArea
+                layoutId={prefs.layout}
+                onSelectCategory={setCatId}
+                onQuickAdd={(product, categoryName) => mutateTicket(() => {
+                  if (product.outOfStock) return;
+                  const variantKey = product.variants?.[0]?.key ?? null;
+                  if (missingRequired(product, variantKey, []).length > 0) {
+                    setConfig({ product, categoryName });
+                    return;
+                  }
+                  addLine(draftToLine(product, { variantKey, options: [], removed: [], note: '', qty: 1 }, uuid()));
+                })}
                 categories={menu.categories}
                 // Les médias voyagent à plat, à côté des catégories : c'est là que
                 // la grille trouve le point d'intérêt et les cotes d'une photo.
@@ -1490,31 +1553,26 @@ export function PosScreen({
               />
             </View>
 
-            {/* Ticket ancré — au-dessus de 900 px de large uniquement */}
-            {layout.compact ? null : ticket()}
           </>
         )}
+
+        {/* Instance unique : une rotation panneau/modale conserve le brouillon. */}
+        {config ? <QuickConfig
+          key={`${config.product._id}:${config.initial?.lineId ?? 'new'}`}
+          inline={inlineConfig} visible={vue === 'vente' && !settingsOpen} product={config.product} categoryName={config.categoryName} brand={brand}
+          initial={config.initial} onClose={() => setConfig(null)} onSubmit={submitConfig}
+        /> : null}
+        {vue === 'vente' && !layout.compact && prefs.layout !== 'B' ? ticket() : null}
 
         {/* Ticket escamoté : tiroir depuis la droite, SOUS les modales pour
             qu'une configuration ouverte depuis une ligne passe devant. */}
         {layout.compact && ticketOpen && vue === 'vente' ? (
-          <Drawer onClose={() => setTicketOpen(false)} width={layout.ticketW}>
+          <Drawer side={ticketSide} onClose={() => setTicketOpen(false)} width={layout.ticketW}>
             {ticket(() => setTicketOpen(false))}
           </Drawer>
         ) : null}
 
         {/* Surcouches — sous la barre haute, qui reste lisible */}
-        {config ? (
-          <QuickConfig
-            product={config.product}
-            categoryName={config.categoryName}
-            brand={brand}
-            initial={config.initial}
-            onClose={() => setConfig(null)}
-            onSubmit={submitConfig}
-          />
-        ) : null}
-
         {cashOpen ? (
           <CashModal
             total={cartTotal(lines)}
@@ -1631,6 +1689,7 @@ export function PosScreen({
           phone.clearConfirmed(); setCollectionTarget({ id: receipt.orderId, number: receipt.number });
         }} /> : null}
 
+      {settingsOpen ? <SettingsModal brand={brand} restaurant={session.tenantName} deviceName={deviceName} pending={sync.pending} onClose={() => setSettingsOpen(false)} /> : null}
       {host}
     </View>
   );

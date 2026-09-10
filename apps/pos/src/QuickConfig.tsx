@@ -1,11 +1,12 @@
 /**
- * Config express (V2) — la modale ouverte au tap sur un produit.
+ * Config express — panneau latéral ou modale selon l’espace disponible.
  *
  * Les règles min/max sont lues PAR VARIANTE via `ruleFor` du noyau partagé :
  * un tacos M impose 1 viande, un XXL en impose 4. Le bouton d'ajout reste
  * désactivé tant que `missingRequired` n'est pas vide, et l'écran dit
  * précisément ce qui manque plutôt qu'un « formulaire invalide ».
  */
+import { useTheme } from './theme';
 import { useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import {
@@ -20,8 +21,8 @@ import {
   type Product,
   type SelectedOption,
 } from '@sm/client-core';
-import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
-import { Btn, Chip, Field, Overlay, PanelHead, Stepper } from './ui';
+import { FONT, R, S, withAlpha, type Brand } from './theme';
+import { Btn, Chip, Field, InlinePanel, Overlay, Press, PanelHead, Stepper } from './ui';
 import { useLayout } from './useLayout';
 import { optionsForVariant } from './quick-config-options';
 
@@ -55,6 +56,8 @@ export function QuickConfig({
   categoryName,
   brand,
   initial,
+  inline = false,
+  visible = true,
   onClose,
   onSubmit,
 }: {
@@ -62,9 +65,12 @@ export function QuickConfig({
   categoryName?: string;
   brand: Brand;
   initial?: ConfigDraft;
+  inline?: boolean;
+  visible?: boolean;
   onClose: () => void;
   onSubmit: (draft: ConfigDraft) => void;
 }) {
+  const { sheet, palette, type } = useTheme();
   const L = useLayout();
   const variants = product.variants ?? [];
   const [variantKey, setVariantKey] = useState<string | null>(
@@ -157,11 +163,10 @@ export function QuickConfig({
     });
   }
 
-  const ctaLabel = missing.length === 0 ? `Ajouter · ${euros(unit * qty)}` : 'Complétez la configuration';
+  const ctaLabel = missing.length === 0 ? `${initial?.lineId ? 'Mettre à jour' : 'Ajouter'} · ${euros(unit * qty)}` : 'Complétez la configuration';
 
-  return (
-    // 520 px est une largeur SOUHAITÉE : `Overlay` la borne à l'écran.
-    <Overlay onClose={onClose} accessibilityLabel={`Configurer ${product.name}`} width={520}>
+  const content = (
+    <>
       <PanelHead
         title={product.name}
         sub={[categoryName, product.description].filter(Boolean).join(' · ') || undefined}
@@ -173,24 +178,27 @@ export function QuickConfig({
         // Plus de hauteur figée : la modale est bornée à l'écran et c'est ce
         // bloc qui absorbe la différence. Sur une 10" en portrait, le pied et
         // son bouton d'ajout restent visibles, le contenu défile.
-        style={{ flexShrink: 1 }}
-        contentContainerStyle={{ padding: L.sp(S.xl), gap: L.sp(S.xl) }}
+        style={inline ? { flex: 1, minHeight: 0 } : { flexShrink: 1 }}
+        contentContainerStyle={{ paddingHorizontal: L.sp(inline ? 16 : 20), paddingTop: L.sp(6), paddingBottom: L.sp(16), gap: L.sp(14) }}
         keyboardShouldPersistTaps="handled"
       >
         {variants.length > 0 ? (
           <Section title="Taille" hint={`${variants.length} formats`}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
               {variants.map((v) => (
-                <Chip
+                <Press
                   key={v.key}
-                  label={v.name}
-                  detail={euros(v.price)}
-                  on={v.key === variantKey}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`${v.name} ${euros(v.price)}`}
+                  selected={v.key === variantKey}
                   onPress={() => pickVariant(v.key)}
-                  accent={brand.accent}
-                  onAccent={brand.onAccent}
-                  minHeight={L.compact ? 48 : 52}
-                />
+                  style={{ minWidth: L.sp(120), flexBasis: '46%', flexGrow: 1, minHeight: L.touch(64), padding: L.sp(12), borderRadius: R.card, borderWidth: 1, borderColor: v.key === variantKey ? brand.accent : palette.line2, backgroundColor: v.key === variantKey ? brand.tint : palette.surface2 }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: L.sp(8) }}>
+                    <Text style={[type.strong, { flex: 1, flexShrink: 1, fontSize: L.fs(15) }]}>{v.name}</Text>
+                    <Text style={[type.num, { flexShrink: 0, fontWeight: '800', fontSize: L.fs(14) }]}>{euros(v.price)}</Text>
+                  </View>
+                </Press>
               ))}
             </View>
           </Section>
@@ -207,7 +215,7 @@ export function QuickConfig({
               key={group.key}
               title={group.name}
               hint={info.text}
-              hintTone={info.tone === 'need' ? palette.amber : info.tone === 'ok' ? palette.green : palette.mut}
+              hintTone={info.tone === 'need' ? palette.amberText : info.tone === 'ok' ? palette.greenText : palette.mut}
               required={rule.min > 0}
             >
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
@@ -235,7 +243,7 @@ export function QuickConfig({
 
         {product.removables?.length ? (
           <Section
-            title="Retraits"
+            title="Retraits express"
             hint={removed.length === 0 ? 'Complet par défaut' : 'Ce que le client ne veut pas'}
           >
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
@@ -289,7 +297,7 @@ export function QuickConfig({
 
       <View style={sheet.hairline} />
 
-      <View style={{ padding: L.sp(S.xl), gap: L.sp(S.md) }}>
+      <View style={{ padding: L.sp(inline ? 16 : 20), gap: L.sp(S.md), backgroundColor: palette.footBg }}>
         {missingDetail.length > 0 ? (
           <View
             style={{
@@ -305,7 +313,7 @@ export function QuickConfig({
             }}
           >
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: palette.amber }} />
-            <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13.5), fontWeight: '700', flex: 1 }}>
+            <Text style={{ fontFamily: FONT, color: palette.amberText, fontSize: L.fs(13.5), fontWeight: '700', flex: 1 }}>
               {missingDetail.join(' · ')}
             </Text>
           </View>
@@ -315,10 +323,12 @@ export function QuickConfig({
           <Stepper qty={qty} onChange={(n) => setQty(Math.max(1, n))} min={1} />
           <View style={{ flex: 1 }}>
             <Btn
-              label={ctaLabel}
+              label={missing.length > 0 && L.width < 380 ? 'Choix requis' : ctaLabel}
+              accessibilityLabel={ctaLabel}
               sub={missing.length === 0 && qty > 1 ? `${euros(unit)} l'unité` : undefined}
               kind="primary"
-              size="lg"
+              size="md"
+              style={{ paddingHorizontal: L.sp(8) }}
               accent={brand.accent}
               onAccent={brand.onAccent}
               disabled={missing.length > 0}
@@ -328,7 +338,13 @@ export function QuickConfig({
           </View>
         </View>
       </View>
-    </Overlay>
+    </>
+  );
+  if (!visible) return null;
+  return inline ? (
+    <InlinePanel width={L.cfgW} onClose={onClose} label={`Configurer ${product.name}`}>{content}</InlinePanel>
+  ) : (
+    <Overlay onClose={onClose} accessibilityLabel={`Configurer ${product.name}`} width={520}>{content}</Overlay>
   );
 }
 
@@ -345,10 +361,11 @@ function Section({
   required?: boolean;
   children: React.ReactNode;
 }) {
+  const { sheet, type, palette } = useTheme();
   return (
     <View style={{ gap: S.md }}>
-      <View style={[sheet.between, { gap: S.sm }]}>
-        <View style={[sheet.row, { gap: 8, flexShrink: 1 }]}>
+      <View style={[sheet.between, { gap: S.sm, flexWrap: 'wrap' }]}>
+        <View style={[sheet.row, { gap: 8 }]}>
           <Text style={type.eyebrow}>{title}</Text>
           {required ? (
             <View
@@ -359,12 +376,12 @@ function Section({
                 backgroundColor: withAlpha(palette.amber, 0.14),
               }}
             >
-              <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: 11, fontWeight: '800' }}>REQUIS</Text>
+              <Text style={{ fontFamily: FONT, color: palette.amberText, fontSize: 11, fontWeight: '800' }}>REQUIS</Text>
             </View>
           ) : null}
         </View>
         {hint ? (
-          <Text style={{ fontFamily: FONT, color: hintTone ?? palette.mut, fontSize: 13, fontWeight: '700' }}>
+          <Text style={{ fontFamily: FONT, color: hintTone ?? palette.mut, fontSize: 13, fontWeight: '700', flexShrink: 1 }}>
             {hint}
           </Text>
         ) : null}
