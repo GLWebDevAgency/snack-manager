@@ -1,5 +1,5 @@
 /**
- * Panneau ticket (zone D) — colonne de droite du poste.
+ * Panneau ticket (zone D) — colonne ou tiroir, du côté choisi sur le poste.
  *
  * C'est la colonne que le caissier regarde en permanence : hiérarchie franche
  * (nom en gras, options en second niveau gris), total en très grande graisse
@@ -13,7 +13,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { cartTotal, euros, type CartLine } from '@sm/client-core';
-import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
+import { FONT, R, S, useTheme, withAlpha, type Brand } from './theme';
+import { Icon } from './Icon';
+import { PoweredBy } from './PoweredBy';
 import { MODE_LABEL, lineDetail, type Mode } from './pos-state';
 import { phoneServiceDay, type PhoneTicketControls } from './usePhoneOrder';
 import { Btn, Chip, CloseBtn, EmptyState, Field, Press, Stepper } from './ui';
@@ -42,6 +44,8 @@ export function TicketPanel({
   onLoyalty,
   onCollapse,
   phone,
+  side = 'right',
+  powered = true,
 }: {
   lines: CartLine[];
   mode: Mode;
@@ -65,7 +69,10 @@ export function TicketPanel({
   /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
   onCollapse?: () => void;
   phone: PhoneTicketControls;
+  side?: 'left' | 'right';
+  powered?: boolean;
 }) {
+  const { palette, sheet, type, semanticText } = useTheme();
   const L = useLayout();
   const drawer = !!onCollapse;
   const subtotal = cartTotal(lines);
@@ -81,21 +88,24 @@ export function TicketPanel({
         // Ancré : largeur fluide bornée. Tiroir : il remplit la largeur que le
         // tiroir lui donne.
         ...(drawer ? { flex: 1 } : { width: L.ticketW }),
+        minHeight: 0,
         backgroundColor: palette.surface,
-        borderLeftWidth: 1,
+        borderLeftWidth: side === 'right' ? 1 : 0,
         borderLeftColor: palette.line,
+        borderRightWidth: side === 'left' ? 1 : 0,
+        borderRightColor: palette.line,
       }}
     >
       {/* En-tête */}
       <View style={[sheet.between, { paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm }]}>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>Ticket</Text>
           <Text style={[type.h2, { marginTop: 2, fontSize: L.fs(17) }]}>{MODE_LABEL[mode]}</Text>
         </View>
         {lines.length > 0 ? (
           <View style={[sheet.row, { gap: 6 }]}>
-            <TextAction label="En attente" tone={palette.amber} onPress={onPark} />
-            <ConfirmAction label="Vider" confirmLabel="Confirmer ?" tone={palette.red} onConfirm={onClear} />
+            <TextAction label="En attente" tone={semanticText.warning} onPress={onPark} />
+            <ConfirmAction label="Vider" confirmLabel="Confirmer ?" tone={semanticText.danger} onConfirm={onClear} />
           </View>
         ) : null}
         {onCollapse ? <CloseBtn onPress={onCollapse} label="Replier le ticket" /> : null}
@@ -104,7 +114,7 @@ export function TicketPanel({
 
       {/* Bloc client — commande téléphone */}
       {mode === 'tel' ? (
-        <View style={{ paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm, backgroundColor: '#0d0d0d' }}>
+        <View style={{ paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm, backgroundColor: palette.deep }}>
           <Field
             value={customerName}
             onChangeText={onCustomerName}
@@ -149,13 +159,13 @@ export function TicketPanel({
           </ScrollView>
           {phone.slotsBusy ? <Text accessibilityRole="alert" style={type.mut}>Vérification des créneaux…</Text> : null}
           {phone.slots?.closedToday ? <Text style={type.mut}>{phone.slots.closureReason ?? 'Aucun créneau disponible pour cette journée.'}</Text> : null}
-          {phone.slotsError || phone.unavailable ? <Text accessibilityRole="alert" style={[type.mut, { color: palette.amber }]}>{phone.unavailable ?? phone.slotsError}</Text> : null}
+          {phone.slotsError || phone.unavailable ? <Text accessibilityRole="alert" style={[type.mut, { color: semanticText.warning }]}>{phone.unavailable ?? phone.slotsError}</Text> : null}
           <Btn label="Actualiser les créneaux" kind="ghost" size="sm" disabled={busy || phone.slotsBusy || !!phone.unavailable} onPress={phone.onRefresh} />
           <Text style={type.mut}>La fidélité n’est pas encore rattachable aux commandes téléphone.</Text>
           {lines.length > 0 && !phoneOk ? (
             <View style={[sheet.row, { gap: 8 }]}>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
-              <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13), fontWeight: '600', flex: 1 }}>
+              <Text style={{ fontFamily: FONT, color: semanticText.warning, fontSize: L.fs(13), fontWeight: '600', flex: 1 }}>
                 Nom et téléphone requis pour envoyer une commande téléphone
               </Text>
             </View>
@@ -181,27 +191,27 @@ export function TicketPanel({
           paddingVertical: S.sm,
           borderRadius: R.ctrl,
           borderWidth: 1,
-          borderColor: loyalty ? withAlpha(brand.accent, 0.42) : palette.line2,
-          backgroundColor: loyalty ? withAlpha(brand.accent, 0.09) : '#101010',
+          borderColor: loyalty ? withAlpha(brand.accent, 0.5) : palette.line2,
+          backgroundColor: loyalty ? brand.tint : palette.deep,
           flexDirection: 'row',
           alignItems: 'center',
           gap: S.sm,
         }}
-        activeStyle={{ backgroundColor: '#282828' }}
+        activeStyle={{ backgroundColor: palette.press2 }}
       >
         <View
           style={{
             width: 34,
             height: 34,
             borderRadius: 12,
-            backgroundColor: loyalty ? withAlpha(brand.accent, 0.18) : palette.surface2,
+            backgroundColor: loyalty ? brand.tintStrong : palette.surface2,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(17) }}>★</Text>
+          <Icon name="star" size={17} color={loyalty ? brand.accent : palette.mut} />
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.strong, { fontSize: L.fs(14) }]} numberOfLines={1}>
             {loyalty ? loyalty.alias : 'Carte fidélité'}
           </Text>
@@ -211,7 +221,7 @@ export function TicketPanel({
               : 'Scanner, rechercher ou créer'}
           </Text>
         </View>
-        <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(18) }}>›</Text>
+        <Icon name="chev" size={18} color={loyalty ? brand.accent : palette.mut} />
       </Press> : null}
       {mode !== 'tel' ? <View style={sheet.hairline} /> : null}
 
@@ -253,7 +263,7 @@ export function TicketPanel({
         style={{
           borderTopWidth: 1,
           borderTopColor: palette.line,
-          backgroundColor: '#0c0c0c',
+          backgroundColor: palette.footBg,
           paddingHorizontal: S.lg,
           paddingTop: S.md,
           paddingBottom: S.lg,
@@ -279,7 +289,8 @@ export function TicketPanel({
                 // qui doit profiter le plus d'un grand écran.
                 fontSize: L.fs(38),
                 fontWeight: '900',
-                color: lines.length ? brand.accent : '#3a3a3a',
+                color: lines.length ? brand.accent : palette.zero,
+                lineHeight: L.fs(38),
                 letterSpacing: -1.4,
               },
             ]}
@@ -297,6 +308,7 @@ export function TicketPanel({
           <View style={{ flexDirection: 'row', gap: S.sm }}>
             <Btn
               label="Espèces"
+              icon="cash"
               kind="solid"
               size="md"
               disabled={!canSend}
@@ -305,6 +317,7 @@ export function TicketPanel({
             />
             <Btn
               label="Carte"
+              icon="card"
               kind="primary"
               size="md"
               accent={brand.accent}
@@ -329,6 +342,7 @@ export function TicketPanel({
           </>}
         </View>
       </View>
+      {powered ? <PoweredBy variant="ticket" /> : null}
     </View>
   );
 }
@@ -344,6 +358,7 @@ function TicketLine({
   onQty: (qty: number) => void;
   onEdit: () => void;
 }) {
+  const { palette, sheet, type, semanticText } = useTheme();
   const detail = lineDetail(line);
   return (
     <View style={{ paddingVertical: S.md, borderBottomWidth: 1, borderBottomColor: palette.line2 }}>
@@ -365,12 +380,12 @@ function TicketLine({
           ) : null}
           {line.note ? (
             <Text
-              style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13), lineHeight: L.fs(17), marginTop: 3 }}
+              style={{ fontFamily: FONT, color: semanticText.warning, fontSize: L.fs(13), lineHeight: L.fs(17), marginTop: 3 }}
             >
               « {line.note} »
             </Text>
           ) : null}
-          <Text style={[type.num, { color: '#7a7a7a', fontSize: L.fs(12.5), marginTop: 4 }]}>
+          <Text style={[type.num, { color: palette.dimText, fontSize: L.fs(12.5), marginTop: 4 }]}>
             {euros(line.unitPrice)} / u
           </Text>
         </Press>
@@ -390,7 +405,7 @@ function TicketLine({
           }}
           activeStyle={{ backgroundColor: withAlpha(palette.red, 0.14) }}
         >
-          <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(13.5), fontWeight: '700' }}>
+          <Text style={{ fontFamily: FONT, color: semanticText.danger, fontSize: L.fs(13.5), fontWeight: '700' }}>
             Supprimer
           </Text>
         </Press>
@@ -483,8 +498,8 @@ function TextAction({
  * Le ticket est replié, mais le caissier doit garder sous les yeux ce qu'il a
  * saisi ET pouvoir encaisser sans détour : à gauche « Ticket · N articles ·
  * total » ouvre le tiroir, à droite le paiement carte — le plus fréquent —
- * part en UN seul geste. Espèces et paiement au retrait restent dans le
- * tiroir, où le pied de ticket est inchangé.
+ * part en UN seul geste. Le téléphone conserve son admission sur créneau réel
+ * et le titre-restaurant reste accessible dans le tiroir.
  */
 export function TicketDock({
   lines,
@@ -509,7 +524,9 @@ export function TicketDock({
   onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
   phone: PhoneTicketControls;
 }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
+  const tight = L.width < 480;
   const subtotal = cartTotal(lines);
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const canSend = lines.length > 0 && mode !== 'tel' && !busy;
@@ -522,12 +539,12 @@ export function TicketDock({
         gap: S.sm,
         paddingHorizontal: S.md,
         paddingVertical: S.sm,
-        backgroundColor: '#0c0c0c',
+        backgroundColor: palette.footBg,
         borderTopWidth: 1,
         borderTopColor: palette.line,
       }}
     >
-      {mode !== 'tel' ? <Press
+      {mode !== 'tel' && !tight ? <Press
         onPress={onLoyalty}
         accessibilityLabel={
           loyalty
@@ -544,15 +561,16 @@ export function TicketDock({
           alignItems: 'center',
           justifyContent: 'center',
         }}
-        activeStyle={{ backgroundColor: '#282828' }}
+        activeStyle={{ backgroundColor: palette.press2 }}
       >
-        <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(21) }}>★</Text>
+        <Icon name="star" size={20} color={loyalty ? brand.accent : palette.mut} />
       </Press> : null}
       <Press
         onPress={onOpen}
         accessibilityLabel={`Ouvrir le ticket, ${count} article${count > 1 ? 's' : ''}, total ${euros(subtotal)}`}
         style={{
           flex: 1,
+          minWidth: 112,
           minHeight: L.touch(52),
           paddingHorizontal: S.md,
           borderRadius: R.pill,
@@ -564,15 +582,15 @@ export function TicketDock({
           justifyContent: 'space-between',
           gap: S.sm,
         }}
-        activeStyle={{ backgroundColor: '#262626' }}
+        activeStyle={{ backgroundColor: palette.press2 }}
       >
         <Text numberOfLines={1} style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(14), fontWeight: '700' }}>
-          Ticket · {count} art.
+          {tight ? `${count} art.` : `Ticket · ${count} art.`}
         </Text>
         <Text
           style={[
             type.num,
-            { fontSize: L.fs(20), fontWeight: '900', color: lines.length ? brand.accent : '#3a3a3a', letterSpacing: -0.6 },
+            { fontSize: L.fs(20), fontWeight: '900', color: lines.length ? brand.accent : palette.zero, letterSpacing: -0.6 },
           ]}
         >
           {euros(subtotal)}
@@ -586,6 +604,7 @@ export function TicketDock({
         accent={brand.accent} onAccent={brand.onAccent} disabled={!phone.canSubmit || busy} onPress={phone.onSubmit}
         accessibilityLabel="Confirmer le créneau téléphone avant encaissement" /> : <><Btn
         label="Carte"
+        icon="card"
         kind="primary"
         size="md"
         accent={brand.accent}
@@ -595,12 +614,14 @@ export function TicketDock({
         accessibilityLabel={`Encaisser ${euros(subtotal)} par carte`}
       />
       <Btn
-        label="Espèces"
+        label=""
+        icon="cash"
         kind="solid"
         size="md"
         disabled={!canSend}
         onPress={() => onPay('especes')}
         accessibilityLabel={`Encaisser ${euros(subtotal)} en espèces`}
+        style={{ width: L.touch(52), paddingHorizontal: 0 }}
       />
       </>}
     </View>

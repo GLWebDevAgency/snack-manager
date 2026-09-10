@@ -692,6 +692,7 @@ describe('les clés effacées au désappairage', () => {
         'sm.pos.loyalty-enrollment-recovery.v1',
         'sm.pos.parked.v1',
         'sm.pos.phone-order-attempt.v1',
+        'sm.pos.prefs.v1',
         'sm.pos.servicestart.v1',
         'sm.pos.session.v1',
       ].sort(),

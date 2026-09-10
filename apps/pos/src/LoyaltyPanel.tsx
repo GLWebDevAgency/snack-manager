@@ -1,3 +1,4 @@
+import { useTheme } from './theme';
 /**
  * Fidélité au comptoir — autonome de la commande en ligne.
  *
@@ -31,7 +32,7 @@ import {
   type LoyaltyEnrollmentRecoveryState,
   type LoyaltyTicketMember,
 } from './loyalty-state';
-import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
+import { FONT, R, S, withAlpha, type Brand } from './theme';
 import { Btn, Chip, Field, Overlay, PanelHead, Press, ScrollView } from './ui';
 import { useLayout } from './useLayout';
 
@@ -82,6 +83,7 @@ export function LoyaltyPanel({
   onUnauthorized: () => void;
   onClose: () => void;
 }) {
+  const { type, palette, sheet } = useTheme();
   const L = useLayout();
   const [tab, setTab] = useState<MainTab>('find');
   const [findMode, setFindMode] = useState<FindMode>('qr');
@@ -757,6 +759,7 @@ function FindCard({
   brand: Brand;
   onSubmit: () => void;
 }) {
+  const { sheet, type } = useTheme();
   const L = useLayout();
   return (
     <View style={[sheet.inset, { padding: L.sp(S.lg), gap: S.lg }]}>
@@ -842,6 +845,7 @@ function CreateCard({
   brand: Brand;
   onSubmit: () => void;
 }) {
+  const { sheet, type, palette } = useTheme();
   const L = useLayout();
   return (
     <View style={[sheet.inset, { padding: L.sp(S.lg), gap: S.lg }]}>
@@ -925,6 +929,7 @@ function ConsentRow({
   accent: string;
   disabled?: boolean;
 }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   return (
     <Press
@@ -944,7 +949,7 @@ function ConsentRow({
         alignItems: 'flex-start',
         gap: S.md,
       }}
-      activeStyle={{ backgroundColor: '#242424' }}
+      activeStyle={{ backgroundColor: palette.press2 }}
     >
       <View
         style={{
@@ -990,6 +995,7 @@ function MemberView({
   onDetach: () => void;
   onAnother: () => void;
 }) {
+  const { sheet, type, palette } = useTheme();
   const L = useLayout();
   return (
     <View style={{ gap: S.lg }}>
@@ -1069,7 +1075,7 @@ function MemberView({
                     width: 42,
                     height: 42,
                     borderRadius: 14,
-                    backgroundColor: affordable ? withAlpha(brand.accent, 0.14) : '#171717',
+                    backgroundColor: affordable ? withAlpha(brand.accent, 0.14) : palette.surface2,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
@@ -1110,6 +1116,7 @@ function QrHandoff({
   busy: boolean;
   onDone: () => void;
 }) {
+  const { type } = useTheme();
   const L = useLayout();
   return (
     <View style={{ alignItems: 'center', gap: S.lg }}>
@@ -1178,6 +1185,7 @@ function QrMatrix({ payload, accent }: { payload: string; accent: string }) {
 }
 
 function StatusCard({ tone, title, body }: { tone: string; title: string; body: string }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   const textTone = tone === palette.red ? '#ff776b' : tone;
   return (

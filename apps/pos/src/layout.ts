@@ -207,6 +207,23 @@ export interface Layout {
   topbarSelectorsSplit: boolean;
   /** Rail des catégories (zone B). */
   railW: number;
+  /** Disposition C : rail horizontalement plus généreux. */
+  railDenseW: number;
+  pinPadW: number;
+  pinKeyW: number;
+  pinKeyH: number;
+  pinMark: number;
+  segmentPadX: number;
+  catalogWideSearch: boolean;
+  catalogCategoryIcons: boolean;
+  catalogDescriptions: boolean;
+  railIcons: boolean;
+  railCompactBrand: boolean;
+  /** Configurateur latéral des dispositions B et C. */
+  cfgW: number;
+  /** Repli modal si deux cartes lisibles ne tiennent plus à côté des panneaux. */
+  configInlineFor: (id: 'A' | 'B' | 'C') => boolean;
+  listColumnsFor: (gridWidth: number) => 1 | 2;
   /** Taille du libellé de catégorie — calée sur la largeur du rail, pas sur l'échelle. */
   railFs: number;
   /** Ticket (zone D) — largeur du panneau ancré, ou du tiroir en compact. */
@@ -363,7 +380,7 @@ export function computeLayout(width: number, height: number): Layout {
     return scale >= 1 ? v : Math.max(v, Math.min(px, FONT_FLOOR));
   };
   const sp = (px: number): number => Math.max(2, Math.round(px * spaceScale));
-  const touch = (px: number = TOUCH_MIN): number => Math.max(TOUCH_MIN, Math.round(px * spaceScale));
+  const touch = (px: number = TOUCH_MIN): number => Math.max(TOUCH_MIN, px, Math.round(px * spaceScale));
 
   // `floor` et non `round` : à 1280 la formule doit rendre 108 tout rond, la
   // valeur de la maquette.
@@ -394,6 +411,21 @@ export function computeLayout(width: number, height: number): Layout {
     topbarStacked: w < TOPBAR_SPLIT_W,
     topbarSelectorsSplit: w < TOPBAR_SELECTORS_SPLIT_W,
     railW,
+    railDenseW: railW + 60,
+    pinPadW: Math.min(300, w - sp(48)),
+    pinKeyW: (Math.min(300, w - sp(48)) - sp(10) * 2) / 3,
+    pinKeyH: Math.max(TOUCH_MIN, Math.round(58 * scale)),
+    pinMark: sp(66),
+    segmentPadX: sp(w < 480 ? 8 : 16),
+    catalogWideSearch: w >= 1100,
+    catalogCategoryIcons: w >= 700,
+    catalogDescriptions: w >= 700,
+    railIcons: railW >= 112,
+    railCompactBrand: railW < 96,
+    cfgW: clamp(320, Math.round(w * 0.27), 420),
+    configInlineFor: (id) => !compact && id !== 'A' &&
+      w - ticketW - clamp(320, Math.round(w * 0.27), 420) - (id === 'C' ? railW + 60 : 0) - gridPad * 2 >= 320,
+    listColumnsFor: (gridWidth: number): 1 | 2 => gridWidth >= 1040 ? 2 : 1,
     // Le libellé suit la largeur du rail (12 % : 13 px à 108, la valeur de la
     // maquette) et non l'échelle générale : c'est la place disponible, et non
     // la distance de lecture, qui décide ici.

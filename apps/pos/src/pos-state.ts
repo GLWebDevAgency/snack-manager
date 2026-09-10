@@ -12,6 +12,8 @@
  * d'office, sans qu'on ait à penser à la lister ailleurs.
  */
 export const KEYS = {
+  /** Préférences visuelles du poste, purgées avec son établissement. */
+  prefs: 'sm.pos.prefs.v1',
   session: 'sm.pos.session.v1',
   /** Appairage de l'appareil — survit à la déconnexion de l'équipier. */
   device: 'sm.pos.device.v1',

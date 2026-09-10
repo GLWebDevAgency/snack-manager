@@ -1,8 +1,9 @@
+import { useTheme } from './theme';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { euros, uuid, type KeyValueStore } from '@sm/client-core';
 import { PAYMENT_TENDER_LABELS, type CollectOrderPayment } from '@sm/contracts';
-import { S, palette, sheet, type, type Brand } from './theme';
+import { S, type Brand } from './theme';
 import { Btn, Chip, Overlay, PanelHead, Press } from './ui';
 import { useLayout } from './useLayout';
 import type { ServerOrderRow } from './service-state';
@@ -26,6 +27,7 @@ export function CollectPaymentModal({ orderId, number, brand, actions, offline: 
   orderId: string; number: number; brand: Brand; actions: ServicePaymentActions;
   offline?: boolean; onClose: () => void;
 }) {
+  const { sheet, type, palette } = useTheme();
   const L = useLayout();
   const disconnected = useSyncExternalStore(subscribeConnection, browserOffline, () => false);
   const offline = menuOffline || disconnected;

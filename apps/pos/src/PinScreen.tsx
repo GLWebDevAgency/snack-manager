@@ -13,10 +13,12 @@
  * points de saisie, pavé sur panneau — parce que c'est le même geste, au même
  * endroit, sur la même tablette. Seul l'alphabet change.
  */
+import { PoweredBy } from './PoweredBy';
+import { useTheme } from './theme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, Text, View } from 'react-native';
+import { Animated, Easing, Image, Platform, ScrollView, Text, View } from 'react-native';
 import { PAIRING_CODE_ALPHABET, PAIRING_CODE_LENGTH } from '@sm/contracts';
-import { TOUCH_MIN, palette } from '@sm/client-core';
+import { TOUCH_MIN } from '@sm/client-core';
 import {
   DeviceError,
   client,
@@ -26,7 +28,7 @@ import {
   type PairedDevice,
   type Session,
 } from './client';
-import { FONT, R, makeBrand, shadow, type, withAlpha } from './theme';
+import { FONT, R, makeBrand, withAlpha } from './theme';
 import { Btn, Overlay, PanelHead, Press, Sheen, useReducedMotion } from './ui';
 import { useLayout } from './useLayout';
 
@@ -46,14 +48,14 @@ function useShake(reduced: boolean) {
   const shake = useCallback(() => {
     if (reduced) return;
     Animated.sequence([
-      Animated.timing(value, { toValue: 1, duration: 55, useNativeDriver: true }),
-      Animated.timing(value, { toValue: -1, duration: 55, useNativeDriver: true }),
-      Animated.timing(value, { toValue: 0.6, duration: 55, useNativeDriver: true }),
+      Animated.timing(value, { toValue: 1, duration: 55, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(value, { toValue: -1, duration: 55, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(value, { toValue: 0.6, duration: 55, useNativeDriver: Platform.OS !== 'web' }),
       Animated.timing(value, {
         toValue: 0,
         duration: 70,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   }, [reduced, value]);
@@ -79,6 +81,7 @@ const ALPHABET = PAIRING_CODE_ALPHABET.split('');
  * qui restaient une fois le code affiché en gros.
  */
 export function PairingScreen({ onPaired }: { onPaired: (device: PairedDevice) => void }) {
+  const { palette, type } = useTheme();
   const L = useLayout();
   const reduced = useReducedMotion();
   const { shake, transform } = useShake(reduced);
@@ -286,7 +289,7 @@ export function PairingScreen({ onPaired }: { onPaired: (device: PairedDevice) =
             marginTop: 6,
             padding: 18,
             borderRadius: 26,
-            backgroundColor: '#0b0b0b',
+            backgroundColor: palette.deep,
             borderWidth: 1,
             borderColor: palette.line2,
             justifyContent: 'center',
@@ -328,12 +331,14 @@ export function PinScreen({
   /** Raison du verrouillage (session expirée, fin de poste…). */
   notice?: string | null;
 }) {
+  const { palette, shadow, type } = useTheme();
   const L = useLayout();
   const brand = useMemo(
-    () => makeBrand(device.tenant.name, device.tenant.brandColor),
-    [device.tenant.brandColor, device.tenant.name],
+    () => makeBrand(device.tenant.name, device.tenant.brandColor, device.tenant.logoUrl),
+    [device.tenant.brandColor, device.tenant.name, device.tenant.logoUrl],
   );
   const [pin, setPin] = useState('');
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(notice ?? null);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
@@ -416,38 +421,20 @@ export function PinScreen({
     return () => doc.removeEventListener('keydown', onKey);
   }, [back, push]);
 
-  // Pavé : 378 px de large sur la référence (3 touches + 2 gouttières de 12 +
-  // 2 × 18 de padding + 2 × 1 de bordure), fluide ailleurs, jamais plus large
-  // que l'écran. On dimensionne la TOUCHE d'abord puis le panneau autour :
-  // partir de la largeur du panneau laisse les bordures déborder d'un pixel et
-  // fait retomber le pavé sur deux colonnes.
-  const padMax = Math.min(Math.round(378 * (1 + (L.scale - 1) * 0.6)), L.width - 32);
-  const keySize = Math.max(TOUCH_MIN, Math.floor((padMax - 36 - 24 - 2) / 3));
-  const padW = keySize * 3 + 24 + 36 + 2;
+  const keySize = L.pinKeyW;
+  const padW = L.pinPadW;
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.bg, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Filet d'accent en tête d'écran : signature de marque discrète, désormais
-          celle de l'établissement appairé et non plus d'une constante. */}
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          backgroundColor: brand.accent,
-          opacity: 0.55,
-        }}
-      />
-
-      <Animated.View style={{ alignItems: 'center', transform }}>
+    <View style={{ flex: 1, backgroundColor: palette.bg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingHorizontal: L.sp(24) }}>
+      <View style={{ flexGrow: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingVertical: L.sp(24) }}>
+      <Animated.View style={{ width: '100%', maxWidth: 480, alignItems: 'center', transform }}>
         <View
           style={[
             {
-              width: 72,
-              height: 72,
-              borderRadius: 22,
+              width: L.pinMark,
+              height: L.pinMark,
+              borderRadius: L.sp(19),
               backgroundColor: brand.accent,
               alignItems: 'center',
               justifyContent: 'center',
@@ -455,69 +442,64 @@ export function PinScreen({
             shadow(2),
           ]}
         >
-          <Text style={{ fontFamily: FONT, color: brand.onAccent, fontSize: 34, fontWeight: '800' }}>
-            {brand.initial}
-          </Text>
+          {brand.logoUrl && failedLogo !== brand.logoUrl ? <Image source={{ uri: brand.logoUrl }} resizeMode="contain" onError={() => setFailedLogo(brand.logoUrl ?? null)} style={{ width: '72%', height: '72%' }} accessible={false} /> :
+          <Text style={{ fontFamily: FONT, color: brand.onAccent, fontSize: L.fs(28), fontWeight: '800' }}>{brand.initial}</Text>}
         </View>
 
-        <Text style={[type.h1, { fontSize: 26, marginTop: 18 }]}>{brand.name}</Text>
+        <Text style={[type.h1, { fontSize: L.fs(20), marginTop: L.sp(14), textAlign: 'center' }]}>{brand.name}</Text>
         {/* Le nom de l'APPAREIL, pas un numéro de poste inventé : c'est celui
             que le gérant a saisi dans le back-office, donc celui qu'il cherche
             quand il veut savoir quelle tablette est laquelle. */}
-        <Text style={[type.eyebrow, { marginTop: 8 }]}>
+        <Text style={[type.mut, { marginTop: L.sp(2) }]}>
           {device.device.kindLabel} · {device.device.name}
         </Text>
 
+        <Text style={[type.eyebrow, { marginTop: L.sp(20) }]}>Code équipier</Text>
+        <Text style={[type.mut, { marginTop: L.sp(6) }]}>Quatre chiffres pour ouvrir le poste</Text>
         {/* Points de saisie */}
-        <View style={{ flexDirection: 'row', gap: 16, marginTop: 30, height: 18, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', gap: L.sp(14), marginTop: L.sp(20), height: L.sp(14), alignItems: 'center' }}>
           {[0, 1, 2, 3].map((i) => {
             const filled = pin.length > i;
             return (
               <View
                 key={i}
                 style={{
-                  width: filled ? 16 : 12,
-                  height: filled ? 16 : 12,
+                  width: L.sp(14),
+                  height: L.sp(14),
                   borderRadius: 8,
                   backgroundColor: filled ? brand.accent : 'transparent',
                   borderWidth: filled ? 0 : 1.5,
-                  borderColor: '#3a3a3a',
+                  borderColor: palette.zero,
                 }}
               />
             );
           })}
         </View>
 
-        <View style={{ height: 30, justifyContent: 'center' }}>
+        <View style={{ minHeight: 30, justifyContent: 'center' }}>
           <Text
             style={{
               fontFamily: FONT,
               fontSize: 14,
+              textAlign: 'center',
               fontWeight: '600',
               color: error ? palette.red : palette.mut,
               opacity: error || busy ? 1 : 0.7,
             }}
           >
-            {error ?? (busy ? 'Vérification…' : 'Saisissez votre code à 4 chiffres')}
+            {error ?? (busy ? 'Vérification…' : '')}
           </Text>
         </View>
 
-        {/* Pavé numérique — posé sur un panneau, pour la stratification
-            fond → panneau → touche plutôt qu'un aplat unique. Sa largeur suit
-            l'écran : 378 px sur la tablette de référence, jamais plus large
-            que la fenêtre sur un téléphone de dépannage. */}
+        {/* Le pavé conserve des cibles tactiles lisibles ; en faible hauteur,
+            l'écran défile au lieu de laisser le pied recouvrir ses touches. */}
         <View
           style={{
             width: padW,
             flexDirection: 'row',
             flexWrap: 'wrap',
-            gap: 12,
-            marginTop: 12,
-            padding: 18,
-            borderRadius: 26,
-            backgroundColor: '#0b0b0b',
-            borderWidth: 1,
-            borderColor: palette.line2,
+            gap: L.sp(10),
+            marginTop: L.sp(4),
             justifyContent: 'center',
           }}
         >
@@ -543,6 +525,7 @@ export function PinScreen({
           })}
         </View>
       </Animated.View>
+      </View>
 
       {/*
         « Changer d'établissement » — discret par construction : sur un poste
@@ -550,25 +533,26 @@ export function PinScreen({
         service couperait l'encaissement. D'où le pied d'écran, le gris, et la
         confirmation qui suit.
       */}
-      <View style={{ position: 'absolute', bottom: 18, alignItems: 'center', gap: 6 }}>
+      <View style={{ paddingBottom: 18, alignItems: 'center', gap: 6 }}>
         <Press
           onPress={() => setConfirmUnpair(true)}
           accessibilityLabel="Changer d'établissement"
           scale={0.97}
           style={{
             paddingHorizontal: 14,
-            paddingVertical: 9,
+            minHeight: L.touch(),
+            justifyContent: 'center',
             borderRadius: R.pill,
-            borderWidth: 1,
-            borderColor: palette.line2,
           }}
         >
           <Text style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: '600', color: '#6b6b6b' }}>
             Changer d'établissement
           </Text>
         </Press>
-        <Text style={[type.mut, { color: '#4a4a4a', fontSize: 12 }]}>Snack Manager · Caisse</Text>
+        <PoweredBy variant="lockup" />
       </View>
+
+      </ScrollView>
 
       {confirmUnpair && (
         <Overlay onClose={() => setConfirmUnpair(false)} accessibilityLabel="Changer d'établissement" width={460}>
@@ -639,6 +623,8 @@ function PadKey({
   compact?: boolean;
   accessibilityLabel?: string;
 }) {
+  const { palette, shadow } = useTheme();
+  const L = useLayout();
   return (
     <Press
       onPress={onPress}
@@ -647,10 +633,10 @@ function PadKey({
       style={[
         {
           width: size,
-          height: compact ? size : Math.max(TOUCH_MIN, Math.round(size * 0.7)),
+          height: compact ? size : L.pinKeyH,
           minHeight: compact ? Math.round(TOUCH_MIN * 0.92) : TOUCH_MIN,
-          borderRadius: R.panel,
-          backgroundColor: palette.surface,
+          borderRadius: L.sp(14),
+          backgroundColor: palette.surface2,
           borderWidth: 1,
           borderColor: palette.line2,
           alignItems: 'center',
@@ -659,14 +645,14 @@ function PadKey({
         },
         shadow(1),
       ]}
-      activeStyle={{ backgroundColor: '#212121' }}
+      activeStyle={{ backgroundColor: palette.press2 }}
     >
       <Sheen />
       <Text
         style={{
           fontFamily: FONT,
           color: muted ? palette.mut : palette.text,
-          fontSize: compact ? Math.max(17, Math.round(size * 0.44)) : muted ? 22 : 27,
+          fontSize: compact ? Math.max(17, Math.round(size * 0.44)) : L.fs(muted ? 16 : 22),
           fontWeight: '700',
           letterSpacing: -0.5,
         }}

@@ -14,7 +14,9 @@
     "qrcode": "^1.5.4",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@sm/client-core": "workspace:*",
-    "@sm/contracts": "workspace:*"
+    "@sm/contracts": "workspace:*",
+    "react-native-svg": "15.15.4",
+    "expo-font": "~57.0.3"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",
