@@ -2,15 +2,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Order } from '@sm/client-core';
 import {
   EMPTY_COPY,
-  hair2,
+  makeUi,
   radius,
   space,
   STATUS_TONE,
-  surface,
   tabular,
-  type,
   type BoardStatus,
 } from '../ui';
+import { useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
 import { CardSkeleton, EmptyState } from './primitives';
 import { OrderCard } from './OrderCard';
@@ -35,6 +34,7 @@ export function StatusColumn({
   pendingIds,
   onAdvance,
   layout,
+  density = 'comfort',
 }: {
   status: BoardStatus;
   orders: Order[];
@@ -45,8 +45,10 @@ export function StatusColumn({
   pendingIds: Set<string>;
   onAdvance: (order: Order) => void;
   layout: Layout;
+  density?: 'comfort' | 'dense';
 }) {
-  const styles = columnStyles(layout);
+  const { theme } = useUi();
+  const styles = columnStyles(layout, theme);
   const tone = STATUS_TONE[status];
   const empty = EMPTY_COPY[status];
 
@@ -73,7 +75,7 @@ export function StatusColumn({
             <CardSkeleton reducedMotion={reducedMotion} layout={layout} />
           </>
         ) : orders.length === 0 ? (
-          <EmptyState title={empty.title} hint={empty.hint} layout={layout} />
+          <EmptyState icon={status === 'new' ? 'kds-bell' : status === 'preparing' ? 'kds-flame' : 'check'} title={empty.title} hint={empty.hint} layout={layout} />
         ) : (
           orders.map((order) => (
             <OrderCard
@@ -85,6 +87,7 @@ export function StatusColumn({
               pending={pendingIds.has(order._id)}
               onAdvance={onAdvance}
               layout={layout}
+              density={density}
             />
           ))
         )}
@@ -93,11 +96,13 @@ export function StatusColumn({
   );
 }
 
-const columnStyles = scaledStyles((l: Layout) =>
-  StyleSheet.create({
+const columnStyles = scaledStyles((l: Layout, theme) => {
+  const { surface, hair2, type } = makeUi(theme);
+  return StyleSheet.create({
     column: {
       flex: 1,
       minWidth: 0,
+      minHeight: 0,
       backgroundColor: surface.column,
       borderRadius: radius.lg,
       borderWidth: 1,
@@ -136,5 +141,5 @@ const columnStyles = scaledStyles((l: Layout) =>
     },
     body: { flex: 1, minHeight: 0 },
     bodyContent: { padding: l.gap, gap: l.gap, paddingBottom: l.gap + 6 },
-  }),
-);
+  });
+});

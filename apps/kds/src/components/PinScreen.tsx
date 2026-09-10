@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PAIRING_CODE_ALPHABET, PAIRING_CODE_LENGTH } from '@sm/contracts';
 import {
   alpha,
   contrastOn,
-  hair,
-  hair2,
-  ink,
-  palette,
   radius,
-  shadow,
-  surface,
   tabular,
   TOUCH_MIN,
-  type,
 } from '../ui';
 import { forgetPairedDevice, pairDevice, type PairedDevice } from '../client';
 import { useDevice } from '../useSession';
+import { useUi } from '../theme';
+import { makeUi } from '../ui';
+import { SMMark, BRAND_GOLD } from '@sm/ui-native';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Sheen, Tap } from './primitives';
 
@@ -37,30 +33,6 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const ALPHABET = PAIRING_CODE_ALPHABET.split('');
 const MIN_PIN = 4;
 const MAX_PIN = 6;
-
-/**
- * Le signe Snack Manager sur l'écran d'appairage — sa taille, et la place
- * qu'il exige.
- *
- * 80 px à la référence, borné à [72 ; 96] : assez pour être lu à bout de bras
- * sur une tablette posée au passe. Mais le panneau d'appairage ne défile pas,
- * et son pavé de 32 touches tient déjà tout juste sur un écran court — le
- * signe ne passe donc JAMAIS avant les touches. `fits` mesure la place
- * réellement libre avant de l'autoriser.
- */
-function markFor(l: Layout) {
-  const size = Math.min(96, Math.max(72, Math.round(80 * l.scale)));
-  // Même grille que `alphaPad` plus bas : 8 colonnes sur tablette, 6 étroit.
-  const cols = l.width < 620 ? 6 : 8;
-  const key = Math.max(TOUCH_MIN, Math.round(58 * l.scale));
-  const rows = Math.ceil(ALPHABET.length / cols);
-  const padH = rows * key + 10 * (rows - 1);
-  // Titre, sous-titre, phrase d'aide, tuiles, ligne de message, boutons et
-  // marges du panneau : environ 320 px à l'échelle 1. Les 48 px retranchés de
-  // la hauteur sont le padding de l'écran.
-  const fits = l.height - 48 - padH - Math.round(320 * l.scale) >= size + 4;
-  return { size, fits };
-}
 
 export function PinScreen({
   accent,
@@ -117,7 +89,8 @@ function PairingView({
   reducedMotion: boolean;
   layout: Layout;
 }) {
-  const styles = pinStyles(layout);
+  const { palette, surface, ink, hair, hair2, shadow, type, theme } = useUi();
+  const styles = pinStyles(layout, theme);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +150,7 @@ function PairingView({
   }, [push, back]);
 
   return (
-    <View style={styles.screen}>
+    <ScrollView style={{ flex: 1, backgroundColor: palette.bg }} contentContainerStyle={styles.screen}>
       <View style={[styles.widePanel, shadow.panel]}>
         <Sheen height={160} radius={radius.xl} />
 
@@ -189,14 +162,7 @@ function PairingView({
               reprend la tuile avec l'initiale et l'accent du RESTAURANT.
               Le signe est posé sur l'aplat du panneau : son éclair est un
               VIDE, il exige un fond uni derrière lui. */}
-          {markFor(layout).fits && (
-            <Image
-              source={require('../../assets/mark.png')}
-              style={styles.mark}
-              resizeMode="contain"
-              accessibilityLabel="Snack Manager"
-            />
-          )}
+          {layout.pairingMarkFits && <SMMark size={layout.pairingMark} color={palette.text} />}
           <Text style={styles.title}>Appairer cet appareil</Text>
           <Text style={styles.subtitle}>Snack Manager · Cuisine</Text>
         </View>
@@ -277,7 +243,7 @@ function PairingView({
           </Tap>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -300,7 +266,8 @@ function CodeView({
   reducedMotion: boolean;
   layout: Layout;
 }) {
-  const styles = pinStyles(layout);
+  const { palette, surface, ink, hair, hair2, shadow, type, theme } = useUi();
+  const styles = pinStyles(layout, theme);
   // Le nom et l'accent viennent de l'établissement APPAIRÉ : plus aucune
   // constante côté application. Les valeurs reçues en props ne servent que de
   // repli si la marque revenait vide du serveur.
@@ -311,6 +278,7 @@ function CodeView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
 
   const push = useCallback(
     (digit: string) => {
@@ -365,7 +333,7 @@ function CodeView({
    */
   if (confirmUnpair) {
     return (
-      <View style={styles.screen}>
+      <ScrollView style={{ flex: 1, backgroundColor: palette.bg }} contentContainerStyle={styles.screen}>
         <View style={[styles.panel, shadow.panel]}>
           <Sheen height={160} radius={radius.xl} />
           <Text style={styles.title}>Changer d&apos;établissement</Text>
@@ -406,23 +374,20 @@ function CodeView({
             </Tap>
           </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      <View style={[styles.panel, shadow.panel]}>
-        <Sheen height={160} radius={radius.xl} />
-
+    <ScrollView style={{ flex: 1, backgroundColor: palette.bg }} contentContainerStyle={styles.screen}>
+      <View style={styles.codePanel}>
         <View style={styles.head}>
           <View style={[styles.brand, { backgroundColor: accent }]}>
-            <Text style={[styles.brandLetter, { color: contrastOn(accent) }]}>
-              {(tenantName.trim()[0] ?? 'S').toUpperCase()}
-            </Text>
+            {device.tenant.logoUrl && failedLogo !== device.tenant.logoUrl ? <Image source={{ uri: device.tenant.logoUrl }} resizeMode="contain" onError={() => setFailedLogo(device.tenant.logoUrl ?? null)} style={{ width: '72%', height: '72%' }} accessible={false} /> :
+            <Text style={[styles.brandLetter, { color: contrastOn(accent) }]}>{(tenantName.trim()[0] ?? 'S').toUpperCase()}</Text>}
           </View>
-          <Text style={styles.title}>Cuisine · KDS</Text>
-          <Text style={styles.subtitle}>{tenantName}</Text>
+          <Text style={styles.title}>{tenantName}</Text>
+          <Text style={styles.subtitle}>Cuisine · {device.device.name}</Text>
         </View>
 
         <Text style={styles.prompt}>Code équipe</Text>
@@ -512,6 +477,11 @@ function CodeView({
           {MIN_PIN} à {MAX_PIN} chiffres, puis validez.
         </Text>
 
+        <View style={{ flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: layout.fs(6), marginTop: layout.fs(22), opacity: 0.6 }}>
+          <SMMark size={layout.fs(18)} color={palette.text} accessible={false} />
+          <Text style={{ fontFamily: type.title.fontFamily, fontSize: layout.fs(13), fontWeight: '800', color: palette.text }}>Snack <Text style={{ color: BRAND_GOLD }}>Manager</Text></Text>
+        </View>
+
         {/* Nom de l'APPAREIL, pas un numéro inventé : c'est celui que le gérant
             a saisi dans le back-office, donc celui qu'il cherche quand il veut
             savoir quelle tablette est laquelle. */}
@@ -527,33 +497,30 @@ function CodeView({
           </Text>
         </Tap>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
-const pinStyles = scaledStyles((l: Layout) => {
-  const keyW = Math.round(76 * l.scale);
-  const keyH = Math.max(TOUCH_MIN, l.touch, Math.round(62 * l.scale));
-  const gap = 10;
-  // Pavé de 32 symboles : 8 colonnes sur une tablette, 6 sur un écran étroit.
-  const alphaCols = l.width < 620 ? 6 : 8;
-  const alphaKey = Math.max(TOUCH_MIN, Math.round(58 * l.scale));
-  // Largeur du panneau d'appairage : touches + gouttières + 2 × 20 de padding
-  // + 2 × 1 de bordure. Le `+ 2` n'est pas cosmétique — sans lui la dernière
-  // colonne de touches passe à la ligne, et le pavé perd sa grille.
-  const wideWidth = alphaKey * alphaCols + gap * (alphaCols - 1) + 40 + 2;
-  const markSize = markFor(l).size;
+const pinStyles = scaledStyles((l: Layout, theme) => {
+  const { palette, surface, ink, hair, hair2, type } = makeUi(theme);
+  const keyW = l.pinKeyW;
+  const keyH = l.pinKeyH;
+  const gap = l.fs(10);
+  const alphaKey = l.pairingKey;
+  const wideWidth = l.pairingWidth;
+  const markSize = l.pairingMark;
   return StyleSheet.create({
     screen: {
-      flex: 1,
+      flexGrow: 1,
       backgroundColor: palette.bg,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 24,
+      padding: l.fs(16),
     },
     // Le panneau suit l'échelle (340 px à la référence) mais ne descend jamais
     // sous la largeur du pavé : trois touches + deux gouttières + marges +
     // bordures — sinon la troisième colonne de touches passe à la ligne.
+    codePanel: { width: l.pinPadW, maxWidth: '100%', paddingVertical: l.fs(20) },
     panel: {
       width: Math.max(Math.round(340 * l.scale), keyW * 3 + gap * 2 + 46),
       maxWidth: '100%',
@@ -581,9 +548,9 @@ const pinStyles = scaledStyles((l: Layout) => {
     },
     head: { alignItems: 'center', gap: 8 },
     brand: {
-      width: Math.round(52 * l.scale),
-      height: Math.round(52 * l.scale),
-      borderRadius: Math.round(15 * l.scale),
+      width: l.pinBrand,
+      height: l.pinBrand,
+      borderRadius: l.fs(19),
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 4,
@@ -602,7 +569,7 @@ const pinStyles = scaledStyles((l: Layout) => {
     },
     title: {
       fontFamily: type.title.fontFamily,
-      fontSize: l.fs(19),
+      fontSize: l.fs(20),
       fontWeight: '700',
       letterSpacing: -0.4,
       color: palette.text,
@@ -644,10 +611,10 @@ const pinStyles = scaledStyles((l: Layout) => {
       borderColor: hair,
       backgroundColor: 'transparent',
     },
-    dotOptional: { borderColor: alpha('#ffffff', 0.06) },
+    dotOptional: { borderColor: hair2 },
     slots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 18 },
     slot: {
-      width: Math.round(46 * l.scale),
+      width: l.pairingSlotW,
       height: Math.round(58 * l.scale),
       borderRadius: radius.md,
       borderWidth: 1,
@@ -748,6 +715,8 @@ const pinStyles = scaledStyles((l: Layout) => {
       marginTop: 16,
     },
     unpair: {
+      minHeight: l.touch,
+      justifyContent: 'center',
       alignSelf: 'center',
       marginTop: 12,
       paddingHorizontal: 12,

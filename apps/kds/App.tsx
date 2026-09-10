@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   useAutoSync,
@@ -18,8 +18,13 @@ import { useReducedMotion } from './src/useReducedMotion';
 import { useSession } from './src/useSession';
 import { useStayAwake } from './src/useStayAwake';
 import { sound, soundSupported } from './src/sound';
-import { KEY_PREFS, REMINDER_MS } from './src/config';
-import { ink, palette, type } from './src/ui';
+import { REMINDER_MS } from './src/config';
+import { makeUi } from './src/ui';
+import { ThemeProvider } from './src/theme';
+import { usePrefs } from './src/usePrefs';
+import { BrandSplash, useBrandFonts } from '@sm/ui-native';
+import { SettingsSheet } from './src/components/SettingsSheet';
+import type { KdsTheme } from './src/prefs';
 
 /**
  * Écran cuisine (KDS) — Snack Manager.
@@ -35,38 +40,13 @@ import { ink, palette, type } from './src/ui';
  *   └─ Board      — barre haute + « À lancer » + 3 colonnes (ou onglets)
  */
 
-interface Prefs {
-  sound: boolean;
-  /**
-   * Panneau « À lancer » épinglé par le cuisinier.
-   *
-   * Absent = on laisse la place décider, comme avant. Présent = sa décision
-   * prime sur le repli automatique, y compris sur un écran étroit.
-   */
-  allDay?: boolean;
-}
-
 export default function App() {
+  useBrandFonts();
+  const [splashDone, setSplashDone] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const finishSplash = useCallback(() => setSplashDone(true), []);
   // Une cuisine ne doit jamais voir l'écran s'éteindre en plein coup de feu.
   useStayAwake();
-
-  /**
-   * Panneau « À lancer » épinglé.
-   *
-   * Déclaré AVANT `useLayout`, qui en dépend : cet état ne décide pas d'un
-   * affichage, il décide d'une MISE EN PAGE — la largeur rendue au panneau, et
-   * donc celle qui reste aux colonnes.
-   *
-   * Il vivait auparavant dans le tableau, sous `useLayout`, et n'avait donc
-   * aucune prise sur elle : sous le seuil de repli automatique, le bouton
-   * disparaissait purement et simplement, laissant le cuisinier sans moyen de
-   * rappeler la seule vue qui AGRÈGE ce qu'il a à lancer au lieu de le lister.
-   */
-  const [allDayOn, setAllDayOn] = useState(true);
-
-  // Toutes les dimensions de l'écran — colonnes, panneau, échelle typo, cibles
-  // tactiles — sortent d'ici et de nulle part ailleurs.
-  const layout = useLayout(allDayOn);
 
   const reducedMotion = useReducedMotion();
   const now = useNow(1000);
@@ -76,6 +56,16 @@ export default function App() {
   const sync = useSyncState(client);
   useAutoSync(client, 15000);
   const activeDeviceScope = sync.scopeValid ? (device?.queueScope ?? null) : null;
+  const { prefs, ready: prefsReady, patchPrefs } = usePrefs(activeDeviceScope);
+  const { palette } = makeUi(prefs.theme);
+  const soundOn = prefs.sound;
+  const allDayOn = prefs.allDay;
+  const layout = useLayout(allDayOn);
+  const styles = appStyles(prefs.theme);
+
+  useEffect(() => { if (prefsReady && !prefs.splash) finishSplash(); }, [prefsReady, prefs.splash, finishSplash]);
+  useEffect(() => { setSettingsOpen(false); }, [activeDeviceScope, session === null]);
+
 
   // Le rapporteur d'erreurs, pour toute la vie de l'écran — voir `client.ts`.
   useEffect(() => installErrorReporting(), []);
@@ -92,67 +82,15 @@ export default function App() {
     activeDeviceScope,
   );
 
-  // ─── Préférences locales (son, panneau « À lancer ») ───
-
-  const [soundOn, setSoundOn] = useState(true);
-
-  /** Vrai une fois les préférences relues : avant, on n'écrase rien. */
-  const prefsLoadedScope = useRef<string | null>(null);
-  const deviceScope = activeDeviceScope;
-
-  useEffect(() => {
-    let alive = true;
-    const capturedScope = deviceScope;
-    prefsLoadedScope.current = null;
-    setSoundOn(true);
-    setAllDayOn(true);
-    if (!capturedScope) return () => void (alive = false);
-    void (async () => {
-      try {
-        const raw = await client.tenantStore.getItem(KEY_PREFS);
-        if (!alive || deviceScope !== capturedScope) return;
-        if (raw) {
-          const prefs = JSON.parse(raw) as Prefs;
-          if (typeof prefs.sound === 'boolean') setSoundOn(prefs.sound);
-          if (typeof prefs.allDay === 'boolean') setAllDayOn(prefs.allDay);
-        }
-      } catch {
-        /* préférences illisibles : on garde les valeurs par défaut */
-      } finally {
-        if (alive) prefsLoadedScope.current = capturedScope;
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [deviceScope]);
-
-  // Une seule écriture pour toutes les préférences : chaque bascule n'a pas à
-  // connaître l'état des autres, et aucune ne peut en effacer une en écrivant
-  // un objet partiel.
-  useEffect(() => {
-    if (!deviceScope || prefsLoadedScope.current !== deviceScope) return;
-    void client.tenantStore
-      .setItem(
-        KEY_PREFS,
-        JSON.stringify({ sound: soundOn, allDay: allDayOn } satisfies Prefs),
-      )
-      .catch(() => undefined);
-  }, [soundOn, allDayOn, deviceScope]);
-
-  const toggleAllDay = useCallback(() => setAllDayOn((v) => !v), []);
-
+  // Les gestes audio conservent leur rôle de déblocage du contexte navigateur.
+  const toggleAllDay = useCallback(() => patchPrefs((p) => ({ allDay: !p.allDay })), [patchPrefs]);
   const toggleSound = useCallback(() => {
-    setSoundOn((current) => {
-      const next = !current;
-      // Le geste sert aussi à débloquer le contexte audio du navigateur.
-      if (next) {
-        sound.unlock();
-        sound.newOrder();
-      }
-      return next;
+    patchPrefs((p) => {
+      const next = !p.sound;
+      if (next) { sound.unlock(); sound.newOrder(); }
+      return { sound: next };
     });
-  }, []);
+  }, [patchPrefs]);
 
   // ─── Commandes dont une écriture attend encore le réseau ───
 
@@ -228,8 +166,9 @@ export default function App() {
   const accent = session ? session.tenant.brandColor || palette.gold : palette.gold;
 
   return (
+    <ThemeProvider theme={prefs.theme}>
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style={prefs.theme === 'light' ? 'dark' : 'light'} />
       {/* Le retour à la vitrine, en démonstration UNIQUEMENT. */}
       <DemoBanner />
       {restoring ? (
@@ -303,6 +242,10 @@ export default function App() {
           now={now}
           accent={accent}
           tenantName={session.tenant.name}
+          logoUrl={device?.tenant.logoUrl}
+          density={prefs.density}
+          onSettings={() => setSettingsOpen(true)}
+          onLogout={() => void logout()}
           online={!board.offline}
           loading={board.loading}
           error={board.offline ? board.error : null}
@@ -317,12 +260,27 @@ export default function App() {
           layout={layout}
         />
       )}
+      {settingsOpen && session ? <SettingsSheet layout={layout} reducedMotion={reducedMotion} prefs={prefs}
+        accent={accent} tenantName={session.tenant.name} deviceName={device?.device.name ?? 'Cuisine'} pending={sync.pending}
+        soundSupported={soundSupported} onTheme={(theme) => patchPrefs({ theme })} onDensity={(density) => patchPrefs({ density })}
+        onToggleSound={toggleSound} onToggleAllDay={toggleAllDay} onToggleSplash={() => patchPrefs((p) => ({ splash: !p.splash }))}
+        onClose={() => setSettingsOpen(false)} onLogout={() => { setSettingsOpen(false); void logout(); }} /> : null}
+      {(prefsReady || (!restoring && !device)) && prefs.splash && !splashDone ?
+        <BrandSplash ready={!restoring} onDone={finishSplash} kindLabel="Cuisine" deviceName={device?.device.name ?? 'Écran'} reducedMotion={reducedMotion} /> : null}
     </View>
+    </ThemeProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.bg },
+const styleCache = new Map<KdsTheme, ReturnType<typeof buildAppStyles>>();
+function appStyles(theme: KdsTheme) {
+  if (!styleCache.has(theme)) styleCache.set(theme, buildAppStyles(theme));
+  return styleCache.get(theme)!;
+}
+function buildAppStyles(theme: KdsTheme) {
+  const { palette, ink, type } = makeUi(theme);
+  return StyleSheet.create({
+  root: { flex: 1, backgroundColor: palette.bg, ...(Platform.OS === 'web' ? { WebkitFontSmoothing: 'antialiased' } : {}) },
   boot: {
     flex: 1,
     backgroundColor: palette.bg,
@@ -352,3 +310,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+}

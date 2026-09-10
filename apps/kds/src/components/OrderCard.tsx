@@ -1,24 +1,19 @@
-import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useRef } from 'react';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { timerColor, TIMER_THRESHOLDS, type Order, type OrderLine } from '@sm/client-core';
 import {
   ADVANCE_LABEL,
   alpha,
   CHANNEL_LABEL,
   contrastOn,
-  hair,
-  hair2,
-  ink,
-  palette,
+  makeUi,
   radius,
-  shadow,
   STATUS_TONE,
-  surface,
   tabular,
   TYPE_LABEL,
-  type,
   type BoardStatus,
 } from '../ui';
+import { useAccentText, useUi } from '../theme';
 import { clockHM, elapsedLabel, elapsedSeconds, optionsText } from '../format';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Chevron, Pill, PulseRing, Sheen, Tap } from './primitives';
@@ -52,6 +47,8 @@ export interface OrderCardProps {
   layout: Layout;
   /** Une écriture attend encore le réseau pour cette commande. */
   pending?: boolean;
+  /** La densité compacte les espacements, jamais les informations de préparation. */
+  density?: 'comfort' | 'dense';
 }
 
 function ItemRow({
@@ -59,17 +56,21 @@ function ItemRow({
   accent,
   last,
   layout,
+  density,
 }: {
   line: OrderLine;
   accent: string;
   last: boolean;
   layout: Layout;
+  density: 'comfort' | 'dense';
 }) {
-  const styles = cardStyles(layout);
+  const { theme } = useUi();
+  const accentText = useAccentText(accent);
+  const styles = cardStyles(layout, theme, density);
   const options = optionsText(line);
   return (
     <View style={[styles.itemRow, !last && styles.itemDivider]}>
-      <Text style={[styles.qty, { color: accent }]}>{line.qty}×</Text>
+      <Text style={[styles.qty, { color: accentText }]}>{line.qty}×</Text>
 
       <View style={styles.itemBody}>
         <View style={styles.itemHead}>
@@ -112,8 +113,10 @@ function OrderCardBase({
   onAdvance,
   pending,
   layout,
+  density = 'comfort',
 }: OrderCardProps) {
-  const styles = cardStyles(layout);
+  const { theme, palette, surface, ink, hair, shadow } = useUi();
+  const styles = cardStyles(layout, theme, density);
   const status = order.status as BoardStatus;
   const tone = STATUS_TONE[status] ?? STATUS_TONE.new;
 
@@ -130,7 +133,10 @@ function OrderCardBase({
    * plus de rien. Les seuils sont centralisés dans `@sm/client-core/theme` pour
    * devenir paramétrables par tenant sans toucher à cette carte.
    */
-  const timer = timerColor(minutes);
+  // Les seuils restent ceux du noyau ; seule l’encre s’adapte au fond.
+  const timerTone = timerColor(minutes);
+  const timer = timerTone === palette.red ? ink.onRed
+    : timerTone === palette.amber ? ink.onAmber : ink.onGreen;
   const late = minutes >= TIMER_THRESHOLDS.late && status !== 'ready';
   const isNew = status === 'new';
 
@@ -151,14 +157,34 @@ function OrderCardBase({
   // Liseré vivant : rouge quand c'est en retard (priorité absolue), accent
   // quand le ticket vient d'arriver, rien ensuite.
   const ringColor = late ? palette.red : isNew ? accent : null;
+  const entrance = useRef(new Animated.Value(isNew && !reducedMotion ? 0 : 1)).current;
+  useEffect(() => {
+    if (reducedMotion) {
+      entrance.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(entrance, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [entrance, reducedMotion]);
 
   return (
-    <View
+    <Animated.View
+      accessibilityLabel={`Commande ${order.number}`}
       style={[
         styles.card,
         shadow.card,
         late && shadow.alert,
         late && { borderColor: alpha(palette.red, 0.45) },
+        {
+          opacity: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+          transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+        },
       ]}
     >
       <Sheen height={layout.fs(96)} radius={radius.md} />
@@ -173,7 +199,7 @@ function OrderCardBase({
 
         <View style={styles.headRight}>
           <View style={styles.headTop}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={styles.title}>
               {title}
             </Text>
             <Text
@@ -203,7 +229,7 @@ function OrderCardBase({
               layout={layout}
             />
             {late ? (
-              <Pill text="En retard" color="#ffffff" background={palette.red} layout={layout} />
+              <Pill text="En retard" color={STATUS_TONE.new.fg} background={palette.red} layout={layout} />
             ) : null}
             {pending ? (
               <Pill
@@ -257,6 +283,7 @@ function OrderCardBase({
             accent={accent}
             last={i === order.lines.length - 1}
             layout={layout}
+            density={density}
           />
         ))}
       </View>
@@ -290,9 +317,10 @@ function OrderCardBase({
         color={ringColor ?? accent}
         radius={radius.md}
         active={ringColor !== null}
+        periodMs={late ? 1600 : 2400}
         reducedMotion={reducedMotion}
       />
-    </View>
+    </Animated.View>
   );
 }
 
@@ -304,6 +332,7 @@ function OrderCardBase({
 export const OrderCard = memo(OrderCardBase, (a, b) => {
   if (a.order !== b.order || a.accent !== b.accent) return false;
   if (a.reducedMotion !== b.reducedMotion || a.pending !== b.pending) return false;
+  if (a.density !== b.density || a.onAdvance !== b.onAdvance) return false;
   // La mise en page change au redimensionnement : sans ce test, une carte
   // resterait dessinée à l'ancienne échelle jusqu'à sa prochaine mutation.
   if (a.layout !== b.layout) return false;
@@ -317,7 +346,9 @@ export const OrderCard = memo(OrderCardBase, (a, b) => {
  *  - `actionH` pour le bouton, jamais sous 56 px.
  * La feuille n'est fabriquée qu'une fois par palier d'échelle.
  */
-const cardStyles = scaledStyles((l: Layout) => {
+const cardStyles = scaledStyles((l: Layout, theme, density) => {
+  const { palette, surface, ink, hair, hair2, type } = makeUi(theme);
+  const dense = density === 'dense';
   const pad = Math.round(10 * l.scale);
   const gap = Math.round(12 * l.scale);
   return StyleSheet.create({
@@ -337,12 +368,13 @@ const cardStyles = scaledStyles((l: Layout) => {
       gap,
       paddingLeft: RAIL + pad,
       paddingRight: gap,
-      paddingVertical: pad,
+      paddingVertical: dense ? Math.round(7 * l.scale) : pad,
       borderBottomWidth: 1,
       borderBottomColor: hair2,
     },
     noBox: {
-      width: l.far(68),
+      minWidth: l.far(68),
+      flexShrink: 0,
       borderRadius: radius.sm,
       backgroundColor: surface.el,
       borderWidth: 1,
@@ -350,6 +382,7 @@ const cardStyles = scaledStyles((l: Layout) => {
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 6,
+      paddingHorizontal: l.fs(6),
     },
     noLabel: {
       fontFamily: type.micro.fontFamily,
@@ -370,9 +403,11 @@ const cardStyles = scaledStyles((l: Layout) => {
     },
 
     headRight: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 6 },
-    headTop: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+    headTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 },
     title: {
-      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: l.fs(70),
       minWidth: 0,
       fontFamily: type.title.fontFamily,
       fontSize: l.fs(16.5),
@@ -381,6 +416,7 @@ const cardStyles = scaledStyles((l: Layout) => {
       color: palette.text,
     },
     timer: {
+      flexShrink: 0,
       fontFamily: type.clock.fontFamily,
       fontSize: l.far(22),
       fontWeight: '800',
@@ -425,9 +461,10 @@ const cardStyles = scaledStyles((l: Layout) => {
     },
 
     items: { paddingLeft: RAIL + pad, paddingRight: gap, paddingVertical: 4 },
-    itemRow: { flexDirection: 'row', gap: 10, paddingVertical: Math.round(8 * l.scale) },
+    itemRow: { flexDirection: 'row', gap: 10, paddingVertical: Math.round((dense ? 5 : 8) * l.scale) },
     itemDivider: { borderBottomWidth: 1, borderBottomColor: hair2 },
     qty: {
+      flexShrink: 0,
       fontFamily: type.qty.fontFamily,
       fontSize: l.far(17),
       fontWeight: '800',
@@ -439,6 +476,8 @@ const cardStyles = scaledStyles((l: Layout) => {
     itemBody: { flex: 1, minWidth: 0, gap: 5 },
     itemHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7 },
     itemName: {
+      flexShrink: 1,
+      maxWidth: '100%',
       fontFamily: type.item.fontFamily,
       fontSize: l.far(16),
       fontWeight: '700',
@@ -447,6 +486,7 @@ const cardStyles = scaledStyles((l: Layout) => {
       color: palette.text,
     },
     variant: {
+      maxWidth: '100%',
       backgroundColor: surface.el2,
       borderWidth: 1,
       borderColor: hair,
@@ -472,6 +512,7 @@ const cardStyles = scaledStyles((l: Layout) => {
 
     removedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 1 },
     removed: {
+      maxWidth: '100%',
       backgroundColor: alpha(palette.red, 0.16),
       borderWidth: 1,
       borderColor: alpha(palette.red, 0.55),
@@ -505,7 +546,8 @@ const cardStyles = scaledStyles((l: Layout) => {
     },
 
     action: {
-      height: l.actionH,
+      minHeight: dense ? Math.max(56, l.actionH - 6) : l.actionH,
+      paddingVertical: 6,
       justifyContent: 'center',
       borderBottomLeftRadius: radius.md,
       borderBottomRightRadius: radius.md,
