@@ -73,6 +73,7 @@ export interface TapProps {
   pressedStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
   label?: string;
+  nativeID?: string;
   /** Appui « discret » : pas d'enfoncement (grandes zones, cartes). */
   flat?: boolean;
   reducedMotion?: boolean;
@@ -93,6 +94,7 @@ export function Tap({
   pressedStyle,
   disabled,
   label,
+  nativeID,
   flat,
   reducedMotion,
   selected,
@@ -100,6 +102,7 @@ export function Tap({
 }: TapProps) {
   return (
     <Pressable
+      nativeID={nativeID}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole={role}
@@ -492,6 +495,8 @@ interface WebModalLayer {
   initialFocus: ModalInitialFocus;
   previousFocus: HTMLElement | null;
   fallbackFocus: HTMLElement | null;
+  resolveReturnFocus?: () => HTMLElement | null;
+  fallbackReturnFocus?: () => HTMLElement | null;
   cancelScheduledFocus?: () => void;
   manager: WebModalManager;
 }
@@ -501,6 +506,7 @@ interface WebModalManager {
     root: HTMLElement,
     close: () => void,
     initialFocus: ModalInitialFocus,
+    resolveReturnFocus?: () => HTMLElement | null,
   ) => WebModalLayer;
   unregister: (layer: WebModalLayer) => void;
   refocus: (layer: WebModalLayer) => void;
@@ -684,7 +690,7 @@ function getWebModalManager(doc: Document): WebModalManager {
   };
 
   const manager: WebModalManager = {
-    register(root, close, initialFocus) {
+    register(root, close, initialFocus, resolveReturnFocus) {
       cancelScheduledRestore?.();
       cancelScheduledRestore = undefined;
 
@@ -698,6 +704,8 @@ function getWebModalManager(doc: Document): WebModalManager {
         // Si plusieurs couches disparaissent dans le même rendu, cette cible
         // reste hors de la pile et permet une restitution au déclencheur réel.
         fallbackFocus: activeBefore?.fallbackFocus ?? activeElement,
+        resolveReturnFocus,
+        fallbackReturnFocus: activeBefore?.fallbackReturnFocus ?? resolveReturnFocus,
         manager,
       };
 
@@ -730,15 +738,18 @@ function getWebModalManager(doc: Document): WebModalManager {
       }
 
       if (!wasTop) return;
-      const activeAfter = top();
-      const restoreTarget = canRestore(layer.previousFocus, activeAfter)
-        ? layer.previousFocus
-        : canRestore(layer.fallbackFocus, activeAfter)
-          ? layer.fallbackFocus
-          : null;
+      cancelScheduledRestore?.();
       cancelScheduledRestore = scheduleOnNextFrame(doc, () => {
         const currentTop = top();
-        if (canRestore(restoreTarget, currentTop)) restoreTarget.focus();
+        // La rotation peut remplacer le déclencheur pendant l'ouverture.
+        // Résoudre sa nouvelle instance après le rendu et la fin de l'isolation.
+        const restoreTarget = [
+          layer.previousFocus,
+          layer.resolveReturnFocus?.() ?? null,
+          layer.fallbackFocus,
+          layer.fallbackReturnFocus?.() ?? null,
+        ].find((candidate) => canRestore(candidate, currentTop));
+        if (restoreTarget) restoreTarget.focus();
         else if (currentTop) focusLayerNow(currentTop);
       });
     },
@@ -761,12 +772,15 @@ function useWebModalLayer(
   onClose: () => void,
   initialFocus: ModalInitialFocus,
   focusKey?: string | number,
+  returnFocusId?: string,
 ): () => void {
   const onCloseRef = useRef(onClose);
   const initialFocusRef = useRef(initialFocus);
   const layerRef = useRef<WebModalLayer | null>(null);
+  const returnFocusIdRef = useRef(returnFocusId);
   onCloseRef.current = onClose;
   initialFocusRef.current = initialFocus;
+  returnFocusIdRef.current = returnFocusId;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -775,7 +789,10 @@ function useWebModalLayer(
     if (!doc || !root) return;
 
     const manager = getWebModalManager(doc);
-    const layer = manager.register(root, () => onCloseRef.current(), initialFocusRef.current);
+    const layer = manager.register(root, () => onCloseRef.current(), initialFocusRef.current, () => {
+      const id = returnFocusIdRef.current;
+      return id ? doc.getElementById(id) : null;
+    });
     layerRef.current = layer;
     return () => {
       layerRef.current = null;
@@ -798,16 +815,18 @@ function useWebModalLayer(
 }
 
 /** Dialogue centré : même fermeture et même ordre clavier dans les deux thèmes. */
-export function Overlay({ layout, reducedMotion, onClose, label, children }: {
+export function Overlay({ layout, reducedMotion, onClose, label, returnFocusId, children }: {
   layout: Layout;
   reducedMotion: boolean;
   onClose: () => void;
   label: string;
+  /** Identité native du déclencheur, conservée lorsque sa disposition change. */
+  returnFocusId?: string;
   children: ReactNode;
 }) {
   const { surface, hair, shadow, scrim } = useUi();
   const root = useRef<HTMLElement | null>(null);
-  const requestClose = useWebModalLayer(root, onClose, 'first');
+  const requestClose = useWebModalLayer(root, onClose, 'first', undefined, returnFocusId);
   const progress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   useEffect(() => {
     const animation = Animated.timing(progress, { toValue: 1, duration: reducedMotion ? 0 : 260,

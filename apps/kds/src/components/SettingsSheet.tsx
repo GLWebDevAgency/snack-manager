@@ -4,7 +4,7 @@ import { TIMER_THRESHOLDS } from '@sm/client-core';
 import { Icon } from '@sm/ui-native';
 import type { KdsDensity, KdsPrefs, KdsTheme } from '../prefs';
 import { useAccentText, useUi } from '../theme';
-import { alpha, contrastOn, radius } from '../ui';
+import { alpha, contrastOn, radius, SETTINGS_TRIGGER_ID } from '../ui';
 import type { Layout } from '../useLayout';
 import { Overlay, PanelHead, Segmented, Tap } from './primitives';
 
@@ -98,7 +98,7 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
     { label: 'Seuils minuteur', value: `${TIMER_THRESHOLDS.warn} min · ${TIMER_THRESHOLDS.late} min` },
     { label: 'Version', value: `KDS ${VERSION}` },
   ];
-  return <Overlay layout={layout} reducedMotion={reducedMotion} onClose={onClose} label="Paramètres de l'écran">
+  return <Overlay layout={layout} reducedMotion={reducedMotion} onClose={onClose} label="Paramètres de l'écran" returnFocusId={SETTINGS_TRIGGER_ID}>
     <PanelHead title="Paramètres de l'écran" sub="Appliqués immédiatement · propres à cet écran"
       onClose={onClose} layout={layout} reducedMotion={reducedMotion} />
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingHorizontal: layout.fs(20), paddingTop: layout.fs(6), paddingBottom: layout.fs(16) }}>
