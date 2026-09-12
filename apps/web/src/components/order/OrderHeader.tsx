@@ -15,7 +15,8 @@ export function OrderHeader({ site, logoUrl, lockupUrl, account, onHeightChange 
   useEffect(() => {
     const header = headerRef.current;
     if (!header || !onHeightChange) return;
-    const measure = () => onHeightChange(Math.ceil(header.getBoundingClientRect().height));
+    // The category rail shares this edge: rounding up leaves a visible slit.
+    const measure = () => onHeightChange(header.getBoundingClientRect().height);
     measure(); const observer = new ResizeObserver(measure); observer.observe(header);
     return () => observer.disconnect();
   }, [onHeightChange]);

@@ -61,6 +61,7 @@ export function MenuBoard({
 }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(categories[0]?.id ?? "");
+  const searchRef = useRef<HTMLInputElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
   const lockRef = useRef(0);
@@ -160,16 +161,17 @@ export function MenuBoard({
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-mut"
           />
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Un kebab ? Un tacos gratiné ?"
             aria-label="Rechercher dans la carte"
-            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
+            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-14 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
           />
           {query && (
             <Tap
-              onClick={() => setQuery("")}
+              onClick={() => { setQuery(""); searchRef.current?.focus({ preventScroll: true }); }}
               aria-label="Effacer la recherche"
               /* La cible fait 44 px, la pastille visible 28 : le pouce vise
                  large sans qu'une gomme énorme s'installe dans le champ. */
