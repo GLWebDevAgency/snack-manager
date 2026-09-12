@@ -54,7 +54,7 @@ beforeAll(async () => {
     define: { ...options.define, 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
     plugins: [{ name: 'local-navigation-provider-boundaries', setup(builder) {
       builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
-      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ contents: `export const usePathname=()=>window.location.pathname;export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
+      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ resolveDir: root, contents: `import{useSyncExternalStore}from'react';const subscribe=callback=>{window.addEventListener('popstate',callback);window.addEventListener('sm:order-navigation',callback);return()=>{window.removeEventListener('popstate',callback);window.removeEventListener('sm:order-navigation',callback)}};export const usePathname=()=>useSyncExternalStore(subscribe,()=>window.location.pathname);export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
       // Navigation only: no checkout/payment or Next font download is exercised.
       builder.onResolve({ filter: /\/StripeCard$/ }, () => ({ path: 'stripe', namespace: 'account-navigation' }));
       builder.onLoad({ filter: /^stripe$/, namespace: 'account-navigation' }, () => ({ contents: 'export const apparenceStripeDe=()=>({});export function StripeCard(){return null}' }));
@@ -135,6 +135,37 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await expect.poll(() => requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
     return requests;
   }
+  it('relie les onglets au panneau stable et conserve le panier pendant la navigation clavier et le retour navigateur', async () => {
+    const requests = await openStorefrontNavigation(navigationDiagnostic('named-panels-cart'));
+    await page.setViewportSize({ width: 320, height: 568 });
+    const panel = page.getByRole('tabpanel', { name: 'Carte', exact: true });
+    const panelId = await panel.getAttribute('id');
+    expect(panelId).toBeTruthy();
+    const stablePanel = await panel.elementHandle();
+    expect(await page.getByRole('main').getByRole('tabpanel').count()).toBe(1);
+    expect(await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.getAttribute('aria-controls')))).toEqual(Array(4).fill(panelId));
+    await panel.getByRole('article', { name: 'Canette recette', exact: true }).getByRole('button', { name: /^Canette recette/ }).click();
+    const cart = page.getByRole('button', { name: /Voir mon panier/ });
+    await expect.poll(() => cart.innerText()).toMatch(/1,50/);
+    await page.getByRole('tab', { name: 'Carte', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('tabpanel', { name: 'Rechercher', exact: true }).waitFor();
+    await page.getByRole('searchbox').fill('canette');
+    expect(await page.getByRole('tab', { name: 'Rechercher', exact: true }).getAttribute('aria-selected')).toBe('true');
+    await page.getByRole('tab', { name: 'Rechercher', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('tabpanel', { name: 'Commandes', exact: true }).waitFor();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goBack();
+    await page.getByRole('tabpanel', { name: 'Rechercher', exact: true }).waitFor();
+    await page.setViewportSize({ width: 320, height: 568 });
+    expect(await stablePanel!.evaluate(element => element.isConnected)).toBe(true);
+    expect(await page.getByRole('tabpanel').getAttribute('id')).toBe(panelId);
+    expect(await cart.innerText()).toMatch(/1,50/);
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(requests.mutations).toEqual([]);
+  });
   it.each([320, 390, 1440])('keeps ordering primary and personal entries aligned at %ipx', async width => {
     const phase = navigationDiagnostic(`geometry-${width}`);
     const requests = await openStorefrontNavigation(phase);
@@ -204,6 +235,10 @@ describe('customer entry placement — real Storefront and loyalty components', 
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
     await page.getByText('Solde de Camille recette', { exact: true }).waitFor();
+    const panelId = await page.getByRole('main').getByRole('tabpanel', { name: 'Fidélité', exact: true }).getAttribute('id');
+    expect(panelId).toBeTruthy();
+    expect(await page.getByRole('tab', { name: 'Fidélité', exact: true }).getAttribute('aria-controls')).toBe(panelId);
+    expect(await page.getByRole('tab', { name: 'Fidélité', exact: true }).getAttribute('aria-selected')).toBe('true');
     expect(requests.reads()).toBe(0);
     for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 });

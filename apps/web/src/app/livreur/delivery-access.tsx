@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ajusterJusquaAA, logoUrlDe } from "@sm/contracts";
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { ajusterJusquaAA, logoUrlDe, marqueDeRepli } from "@sm/contracts";
 import { LogoMark } from "@/components/brand/Logo";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { DeliveryPowered, deliveryInitials } from "./delivery-presentation";
 import { useDeliveryPreferences } from "./delivery-preferences";
 import { Btn } from "@/components/ui/Btn";
@@ -64,9 +65,16 @@ export function DeliveryAccess() {
                 : "Votre accès livreur.";
 
   const brand = state.session?.brand;
+  // La forme reste celle du restaurant ; les couleurs clair/sombre restent
+  // celles choisies sur ce téléphone. Aucun second réglage de forme à stocker.
+  const radii = useMemo(() => Object.fromEntries(
+    Object.entries(styleDuMasque(brand ?? marqueDeRepli(null, null)))
+      .filter(([key]) => key === "--cf-r" || key.startsWith("--cf-r-")),
+  ), [brand]);
   const accent = brand?.palette.accent ?? "#c9a15a";
   const surfaceColors = appearance.theme === "light" ? ["#ececea", "#fff", "#f2f1ee", "#e6e4df"] : ["#000", "#111", "#1a1a1a", "#242424"];
   const style = {
+    ...radii,
     "--lv-accent": accent,
     "--lv-accent-text": ajusterJusquaAA(accent, surfaceColors).couleur,
     "--lv-on-accent": ajusterJusquaAA(brand?.palette.onAccent ?? "#12100d", [accent]).couleur,

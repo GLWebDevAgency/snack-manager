@@ -5,7 +5,7 @@
  * embed retains its host resize protocol and guest-only account boundary. */
 
 import { storefrontHighlights } from "./highlights";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSMTabTransition } from "@/components/ui/SMTabBar";
 import { OrderHeader, OrderHero } from "./OrderHeader";
 import { OrderTabBar } from "./OrderTabBar";
@@ -200,6 +200,7 @@ export function Storefront({
   const [navigationLocked, setNavigationLocked] = useState(false);
   const devicePreferences = useDevicePreferences(site.tenant.slug, !demo);
   const pathname = usePathname();
+  const panelId = useId();
   const embeddedView = useEmbeddedOrderView();
   const installRequested = useOrderInstallationRequest();
   const activeTab = embed || demo ? embeddedView
@@ -343,7 +344,8 @@ export function Storefront({
       <main className="mx-auto w-full max-w-[1080px] px-4">
         <OrderInstall key={site.tenant.slug} slug={site.tenant.slug} name={site.tenant.name} disabled={demo || embed}
           eligible={!tunnel && (installRequested || recovery.active?.state === "received" || !!recovery.last)} />
-        <div {...transition.contentProps}>
+        <div {...transition.contentProps} id={panelId} role="tabpanel" tabIndex={0}
+          aria-label={activeTab === "search" ? "Rechercher" : activeTab === "orders" ? "Commandes" : "Carte"}>
         {!embed && activeTab === "menu" && <OrderHero site={site} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
         {!demo && <DeviceOrdersSheet open={activeTab === "orders" || deviceOrdersOpen} presentation={activeTab === "orders" ? "page" : "sheet"}
           slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed} onClose={() => setDeviceOrdersOpen(false)}
@@ -489,7 +491,7 @@ export function Storefront({
         </div>
       )}
 
-      <div><OrderTabBar slug={site.tenant.slug} activeKey={activeTab} theme={brand.mode} hidden={tunnel}
+      <div><OrderTabBar slug={site.tenant.slug} activeKey={activeTab} panelId={panelId} theme={brand.mode} hidden={tunnel}
         minimizable={!draft && !deviceOrdersOpen && !preferencesOpen} disabled={navigationLocked} loyaltyHref={!embed ? loyalty?.chemin : null}
         demo={demo} onSelect={key => transition.selectTab(key === "search" || key === "orders" ? key : "menu")} /></div>
 

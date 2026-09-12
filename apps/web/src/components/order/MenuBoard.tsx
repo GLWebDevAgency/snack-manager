@@ -305,11 +305,12 @@ export function MenuBoard({
  * plutôt qu’une phrase inventée.
  */
 function categoryNote(category: MenuCategory): string | null {
-  const prices = category.products
-    .filter((p) => !p.outOfStock && p.fromPrice > 0)
-    .map((p) => p.fromPrice);
+  const products = category.products.filter((p) => !p.outOfStock && p.fromPrice > 0);
+  const prices = products.map((p) => p.fromPrice);
   if (prices.length === 0) return null;
   const low = Math.min(...prices);
+  // fromPrice is a minimum: a larger format can exceed every base price.
+  if (products.some((p) => p.variants.length > 0)) return `À partir de ${euros(low)}`;
   const high = Math.max(...prices);
   return low === high ? `Tous à ${euros(low)}` : `De ${euros(low)} à ${euros(high)}`;
 }
@@ -318,8 +319,7 @@ function categoryNote(category: MenuCategory): string | null {
 // Carte produit
 // ─────────────────────────────────────────────────────────────
 
-/** A category becomes a photo grid only when its real media coverage permits
- * it. Products without photos remain readable without a reserved thumbnail. */
+/** A category becomes a photo grid only when its real media coverage permits it. */
 function photoGrid(category: MenuCategory): boolean {
   return category.products.length >= 2 && category.products.filter(product => product.photoUrl).length / category.products.length >= .6;
 }
@@ -328,22 +328,30 @@ function ProductCard({ product, qty, disabled, prixMono, onPick, grid }: {
   product: MenuProduct; qty: number; disabled: boolean; prixMono: boolean; onPick: (variantKey?: string) => void; grid: boolean;
 }) {
   const clickable = !product.outOfStock && !disabled;
-  return <article aria-label={product.name} className={cx(grid ? "sm-order-product-card" : "sm-order-product-row", product.outOfStock && "opacity-55")}>
+  const badge = !product.outOfStock && (product.isNew ? <Badge tone="new">Nouveau</Badge>
+    : product.popular ? <span className="sm-order-popular">Populaire</span> : null);
+  const price = product.outOfStock ? <Badge tone="out">Bientôt</Badge>
+    : <PriceTag cents={product.fromPrice} from={product.variants.length > 0} mono={prixMono} size={grid ? "sm" : "md"} />;
+  return <article aria-label={product.name} data-photo={product.photoUrl ? "" : undefined} className={cx(grid ? "sm-order-product-card" : "sm-order-product-row", product.outOfStock && "opacity-55")}>
     <Tap onClick={() => onPick()} disabled={!clickable} className="sm-order-product-button">
-      {grid && product.photoUrl && <Plate photoUrl={product.photoUrl} cover={product.photoCover} name={product.name} pad="p-[8%]" radius="rounded-none" className="sm-order-product-photo" />}
+      {grid && <span className="sm-order-product-visual">
+        <Plate photoUrl={product.photoUrl} cover={product.photoCover} name={product.name} pad="p-[8%]" radius="rounded-none" className="sm-order-product-photo" />
+        {badge && <span className="sm-order-product-badge">{badge}</span>}
+      </span>}
       <span className="sm-order-product-copy">
-        <span className="sm-order-product-name">{product.name}{product.popular && !product.outOfStock && <span className="sm-order-popular">Populaire</span>}{product.isNew && !product.outOfStock && <Badge tone="new">Nouveau</Badge>}</span>
+        <span className="sm-order-product-name">{product.name}{!grid && badge}</span>
         {product.description && <span className="sm-order-product-description">{product.description}</span>}
         {product.tags.length > 0 && <span className="sm-order-product-tags">{product.tags.slice(0, 2).join(" · ")}</span>}
+        {!grid && product.photoUrl && <span className="sm-order-product-price">{price}</span>}
       </span>
       <span className="sm-order-product-footer">
-        {product.outOfStock ? <Badge tone="out">Bientôt</Badge> : <PriceTag cents={product.fromPrice} from={product.variants.length > 0} mono={prixMono} />}
+        {(grid || !product.photoUrl) && <span className="sm-order-product-price">{price}</span>}
         {!grid && product.photoUrl && <Plate photoUrl={product.photoUrl} cover={product.photoCover} name={product.name} pad="p-[6%]" className="sm-order-product-thumbnail" />}
-        {clickable && <AddButton qty={qty} compose={product.configurable} />}
+        {clickable && <AddButton qty={qty} compose={product.configurable} compact={grid} />}
       </span>
       <span className="sr-only">{qty > 0 ? `, ${qty} déjà au panier` : ""}{clickable ? product.configurable ? ", composer" : ", ajouter au panier" : ""}</span>
     </Tap>
-    {product.variants.length > 0 && product.variants.length <= 4 && <div className="sm-order-variants" role="group" aria-label={`Choisir ${product.name}`}>
+    {product.variants.length > 0 && product.variants.length <= 4 && <div className="sm-order-variants" data-count={product.variants.length} role="group" aria-label={`Choisir ${product.name}`}>
       {product.variants.map(variant => <Tap key={variant.key} disabled={!clickable} onClick={() => onPick(variant.key)}>{variant.name}<span>{euros(variant.price)}</span></Tap>)}
     </div>}
   </article>;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -146,6 +147,7 @@ function lireContexteInstallation(): ContexteInstallation {
 const rienAuServeur = (): ContexteInstallation => "rien";
 
 export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
+  const panelId = useId();
   const slug = catalog.restaurant.slug;
   const cheminVitrine = `/r/${encodeURIComponent(slug)}`;
 
@@ -649,6 +651,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           La largeur est celle de la vitrine du même restaurant — les deux
           surfaces se répondent. */}
       <main className="mx-auto w-full max-w-[1080px] px-4 pt-6">
+        <div id={panelId} role="tabpanel" aria-label="Fidélité" tabIndex={0}>
         {slug !== 'demo' && <div className="mb-5 flex justify-end">
           <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} mode={catalog.restaurant.brand.mode} returnLabel="Revenir à la fidélité" />
         </div>}
@@ -854,6 +857,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
             </div>
           </div>
         )}
+        </div>
       </main>
 
       {/*
@@ -867,7 +871,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
       */}
       <SignatureSnackManager brand={catalog.restaurant.brand} />
       <SMTabBarSpacer />
-      <OrderTabBar slug={slug} activeKey="loyalty" theme={catalog.restaurant.brand.mode}
+      <OrderTabBar slug={slug} activeKey="loyalty" panelId={panelId} theme={catalog.restaurant.brand.mode}
         loyaltyHref={`${cheminVitrine}/fidelite${slug === "demo" ? "?demo=1" : ""}`} demo={slug === "demo"} />
 
       {/*

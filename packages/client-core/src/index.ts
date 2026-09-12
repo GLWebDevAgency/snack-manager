@@ -11,3 +11,4 @@ export * from './theme';
 export * from './hooks';
 export * from './demo';
 export * from './error-report';
+export * from './supplement-categories';
