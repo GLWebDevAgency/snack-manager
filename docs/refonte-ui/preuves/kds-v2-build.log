@@ -1,0 +1,37 @@
+
+> @sm/kds@1.0.0 build /Users/limameghassene/development/SnackManager-refonte-ui/apps/kds
+> node ../../scripts/verifier-build-terrain.mjs && expo export --platform web --output-dir dist --clear
+
+✓ Origines du build terrain verrouillées sur local
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:16932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+Web Bundled 13786ms apps/kds/index.ts (553 modules)
+
+› Assets (1):
+../../packages/ui-native/assets/fonts/InterVariable.7c80433dfb0d6e565327d9beeb774bac.ttf (880KB)
+
+› web bundles (1):
+_expo/static/js/web/index-70254fdb6a5b2d38d7d73ce43447f795.js (1.5MB)
+
+› Files (3):
+favicon.ico (15KB)
+index.html (1.2KB)
+metadata.json (49B)
+
+Exported: dist

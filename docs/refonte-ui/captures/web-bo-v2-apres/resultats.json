@@ -1,0 +1,575 @@
+{
+  "phase": "bo-v2-apres",
+  "base": "http://127.0.0.1:3093",
+  "note": "After surface changes; actual Next routes, repository demos and local-only delivery/HQ fixtures. Light tenant cases use the existing Brasserie demo mask.",
+  "results": [
+    {
+      "name": "restaurant-1440-light",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-1440-light-dashboard.png",
+        "restaurant-1440-light-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-1440-dark",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-1440-dark-dashboard.png",
+        "restaurant-1440-dark-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-390-light",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-390-light-dashboard.png",
+        "restaurant-390-light-navigation.png",
+        "restaurant-390-light-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-390-dark",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-390-dark-dashboard.png",
+        "restaurant-390-dark-navigation.png",
+        "restaurant-390-dark-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "snackmanager-1440-light",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-1440-light-dashboard-vide.png",
+        "snackmanager-1440-light-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-1440-dark",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-1440-dark-dashboard-vide.png",
+        "snackmanager-1440-dark-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-390-light",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-390-light-dashboard-vide.png",
+        "snackmanager-390-light-navigation.png",
+        "snackmanager-390-light-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-390-dark",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3093/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "appearance toggle preserves route, persists after reload and changes native control color-scheme",
+        "open form and typed value survive appearance change from another tab",
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-390-dark-dashboard-vide.png",
+        "snackmanager-390-dark-navigation.png",
+        "snackmanager-390-dark-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    }
+  ]
+}

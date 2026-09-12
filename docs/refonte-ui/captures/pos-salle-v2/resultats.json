@@ -1,0 +1,2471 @@
+{
+  "source": "real POS export; local HTTP fixtures; no real payment",
+  "results": [
+    {
+      "name": "desktop-clair",
+      "pass": true,
+      "shots": [
+        "desktop-clair-table-ouverte.png",
+        "desktop-clair-servie-avant-paiement.png",
+        "desktop-clair-table-transferee.png",
+        "desktop-clair-table-liberee.png",
+        "desktop-clair-ticket-table-historique.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/orders",
+          "body": {
+            "operationId": "9dea30e4-5d4f-47ee-bc14-cd2847f179a8",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "9dea30e4-5d4f-47ee-bc14-cd2847f179a8",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/orders/000000000000000000000041/serve",
+          "body": {
+            "operationId": "12610c59-f8cb-4be4-8819-155f909ee853"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/transfer",
+          "body": {
+            "operationId": "a4fbb159-ab07-48e2-bc7f-c29a2ed67d82",
+            "expectedRevision": 1,
+            "tableId": "b0173871-811a-43ee-ae1c-504163424662"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/orders/000000000000000000000041/collect",
+          "body": {
+            "operationId": "461570a5-80b1-49d9-9094-14a4fb8f3977",
+            "expectedTotalCents": 1250,
+            "tender": "card"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/close",
+          "body": {
+            "operationId": "e9a048c5-5487-46fb-9f99-d0ea68a6724a",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/public/orders/000000000000000000000041/ticket",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "mobile-sombre",
+      "pass": true,
+      "shots": [
+        "mobile-sombre-table-ouverte.png",
+        "mobile-sombre-servie-avant-paiement.png",
+        "mobile-sombre-table-transferee.png",
+        "mobile-sombre-table-liberee.png",
+        "mobile-sombre-ticket-table-historique.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "da734ef7-ba46-46f2-99f2-d9a15615bb76",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/orders",
+          "body": {
+            "operationId": "0bb07fca-e568-4520-8b62-4d4fbb00c7a4",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "0bb07fca-e568-4520-8b62-4d4fbb00c7a4",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/orders/000000000000000000000041/serve",
+          "body": {
+            "operationId": "34067052-bcc2-4b83-8578-aaf5dd43706a"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/transfer",
+          "body": {
+            "operationId": "070e14eb-6072-43b6-82d9-71d0b29539f1",
+            "expectedRevision": 1,
+            "tableId": "b0173871-811a-43ee-ae1c-504163424662"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/orders/000000000000000000000041/collect",
+          "body": {
+            "operationId": "54c7f9b9-2e56-4821-9fcb-d3a24953e40d",
+            "expectedTotalCents": 1250,
+            "tender": "card"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/close",
+          "body": {
+            "operationId": "55c9f5e7-122b-42d8-86a8-cbd1be275729",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/public/orders/000000000000000000000041/ticket",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "reprise-apres-reload",
+      "pass": true,
+      "shots": [
+        "reprise-apres-reload-table-ouverte.png",
+        "reprise-apres-reload-reponse-perdue.png",
+        "reprise-apres-reload-autre-equipier-bloque.png",
+        "reprise-apres-reload-servie-avant-paiement.png",
+        "reprise-apres-reload-table-transferee.png",
+        "reprise-apres-reload-table-liberee.png",
+        "reprise-apres-reload-ticket-table-historique.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "2f0f3681-6c3f-4ed6-ad28-d72101339321",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders",
+          "body": {
+            "operationId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders",
+          "body": {
+            "operationId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders/000000000000000000000041/serve",
+          "body": {
+            "operationId": "1993b279-cf37-4cfe-a60a-3285821638c0"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/transfer",
+          "body": {
+            "operationId": "669e991d-e402-4cb6-822a-01d08e9ed5fc",
+            "expectedRevision": 1,
+            "tableId": "b0173871-811a-43ee-ae1c-504163424662"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/orders/000000000000000000000041/collect",
+          "body": {
+            "operationId": "686c408e-bc5d-4992-9676-daf1693602f9",
+            "expectedTotalCents": 1250,
+            "tender": "card"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/close",
+          "body": {
+            "operationId": "d6a84e3f-f790-48f4-9ec4-c842e21585d8",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/public/orders/000000000000000000000041/ticket",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "journal-refuse-reload",
+      "pass": true,
+      "shots": [
+        "journal-refuse-reload-table-ouverte.png",
+        "journal-refuse-reload-journal-refuse.png",
+        "journal-refuse-reload-servie-avant-paiement.png",
+        "journal-refuse-reload-table-transferee.png",
+        "journal-refuse-reload-table-liberee.png",
+        "journal-refuse-reload-ticket-table-historique.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders",
+          "body": {
+            "operationId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders",
+          "body": {
+            "operationId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders/000000000000000000000041/serve",
+          "body": {
+            "operationId": "bb28f629-f85f-42ee-9db8-0ea525992fce"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/transfer",
+          "body": {
+            "operationId": "0b978e82-dc30-43eb-87cb-1d3852e455db",
+            "expectedRevision": 1,
+            "tableId": "b0173871-811a-43ee-ae1c-504163424662"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/orders/000000000000000000000041/collect",
+          "body": {
+            "operationId": "43b3d4da-2a1a-4d9f-bd8b-dcca9e0a591c",
+            "expectedTotalCents": 1250,
+            "tender": "card"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/close",
+          "body": {
+            "operationId": "00ce2c61-0e56-44b4-bc9b-58c39dfed813",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/public/orders/000000000000000000000041/ticket",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "deux-onglets",
+      "pass": true,
+      "shots": [
+        "deux-onglets-table-ouverte.png",
+        "deux-onglets-brouillon-etranger-conserve.png",
+        "deux-onglets-servie-avant-paiement.png",
+        "deux-onglets-table-transferee.png",
+        "deux-onglets-table-liberee.png",
+        "deux-onglets-ticket-table-historique.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "6081c8a5-ad1f-444c-a45d-066c487eb47c",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "body": {
+            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "body": {
+            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "body": {
+            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders/000000000000000000000041/serve",
+          "body": {
+            "operationId": "643a2717-e214-4e56-9294-344801df42bf"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/transfer",
+          "body": {
+            "operationId": "58b9b4ed-e9e0-4623-b121-aed328b1e78a",
+            "expectedRevision": 1,
+            "tableId": "b0173871-811a-43ee-ae1c-504163424662"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders/000000000000000000000041",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/orders/000000000000000000000041/collect",
+          "body": {
+            "operationId": "ffe377c1-9013-475e-b4b1-fad0b858c900",
+            "expectedTotalCents": 1250,
+            "tender": "card"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/close",
+          "body": {
+            "operationId": "5e6150e1-97cc-44fc-b4f2-a7bfc436330c",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/public/orders/000000000000000000000041/ticket",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rembourse-avant-reprise",
+      "pass": true,
+      "shots": [
+        "rembourse-avant-reprise-table-ouverte.png",
+        "rembourse-avant-reprise-remboursement-avant-reprise.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "e500a8f5-5054-4b70-948e-224b82d7b015",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/orders",
+          "body": {
+            "operationId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/orders",
+          "body": {
+            "operationId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/close",
+          "body": {
+            "operationId": "54d237bb-bf61-4fcb-a53f-e346ddc24d38",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

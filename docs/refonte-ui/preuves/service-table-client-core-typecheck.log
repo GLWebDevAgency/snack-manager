@@ -1,0 +1,4 @@
+
+> @sm/client-core@0.0.1 typecheck /Users/limameghassene/development/SnackManager-refonte-ui/packages/client-core
+> tsc --noEmit
+

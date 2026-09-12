@@ -8,10 +8,12 @@ export interface KdsPrefs {
   theme: KdsTheme;
   density: KdsDensity;
   splash: boolean;
+  reduceMotion: boolean;
+  reduceTransparency: boolean;
 }
 
 export const DEFAULT_PREFS: Readonly<KdsPrefs> = {
-  sound: true, allDay: true, theme: 'dark', density: 'comfort', splash: true,
+  sound: true, allDay: true, theme: 'light', density: 'comfort', splash: true, reduceMotion: false, reduceTransparency: false,
 };
 
 /** Un ancien JSON {sound,allDay} conserve ses choix ; un champ invalide retombe seul au défaut. */
@@ -26,6 +28,8 @@ export function parsePrefs(raw: string | null): KdsPrefs {
       theme: prefs.theme === 'dark' || prefs.theme === 'light' ? prefs.theme : DEFAULT_PREFS.theme,
       density: prefs.density === 'comfort' || prefs.density === 'dense' ? prefs.density : DEFAULT_PREFS.density,
       splash: typeof prefs.splash === 'boolean' ? prefs.splash : DEFAULT_PREFS.splash,
+      reduceMotion: typeof prefs.reduceMotion === 'boolean' ? prefs.reduceMotion : DEFAULT_PREFS.reduceMotion,
+      reduceTransparency: typeof prefs.reduceTransparency === 'boolean' ? prefs.reduceTransparency : DEFAULT_PREFS.reduceTransparency,
     };
   } catch {
     return { ...DEFAULT_PREFS };

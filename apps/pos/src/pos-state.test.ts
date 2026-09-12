@@ -689,6 +689,7 @@ describe('les clés effacées au désappairage', () => {
         'sm.pos.collection-recovery.v1',
         'sm.pos.daylog.v1',
         'sm.pos.device.v1',
+        'sm.pos.dining-operation.v1',
         'sm.pos.loyalty-enrollment-recovery.v1',
         'sm.pos.parked.v1',
         'sm.pos.phone-order-attempt.v1',

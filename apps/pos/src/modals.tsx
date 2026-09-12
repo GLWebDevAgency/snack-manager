@@ -282,8 +282,8 @@ export function SentOverlay({
         </View>
 
         <Text style={[type.mut, { marginTop: 14, textAlign: 'center', fontSize: L.fs(14) }]}>
-          {MODE_LABEL[entry.mode]} · {euros(entry.total)} ·{' '}
-          {entry.paid ? `Payé (${PAY_LABEL[entry.method].toLowerCase()})` : 'À encaisser au retrait'}
+          {MODE_LABEL[entry.mode]} · {euros(entry.total - (entry.discount ?? 0))} ·{' '}
+          {entry.refunded ? 'Remboursé · encaissement historique' : entry.paid ? `Payé (${PAY_LABEL[entry.method].toLowerCase()})` : 'À encaisser au retrait'}
         </Text>
 
         {entry.loyalty ? (
@@ -652,6 +652,7 @@ export interface OrderTicketDto {
   typeLabel: string;
   statusLabel: string;
   pickup: { slotLabel: string; customerName: string; customerPhone: string | null } | null;
+  dining?: { tableLabel: string } | null;
   lines: TicketLineDto[];
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
   payment: {
@@ -745,6 +746,7 @@ export function TicketPreview({
               <Paper center>
                 {ticket.channelLabel} · {ticket.typeLabel}
               </Paper>
+              {ticket.dining ? <Paper center bold>Table · {ticket.dining.tableLabel}</Paper> : null}
               {ticket.pickup ? (
                 <Paper center>
                   Retrait {ticket.pickup.slotLabel} · {ticket.pickup.customerName}
@@ -1108,6 +1110,7 @@ function OrderRow({
         </Text>
         <Text style={[type.mut, { fontSize: L.fs(12.5), marginTop: 2 }]}>
           {PAY_LABEL[entry.method]}
+          {entry.refunded ? ' · Remboursé · encaissement historique' : ''}
           {entry.serverId ? '' : ' · en file'}
           {entry.discount ? ` · remise ${euros(entry.discount)}` : ''}
         </Text>

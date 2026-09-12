@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@sm/ui-native';
-import { alpha, CHANNEL_FILTERS, contrastOn, makeUi, radius, SETTINGS_TRIGGER_ID, STATUS_TONE, tabular, type ChannelFilter } from '../ui';
+import { alpha, CHANNEL_FILTERS, contrastOn, makeUi, radius, SETTINGS_TRIGGER_ID, tabular, type ChannelFilter } from '../ui';
 import { useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Chip, Pill, StatusDot, Tap } from './primitives';
@@ -75,38 +75,42 @@ export function Toolbar({
   soundOn, onToggleSound, allDayOn, onToggleAllDay, onSettings, onLogout,
   reducedMotion, layout,
 }: ToolbarProps) {
-  const { theme, palette } = useUi();
+  const { theme, palette, surface, statusColors } = useUi();
   const bar = barStyles(layout, theme);
   return (
     <View style={bar.bar}>
-      <View style={bar.left}>
-        <BrandTile name={tenantName} logoUrl={logoUrl} accent={accent} size={layout.fs(34)} />
-        <View style={bar.identity}>
-          <Text style={bar.appTitle} numberOfLines={1}>Cuisine · KDS</Text>
-          <View style={bar.connection}>
-            <StatusDot color={online ? palette.green : palette.red} size={layout.fs(7)} />
-            <Text style={bar.connectionText} numberOfLines={1}>{online ? 'En ligne' : 'Hors ligne'} · {tenantName}</Text>
+      <View style={bar.topLine}>
+        <View style={bar.left}>
+          <BrandTile name={tenantName} logoUrl={logoUrl} accent={accent} size={layout.fs(42)} />
+          <View style={bar.identity}>
+            <Text style={bar.desktopTitle} numberOfLines={1}>Cuisine</Text>
+            <View style={bar.connection}>
+              <StatusDot color={online ? palette.green : palette.red} size={layout.fs(7)} />
+              <Text style={bar.connectionText} numberOfLines={1}>{online ? 'En ligne' : 'Hors ligne'} · {tenantName}</Text>
+            </View>
           </View>
         </View>
-      </View>
-      <View style={bar.filters} accessibilityRole="tablist" accessibilityLabel="Filtrer par canal de commande">
-        <ChannelChips filter={filter} onFilter={onFilter} accent={accent} reducedMotion={reducedMotion} layout={layout} />
-      </View>
-      <View style={bar.right}>
-        {!layout.denseToolbar ? <>
-          <Counter value={counts.new} label="Nouveau" color={STATUS_TONE.new.bg} layout={layout} />
-          <Counter value={counts.preparing} label="En prépa" color={STATUS_TONE.preparing.bg} layout={layout} />
-          <Counter value={counts.ready} label="Prêt" color={STATUS_TONE.ready.bg} layout={layout} />
+        <View style={bar.right}>
+          {!layout.denseToolbar ? <>
+            <Counter value={counts.new} label="Nouveau" color={statusColors.new.ink} layout={layout} />
+            <Counter value={counts.preparing} label="En prépa" color={statusColors.preparing.ink} layout={layout} />
+            <Counter value={counts.ready} label="Prêt" color={statusColors.ready.ink} layout={layout} />
+            <View style={bar.divider} />
+          </> : null}
+          <Counter value={counts.total} label="Actives" color={palette.text} layout={layout} />
           <View style={bar.divider} />
-        </> : null}
-        <Counter value={counts.total} label="Actives" color={palette.text} layout={layout} />
-        <View style={bar.divider} />
-        <Text style={bar.clock}>{clock}</Text>
-        <SyncBadge online={online} pending={pending} layout={layout} />
-        <Chip text="À lancer" icon="kds-list" active={allDayOn} onPress={onToggleAllDay} accent={accent} reducedMotion={reducedMotion} tone={{ bg: accent, fg: contrastOn(accent) }} layout={layout} />
-        <Chip text={soundOn ? 'Son' : 'Muet'} icon={soundOn ? 'kds-bell' : 'bellOff'} active={soundOn} onPress={onToggleSound} accent={accent} reducedMotion={reducedMotion} tone={{ bg: accent, fg: contrastOn(accent) }} layout={layout} />
-        {onSettings ? <IconButton nativeID={SETTINGS_TRIGGER_ID} icon="gear" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
-        {onLogout ? <IconButton icon="lock" label="Fermer le service" onPress={onLogout} layout={layout} reducedMotion={reducedMotion} /> : null}
+          <Text style={bar.clock}>{clock}</Text>
+          <SyncBadge online={online} pending={pending} layout={layout} />
+          <Chip text={soundOn ? 'Son' : 'Muet'} icon={soundOn ? 'bell' : 'bellOff'} active={soundOn} onPress={onToggleSound} accent={accent} reducedMotion={reducedMotion} tone={{ bg: surface.el, fg: palette.text }} layout={layout} />
+          {onSettings ? <IconButton nativeID={SETTINGS_TRIGGER_ID} icon="settings" label="Paramètres de l'écran" onPress={onSettings} layout={layout} reducedMotion={reducedMotion} /> : null}
+          {onLogout ? <IconButton icon="lock" label="Fermer le service" onPress={onLogout} layout={layout} reducedMotion={reducedMotion} /> : null}
+        </View>
+      </View>
+      <View style={bar.filterLine}>
+        <View style={bar.filters} accessibilityRole="tablist" accessibilityLabel="Filtrer par canal de commande">
+          <ChannelChips filter={filter} onFilter={onFilter} accent={accent} reducedMotion={reducedMotion} layout={layout} />
+        </View>
+        <Chip text="À lancer" icon="menu" active={allDayOn} onPress={onToggleAllDay} accent={accent} reducedMotion={reducedMotion} tone={{ bg: surface.el, fg: palette.text }} layout={layout} />
       </View>
     </View>
   );
@@ -146,22 +150,24 @@ const barStyles = scaledStyles((l: Layout, theme) => {
   const { palette, surface, hair, hair2, ink, type } = makeUi(theme);
   return StyleSheet.create({
     bar: {
-      flexDirection: 'row', alignItems: 'center', columnGap: l.fs(10), rowGap: l.fs(16),
-      flexWrap: 'wrap', paddingHorizontal: l.pad + 2, paddingVertical: l.fs(10),
-      backgroundColor: surface.card, borderBottomWidth: 1, borderBottomColor: hair, flexShrink: 0,
+      gap: l.fs(20), paddingHorizontal: l.pad + 2, paddingTop: l.fs(20), paddingBottom: l.fs(8),
+      backgroundColor: surface.bg, flexShrink: 0,
     },
+    topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: l.fs(20), flexWrap: 'wrap' },
+    filterLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: l.fs(12) },
+    desktopTitle: { fontFamily: type.title.fontFamily, fontSize: l.fs(28), fontWeight: '700', letterSpacing: -0.9, color: palette.text },
     left: { flexDirection: 'row', alignItems: 'center', gap: l.fs(11), flexShrink: 1, minWidth: 0 },
     identity: { gap: l.fs(1), flexShrink: 1, minWidth: 0 },
     connection: { flexDirection: 'row', alignItems: 'center', gap: l.fs(6) },
     appTitle: { fontFamily: type.title.fontFamily, fontSize: l.fs(17), fontWeight: '700', letterSpacing: -0.4, color: palette.text },
     connectionText: { fontFamily: type.body.fontFamily, fontSize: l.fs(12.5), fontWeight: '600', color: ink.dim, flexShrink: 1 },
-    filters: { flexDirection: 'row', alignItems: 'center', gap: l.fs(8), flexGrow: 1, flexShrink: 0, justifyContent: 'center' },
+    filters: { flexDirection: 'row', alignItems: 'center', gap: l.fs(8), flexGrow: 1, flexShrink: 0, justifyContent: 'flex-start' },
     right: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: l.fs(14), flexWrap: 'wrap', rowGap: l.fs(8), flexGrow: 1 },
     counter: { alignItems: 'flex-start', minWidth: l.fs(44) },
-    counterValue: { fontFamily: type.hero.fontFamily, fontSize: l.far(24), fontWeight: '900', letterSpacing: -1, lineHeight: l.far(26.5), ...tabular },
+    counterValue: { fontFamily: type.hero.fontFamily, fontSize: l.far(24), fontWeight: '700', letterSpacing: -1, lineHeight: l.far(26.5), ...tabular },
     counterLabel: { fontFamily: type.micro.fontFamily, fontSize: l.fs(11.5), fontWeight: '600', letterSpacing: -0.1, color: ink.dim },
     divider: { width: 1, alignSelf: 'stretch', minHeight: l.fs(30), backgroundColor: hair2 },
-    clock: { fontFamily: type.clock.fontFamily, fontSize: l.far(23), fontWeight: '800', letterSpacing: -0.6, color: palette.text, ...tabular },
+    clock: { fontFamily: type.clock.fontFamily, fontSize: l.far(18), fontWeight: '600', letterSpacing: -0.6, color: palette.text, ...tabular },
     iconButton: { width: l.touch, height: l.touch, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: surface.card, borderWidth: 1, borderColor: hair2, flexShrink: 0 },
     compactShell: { backgroundColor: surface.card, borderBottomWidth: 1, borderBottomColor: hair, flexShrink: 0 },
     compactBar: { flexDirection: 'row', alignItems: 'center', gap: l.fs(8), paddingHorizontal: l.gap, paddingVertical: l.fs(9), flexShrink: 0 },

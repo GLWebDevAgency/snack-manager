@@ -112,3 +112,24 @@ Le lot de code UI et d'assets est intégralement fusionné et disponible sur sta
 Prochaine tranche : recette utilisateur sur staging, en priorité POS A/B/C (configurateur, ticket, reprises), KDS (filtres et transitions), commande/fidélité/livreur, deux back-offices et choix d'illustration dans les deux médiathèques. Les formulaires secondaires complets et les essais appareils restent à couvrir ; les 33 parcours visuels locaux utilisent des fixtures et les 8 contrôles staging sont des lectures publiques, pas une recette métier authentifiée.
 
 Accès : [web](https://web-staging-6f5f.up.railway.app), [POS](https://pos-staging-7f92.up.railway.app), [KDS](https://kds-staging-90da.up.railway.app).
+
+## Deuxième passe demandée — travail en cours, 12 septembre 2026
+
+Branche dédiée `refactor/ui-handoff-fidelity`, issue de `origin/develop` `a01f857`, suivi de livraison repris par le commit `d90e7f8`. Checkout principal et autres branches préservés. Aucun nouveau push, merge ou déploiement autorisé pour cette passe.
+
+La demande de reprise corrige deux lacunes concrètes : les photos n'étaient proposées qu'après création du produit et trop d'icônes historiques évitaient encore le kit. La bibliothèque est déplacée en tête du formulaire, création comprise. Le premier POST produit est suivi de l'association via le contrat médias existant ; tout échec de cette seconde étape conserve le produit créé et reprend son identité. Les icônes sémantiques sont raccordées aux 78 dessins du kit. Les détails et preuves ciblées sont dans `LOT-ASSETS-V2.md` et `LOT-ICONES-V2.md`.
+
+POS : densité confortable/compacte, carte produit plus ample, hiérarchie typographique, segments, réglages clair/sombre et préférences de réduction des mouvements/transparence. Premier export de cette présentation : typecheck/build réussis et recette 7/7, captures `captures/pos-fidelite-v2`. Ces résultats précèdent l'ajout du service à table et ne valident pas ce dernier.
+
+Service à table : fonctionnalité explicitement autorisée par la nouvelle demande, développée dans les applications existantes. Configuration en BO, occupation exclusive des tables, tablées et plusieurs tickets, transfert, règlements et remise via les contrôleurs existants, libération conditionnée aux commandes terminées. Les admissions conservent les prix/calculs/stock/capacité du serveur. Les intentions directes sont durables avant réseau et se reprennent avec le même UUID ; une réponse incertaine bloque le remplacement de l'intention et le désappairage. Les premières intégrations Mongo locales passent ; l'interface POS, la recette bout en bout et la revue des courses restent en cours. Aucune preuve de production n'est revendiquée.
+
+Prochaine tranche précise : finir l'envoi table → cuisine → règlement → remise → libération avec journal local durable et reprise après rechargement ; vérifier les courses et droits sur base temporaire locale, puis recette navigateur et passe des thèmes BO. Les validations finales et la liste des fichiers seront complétées ici.
+
+
+### Gel local V2 avant reprise de la PR 178
+
+Le service à table et les sept surfaces sont implémentés ; les preuves détaillées figurent dans `LOT-POS-V2.md`, `LOT-KDS-V2.md`, `LOT-ASSETS-V2.md`, `LOT-ICONES-V2.md`, `LOT-SALLE-BO.md`, `LOT-SERVICE-TABLE.md`, `LOT-BACKOFFICES-V2.md` et `LOT-SURFACES-CLIENT-V2.md`. Le journal distingue un remboursement connu à la reprise tout en conservant sa sémantique historique.
+
+Validations de cet arbre avant PR 178 : POS331 +5Node et6parcours salle ; KDS86 ; web2915 ; API3686 (803ignorés), DB556 (10ignorés), contrats678, client-core131. Typechecks, builds API/Next/exports Expo web et Hermes iOS/Android exécutés. Détails, environnements et causes des contrôles ignorés : `VALIDATION-METIER-V2.md`, `VALIDATION-WEB-V2.md` et les lots POS/KDS. La recette web compilée a réussi26parcours/76captures. Ces preuves ne valent pas encore validation du nouvel arbre combiné.
+
+Nouvelle demande de compatibilité : PR[#178](https://github.com/GLWebDevAgency/snack-manager/pull/178) fusionnée dans `develop` en `80f2eac593863dfcfc1f9e5962c09db38fe6db24`. Elle ajoute Carte/Rechercher/Commandes/Fidélité/Compte et leur continuité de navigation. Sauvegarde locale du lot V2, puis rebase local de la branche dédiée sur ce commit ; aucune fusion distante, aucun push ni déploiement. Prochaine tranche précise : habiller et tester ces nouvelles destinations, conserver les comportements PR178, puis relancer les validations sur la base combinée.

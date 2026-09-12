@@ -64,7 +64,7 @@ export type NavGroupe = { titre: string; items: readonly NavItem[] };
 export const NAV_ACCUEIL: NavItem = {
   href: "/sm",
   label: "Tableau de bord",
-  icon: "home",
+  icon: "chart",
   court: "Accueil",
 };
 
@@ -76,13 +76,13 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // celui que l'écran emploie déjà dans sa recherche (« Rechercher un
       // prospect… »). La route `/sm/pipeline` et le type `CrmLead` ne bougent
       // pas — on renomme ce qui se lit, pas ce qui s'exécute.
-      { href: "/sm/pipeline", label: "Prospection", icon: "grid" },
+      { href: "/sm/pipeline", label: "Prospection", icon: "users" },
     ],
   },
   {
     titre: "Parc",
     items: [
-      { href: "/sm/clients", label: "Restaurants", icon: "user" },
+      { href: "/sm/clients", label: "Restaurants", icon: "store" },
       // « File du jour » : le nom dit ce qu'on en fait — une file se vide dans
       // la journée. « Signaux » nommait la matière première, pas le geste.
       { href: "/sm/signals", label: "File du jour", icon: "bell" },
@@ -102,10 +102,9 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       { href: "/sm/erreurs", label: "Erreurs", icon: "alert" },
       // LE ROUAGE A DISPARU D'ICI. Partout ailleurs dans le produit il annonce
       // les RÉGLAGES ; cet écran-là n'en est pas un — il MET EN LIGNE la
-      // vitrine commerciale, c'est-à-dire ce que le visiteur verra. `tv` est
-      // la seule icône du jeu qui montre une surface d'affichage public, et
-      // aucune autre entrée ne la porte (le test le vérifie).
-      { href: "/sm/reseaux", label: "Vitrine Snack Manager", icon: "tv" },
+      // vitrine commerciale. Le globe fourni par le kit désigne le site
+      // public ; aucune autre entrée ne le porte (le test le vérifie).
+      { href: "/sm/reseaux", label: "Vitrine Snack Manager", icon: "globe" },
     ],
   },
 ];

@@ -9,6 +9,11 @@
  */
 import { usePrefs } from './usePrefs';
 import { SettingsModal } from './SettingsModal';
+import { DiningRoomPanel } from './DiningRoomPanel';
+import { useDining } from './useDining';
+import { diningOwner, type DiningOperation } from './dining-operation';
+import { appendDiningEntry, diningJournalEntry } from './dining-journal';
+import { DiningAddOrderSchema } from '@sm/contracts';
 import { useTheme } from './theme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
@@ -151,6 +156,7 @@ export function PosScreen({
 
   // ─── Ticket en cours ───
   const [mode, setMode] = useState<Mode>('surplace');
+  const [cartDiningId, setCartDiningId] = useState<string | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [note, setNote] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -158,17 +164,13 @@ export function PosScreen({
   const [slotIso, setSlotIso] = useState<string | null>(null);
   // Identité du brouillon, pas hash de PII sur disque. Une autre fenêtre ou
   // un ticket édité/reconstruit identique ne possède jamais l'ancienne vente.
-  const draftSignature = JSON.stringify([mode, lines.map((line) => [line.lineId, line.productId, line.variantKey,
+  const draftSignature = JSON.stringify([mode, cartDiningId, lines.map((line) => [line.lineId, line.productId, line.variantKey,
     line.qty, line.options, line.removed, line.note]), note, customerName, customerPhone, slotIso]);
   const draftIdentity = useRef({ signature: '', id: '' });
   if (draftIdentity.current.signature !== draftSignature) draftIdentity.current = { signature: draftSignature, id: uuid() };
   const [query, setQuery] = useState('');
   const [catId, setCatId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const mutateTicket = useCallback(
-    (action: () => void) => saleInFlight.runWhenIdle(action),
-    [saleInFlight],
-  );
   /** Mode compact seulement : tiroir du ticket ouvert. */
   const [ticketOpen, setTicketOpen] = useState(false);
   /**
@@ -178,6 +180,15 @@ export function PosScreen({
    * qui démarre sur un écran de consultation coûte un geste à chaque service.
    */
   const [vue, setVue] = useState<Vue>('vente');
+  const diningStaff = useMemo(() => diningOwner(session.token), [session.token]);
+  const dining = useDining(vue === 'salle', offline, diningStaff, draftIdentity.current.id);
+  const mutateTicket = useCallback((action: () => void) => {
+    if (!dining.ready || dining.pending || dining.storageError || dining.busy) {
+      push(dining.storageError ?? 'Vérifiez l’opération de salle avant de modifier le ticket.', 'warn');
+      return;
+    }
+    saleInFlight.runWhenIdle(action);
+  }, [dining.ready, dining.pending, dining.storageError, dining.busy, push, saleInFlight]);
 
   // ─── Surcouches ───
   const [config, setConfig] = useState<{
@@ -794,6 +805,7 @@ export function PosScreen({
   );
 
   const resetTicket = useCallback(() => {
+    setCartDiningId(null);
     setConfig(null);
     setLines([]);
     setNote('');
@@ -878,6 +890,10 @@ export function PosScreen({
   const changeMode = useCallback(
     (next: Mode) => {
       mutateTicket(() => {
+        if (cartDiningId && next !== 'surplace') {
+          push('Quittez la table avant de changer de mode de service.', 'warn');
+          return;
+        }
         if (next === 'tel' && loyaltyMember) {
           setLoyaltyMember(null);
           setLoyaltyOpen(false);
@@ -891,7 +907,7 @@ export function PosScreen({
         setMode(next);
       });
     },
-    [loyaltyMember, mode, mutateTicket, push],
+    [cartDiningId, loyaltyMember, mode, mutateTicket, push],
   );
 
   const closeLoyalty = useCallback(() => setLoyaltyOpen(false), []);
@@ -971,6 +987,7 @@ export function PosScreen({
         ...customer,
         note,
         at: Date.now(),
+        ...(cartDiningId ? { diningSessionId: cartDiningId } : {}),
       });
       setParked((cur) => [...cur, ticket]);
       resetTicket();
@@ -981,7 +998,7 @@ export function PosScreen({
         'warn',
       );
     });
-  }, [customerName, customerPhone, lines, loyaltyMember, mode, mutateTicket, note, push, resetTicket, slotIso]);
+  }, [cartDiningId, customerName, customerPhone, lines, loyaltyMember, mode, mutateTicket, note, push, resetTicket, slotIso]);
 
   const recall = useCallback(
     (ticket: ParkedTicket) => {
@@ -991,6 +1008,8 @@ export function PosScreen({
           return;
         }
         setLines(ticket.lines);
+        dining.selectSession(ticket.diningSessionId ?? null);
+        setCartDiningId(ticket.diningSessionId ?? null);
         setMode(ticket.mode);
         const customer = customerFieldsForMode(
           ticket.mode,
@@ -1007,7 +1026,7 @@ export function PosScreen({
         push(`Ticket ${ticket.code} rappelé`);
       });
     },
-    [lines.length, mutateTicket, push],
+    [dining.selectSession, lines.length, mutateTicket, push],
   );
 
   // ─── Envoi en cuisine ───
@@ -1018,7 +1037,7 @@ export function PosScreen({
 
   const send = useCallback(
     async (method: PayMethod, cash?: { received: number; change: number }) => {
-      if (lines.length === 0 || busy) return;
+      if (lines.length === 0 || busy || !dining.ready || dining.pending || dining.storageError || dining.busy || cartDiningId) return;
       if (!configurationCommitted()) return;
       if (mode === 'tel') {
         push('Confirmez d’abord le créneau téléphone. L’encaissement se fait ensuite sur la commande confirmée.', 'warn');
@@ -1131,6 +1150,7 @@ export function PosScreen({
       loyaltyMember,
       mode,
       nextLocalNumber,
+      cartDiningId, dining.ready, dining.pending, dining.storageError, dining.busy,
       note,
       push,
       resetTicket,
@@ -1139,9 +1159,85 @@ export function PosScreen({
     ],
   );
 
+  const sendDiningOrder = useCallback(async (recovery?: Extract<DiningOperation, { action: 'order' }>) => {
+    if (busy || journalResetGate.current || !isCounterHandoverRole(session.staffRole)) return;
+    if (!recovery && (!cartDiningId || !lines.length || !configurationCommitted())) return;
+    if (!recovery && (dining.stale || dining.session?.id !== cartDiningId || dining.session.state !== 'open')) {
+      push('Actualisez cette tablée avant d’envoyer les plats.', 'warn'); return;
+    }
+    if (!saleInFlight.tryStart()) return;
+    setBusy(true);
+    try {
+      let operation = recovery;
+      if (!operation) {
+        const operationId = uuid();
+        const loyaltyIntent = loyaltyMember?.status === 'active' ? { memberId: loyaltyMember.id, operationId: uuid() } : null;
+        if (!diningStaff) throw new Error('Reconnectez-vous pour confirmer l’identité de l’équipier.');
+        operation = { action: 'order', ownerId: diningStaff, sessionId: cartDiningId!, draftId: draftIdentity.current.id, body: DiningAddOrderSchema.parse({
+          operationId, expectedRevision: dining.session!.revision,
+          order: buildOrderBody({ clientId: operationId, loyaltyMemberId: loyaltyIntent?.memberId ?? null,
+            loyaltyEarnOperationId: loyaltyIntent?.operationId ?? null, mode: 'surplace', lines, note,
+            customerName: '', customerPhone: '', slotIso: null, method: 'retrait' }),
+        }) };
+      }
+      const result = await dining.execute(operation);
+      if (!result.order) throw new Error('L’envoi reste à vérifier avec la même référence.');
+      const entry = diningJournalEntry(operation, result.order);
+      try {
+        const persisted = await dayLogWriter.commit(() => dayLogRef.current,
+          (current) => appendDiningEntry(current, entry), applyDayLog, dayLogWriter.revision());
+        if (!persisted) throw new Error('Journal modifié pendant la confirmation.');
+        setJournalDegraded(false);
+      } catch {
+        setJournalDegraded(true);
+        throw new Error('Plats enregistrés en cuisine. Le journal local reste à confirmer : vérifiez cet envoi, sans ressaisir la commande.');
+      }
+      await dining.acknowledge(operation.body.operationId);
+      // Une reprise depuis un autre onglet ne possède pas le brouillon courant.
+      if (draftIdentity.current.id === operation.draftId || lines.length === 0) resetTicket();
+      setTicketOpen(false); setVue('salle');
+      dining.selectSession(result.session.id);
+      push(`Commande #${entry.serverNumber} envoyée · ${result.session.tableLabel}`, 'good');
+      void dining.refresh(); void reconcile(true);
+    } catch (e) {
+      if (e instanceof SmApiError && e.status === 401) onLock('Session expirée — reconnectez l’équipier pour reprendre l’envoi.');
+      push(e instanceof Error ? e.message : 'Envoi de table non confirmé.', 'bad');
+    }
+    finally { saleInFlight.finish(); setBusy(false); }
+  }, [applyDayLog, busy, cartDiningId, configurationCommitted, dayLogWriter, dining, diningStaff, lines, loyaltyMember, note, onLock, push, reconcile, resetTicket, saleInFlight, session.staffRole]);
+
+  const resumeDining = async () => {
+    if (!dining.pending || busy || journalResetGate.current) return;
+    if (dining.pending.action === 'order') { await sendDiningOrder(dining.pending); return; }
+    if (!saleInFlight.tryStart()) return;
+    try { await dining.execute(dining.pending); setVue('salle'); }
+    catch (e) {
+      if (e instanceof SmApiError && e.status === 401) onLock('Session expirée — reconnectez l’équipier pour reprendre l’opération.');
+      push(e instanceof Error ? e.message : 'Opération de salle non confirmée.', 'bad');
+    }
+    finally { saleInFlight.finish(); }
+  };
+
+  const composeDining = (id: string) => {
+    mutateTicket(() => {
+      if (phone.attempt || phone.busy || (lines.length > 0 && cartDiningId !== id)) {
+        push('Terminez ou mettez en attente le ticket actuel avant de changer de table.', 'warn'); return;
+      }
+      if (!configurationCommitted()) return;
+      setCartDiningId(id); dining.selectSession(id); setMode('surplace'); setVue('vente');
+    });
+  };
+
+  const roomDining = { ...dining, execute: async (operation: Parameters<typeof dining.execute>[0]) => {
+    if (!saleInFlight.tryStart()) throw new Error('Une autre opération du poste est en cours. Patientez avant de modifier la salle.');
+    try { return await dining.execute(operation); }
+    catch (e) { if (e instanceof SmApiError && e.status === 401) onLock('Session expirée — reconnectez l’équipier pour reprendre l’opération.'); throw e; }
+    finally { saleInFlight.finish(); }
+  } };
+
   const onPay = useCallback(
     (method: PayMethod) => {
-      if (saleInFlight.active) return;
+      if (saleInFlight.active || cartDiningId || !dining.ready || dining.pending || dining.storageError || dining.busy) return;
       if (mode === 'tel') return;
       if (!configurationCommitted()) return;
       // En compact, l'encaissement se déclenche depuis la barre d'accès comme
@@ -1150,7 +1246,7 @@ export function PosScreen({
       if (method === 'especes') setCashOpen(true);
       else void send(method);
     },
-    [configurationCommitted, mode, saleInFlight, send],
+    [cartDiningId, dining.ready, dining.pending, dining.storageError, dining.busy, configurationCommitted, mode, saleInFlight, send],
   );
 
   // ─── Remise (PIN) ───
@@ -1292,7 +1388,7 @@ export function PosScreen({
     (): JournalResetSafety => {
       const queue = client.queue.getState();
       return {
-        saleInFlight: busyRef.current || saleInFlight.active,
+        saleInFlight: busyRef.current || saleInFlight.active || !dining.ready || !!dining.pending || !!dining.storageError || dining.busy,
         offline: offlineRef.current,
         pendingSync: queue.pending,
         rejectedSync: queue.rejected.length,
@@ -1300,7 +1396,7 @@ export function PosScreen({
         journalDegraded: journalDegradedRef.current,
       };
     },
-    [saleInFlight],
+    [saleInFlight, dining.ready, dining.pending, dining.storageError, dining.busy],
   );
 
   const dismissRecap = useCallback(() => {
@@ -1311,7 +1407,7 @@ export function PosScreen({
   }, []);
 
   const openRecap = useCallback(async () => {
-    if (busy || saleInFlight.active || journalResetGate.current) {
+    if (busy || saleInFlight.active || journalResetGate.current || !dining.ready || dining.pending || dining.storageError || dining.busy) {
       push('Une vente est encore en cours d’enregistrement', 'warn');
       return;
     }
@@ -1330,7 +1426,7 @@ export function PosScreen({
       setJournalDegraded(true);
     }
     setCloseOpen(true);
-  }, [applyDayLog, busy, dayLogWriter, push, saleInFlight]);
+  }, [applyDayLog, busy, dayLogWriter, dining.ready, dining.pending, dining.storageError, dining.busy, push, saleInFlight]);
 
   const resetJournal = useCallback(async () => {
     if (journalResetCommitGate.current) return;
@@ -1422,7 +1518,9 @@ export function PosScreen({
       onPark={park}
       onClear={clearTicket}
       onPay={onPay}
-      busy={busy}
+      busy={busy || !dining.ready || dining.busy || !!dining.pending || !!dining.storageError}
+      dining={cartDiningId ? { label: dining.room?.sessions.find((item) => item.id === cartDiningId)?.tableLabel ?? 'Table à vérifier',
+        blocked: dining.stale || dining.session?.id !== cartDiningId || dining.session?.state !== 'open', onSend: () => void sendDiningOrder() } : undefined}
       phone={phoneControls}
       loyalty={loyaltyMember}
       onLoyalty={openLoyalty}
@@ -1459,7 +1557,8 @@ export function PosScreen({
         staffName={session.staffName}
         deviceName={deviceName}
         vue={vue}
-        onVue={setVue}
+        onVue={(next) => { if (next === 'vente' && cartDiningId) dining.selectSession(cartDiningId); setVue(next); }}
+        onDining={() => setVue('salle')}
         serviceBadge={serviceBadge}
         serviceTone={serviceBadgeTone({
           stale: fraicheurService.perimee,
@@ -1481,6 +1580,17 @@ export function PosScreen({
 
       <PhoneOrderNotice key={phone.attempt?.clientId ?? 'none'} attempt={phone.attempt} error={phone.error}
         busy={phone.busy} brand={brand} onResume={phone.resume} onAbandon={phone.abandon} onRelease={phone.release} onFinish={phone.finish} />
+      {dining.pending || dining.storageError ? <View style={{ padding: S.md, gap: S.sm, backgroundColor: palette.surface2 }}>
+        <Text accessibilityRole="alert" style={{ color: palette.text }}>{dining.storageError ?? `Opération de salle à vérifier · ${dining.pending!.body.operationId}. Reprenez cette référence avant un nouvel envoi.`}</Text>
+        {dining.ownerMismatch ? <Text accessibilityRole="alert" style={{ color: palette.text }}>Reconnectez l’équipier ayant commencé cette opération pour la reprendre.</Text> : null}
+        {dining.pending ? <Btn label="Vérifier l’opération de salle" icon="refresh" disabled={offline || dining.busy || busy || dining.ownerMismatch} onPress={() => void resumeDining()} /> : null}
+      </View> : null}
+      {cartDiningId && vue === 'vente' ? <View style={{ padding: S.sm, gap: S.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', backgroundColor: palette.surface2 }}>
+        <Text style={{ color: palette.text }}>Table · {dining.room?.sessions.find((item) => item.id === cartDiningId)?.tableLabel ?? 'Lecture en cours'}</Text>
+        <Btn label="Voir la tablée" icon="table" onPress={() => { dining.selectSession(cartDiningId); setVue('salle'); }} />
+        <Btn label="Revenir au comptoir" disabled={lines.length > 0 || dining.busy || !!dining.pending || busy}
+          onPress={() => mutateTicket(() => setCartDiningId(null))} />
+      </View> : null}
       <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
         {/*
           LA VUE DU SERVICE REMPLACE LE PLAN DE VENTE, elle ne s'y superpose
@@ -1490,7 +1600,8 @@ export function PosScreen({
           commande. Le ticket en cours n'est pas perdu pour autant — il est en
           mémoire et revient intact d'un appui sur « Vendre ».
         */}
-        {vue === 'service' ? (
+        {vue === 'salle' ? <DiningRoomPanel dining={roomDining} brand={brand} role={session.staffRole} onCompose={composeDining}
+          onCollect={(row) => setCollectionTarget({ id: row._id, number: row.number })} onHandover={confirmServiceHandover} /> : vue === 'service' ? (
           <ServicePanel
             commandes={serviceCommandes}
             now={now}
@@ -1656,7 +1767,8 @@ export function PosScreen({
           lines={lines}
           mode={mode}
           brand={brand}
-          busy={busy}
+          busy={busy || !dining.ready || dining.busy || !!dining.pending || !!dining.storageError}
+          dining={cartDiningId ? { label: 'Table', blocked: dining.stale || dining.session?.id !== cartDiningId || dining.session?.state !== 'open', onSend: () => void sendDiningOrder() } : undefined}
           phone={phoneControls}
           customerName={customerName}
           customerPhone={customerPhone}

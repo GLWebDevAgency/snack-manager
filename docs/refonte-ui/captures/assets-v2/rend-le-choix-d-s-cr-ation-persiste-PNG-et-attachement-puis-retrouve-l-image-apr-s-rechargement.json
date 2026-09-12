@@ -1,0 +1,128 @@
+{
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/medias",
+      "body": {
+        "name": "illustration-samosa.png",
+        "type": "image/png",
+        "octets": 225703,
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/products",
+      "body": {
+        "categoryId": "category-local",
+        "name": "Produit illustré",
+        "description": "",
+        "tags": [],
+        "isNew": false,
+        "photoKind": "cutout",
+        "popularOverride": null
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/product-2/medias",
+      "body": {
+        "medias": [
+          "media-2"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/supply/products/product-2/bom",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/supply/ingredients",
+      "body": null
+    }
+  ],
+  "errors": [],
+  "products": [
+    {
+      "_id": "product-original",
+      "categoryId": "category-local",
+      "name": "Plat existant",
+      "description": "Recette conservée",
+      "price": 1234,
+      "medias": [
+        "media-original"
+      ],
+      "photoKind": "cover",
+      "tags": [
+        "midi"
+      ],
+      "isNew": true
+    },
+    {
+      "categoryId": "category-local",
+      "name": "Produit illustré",
+      "description": "",
+      "price": 0,
+      "variants": [],
+      "optionGroups": [],
+      "removables": [],
+      "tags": [],
+      "isNew": false,
+      "photoKind": "cutout",
+      "popularOverride": null,
+      "order": 0,
+      "active": true,
+      "_id": "product-2",
+      "medias": [
+        "media-2"
+      ],
+      "photoUrl": null
+    }
+  ],
+  "media": [
+    {
+      "id": "media-original",
+      "alt": "Photo existante",
+      "octets": 70,
+      "largeur": 1,
+      "hauteur": 1
+    },
+    {
+      "id": "media-2",
+      "alt": "illustration-samosa.png",
+      "octets": 225703,
+      "largeur": 1600,
+      "hauteur": 1100
+    }
+  ]
+}

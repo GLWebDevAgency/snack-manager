@@ -94,7 +94,7 @@ export function DeliveryAccess() {
     "--lv-red-soft": palette.dangerSoft,
     "--lv-amber-soft": palette.warningSoft,
     "--lv-foot": palette.surface,
-    "--lv-scrim": palette.scrim,
+    "--lv-scrim-default": palette.scrim,
     "--lv-focus": palette.focus,
     "--lv-title": `${typography.title}px`,
     "--lv-heading": `${typography.heading}px`,
@@ -124,7 +124,7 @@ export function DeliveryAccess() {
       <p className="lv-copy">Un nouveau lien d’invitation sera nécessaire pour vous reconnecter.</p>
     </>}
   </div>;
-  return <main className="lv-app" data-theme={appearance.theme} style={style}>
+  return <main className="lv-app" data-theme={appearance.theme} data-reduce-motion={appearance.preferences.reduceMotion || undefined} data-reduce-transparency={appearance.preferences.reduceTransparency || undefined} style={style}>
     <div className="lv-shell">
       <header className="lv-top">
         <div className="lv-brand"><BrandTile name={state.session?.restaurantName} logo={logo} /><div className="lv-brand-copy"><b>{state.session?.restaurantName ?? "SM Livreur"}</b><small>{state.session ? "Livraison" : "Votre accès restaurant"}</small></div></div>

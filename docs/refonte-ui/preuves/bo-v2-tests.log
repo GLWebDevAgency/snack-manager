@@ -1,0 +1,13 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/backoffice/visual-style.test.ts (10 tests) 11ms
+ ✓ src/app/admin/navigation.test.ts (27 tests) 6ms
+ ✓ src/app/sm/navigation.test.ts (7 tests) 3ms
+ ✓ src/components/backoffice/appearance.test.tsx (7 tests) 2ms
+
+ Test Files  4 passed (4)
+      Tests  51 passed (51)
+   Start at  21:00:12
+   Duration  1.01s (transform 94ms, setup 0ms, collect 308ms, tests 22ms, environment 1ms, prepare 165ms)
+

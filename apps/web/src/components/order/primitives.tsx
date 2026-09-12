@@ -65,15 +65,9 @@ export function Tap({ className, type = "button", ...rest }: TapProps) {
 // Icônes propres au parcours client
 // ─────────────────────────────────────────────────────────────
 
+// Les mêmes signes que le POS/KDS ; les noms publics de Glyph restent compatibles.
+const KIT_GLYPHS = { pin: "pin", fire: "spicy", bag: "bag" } as const;
 const GLYPHS = {
-  /** Épingle de lieu — carte « où retirer ». */
-  pin: ["M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z", "M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"],
-  /** Flamme — « au plus tôt », créneau chaud. */
-  fire: [
-    "M12 3s5.5 4.2 5.5 9a5.5 5.5 0 0 1-11 0c0-2 .9-3.4 1.8-4.4.4 1.2 1.2 1.9 2 1.9 1.4 0 1.9-1.3 1.7-6.5z",
-  ],
-  /** Sac de retrait — paiement au comptoir. */
-  bag: ["M5 8h14l-1.1 12.5H6.1z", "M9 8V6a3 3 0 0 1 6 0v2"],
   /** Étincelle — nouveauté, mise en avant. */
   spark: ["M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9z"],
   /** Curseurs — « ce produit se compose » : une feuille d’options va s’ouvrir. */
@@ -87,9 +81,9 @@ const GLYPHS = {
   ],
 } as const;
 
-export type GlyphName = keyof typeof GLYPHS;
+export type GlyphName = keyof typeof GLYPHS | keyof typeof KIT_GLYPHS;
 
-/** Icônes absentes du DS back-office, nécessaires à la surface client. */
+/** Les curseurs et l’étincelle sont les deux signes sans équivalent exact dans le kit. */
 export function Glyph({
   name,
   size = 18,
@@ -103,6 +97,9 @@ export function Glyph({
   className?: string;
   filled?: boolean;
 }) {
+  if (Object.hasOwn(KIT_GLYPHS, name)) return <Icon
+    name={KIT_GLYPHS[name as keyof typeof KIT_GLYPHS]} size={size} stroke={stroke}
+    className={className} fill={filled ? "currentColor" : "none"} />;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -116,7 +113,7 @@ export function Glyph({
       aria-hidden="true"
       className={className}
     >
-      {GLYPHS[name].map((d) => (
+      {GLYPHS[name as keyof typeof GLYPHS].map((d) => (
         <path key={d} d={d} />
       ))}
     </svg>

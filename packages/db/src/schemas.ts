@@ -7,6 +7,8 @@ import { OrderRefundFlowSchema } from './order-refund-flow.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
 import { DeliveryHandoffSchema } from './delivery-handoff.schema';
+import { DiningTableSchema, DiningSessionSchema } from './dining.schema';
+import { DiningOrderPricingSchema } from './dining-pricing.schema';
 import { HistoricalOrderAdmissionImportSchema, validHistoricalOrderAdmission, OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
@@ -83,6 +85,8 @@ function hidePrivateOrderFields(
   delete returned.publicRecovery;
   delete returned.deliveryMission;
   delete returned.deliveryHandoff;
+  delete returned.diningServeReceipt;
+  delete returned.diningServeRejections;
   return returned;
 }
 
@@ -1036,6 +1040,16 @@ export const OrderSchema = new Schema(
     loyaltyEarnLeaseUntil: { type: Date, default: null, select: false },
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
     type: { type: String, enum: ['surplace', 'emporter', 'pickup', 'delivery'], required: true },
+    dining: { type: new Schema({
+      sessionId: { type: String, required: true }, tableId: { type: String, required: true }, tableLabel: { type: String, required: true },
+      servedAt: { type: Date, default: null },
+    }, { _id: false }), default: null },
+    diningServeReceipt: { type: new Schema({
+      operationId: { type: String, required: true }, sessionId: { type: String, required: true },
+      servedAt: { type: Date, required: true }, tableId: { type: String, required: true }, tableLabel: { type: String, required: true },
+      actor: { type: new Schema({ sub: { type: String, required: true }, role: { type: String, required: true }, kind: { type: String, required: true } }, { _id: false }), required: true },
+    }, { _id: false }), default: null, select: false },
+    diningServeRejections: { type: [new Schema({ operationId: { type: String, required: true }, reason: { type: String, required: true } }, { _id: false })], default: [], select: false },
     lines: { type: [OrderLineSub], required: true },
     // Sous-schémas explicites + required : sans cela, Mongoose 8.24 infère les
     // objets imbriqués comme optionnels et tout accès devient nullable côté TS.
@@ -1792,6 +1806,13 @@ export const PromotionSchema = new Schema(
     endsAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
     usageCount: { type: Number, default: 0 },
+    /** Idempotent table admissions share the ordinary quota counter. Private
+     * receipts retain released operations so delayed reservations cannot revive. */
+    diningReservations: { type: [new Schema({
+      operationId: { type: String, required: true }, payloadHash: { type: String, required: true },
+      state: { type: String, enum: ['reserved', 'released'], required: true },
+      at: { type: Date, required: true }, releasedAt: { type: Date, default: null },
+    }, { _id: false })], default: [], select: false },
     /**
      * Les trois bornes qui manquaient — et sans lesquelles une promotion se
      * découvre sur la marge du mois plutôt que sur un écran.
@@ -2243,6 +2264,9 @@ export const MODELS = {
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
   Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
+  DiningTable: { name: 'DiningTable', schema: DiningTableSchema, collection: 'dining_tables' },
+  DiningSession: { name: 'DiningSession', schema: DiningSessionSchema, collection: 'dining_sessions' },
+  DiningOrderPricing: { name: 'DiningOrderPricing', schema: DiningOrderPricingSchema, collection: 'dining_order_pricing' },
   OrderReadyNotification: { name: 'OrderReadyNotification', schema: OrderReadyNotificationSchema, collection: 'order_ready_notifications' },
   PublicOrderAdmission: { name: 'PublicOrderAdmission', schema: PublicOrderAdmissionSchema, collection: 'public_order_admissions' },
   OrderCapacityDay: { name: 'OrderCapacityDay', schema: OrderCapacityDaySchema, collection: 'order_capacity_days' },

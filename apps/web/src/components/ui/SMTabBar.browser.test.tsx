@@ -9,7 +9,7 @@ import { minimizeFromScroll, tabIndexAt } from './SMTabBar.model';
 
 declare global { interface Window { tabFixture: {
   selections: string[]; ticks: number; active: string;
-  configure: (options: { hidden?: boolean; disabled?: boolean; refScroll?: boolean; minimizable?: boolean; count?: number; theme?: 'dark' | 'light' }) => void;
+  configure: (options: { hidden?: boolean; disabled?: boolean; refScroll?: boolean; minimizable?: boolean; count?: number; theme?: 'dark' | 'light'; reduceMotion?: boolean; reduceTransparency?: boolean }) => void;
   unmount: () => void;
 } } }
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
@@ -26,14 +26,14 @@ beforeAll(async () => {
     const root=createRoot(document.getElementById('root'));
     window.tabFixture={selections:[],ticks:0,active:'one',configure:()=>{},unmount:()=>root.unmount()};
     const keys=['one','two','three','four','five'], labels=['Carte','Recherche','Commandes','Fidélité','Compte'];
-    function App(){const[active,setActive]=useState('one');const[config,setConfig]=useState({hidden:false,disabled:false,refScroll:false,minimizable:true,count:5,theme:'dark'});
+    function App(){const[active,setActive]=useState('one');const[config,setConfig]=useState({hidden:false,disabled:false,refScroll:false,minimizable:true,count:5,theme:'dark',reduceMotion:false,reduceTransparency:false});
       useEffect(()=>{const pop=()=>setActive(new URLSearchParams(location.search).get('tab')||'one');window.addEventListener('popstate',pop);return()=>window.removeEventListener('popstate',pop)},[]);
       const scroll=useRef(null);window.tabFixture.configure=patch=>setConfig(c=>({...c,...patch}));window.tabFixture.active=active;
-      const {selectTab,contentProps}=useSMTabTransition({activeKey:active,onSelect:key=>{window.tabFixture.selections.push(key);history.pushState(null,'','?tab='+key);setActive(key)},scrollRef:config.refScroll?scroll:undefined});
+      const {selectTab,contentProps}=useSMTabTransition({activeKey:active,reduceMotion:config.reduceMotion,onSelect:key=>{window.tabFixture.selections.push(key);history.pushState(null,'','?tab='+key);setActive(key)},scrollRef:config.refScroll?scroll:undefined});
       const items=keys.slice(0,config.count).map((key,index)=>({key,label:labels[index],badge:index===2?3:null,icon:color=><svg viewBox="0 0 24 24" fill="none" stroke={color}><circle cx="12" cy="12" r="8"/></svg>}));
       return <><button id="outside">Hors navigation</button><div ref={scroll} id="scroller" style={config.refScroll?{height:420,overflow:'auto'}:{}}>
         <section {...contentProps} id="content" style={{height:2200}}><h1>Écran {active}</h1><button id="content-action">Action du contenu</button><SMTabBarSpacer/></section></div>
-        <SMTabBar items={items} activeKey={active} onSelect={selectTab} scrollRef={config.refScroll?scroll:undefined} theme={config.theme} hidden={config.hidden} disabled={config.disabled} minimizable={config.minimizable} onTick={()=>window.tabFixture.ticks++}/></>;
+        <SMTabBar items={items} activeKey={active} onSelect={selectTab} scrollRef={config.refScroll?scroll:undefined} theme={config.theme} reduceMotion={config.reduceMotion} reduceTransparency={config.reduceTransparency} hidden={config.hidden} disabled={config.disabled} minimizable={config.minimizable} onTick={()=>window.tabFixture.ticks++}/></>;
     }root.render(<React.StrictMode><App/></React.StrictMode>);` }, bundle: true, write: false, outfile: 'tabbar.js', format: 'esm', platform: 'browser', target: 'es2022', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' } });
   const js = bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text;
   const css = `:root{${declarations.join(';')}}body{margin:0;background:var(--cf-bg);color:var(--cf-text);font-family:Arial,sans-serif}` + bundle.outputFiles.find(file => file.path.endsWith('.css'))!.text;
@@ -228,4 +228,24 @@ describe('SMTabBar — navigation partagée sans état métier', () => {
     await page.clock.runFor(150);
     expect(await page.evaluate(() => window.tabFixture.selections)).toEqual(['five']);
   });
+});
+
+it('applique la réduction locale à la navigation JS et aux fonds sans affaiblir le réglage système', async () => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await config({ reduceMotion: true, reduceTransparency: true });
+  await expect.poll(() => bar().getAttribute('data-sm-reduce-motion')).toBe('true');
+  await expect.poll(() => bar().getAttribute('data-sm-reduce-transparency')).toBe('true');
+  expect(await bar().evaluate(element => getComputedStyle(element).transitionDuration)).toBe('0s');
+  expect(await pill().evaluate(element => getComputedStyle(element).backgroundColor)).toBe(await page.locator('body').evaluate(element => { const probe = document.createElement('i'); probe.style.color = 'var(--cf-surface)'; element.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color; }));
+  await page.clock.install();
+  await page.getByRole('tab', { name: 'Recherche', exact: true }).click();
+  // No clock advance: an animated transition would still wait for its timer.
+  await expect.poll(() => selected().getAttribute('aria-label')).toBe('Recherche');
+  expect(await page.locator('#content').getAttribute('data-sm-tab-leaving')).toBe('false');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await config({ reduceMotion: false });
+  expect(await bar().getAttribute('data-sm-reduce-motion')).toBe('true');
+  await page.emulateMedia({ forcedColors: 'active' });
+  const canvas = await page.locator('body').evaluate(element => { const probe = document.createElement('i'); probe.style.backgroundColor = 'Canvas'; element.append(probe); const color = getComputedStyle(probe).backgroundColor; probe.remove(); return color; });
+  expect(await pill().evaluate(element => getComputedStyle(element).backgroundColor)).toBe(canvas);
 });

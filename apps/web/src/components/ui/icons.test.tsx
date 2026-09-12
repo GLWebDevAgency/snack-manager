@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { iconNames } from "@sm/design-icons";
+import { iconNames, shapes, legacyIconAliases, resolveIconName } from "@sm/design-icons";
 import { Icon, ICON_NAMES } from "./icons";
 
 describe("icônes intégrées du projet", () => {
@@ -20,5 +20,19 @@ describe("icônes intégrées du projet", () => {
     expect(html).toContain('width="28"');
     expect(html).toContain('stroke-width="2.3"');
     expect(html).toContain('class="category-icon"');
+  });
+
+  it("rend le tracé du kit pour les anciens noms plutôt que leur ancien dessin", () => {
+    for (const [name, target] of Object.entries(legacyIconAliases)) {
+      const html = renderToStaticMarkup(createElement(Icon, { name: name as keyof typeof legacyIconAliases }));
+      expect(html).toContain(shapes[target]);
+      expect(ICON_NAMES).toContain(name);
+    }
+    expect(resolveIconName('gear')).toBe('settings');
+    expect(resolveIconName('receipt')).toBe('orders');
+    expect(resolveIconName('drink')).toBe('cup');
+    expect(resolveIconName('inconnue')).toBeNull();
+    expect(resolveIconName('toString')).toBeNull();
+    expect(resolveIconName('trash')).toBeNull();
   });
 });

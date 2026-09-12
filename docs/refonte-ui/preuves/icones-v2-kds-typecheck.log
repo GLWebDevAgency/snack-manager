@@ -1,0 +1,4 @@
+
+> @sm/kds@1.0.0 typecheck /Users/limameghassene/development/SnackManager-refonte-ui/apps/kds
+> tsc --noEmit
+

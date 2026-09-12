@@ -1,0 +1,377 @@
+
+> @sm/api@0.0.1 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/api
+> vitest run --maxWorkers=2 --minWorkers=1
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/api
+
+ ✓ src/modules/crm/billing.test.ts (125 tests) 124ms
+ ↓ src/modules/loyalty/loyalty-member.service.integration.test.ts (8 tests | 8 skipped)
+ ✓ src/modules/ordering/order-payment-lifecycle.integration.test.ts (121 tests | 111 skipped) 3ms
+(node:55987) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:55987) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ↓ src/modules/customer-identity/customer-verification.http.integration.test.ts (22 tests | 22 skipped)
+(node:56043) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56043) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ↓ src/modules/customer-identity/customer-loyalty.store.integration.test.ts (61 tests | 61 skipped)
+[33m[Nest] 56068  - [39m09/12/2026, 9:24:58 PM [33m   WARN[39m [38;5;3m[Masque] [39m[33mMasque illisible en base pour « classfood » — repli Nuit servi sur toutes ses surfaces clientes. Le document ne passe pas BrandSchema : reprendre le masque (éditeur de marque ou `pnpm --filter @sm/db backfill:brand`).[39m
+ ✓ src/modules/crm/admin.test.ts (75 tests) 78ms
+(node:56073) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56073) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/billing/my-billing.test.ts (48 tests) 30ms
+ ✓ src/modules/customer-identity/customer-account.runtime.test.ts (96 tests) 556ms
+ ✓ src/modules/orders/customer-orders.integration.test.ts (42 tests | 37 skipped) 3ms
+ ✓ src/modules/ordering/order-refunds.integration.test.ts (51 tests | 41 skipped) 3ms
+[33m[Nest] 56187  - [39m09/12/2026, 9:25:02 PM [33m   WARN[39m [38;5;3m[SignalsService] [39m[33mAppro indisponible — file servie sans le volet stocks : ECONNREFUSED 127.0.0.1:5432[39m
+[33m[Nest] 56187  - [39m09/12/2026, 9:25:02 PM [33m   WARN[39m [38;5;3m[SignalsService] [39m[33mFacturation indisponible — file servie sans les impayés : Invoice model unavailable[39m
+ ✓ src/modules/crm/signals.test.ts (60 tests) 19ms
+ ✓ src/modules/tenants/tenants.test.ts (52 tests) 21ms
+[33m[Nest] 56211  - [39m09/12/2026, 9:25:03 PM [33m   WARN[39m [38;5;3m[HealthService] [39m[33mAppro indisponible pour 6a847504c4a551ed35c65ba9 — fiche servie sans le volet stocks : ECONNREFUSED 127.0.0.1:5432[39m
+[33m[Nest] 56211  - [39m09/12/2026, 9:25:03 PM [33m   WARN[39m [38;5;3m[HealthService] [39m[33mAppro indisponible pour 6a847504c4a551ed35c65ba9 — fiche servie sans le volet stocks : ECONNREFUSED 127.0.0.1:5432[39m
+ ✓ src/modules/crm/health.test.ts (51 tests) 20ms
+ ✓ src/modules/delivery/delivery-missions.http.integration.test.ts (14 tests | 12 skipped) 3ms
+ ✓ src/modules/orders/staff-order-attempt.integration.test.ts (48 tests | 33 skipped) 12ms
+ ✓ src/modules/ordering/order-capacity-calendar.store.integration.test.ts (58 tests | 50 skipped) 4ms
+ ✓ src/modules/orders/dining.integration.test.ts (31 tests) 5945ms
+   ✓ table service — real isolated Mongo, ordinary pricing, payment and handoff > preserves the price and last promo quota after admission CAS fails before execution  438ms
+   ✓ table service — real isolated Mongo, ordinary pricing, payment and handoff > does not release another session’s quota when an operation UUID is reused with another binding  441ms
+   ✓ table service — real isolated Mongo, ordinary pricing, payment and handoff > honors an already accepted table grant and its label/capacity after disabling, including replay  404ms
+   ✓ table service — real isolated Mongo, ordinary pricing, payment and handoff > serves before payment without changing financial/kitchen status, then closes through the established handoff  303ms
+   ✓ table service — real isolated Mongo, ordinary pricing, payment and handoff > uses actual HTTP JWT/session guards, tenant scoping, role subsumption and schema validation  371ms
+[33m[Nest] 56296  - [39m09/12/2026, 9:25:06 PM [33m   WARN[39m [38;5;3m[InsightsService] [39m[33mCoût matière indisponible (contexte supply) — conseils servis sans food cost : ECONNREFUSED 127.0.0.1:5432[39m
+ ✓ src/modules/crm/insights.test.ts (45 tests) 19ms
+ ✓ src/modules/orders/order-capacity-commit.integration.test.ts (55 tests | 49 skipped) 2ms
+ ✓ src/modules/ordering/order-capacity-bootstrap.reader.integration.test.ts (53 tests | 45 skipped) 3ms
+ ✓ src/modules/delivery/delivery-missions.integration.test.ts (37 tests | 31 skipped) 3ms
+ ✓ src/modules/crm/conversion.test.ts (35 tests) 22ms
+ ✓ src/modules/ordering/order-capacity-bootstrap.store.integration.test.ts (50 tests | 42 skipped) 3ms
+ ✓ src/modules/ordering/order-capacity-bootstrap.reader.test.ts (75 tests) 41ms
+ ✓ src/modules/delivery/delivery-handoff.integration.test.ts (31 tests | 25 skipped) 2ms
+ ✓ src/modules/tenants/tenant-capacity-settings.store.integration.test.ts (64 tests | 56 skipped) 3ms
+ ✓ src/modules/mediatheque/medias.test.ts (35 tests) 11ms
+ ✓ src/modules/orders/order-capacity-runtime.integration.test.ts (31 tests | 23 skipped) 3ms
+ ✓ src/modules/ordering/order-capacity-bootstrap.test.ts (84 tests) 25ms
+ ✓ src/modules/delivery/delivery-access.http.integration.test.ts (12 tests | 10 skipped) 2ms
+ ✓ src/modules/crm/platform.test.ts (27 tests) 13ms
+ ✓ src/modules/orders/public-order-admission.integration.test.ts (23 tests | 18 skipped) 3ms
+ ✓ src/modules/delivery/delivery-handoff.http.integration.test.ts (14 tests | 12 skipped) 2ms
+(node:56455) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56455) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-identity.service.test.ts (37 tests) 65ms
+[32m[Nest] 56458  - [39m09/12/2026, 9:25:11 PM [32m    LOG[39m [38;5;3m[EncaissementService] [39m[32mCompte d’encaissement acct_resto1 créé pour 6aa5a717bd1b52b7cf6138fd[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:11 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mCompte acct_fantome inconnu du parc — synchronisation ignorée.[39m
+ ✓ src/modules/delivery/delivery-operators.integration.test.ts (38 tests | 23 skipped) 5ms
+ ✓ src/modules/delivery/delivery-access.service.test.ts (38 tests) 23ms
+ ✓ src/modules/crm/invoice-issuance.integration.test.ts (23 tests | 13 skipped) 3ms
+(node:56458) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56458) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+[32m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [32m    LOG[39m [38;5;3m[EncaissementService] [39m[32mCompte acct_resto1 débranché par le restaurateur — encaissement fermé.[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mLecture du compte acct_resto1 impossible (raccordement rompu) : Error: permission_error[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mLecture du compte acct_resto1 impossible (Stripe indisponible) : Error: socket hang up[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mSynchronisation de acct_resto1 reportée — Stripe n'a pas répondu, l'état est inchangé.[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mLecture du compte acct_resto1 impossible (Stripe indisponible) : Error: boom[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mSynchronisation de acct_resto1 reportée — Stripe n'a pas répondu, l'état est inchangé.[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mRaccordement rompu sur acct_resto1 — un nouveau compte est créé pour repartir.[39m
+[32m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [32m    LOG[39m [38;5;3m[EncaissementService] [39m[32mCompte d’encaissement acct_neuf créé pour 6aa5a717bd1b52b7cf6138fd[39m
+[33m[Nest] 56458  - [39m09/12/2026, 9:25:13 PM [33m   WARN[39m [38;5;3m[EncaissementService] [39m[33mLien de raccordement impossible (acct_resto1) : Error: socket[39m
+ ✓ src/modules/encaissement/encaissement.test.ts (25 tests) 2171ms
+   ✓ le câblage Nest — un contrôleur non déclaré est une route 404 silencieuse > les DEUX webhooks Stripe sont déclarés dans le module de commande  581ms
+   ✓ le câblage Nest — un contrôleur non déclaré est une route 404 silencieuse > l’application déclare le module d’encaissement SANS passer par `ordering`  1579ms
+ ↓ src/modules/delivery/delivery-handoff.browser.integration.test.ts (1 test | 1 skipped)
+ ✓ src/modules/order-notifications/order-notifications.mongo.test.ts (31 tests | 21 skipped) 3ms
+ ✓ src/modules/loyalty/loyalty-member.controller.test.ts (17 tests) 12ms
+(node:56519) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56519) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+[31m[Nest] 56501  - [39m08/28/2026, 2:00:00 PM [31m  ERROR[39m [38;5;3m[OrdersGateway] [39m[31mAbonnement Redis du temps réel impossible[39m
+Error: Redis indisponible
+    at /Users/limameghassene/development/SnackManager-refonte-ui/apps/api/src/modules/orders/orders.gateway-auth.test.ts:481:48
+    at file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11
+    at file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26
+    at file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)
+    at runTest (file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)
+    at runSuite (file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)
+    at runSuite (file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)
+    at runFiles (file:///Users/limameghassene/development/SnackManager-refonte-ui/node_modules/@vitest/runner/dist/chunk-hooks.js:1787:3)
+ ✓ src/modules/orders/orders.gateway-auth.test.ts (19 tests) 227ms
+ ✓ src/modules/customer-identity/customer-relay.interop.test.ts (34 tests) 296ms
+ ✓ src/modules/crm/comptes.test.ts (21 tests) 10ms
+ ✓ src/modules/auth/identite.test.ts (24 tests) 6ms
+(node:56530) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56530) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-browser.service.test.ts (45 tests) 62ms
+[33m[Nest] 56533  - [39m09/12/2026, 9:25:16 PM [33m   WARN[39m [38;5;3m[PaymentsService] [39m[33mOuverture de paiement non confirmée pour la commande 665f0d0a1c2b3d4e5f6a7b8c.[39m
+[33m[Nest] 56533  - [39m09/12/2026, 9:25:16 PM [33m   WARN[39m [38;5;3m[PaymentsService] [39m[33mOuverture de paiement non confirmée pour la commande 665f0d0a1c2b3d4e5f6a7b8c.[39m
+ ✓ src/modules/ordering/charges-directes.test.ts (23 tests) 11ms
+ ↓ src/modules/loyalty/loyalty-order-earn.processor.integration.test.ts (5 tests | 5 skipped)
+ ✓ src/modules/ordering/stripe-webhook.test.ts (21 tests) 7ms
+ ✓ src/modules/ordering/order-refunds.service.test.ts (18 tests) 73ms
+ ✓ src/modules/orders/dining-pricing.test.ts (26 tests) 640ms
+ ✓ src/modules/crm/devis.test.ts (21 tests) 7ms
+[32m[Nest] 56572  - [39m09/12/2026, 9:25:18 PM [32m    LOG[39m [38;5;3m[InvoiceCheckoutService] [39m[32mFacture SM-2026-0042 réglée via Stripe (evt_invoice).[39m
+ ✓ src/modules/billing/invoice-checkout.test.ts (30 tests) 16ms
+ ✓ src/modules/customer-identity/twilio-verify.transport.test.ts (47 tests) 35ms
+(node:56578) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56578) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/tenants/logo.test.ts (20 tests) 13ms
+ ✓ src/modules/screens/build-screen-content.test.ts (25 tests) 21ms
+ ✓ src/modules/customer-identity/passkey-verifier.browser.test.ts (15 tests) 563ms
+ ✓ src/modules/loyalty/loyalty-public.service.test.ts (16 tests) 16ms
+ ✓ src/modules/crm/invoice-numbering.test.ts (36 tests) 16ms
+[33m[Nest] 56673  - [39m09/12/2026, 9:25:20 PM [33m   WARN[39m [38;5;3m[SupplyService] [39m[33mModificateurs indisponibles (contexte supply) — menu servi sans suppléments : ECONNREFUSED 127.0.0.1:5432[39m
+ ✓ src/modules/menu/menu-modifiers.test.ts (12 tests) 8ms
+ ✓ src/maintenance/order-capacity-bootstrap.cli.integration.test.ts (16 tests | 8 skipped) 3ms
+ ✓ src/maintenance/order-capacity-bootstrap.cli.test.ts (80 tests) 34ms
+ ✓ src/modules/ordering/order-capacity-calendar.test.ts (66 tests) 18ms
+(node:56705) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56705) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-verification.service.test.ts (25 tests) 37ms
+ ✓ src/modules/customer-identity/paid-pilot-policy.test.ts (132 tests) 15ms
+ ✓ src/modules/tenants/marque.test.ts (23 tests) 23ms
+ ✓ src/modules/delivery/delivery-quote.test.ts (15 tests) 19ms
+ ✓ src/modules/planning/planning.compute.test.ts (20 tests) 6ms
+[33m[Nest] 56789  - [39m09/12/2026, 9:25:22 PM [33m   WARN[39m [38;5;3m[LoyaltyOrderEarnProcessor] [39m[33mGain fidélité à rapprocher (recorded_gain_sale_ineligible)[39m
+[33m[Nest] 56789  - [39m09/12/2026, 9:25:22 PM [33m   WARN[39m [38;5;3m[LoyaltyOrderEarnProcessor] [39m[33mGain fidélité à rapprocher (earn_receipt_conflict)[39m
+[33m[Nest] 56789  - [39m09/12/2026, 9:25:22 PM [33m   WARN[39m [38;5;3m[LoyaltyOrderEarnProcessor] [39m[33mGain fidélité à rapprocher (earn_confirmation_rejected)[39m
+[33m[Nest] 56789  - [39m09/12/2026, 9:25:22 PM [33m   WARN[39m [38;5;3m[LoyaltyOrderEarnProcessor] [39m[33mGain fidélité en échec contrôlé (invalid_outbox_intent)[39m
+ ✓ src/modules/loyalty/loyalty-order-earn.processor.test.ts (16 tests) 11ms
+ ✓ src/modules/orders/slot-reservation-race.integration.test.ts (7 tests | 1 skipped) 2ms
+(node:56797) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56797) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-commerce.test.ts (29 tests) 16ms
+ ✓ src/modules/ops/ops.test.ts (22 tests) 11ms
+[33m[Nest] 56818  - [39m09/12/2026, 9:25:24 PM [33m   WARN[39m [38;5;3m[SupplyService] [39m[33mModificateurs indisponibles (contexte supply) — menu servi sans suppléments : ECONNREFUSED 127.0.0.1:5432[39m
+ ✓ src/modules/supply/supplement-pricing.test.ts (9 tests) 9ms
+ ✓ src/modules/supply/journal-approvisionnement.test.ts (11 tests) 5ms
+ ✓ src/modules/customer-identity/customer-credential-access.test.ts (17 tests) 28ms
+ ✓ src/modules/orders/order-payment-fences.test.ts (43 tests) 10ms
+ ✓ src/modules/orders/public-order-recovery.controller.test.ts (16 tests) 11ms
+(node:56831) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56831) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-loyalty.service.test.ts (22 tests) 17ms
+ ✓ src/modules/delivery/delivery.service.test.ts (14 tests) 19ms
+ ✓ src/modules/payment-domains/payment-domains.worker.test.ts (10 tests) 30ms
+ ✓ src/modules/tenants/journal-etablissement.test.ts (10 tests) 11ms
+ ✓ src/modules/crm/crm-metrics.test.ts (25 tests) 5ms
+[33m[Nest] 56854  - [39m09/12/2026, 9:25:26 PM [33m   WARN[39m [38;5;3m[SupplyService] [39m[33mModificateurs indisponibles (contexte supply) — menu servi sans suppléments : Supply indisponible (test)[39m
+ ✓ src/modules/ordering/site-menu-parity.test.ts (14 tests) 20ms
+ ✓ src/modules/crm/production.test.ts (10 tests) 8ms
+ ✓ src/modules/orders/orders-cheese-pricing.test.ts (18 tests) 14ms
+ ✓ src/common/capacites.test.ts (20 tests) 5ms
+ ✓ src/common/session-access.test.ts (13 tests) 7ms
+ ✓ src/modules/payment-domains/payment-domains.integration.test.ts (22 tests | 6 skipped) 4ms
+[32m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [32m    LOG[39m [38;5;3m[RailwayDomainRegistrar] [39m[32mDomaine « commander.classfood.fr » rattaché (Railway cd_42)[39m
+[32m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [32m    LOG[39m [38;5;3m[RailwayDomainRegistrar] [39m[32mDomaine « commander.classfood.fr » rattaché (Railway cd_42)[39m
+[31m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [31m  ERROR[39m [38;5;3m[RailwayDomainRegistrar] [39m[31mRailway injoignable : fetch failed[39m
+[31m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [31m  ERROR[39m [38;5;3m[RailwayDomainRegistrar] [39m[31mRailway injoignable : fetch failed[39m
+[31m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [31m  ERROR[39m [38;5;3m[RailwayDomainRegistrar] [39m[31mRailway : Domain already exists on another service[39m
+[32m[Nest] 56895  - [39m09/12/2026, 9:25:27 PM [32m    LOG[39m [38;5;3m[RailwayDomainRegistrar] [39m[32mDomaine Railway cd_42 détaché[39m
+ ✓ src/infrastructure/domains/railway-domain-registrar.test.ts (13 tests) 9ms
+(node:56897) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56897) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-identity.orchestration-review.test.ts (9 tests) 21ms
+ ✓ src/modules/menu/menu-featured.test.ts (7 tests) 9ms
+(node:56904) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56904) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/audit/audit.test.ts (14 tests) 6ms
+ ✓ src/modules/customer-identity/customer-account.guard.test.ts (28 tests) 26ms
+ ↓ src/modules/loyalty/loyalty-earn-receipt.reader.integration.test.ts (39 tests | 39 skipped)
+ ✓ src/modules/customer-identity/trial-verification-policy.test.ts (72 tests) 10ms
+(node:56909) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:56909) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-sale-attribution.service.test.ts (21 tests) 17ms
+ ✓ src/common/auth.test.ts (11 tests) 4ms
+ ✓ src/modules/ordering/order-capacity-bootstrap-historical.test.ts (55 tests) 14ms
+ ✓ src/modules/ordering/order-capacity-bootstrap-integrity.test.ts (17 tests) 8ms
+ ✓ src/modules/delivery/delivery-access.controller.test.ts (17 tests) 12ms
+ ✓ src/common/roles-subsomption.test.ts (11 tests) 4ms
+ ✓ src/modules/planning/planning.coverage.test.ts (9 tests) 5ms
+ ✓ src/modules/ordering/order-capacity-availability.test.ts (27 tests) 14ms
+ ✓ src/modules/orders/order-handoff-authorization.test.ts (67 tests) 10ms
+ ✓ src/common/comptable-lecture-seule.test.ts (3 tests) 36ms
+ ✓ src/modules/orders/promotion-appliquee.test.ts (22 tests) 9ms
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mPreuve Turnstile refusee (invalid-input-response).[39m
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mPreuve Turnstile refusee (preuve incoherente).[39m
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mPreuve Turnstile refusee (preuve incoherente).[39m
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mPreuve Turnstile refusee (preuve incoherente).[39m
+[31m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [31m  ERROR[39m [38;5;3m[PublicOrderGate] [39m[31mCle de test Turnstile refusee hors environnement local explicite.[39m
+[31m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [31m  ERROR[39m [38;5;3m[PublicOrderGate] [39m[31mCle de test Turnstile refusee hors environnement local explicite.[39m
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mSiteverify injoignable : reseau coupe[39m
+[33m[Nest] 56975  - [39m09/12/2026, 9:25:31 PM [33m   WARN[39m [38;5;3m[PublicOrderGate] [39m[33mQuota Redis indisponible : redis coupe[39m
+ ✓ src/modules/orders/public-order-gate.test.ts (15 tests) 12ms
+ ✓ src/modules/loyalty/loyalty-public.controller.test.ts (7 tests) 7ms
+ ✓ src/loyalty-db.module.test.ts (17 tests) 5ms
+ ✓ src/modules/supply/menu-modifiers.test.ts (15 tests) 15ms
+ ✓ src/modules/engage/engage.promotions.test.ts (16 tests | 10 skipped) 4ms
+ ✓ src/modules/orders/order-capacity-index-readiness.test.ts (38 tests) 9ms
+ ✓ src/modules/loyalty/loyalty-member.service.test.ts (11 tests) 8ms
+ ✓ src/modules/screens/preview-screen-content.test.ts (11 tests) 13ms
+ ✓ src/modules/orders/public-order-abuse.test.ts (9 tests) 9ms
+ ✓ src/modules/ordering/order-capacity-bootstrap-shape.test.ts (15 tests) 11ms
+ ✓ src/modules/planning/planning.compare.test.ts (10 tests) 5ms
+ ✓ src/modules/screens/suspension.test.ts (7 tests) 7ms
+ ✓ src/modules/delivery/delivery-missions.controller.test.ts (16 tests) 9ms
+ ✓ src/modules/customer-identity/customer-protection.test.ts (9 tests) 20ms
+ ✓ src/modules/delivery/delivery-handoff.controller.test.ts (17 tests) 10ms
+ ✓ src/common/formules-invisibles.test.ts (3 tests) 64ms
+ ✓ src/modules/orders/remise-autorisee.test.ts (12 tests) 6ms
+ ✓ src/modules/orders/delivery-creation.test.ts (8 tests) 12ms
+(node:57056) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57056) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/passkey-verifier.test.ts (32 tests) 12ms
+ ✓ src/modules/orders/order-capacity-index-readiness.integration.test.ts (11 tests | 5 skipped) 2ms
+ ✓ src/modules/auth/auth.service.test.ts (8 tests) 6ms
+ ✓ src/modules/menu/menu-journal.test.ts (6 tests) 4ms
+ ✓ src/modules/delivery/delivery-order-hydrated.test.ts (22 tests) 19ms
+ ✓ src/modules/screens/manage-screens.test.ts (10 tests) 6ms
+ ✓ src/infrastructure/alerts/sentry-forwarder.factory.test.ts (5 tests) 81ms
+[33m[Nest] 57145  - [39m09/12/2026, 9:25:37 PM [33m   WARN[39m [38;5;3m[StripePaymentGateway] [39m[33mPaquet « stripe » indisponible — paiement en ligne désactivé (Cannot find module « stripe »)[39m
+[31m[Nest] 57145  - [39m09/12/2026, 9:25:37 PM [31m  ERROR[39m [38;5;3m[StripePaymentGateway] [39m[31mÉchec PaymentIntent commande 042 : Invalid API Key provided[39m
+ ✓ src/infrastructure/payments/payment-gateway.test.ts (9 tests) 4ms
+ ✓ src/modules/orders/order-admission-identity.test.ts (15 tests) 6ms
+ ✓ src/modules/planning/payroll-access.test.ts (4 tests) 4ms
+(node:57237) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57237) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ↓ src/modules/customer-identity/customer-loyalty-attachment.quota.integration.test.ts (6 tests | 6 skipped)
+ ✓ src/modules/menu/menu-popularity.test.ts (5 tests) 8ms
+ ✓ src/modules/devices/pair-device.test.ts (11 tests) 6ms
+ ✓ src/modules/orders/suivi-temps-reel.test.ts (12 tests) 5ms
+ ✓ src/modules/customer-identity/customer-account.contract.test.ts (22 tests) 9ms
+[32m[Nest] 57258  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[CloudflareDomainRegistrar] [39m[32mDomaine « commander.classfood.fr » rattaché (Cloudflare ch_7)[39m
+[31m[Nest] 57258  - [39m09/12/2026, 9:25:39 PM [31m  ERROR[39m [38;5;3m[CloudflareDomainRegistrar] [39m[31mCloudflare : Duplicate custom hostname[39m
+[31m[Nest] 57258  - [39m09/12/2026, 9:25:39 PM [31m  ERROR[39m [38;5;3m[CloudflareDomainRegistrar] [39m[31mCloudflare injoignable : fetch failed[39m
+[32m[Nest] 57258  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[CloudflareDomainRegistrar] [39m[32mDomaine Cloudflare ch_7 détaché[39m
+ ✓ src/infrastructure/domains/cloudflare-domain-registrar.test.ts (9 tests) 6ms
+[32m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[Sauvegarde] [39m[32mExport de sauvegarde servi en flux (2 collections)[39m
+[33m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [33m   WARN[39m [38;5;3m[Sauvegarde] [39m[33mExport partiel — PostgreSQL injoignable[39m
+[32m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[Sauvegarde] [39m[32mExport de sauvegarde servi en flux (2 collections)[39m
+[33m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [33m   WARN[39m [38;5;3m[Sauvegarde] [39m[33mExport partiel — PostgreSQL injoignable[39m
+[32m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[Sauvegarde] [39m[32mExport de sauvegarde servi en flux (2 collections)[39m
+[32m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[Sauvegarde] [39m[32mExport de sauvegarde servi en flux (2 collections)[39m
+[32m[Nest] 57253  - [39m09/12/2026, 9:25:39 PM [32m    LOG[39m [38;5;3m[Sauvegarde] [39m[32mExport de sauvegarde servi en flux (2 collections)[39m
+ ✓ src/modules/ops/backup.test.ts (5 tests) 8ms
+ ✓ src/modules/payment-domains/stripe-payment-domains.client.test.ts (12 tests) 76ms
+ ✓ src/modules/ordering/delivery-site-hydration.test.ts (6 tests) 29ms
+[31m[Nest] 57267  - [39m09/12/2026, 9:25:40 PM [31m  ERROR[39m [38;5;3m[RedisEventPublisher] [39m[31mDiffusion de « order.created » impossible : ECONNREFUSED[39m
+[33m[Nest] 57267  - [39m09/12/2026, 9:25:40 PM [33m   WARN[39m [38;5;3m[RedisEventPublisher] [39m[33mÉvénement « order.created » ignoré : le restaurant « classfood » est introuvable.[39m
+ ✓ src/infrastructure/events/redis-event-publisher.test.ts (7 tests) 4ms
+ ✓ src/modules/ordering/creneau-verifie.test.ts (7 tests) 8ms
+ ✓ src/modules/customer-identity/customer-account.config.test.ts (31 tests) 14ms
+ ✓ src/modules/orders/payment.test.ts (15 tests) 4ms
+(node:57296) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57296) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-loyalty-attachment.quota.test.ts (11 tests) 9ms
+ ✓ src/modules/site/resolve-tenant-by-host.test.ts (11 tests) 4ms
+ ✓ src/modules/crm/public-leads.test.ts (7 tests) 5ms
+ ✓ src/modules/ordering/slots-durable.test.ts (8 tests) 9ms
+ ✓ src/modules/devices/manage-devices.test.ts (8 tests) 5ms
+ ✓ src/modules/loyalty/loyalty-purchase-verifier.test.ts (10 tests) 6ms
+ ✓ src/modules/delivery/delivery-handoff.crypto.test.ts (14 tests) 10ms
+ ✓ src/modules/crm/crm.prospection.test.ts (8 tests) 11ms
+ ✓ src/modules/orders/price-order-lines.cheese.test.ts (12 tests) 4ms
+ ✓ src/modules/delivery/delivery-order.test.ts (8 tests) 7ms
+ ✓ src/common/marque-observee.test.ts (8 tests) 8ms
+ ✓ src/infrastructure/http-v4.test.ts (6 tests) 5ms
+ ✓ src/modules/orders/guest-order-reorder.test.ts (12 tests) 7ms
+ ✓ src/infrastructure/domains/domain-registrar.factory.test.ts (7 tests) 3ms
+ ✓ src/modules/payment-domains/payment-domain-hosts.test.ts (22 tests) 7ms
+ ✓ src/common/verified-public-relay.test.ts (6 tests) 3ms
+ ✓ src/common/commerce-controller-boundary.test.ts (16 tests) 5ms
+ ✓ src/modules/site/add-custom-domain.test.ts (8 tests) 4ms
+ ✓ src/modules/screens/featured-screen-content.test.ts (6 tests) 7ms
+ ✓ src/modules/orders/order-recovery.test.ts (5 tests) 6ms
+ ✓ src/modules/orders/public-tracking.test.ts (5 tests) 3ms
+ ✓ src/modules/menu/menu-options-roundtrip.test.ts (4 tests) 12ms
+ ✓ src/modules/ops/public-errors.controller.test.ts (4 tests) 4ms
+ ✓ src/modules/orders/cart-promotion.test.ts (12 tests) 5ms
+ ✓ src/modules/devices/suspension.test.ts (4 tests) 2ms
+(node:57484) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57484) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/modules/customer-identity/customer-account.human.test.ts (10 tests) 10ms
+ ✓ src/modules/orders/public-delivery.test.ts (3 tests) 8ms
+[31m[Nest] 57493  - [39m09/12/2026, 9:25:45 PM [31m  ERROR[39m [38;5;3m[RemoveCustomDomain] [39m[31mDétachement impossible pour « commander.classfood.fr » (Fournisseur de test)[39m
+Error: Fournisseur injoignable
+    at FakeRegistrar.release (/Users/limameghassene/development/SnackManager-refonte-ui/apps/api/src/modules/site/site.fakes.ts:67:33)
+    at RemoveCustomDomain.execute (/Users/limameghassene/development/SnackManager-refonte-ui/apps/api/src/modules/site/remove-custom-domain.usecase.ts:37:23)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+ ✓ src/modules/site/check-domain-status.test.ts (5 tests) 6ms
+ ✓ src/common/shared-public-quota.test.ts (6 tests) 5ms
+ ✓ src/modules/screens/pair-screen.test.ts (8 tests) 4ms
+ ✓ src/modules/ordering/delivery-slots.test.ts (4 tests) 12ms
+ ✓ src/modules/orders/order-commercial-scope.test.ts (5 tests) 6ms
+ ✓ src/modules/stats/stats.service.test.ts (15 tests) 4ms
+ ✓ src/modules/loyalty/loyalty.controller.test.ts (5 tests) 4ms
+ ✓ src/modules/orders/order-concurrency.test.ts (2 tests) 3ms
+ ✓ src/modules/health/health.controller.test.ts (9 tests) 3ms
+ ✓ src/modules/crm/crm.projection.test.ts (3 tests) 2ms
+ ✓ src/modules/loyalty/loyalty-earn-receipt.reader.test.ts (19 tests) 7ms
+ ✓ src/modules/orders/order-count.test.ts (3 tests) 4ms
+ ✓ src/modules/order-notifications/order-notifications.controller.test.ts (2 tests) 241ms
+ ✓ src/modules/devices/heartbeat-telemetry.test.ts (3 tests) 2ms
+ ✓ src/modules/order-notifications/order-push.sender.transport.test.ts (17 tests) 17ms
+(node:57603) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57603) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/common/trusted-client-ip.test.ts (5 tests) 6ms
+ ✓ src/modules/tenants/horaires-publics.test.ts (5 tests) 2ms
+ ✓ src/modules/staff/staff-session-revocation.test.ts (2 tests) 4ms
+ ✓ src/modules/ordering/order-refund-client.factory.test.ts (15 tests) 3ms
+ ✓ src/modules/orders/order-client-lookup-authorization.test.ts (9 tests) 4ms
+ ✓ src/modules/screens/default-playlist.test.ts (5 tests) 3ms
+ ✓ src/modules/ordering/dining-ticket.test.ts (3 tests) 5ms
+ ✓ src/modules/screens/pairing-code.test.ts (6 tests) 191ms
+ ✓ src/modules/site/tenant-site.repository.test.ts (2 tests) 3ms
+ ✓ src/modules/order-notifications/order-push.crypto.test.ts (5 tests) 5ms
+ ✓ src/modules/stats/stats-commercial-scope.test.ts (20 tests) 8ms
+ ✓ src/modules/screens/menu-board.repository.test.ts (4 tests) 3ms
+ ✓ src/modules/orders/order-client-lookup.test.ts (4 tests) 3ms
+ ✓ src/modules/orders/order-journal.test.ts (1 test) 2ms
+ ✓ src/modules/orders/order-loyalty-status.test.ts (3 tests) 11ms
+ ✓ src/modules/engage/engage.seed.test.ts (3 tests) 2ms
+ ✓ src/modules/order-notifications/order-push.sender.test.ts (9 tests) 5ms
+ ✓ src/modules/orders/customer-order-owner.test.ts (3 tests) 3ms
+[33m[Nest] 57800  - [39m09/12/2026, 9:25:53 PM [33m   WARN[39m [38;5;3m[LoyaltyEnrollmentExpiryProcessor] [39m[33mBalayage d'un restaurant différé : données indisponibles[39m
+ ✓ src/modules/loyalty/loyalty-enrollment-expiry.processor.test.ts (2 tests) 4ms
+ ✓ src/common/controller-commonjs-initialization.test.ts (10 tests) 148ms
+ ✓ src/modules/encaissement/owner-reauthentication.test.ts (3 tests) 4ms
+ ✓ src/modules/site/dns-instruction.test.ts (5 tests) 2ms
+ ✓ src/modules/devices/device-pin-session.test.ts (1 test) 87ms
+ ✓ src/modules/ordering/delivery-ticket.test.ts (1 test) 4ms
+[33m[Nest] 57820  - [39m09/12/2026, 9:25:54 PM [33m   WARN[39m [38;5;3m[Argon2SecretHasher] [39m[33mEmpreinte illisible, accès refusé : pchstr must contain a $ as first char[39m
+[33m[Nest] 57820  - [39m09/12/2026, 9:25:54 PM [33m   WARN[39m [38;5;3m[Argon2SecretHasher] [39m[33mEmpreinte illisible, accès refusé : pchstr must be a non-empty string[39m
+ ✓ src/infrastructure/security/argon2-secret-hasher.test.ts (4 tests) 306ms
+ ✓ src/modules/encaissement/stripe-connect.client.test.ts (2 tests) 39ms
+ ✓ src/modules/ordering/order-slot-freshness.test.ts (7 tests) 3ms
+ ✓ src/modules/screens/screens.repository.test.ts (4 tests) 4ms
+ ✓ src/modules/ordering/order-refunds.policy.test.ts (5 tests) 4ms
+ ✓ src/modules/ordering/ordering.controller.test.ts (3 tests) 3ms
+ ✓ src/modules/ordering/site-brand.test.ts (2 tests) 3ms
+ ✓ src/common/redis-best-effort.test.ts (2 tests) 2ms
+ ✓ src/common/deployed-runtime.test.ts (6 tests) 2ms
+ ✓ src/modules/auth/auth-dummy-hash.test.ts (1 test) 44ms
+ ✓ src/postgres.module.test.ts (9 tests) 2ms
+
+ Test Files  217 passed | 7 skipped (224)
+      Tests  3663 passed | 824 skipped (4487)
+   Start at  21:24:54
+   Duration  61.59s (transform 3.32s, setup 0ms, collect 75.25s, tests 13.86s, environment 23ms, prepare 7.89s)
+

@@ -2,3 +2,6 @@ export type IconName="user"|"truck"|"store"|"pos"|"kitchen"|"table"|"orders"|"me
 export declare const shapes:Readonly<Record<IconName,string>>;
 export declare const iconNames:readonly IconName[];
 export declare function renderIcon(name:IconName):string;
+
+export { legacyIconAliases } from './aliases.mjs';
+export declare function resolveIconName(name: string): IconName | null;

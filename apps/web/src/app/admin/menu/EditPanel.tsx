@@ -14,7 +14,7 @@
  * contexte supply. Trois vérités, trois portes, aucune écrasée par mégarde.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ALLERGENS,
   ALLERGEN_LABELS,
@@ -49,6 +49,7 @@ import {
   type Variant,
 } from "./types";
 import { PhotosDuPlat } from "./PhotosDuPlat";
+import { normProduct, type RawProduct } from "./product-normalize";
 import { EditeurOptions, EditeurVariantes, figerLesClefs } from "./VariantesOptions";
 import {
   erreurEnregistrementProduit,
@@ -74,6 +75,10 @@ type Props = {
   onClose: () => void;
   /** Sauvegarde réussie — le parent toaste, ferme et recharge. */
   onSaved: (message: string) => void;
+  /** Création confirmée, attachement non confirmé : poursuivre sur cet ID. */
+  onCreationIncomplete?: (product: Product, photos: string[], message: string) => void;
+  photosAEnregistrer?: string[];
+  messageReprise?: string;
   isFeatured?: boolean;
   onManageFeatured?: () => void;
 };
@@ -101,6 +106,9 @@ export function EditPanel({
   chargerMediatheque,
   onClose,
   onSaved,
+  onCreationIncomplete,
+  photosAEnregistrer,
+  messageReprise,
   isFeatured = false,
   onManageFeatured,
 }: Props) {
@@ -134,7 +142,7 @@ export function EditPanel({
    * appartient. Bufferisées ici comme le reste de la fiche : « Enregistrer »
    * les envoie, « Fermer » les abandonne.
    */
-  const [photos, setPhotos] = useState<string[]>(() => product?.medias ?? []);
+  const [photos, setPhotos] = useState<string[]>(() => photosAEnregistrer ?? product?.medias ?? []);
   const photosInitiales = useMemo(() => (product?.medias ?? []).join(","), [product]);
 
   /**
@@ -172,6 +180,15 @@ export function EditPanel({
   const [fallbackNames, setFallbackNames] = useState<Record<string, string>>({});
 
   const [busy, setBusy] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const saving = useRef(false);
+  const created = useRef<Product | null>(null);
+  const repriseRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!messageReprise) return;
+    repriseRef.current?.scrollIntoView({ block: "nearest" });
+    repriseRef.current?.focus({ preventScroll: true });
+  }, [messageReprise]);
   const [error, setError] = useState<string | null>(null);
   /** Garde-fou de « Fermer » : confirmation avant d'abandonner une saisie. */
   const [confirmClose, setConfirmClose] = useState(false);
@@ -278,6 +295,7 @@ export function EditPanel({
 
   // ─── Sauvegarde ───
   async function save() {
+    if (saving.current || mediaBusy) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Le nom est requis.");
@@ -306,11 +324,12 @@ export function EditPanel({
       }));
     }
 
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
       if (mode === "create") {
-        await api.post("/products", {
+        const body = {
           categoryId: catId,
           name: trimmed,
           description: desc.trim(),
@@ -318,7 +337,25 @@ export function EditPanel({
           isNew,
           photoKind,
           popularOverride,
-        });
+        };
+        // Une réponse de création confirmée est conservée AVANT le PUT média.
+        // Le parent passe en édition sur erreur ; même sans lui, une relance
+        // sur ce panneau ne doit jamais créer une seconde fois le produit.
+        if (!created.current) {
+          const response = await api.post<RawProduct>("/products", body);
+          created.current = normProduct(response, catId);
+        }
+        if (photos.length > 0) {
+          try {
+            await api.put(`/products/${created.current._id}/medias`, { medias: photos });
+          } catch (e) {
+            const detail = erreurEnregistrementProduit(e, { optionGroups: groups, variants });
+            const message = `Le produit « ${created.current.name} » a bien été créé. L’enregistrement de ses images n’est pas confirmé. Réessayez l’enregistrement de ce produit.\n${detail}`;
+            setError(message);
+            onCreationIncomplete?.(created.current, photos, message);
+            return;
+          }
+        }
         onSaved("Produit créé");
         return;
       }
@@ -375,6 +412,7 @@ export function EditPanel({
     } catch (e) {
       setError(erreurEnregistrementProduit(e, { optionGroups: groups, variants }));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -394,6 +432,7 @@ export function EditPanel({
         popularOverride !== null ||
         desc.trim() !== "" ||
         catId !== (createCategoryId ?? "") ||
+        photos.length > 0 ||
         tagsChanged()
       : name !== (product?.name ?? "") ||
         isNew !== (product?.isNew ?? false) ||
@@ -418,6 +457,28 @@ export function EditPanel({
      * on ne voyait plus quelle ligne était dépliée (DA §1 et §3).
      */
     <div className="border-l-[3px] border-l-accent bg-[image:var(--cf-elev-gradient)] px-[18px] pb-3.5 pt-2.5 shadow-[inset_0_10px_18px_-12px_rgba(0,0,0,.9)]">
+      {messageReprise && (
+        <div className="mb-4 rounded-ctrl border border-alert/40 p-3">
+          <p ref={repriseRef} tabIndex={-1} role="alert" className="whitespace-pre-line text-sm text-alertt outline-none">{messageReprise}</p>
+          <Btn className="mt-3" size="sm" icon="check" disabled={busy || mediaBusy} onClick={() => void save()}>Réessayer l’enregistrement</Btn>
+        </div>
+      )}
+      <PhotosDuPlat
+        // Le nom EN COURS DE SAISIE et non celui enregistré : c'est le repli
+        // du texte alternatif, et un gérant qui renomme son plat doit voir
+        // ce que les lecteurs d'écran annonceront après enregistrement.
+        produitNom={name.trim() || product?.name || "Nouveau produit"}
+        photos={photos}
+        onChange={setPhotos}
+        chargerMediatheque={chargerMediatheque}
+        disabled={busy}
+        onBusyChange={setMediaBusy}
+      />
+      {photos.join(",") !== photosInitiales && (
+        <p role="status" className="mt-2 text-xs text-mut">Sélection d’images modifiée — enregistrez le produit pour l’appliquer à la carte.</p>
+      )}
+
+
       {/* Une colonne sous `md` : deux champs côte à côte à 170 px chacun
           rendraient les libellés illisibles au doigt. */}
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
@@ -536,17 +597,6 @@ export function EditPanel({
           <p className="mt-1 text-xs text-mut">Les 8 plats avec photo les plus vendus, actualisés chaque minute. La mise en avant reste indépendante.</p>
         </Field>
       </div>
-      {mode !== "create" && product && (
-        <PhotosDuPlat
-          // Le nom EN COURS DE SAISIE et non celui enregistré : c'est le repli
-          // du texte alternatif, et un gérant qui renomme son plat doit voir
-          // ce que les lecteurs d'écran annonceront après enregistrement.
-          produitNom={name.trim() || product.name}
-          photos={photos}
-          onChange={setPhotos}
-          chargerMediatheque={chargerMediatheque}
-        />
-      )}
 
       {/* ─── Tailles et options ─── */}
       {mode !== "create" && (
@@ -774,11 +824,11 @@ export function EditPanel({
       )}
 
       <div className="mt-3.5 flex items-center justify-end gap-2">
-        <Btn variant="ghost" size="sm" onClick={demanderFermeture} disabled={busy}>
+        <Btn variant="ghost" size="sm" onClick={demanderFermeture} disabled={busy || mediaBusy}>
           Fermer
         </Btn>
-        <Btn size="sm" icon="check" onClick={() => void save()} disabled={busy}>
-          {busy ? "Enregistrement…" : "Enregistrer"}
+        <Btn size="sm" icon="check" onClick={() => void save()} disabled={busy || mediaBusy}>
+          {busy ? "Enregistrement…" : mediaBusy ? "Préparation de l’image…" : "Enregistrer"}
         </Btn>
       </div>
 

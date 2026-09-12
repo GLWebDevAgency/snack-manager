@@ -1,0 +1,18 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/order/Tracking.browser.test.tsx (18 tests) 5577ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > affiche remboursement sans fausse annulation et poursuit le poll d’un remboursement en attente  335ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > garde le dernier état lors d’une panne sans présenter une progression non reçue  325ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > laisse le texte des étapes lisible sans collision avec le badge en 320px  421ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > laisse le texte des étapes lisible sans collision avec le badge en 390px  412ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > révèle la preuve seulement après action, conserve son accès dans IDB puis la masque à la remise  387ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > ignore une preuve retardée lorsque la livraison est terminée entretemps  356ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > ne change le paiement au comptoir qu’après confirmation explicite et ACK  377ms
+ ✓ src/components/order/tracking-payment.test.ts (18 tests) 63ms
+
+ Test Files  2 passed (2)
+      Tests  36 passed (36)
+   Start at  21:23:18
+   Duration  6.69s (transform 288ms, setup 0ms, collect 729ms, tests 5.64s, environment 0ms, prepare 73ms)
+

@@ -147,8 +147,8 @@ export function ProductSheet({
 }
 
 /**
- * Visuel de tête. Avec photo : le plat entier, posé sur son plateau et fondu
- * vers la surface de la feuille — jamais recadré sans demande du catalogue.
+ * Visuel de tête. Avec photo : le plat entier, posé sur un plateau en retrait
+ * de la feuille — jamais recadré sans demande du catalogue.
  * Sans photo : bandeau neutre, sans inventer une illustration du produit.
  */
 function ProductHero({
@@ -162,7 +162,7 @@ function ProductHero({
 }) {
   if (photoUrl) {
     return (
-      <div className="relative h-[210px] w-full overflow-hidden">
+      <div className="relative mx-4 mt-4 h-[190px] overflow-hidden rounded-card">
         <Plate
           photoUrl={photoUrl}
           cover={cover}
@@ -172,7 +172,6 @@ function ProductHero({
           radius="rounded-none"
           className="size-full border-0"
         />
-        <span aria-hidden className="sm-scrim absolute inset-x-0 bottom-0 h-24" />
       </div>
     );
   }

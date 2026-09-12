@@ -279,6 +279,14 @@ export function columnsFor(gridWidth: number, layout: Layout): number {
   return clamp(layout.minCols, raw, layout.maxCols);
 }
 
+/** Grandes cartes du handoff ; la densité historique reste sélectionnable. */
+export function catalogColumnsFor(gridWidth: number, layout: Layout, density: 'comfortable' | 'compact'): number {
+  if (density === 'compact') return columnsFor(gridWidth, layout);
+  if (gridWidth <= 0) return 2;
+  const ideal = (layout.compact ? 210 : 276) * layout.scale;
+  return clamp(2, Math.floor((gridWidth + layout.gridGap) / (ideal + layout.gridGap)), 5);
+}
+
 /**
  * LA CARTE DE LA VUE DU SERVICE — bien plus large qu'une tuile produit.
  *

@@ -26,12 +26,12 @@ import { Image, Text, View } from 'react-native';
 import { FONT, R, S, useTheme, withAlpha, type Brand } from './theme';
 import { Icon } from './Icon';
 import { MODE_LABEL, type Mode } from './pos-state';
-import { Press, Segmented, Sheen } from './ui';
+import { Press, Segmented } from './ui';
 import { useLayout } from './useLayout';
 import type { ServiceBadgeTone } from './service-reconciliation';
 
 /** Ce que le poste montre : la vente en cours, ou l'état du service. */
-export type Vue = 'vente' | 'service';
+export type Vue = 'vente' | 'service' | 'salle';
 
 export function TopBar({
   brand,
@@ -52,6 +52,7 @@ export function TopBar({
   onRecap,
   onLock,
   onSettings,
+  onDining,
 }: {
   brand: Brand;
   staffName: string;
@@ -81,6 +82,7 @@ export function TopBar({
   onRecap: () => void;
   onLock: () => void;
   onSettings?: () => void;
+  onDining?: () => void;
 }) {
   const { palette, sheet, shadow, type, semanticText } = useTheme();
   const L = useLayout();
@@ -119,6 +121,7 @@ export function TopBar({
       accent={brand.accent}
       onAccent={brand.onAccent}
       flex={stacked}
+      tone="strong"
       badge={
         serviceTone === 'warning'
           ? palette.amber
@@ -127,8 +130,8 @@ export function TopBar({
             : undefined
       }
       options={[
-        { key: 'vente', label: 'Vendre' },
-        { key: 'service', label: 'Le service', detail: serviceBadge },
+        { key: 'vente', label: 'Vendre', icon: L.width >= 700 ? 'pos' : undefined },
+        { key: 'service', label: 'Le service', icon: L.width >= 700 ? 'orders' : undefined, detail: serviceBadge },
       ]}
     />
   );
@@ -141,7 +144,7 @@ export function TopBar({
       onAccent={brand.onAccent}
       flex={stacked}
       options={[
-        { key: 'surplace', label: MODE_LABEL.surplace, icon: modeIcons ? 'home' : undefined },
+        { key: 'surplace', label: MODE_LABEL.surplace, icon: modeIcons ? 'table' : undefined },
         { key: 'emporter', label: MODE_LABEL.emporter, icon: modeIcons ? 'bag' : undefined },
         { key: 'tel', label: MODE_LABEL.tel, icon: modeIcons ? 'phone' : undefined },
       ]}
@@ -220,7 +223,6 @@ export function TopBar({
         shadow(1),
       ]}
     >
-      <Sheen intensity={0.7} />
 
       <View style={{ height: L.topbarH, flexDirection: 'row', alignItems: 'center', gap: compact ? S.sm : S.lg }}>
         {/* Identité */}
@@ -288,6 +290,7 @@ export function TopBar({
           reste sur la bascule de vue et inclut aussi le web ; aucune fermeture
           comptable ou globale n'est promise ici.
         */}
+        {onDining ? <BarButton label="La salle" icon="table" iconOnly selected={vue === 'salle'} onPress={onDining} /> : null}
         {onSettings ? <BarButton label="Paramètres du poste" icon="gear" iconOnly onPress={onSettings} /> : null}
         <BarButton label="Récapitulatif" icon="receipt" iconOnly={!actionLabels} accessibilityLabel="Récapitulatif local du poste" onPress={onRecap} />
         <BarButton label="Verrouiller" icon="lock" iconOnly={!actionLabels} onPress={onLock} />
@@ -330,12 +333,14 @@ function BarButton({
   accessibilityLabel,
   icon,
   iconOnly,
+  selected = false,
 }: {
   label: string;
   onPress: () => void;
   accessibilityLabel?: string;
   icon: string;
   iconOnly?: boolean;
+  selected?: boolean;
 }) {
   const { palette } = useTheme();
   const L = useLayout();
@@ -343,6 +348,7 @@ function BarButton({
     <Press
       onPress={onPress}
       accessibilityLabel={accessibilityLabel ?? label}
+      selected={selected}
       style={{
         minHeight: L.touch(),
         width: iconOnly ? L.touch() : undefined,
@@ -352,14 +358,14 @@ function BarButton({
         justifyContent: 'center',
         flexShrink: 0,
         gap: 8,
-        borderRadius: R.pill,
+        borderRadius: R.ctrl,
         borderWidth: 1,
-        borderColor: palette.line,
-        backgroundColor: palette.surface2,
+        borderColor: selected ? palette.text : palette.line,
+        backgroundColor: selected ? palette.text : palette.surface,
       }}
       activeStyle={{ backgroundColor: palette.press2 }}
     >
-      <Icon name={icon} size={iconOnly ? 18 : 16} color={palette.text} />
+      <Icon name={icon} size={iconOnly ? 18 : 16} color={selected ? palette.bg : palette.text} />
       {iconOnly ? null : <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13.5), fontWeight: '600' }}>{label}</Text>}
     </Press>
   );

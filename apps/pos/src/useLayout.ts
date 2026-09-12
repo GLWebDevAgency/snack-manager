@@ -18,6 +18,7 @@ export function useLayout(): Layout {
 
 export {
   columnsFor,
+  catalogColumnsFor,
   cardWidth,
   cadrageVignette,
   serviceColumns,

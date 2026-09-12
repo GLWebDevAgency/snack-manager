@@ -25,6 +25,7 @@ import {
   type PaymentTender,
   type StaffRole,
   type OrderDelivery,
+  type OrderDining,
 } from '@sm/contracts';
 import {
   type OrderChannel,
@@ -53,6 +54,7 @@ export interface ServerOrderRow {
   statusHistory?: { status: OrderStatus; at: string; by?: string }[];
   pickup?: { slot: string; customerName: string; customerPhone?: string | null } | null;
   delivery?: OrderDelivery | null;
+  dining?: OrderDining | null;
   note?: string | null;
   /** La vue détaillée relit aussi le sous-total et le motif de remise. */
   totals?: {
@@ -92,6 +94,7 @@ export function isOperationalOrder(row: ServerOrderRow): boolean {
 }
 
 export function serviceReadyLabel(row: ServerOrderRow): string {
+  if (row.dining) return row.dining.servedAt ? 'SERVIE À TABLE' : 'À SERVIR';
   return row.type !== 'delivery' ? 'À APPELER' : row.delivery?.dispatchedAt ? 'EN LIVRAISON' : 'À EXPÉDIER';
 }
 
@@ -134,6 +137,7 @@ export function heureCourte(iso: string | undefined | null): string | null {
 }
 
 function reperageDe(row: ServerOrderRow): string | null {
+  if (row.dining?.tableLabel) return `Table · ${row.dining.tableLabel}`;
   const nom = row.pickup?.customerName?.trim();
   if (nom) return nom;
   const creneau = heureCourte(row.pickup?.slot);

@@ -1,0 +1,11 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/ui/SMTabBar.browser.test.tsx (12 tests) 3650ms
+   ✓ SMTabBar — navigation partagée sans état métier > remonte la nouvelle vue sans mouvement, y compris retour navigateur (ref=false)  1134ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  21:17:04
+   Duration  4.08s (transform 39ms, setup 0ms, collect 222ms, tests 3.65s, environment 0ms, prepare 39ms)
+

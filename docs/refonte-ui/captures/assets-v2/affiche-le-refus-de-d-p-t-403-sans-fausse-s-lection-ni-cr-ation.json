@@ -1,0 +1,54 @@
+{
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/medias",
+      "body": {
+        "name": "illustration-samosa.png",
+        "type": "image/png",
+        "octets": 225703,
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "products": [
+    {
+      "_id": "product-original",
+      "categoryId": "category-local",
+      "name": "Plat existant",
+      "description": "Recette conservée",
+      "price": 1234,
+      "medias": [
+        "media-original"
+      ],
+      "photoKind": "cover",
+      "tags": [
+        "midi"
+      ],
+      "isNew": true
+    }
+  ],
+  "media": [
+    {
+      "id": "media-original",
+      "alt": "Photo existante",
+      "octets": 70,
+      "largeur": 1,
+      "hauteur": 1
+    }
+  ]
+}

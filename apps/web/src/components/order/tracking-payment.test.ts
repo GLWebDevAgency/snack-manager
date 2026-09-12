@@ -32,6 +32,15 @@ const ticket: OrderTicket = {
 };
 
 describe("suivi du retrait et changement de paiement", () => {
+  it("situe la commande à sa table sans transformer un règlement comptoir en paiement en ligne", () => {
+    const html = render({ fulfillment: undefined, payment: { ...pending.payment!, method: "counter" } }, { ...ticket, type: "surplace", dining: { tableLabel: "Terrasse 3" } });
+    expect(html).toContain("Table · Terrasse 3");
+    expect(html).toContain("À régler au comptoir");
+    expect(html).not.toContain("Payer au comptoir");
+    expect(html).toContain("Numéro de commande");
+    expect(html).not.toContain("À récupérer au comptoir");
+    expect(html).not.toContain("Où récupérer");
+  });
   it("propose le comptoir pour le même retrait online en attente, pas pour une livraison", () => {
     expect(render({ fulfillment: "pickup" })).toContain("Payer au comptoir");
     expect(render()).not.toContain("Payer au comptoir");

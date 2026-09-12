@@ -1,0 +1,163 @@
+{
+  "phase": "bo-v2-avant",
+  "base": "http://127.0.0.1:3092",
+  "note": "After surface changes; actual Next routes, repository demos and local-only delivery/HQ fixtures. Light tenant cases use the existing Brasserie demo mask.",
+  "results": [
+    {
+      "name": "restaurant-1440-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-1440-default-dashboard.png",
+        "restaurant-1440-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-390-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-390-default-dashboard.png",
+        "restaurant-390-default-navigation.png",
+        "restaurant-390-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "snackmanager-1440-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-1440-default-dashboard-vide.png",
+        "snackmanager-1440-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-390-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-390-default-dashboard-vide.png",
+        "snackmanager-390-default-navigation.png",
+        "snackmanager-390-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    }
+  ]
+}

@@ -82,7 +82,7 @@ const COL = {
 
 /** Panneau d'édition ouvert : produit existant ou création dans une catégorie. */
 type Editor =
-  | { mode: "edit"; productId: string }
+  | { mode: "edit"; productId: string; photosAEnregistrer?: string[]; messageReprise?: string }
   | { mode: "create"; categoryId: string }
   | null;
 
@@ -474,6 +474,21 @@ export default function MenuPage() {
     await load();
   }
 
+  function reprendreImagesDuProduit(product: Product, photos: string[], message: string) {
+    // Le POST a déjà créé ce produit. Il rejoint immédiatement la vraie carte
+    // et son éditeur canonique ; fermer/revenir ne retourne pas à une création.
+    setMenu((current) => current ? {
+      ...current,
+      categories: current.categories.map(category => category._id === product.categoryId
+        ? { ...category, products: [...category.products.filter(p => p._id !== product._id), product] }
+        : category),
+    } : current);
+    mediathequeRef.current = null;
+    setQ("");
+    setSelected(product.categoryId);
+    setEditor({ mode: "edit", productId: product._id, photosAEnregistrer: photos, messageReprise: message });
+  }
+
   const errorBox = (
     <div className="flex flex-col items-start gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
       <p className="text-sm text-alertt">{error}</p>
@@ -643,6 +658,7 @@ export default function MenuPage() {
                 chargerMediatheque={chargerMediatheque}
                 onClose={() => setEditor(null)}
                 onSaved={(m) => void afterSaved(m)}
+                onCreationIncomplete={reprendreImagesDuProduit}
               />
             )}
 
@@ -896,11 +912,17 @@ export default function MenuPage() {
                       <EditPanel
                         mode="edit"
                         product={p}
+                        photosAEnregistrer={editor?.mode === "edit" ? editor.photosAEnregistrer : undefined}
+                        messageReprise={editor?.mode === "edit" ? editor.messageReprise : undefined}
                         categories={categories}
                         initialCost={costs[p._id]}
                         loadIngredients={loadIngredients}
                         chargerMediatheque={chargerMediatheque}
-                        onClose={() => setEditor(null)}
+                        onClose={() => {
+                          const reprise = editor?.mode === "edit" && editor.messageReprise;
+                          setEditor(null);
+                          if (reprise) void load();
+                        }}
                         onSaved={(m) => void afterSaved(m)}
                         isFeatured={featured}
                         onManageFeatured={p.categoryId ? () => setFeaturedEditor({ categoryId: p.categoryId!, productId: p._id }) : undefined}

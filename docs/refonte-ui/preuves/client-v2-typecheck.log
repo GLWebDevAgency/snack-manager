@@ -1,0 +1,4 @@
+
+> @sm/web@0.1.0 typecheck /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+> tsc --noEmit
+

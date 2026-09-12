@@ -1,0 +1,75 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/app/livreur/delivery-missions.browser.test.ts (21 tests) 11699ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'bouton' : arrête la caméra de remise, permission tardive=false, et réouvre sans action métier  714ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'Échap' : arrête la caméra de remise, permission tardive=false, et réouvre sans action métier  591ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'bouton' : arrête la caméra de remise, permission tardive=true, et réouvre sans action métier  653ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'Échap' : arrête la caméra de remise, permission tardive=true, et réouvre sans action métier  629ms
+   ✓ missions livreur et affectation BO rendues > liste sans modale en 320px et bureau : contenu utile, sans débordement ni mouvement imposé  353ms
+   ✓ missions livreur et affectation BO rendues > réactive la navigation après fermeture du détail et ne laisse aucune action derrière la modale  476ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation longue, sans attendre qu’elle disparaisse pour l’oublier  809ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation ralentie, sans attendre qu’elle disparaisse pour l’oublier  810ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation infinie, sans attendre qu’elle disparaisse pour l’oublier  830ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation bloquée, sans attendre qu’elle disparaisse pour l’oublier  814ms
+   ✓ missions livreur et affectation BO rendues > une vérification d’accès conserve la géométrie compacte et désactive les actions  327ms
+   ✓ missions livreur et affectation BO rendues > mobile : attend préparation/paiement, montre le détail puis le départ réellement confirmé  509ms
+   ✓ missions livreur et affectation BO rendues > reprend après réponse perdue et reload, avec UUID et paramètres inchangés, sans coordonnées stockées  592ms
+   ✓ missions livreur et affectation BO rendues > un stockage refusé ne transmet aucun départ  380ms
+   ✓ missions livreur et affectation BO rendues > 404 retire seulement cette mission ; une autre fonctionne, puis 401 efface les coordonnées et ferme le détail  532ms
+   ✓ missions livreur et affectation BO rendues > un refus terminal reste un avertissement et n’annonce pas attendre une cuisine déjà prête  389ms
+   ✓ missions livreur et affectation BO rendues > BO desktop : affecte avant paiement/préparation, puis confirme séparément le départ  449ms
+   ✓ missions livreur et affectation BO rendues > la caisse voit l’affectation sans annuaire ni contrôle de réaffectation  332ms
+   ✓ missions livreur et affectation BO rendues > BO : annuaire paginé et lien explicite vers la création d’accès, sans envoyer avant le choix  374ms
+   ✓ missions livreur et affectation BO rendues > BO : changement de personne pendant recovery 409 ne clôture pas son journal et ne repeint pas les anciennes coordonnées  403ms
+   ✓ missions livreur et affectation BO rendues > BO : un refus durable retire seulement l’intention et reste un avertissement  360ms
+ ✓ src/components/order/menu-layout.browser.test.tsx (16 tests) 6428ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 320 px  499ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 390 px  437ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 820 px  460ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contient les 3 formats de chaque ligne sans recouvrir le produit suivant  346ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contient les 4 formats de chaque ligne sans recouvrir le produit suivant  302ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 320 px  385ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 330 px  356ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 390 px  440ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contraint la photo intrinsèque 800×600 au plateau contain à 820 px  412ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde Classique entier et les prix contenus dans la carte étroite, puis rétablit deux colonnes de formats  535ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > applique réellement la forme 'net' aux cartes, chips et feuilles  302ms
+ ✓ src/app/livreur/delivery-brand-shape.browser.test.tsx (9 tests) 5614ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'dark'  707ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'light'  580ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'dark'  510ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'light'  508ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'dark'  503ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'light'  479ms
+   ✓ identité des formes — Livreur réel > répercute une marque relue dans la même session sans écrire une préférence de forme  738ms
+   ✓ identité des formes — Livreur réel > applique le repli de marque lorsque la session legacy ne porte pas encore brand  462ms
+   ✓ conserve les réglages locaux d’accessibilité et la forme du restaurant après rechargement  691ms
+ ✓ src/components/order/ProductSheet.browser.test.tsx (8 tests) 4489ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 320px  888ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 390px  802ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > préserve les identités distinctes de même libellé et les sélections récupérées sans les fusionner  380ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > permet le choix au clavier sans désélectionner une option obligatoire ni dépasser le plafond  368ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > ne retire pas le supplément facultatif unique quand le client utilise une flèche  369ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > garde les choix restaurés visibles dans un groupe long et préserve la sélection après repli  428ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > maintient les bornes et prix par variante sans perdre retraits ni supplément dédié  460ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > classe les suppléments par catégorie native sans fusionner deux libellés identiques  403ms
+ ✓ src/components/ui/SMTabBar.browser.test.tsx (12 tests) 2924ms
+ ✓ src/app/livreur/delivery-preferences.browser.test.tsx (7 tests) 2106ms
+   ✓ conserve les préférences validées sans identifiants et suit le thème système  378ms
+   ✓ ne montre aucune mission étrangère et efface l’historique après révocation  362ms
+ ✓ src/components/order/order-header-joint.browser.test.tsx (4 tests) 2355ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 330 px et le recalcule quand l’identité change de hauteur  487ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 820 px et le recalcule quand l’identité change de hauteur  592ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 1280 px et le recalcule quand l’identité change de hauteur  434ms
+   ✓ OrderHeader — raccord sticky avec les catégories > conserve le raccord pendant les redimensionnements du viewport mobile vers tablette et bureau  409ms
+ ✓ src/components/loyalty/paliers.test.ts (13 tests) 14ms
+ ✓ src/components/loyalty/mouvement.test.ts (12 tests) 6ms
+ ✓ src/components/loyalty/relay-proof.test.ts (3 tests) 3ms
+ ✓ src/components/loyalty/session-guards.test.ts (3 tests) 2ms
+
+ Test Files  11 passed (11)
+      Tests  108 passed (108)
+   Start at  21:15:33
+   Duration  39.79s (transform 182ms, setup 0ms, collect 2.40s, tests 35.64s, environment 1ms, prepare 428ms)
+

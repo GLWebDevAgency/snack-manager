@@ -1,0 +1,50 @@
+L
+Le Comptoir
+Caisse QA locale · Équipier QA
+Vendre
+Le service
+≈ 0
+Sur place
+À emporter
+Téléphone
+21:27
+:23
+Récapitulatif
+Verrouiller
+La salle
+Les tables et leurs commandes, de l’accueil au règlement.
+Actualiser la salle
+Situation actualisée · 0 table(s) occupée(s)
+Libre
+Terrasse 1
+4 places
+Libre
+Salle 2
+6 places
+Récapitulatif du poste
+1 commande saisie ici · Équipier QA
+✕
+Récapitulatif local
+Commandes · 1
+Périmètre local uniquement
+Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel.
+TOTAL DU JOURNAL DE CE POSTE
+Hors commandes web, autres caisses et comptabilité globale.
+12,50 €
+Espèces
+0,00 €
+Carte bancaire
+12,50 €
+Titres-restaurant
+0,00 €
+À encaisser au retrait
+0,00 €
+1
+Sur place
+0
+À emporter
+0
+Téléphone
+Journal local durable et file de synchronisation vide.
+Conserver le journal
+Réinitialiser le journal

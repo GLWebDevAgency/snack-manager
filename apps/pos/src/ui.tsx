@@ -26,12 +26,14 @@ import {
 import { TOUCH_MIN } from '@sm/client-core';
 import { DUR, FONT, R, S, TABULAR, withAlpha } from './theme';
 import { useLayout } from './useLayout';
+import { usePrefs } from './usePrefs';
 import { ModalSurface } from './ModalSurface';
 
 // ─── Mouvement ───
 
 /** Respecte le réglage système « réduire les animations ». */
 export function useReducedMotion(): boolean {
+  const { prefs } = usePrefs();
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -44,7 +46,7 @@ export function useReducedMotion(): boolean {
       sub.remove();
     };
   }, []);
-  return reduced;
+  return reduced || prefs.reduceMotion;
 }
 
 /** Apparition « pop » : opacité + échelle uniquement (jamais de layout animé). */
@@ -92,6 +94,8 @@ export function Pop({
  */
 export function Sheen({ intensity = 1 }: { intensity?: number }) {
   const { palette } = useTheme();
+  const { prefs } = usePrefs();
+  if (prefs.reduceTransparency) return null;
   if (Platform.OS === 'web') return <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none', opacity: intensity, backgroundImage: `linear-gradient(180deg, ${palette.sheen}, transparent 60%)` } as ViewStyle]} />;
   return (
     <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
@@ -416,6 +420,7 @@ export function Segmented<T extends string>({
   height = TOUCH_MIN,
   flex,
   badge,
+  tone = 'surface',
 }: {
   value: T;
   options: { key: T; label: string; detail?: string; icon?: string }[];
@@ -425,10 +430,13 @@ export function Segmented<T extends string>({
   height?: number;
   flex?: boolean;
   badge?: string;
+  tone?: 'surface' | 'strong' | 'brand';
 }) {
   const { palette } = useTheme();
   const L = useLayout();
   const h = L.touch(height);
+  const selectedBackground = tone === 'brand' ? accent : tone === 'strong' ? palette.text : palette.surface;
+  const selectedText = tone === 'brand' ? onAccent : tone === 'strong' ? palette.surface : palette.text;
   return (
     <View
       style={{
@@ -456,23 +464,23 @@ export function Segmented<T extends string>({
               minHeight: h,
               paddingHorizontal: opt.detail ? Math.min(L.segmentPadX, L.sp(12)) : L.segmentPadX,
               borderRadius: R.ctrl,
-              backgroundColor: on ? accent : 'transparent',
+              backgroundColor: on ? selectedBackground : 'transparent',
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
               flex: flex ? 1 : undefined,
             }}
-            activeStyle={{ backgroundColor: on ? accent : palette.press2 }}
+            activeStyle={{ backgroundColor: on ? selectedBackground : palette.press2 }}
           >
-            {opt.icon ? <Icon name={opt.icon} size={L.fs(16)} color={on ? onAccent : palette.mut} /> : null}
+            {opt.icon ? <Icon name={opt.icon} size={L.fs(18)} color={on ? selectedText : palette.mut} /> : null}
             <Text
               numberOfLines={1}
               style={{
                 fontFamily: FONT,
-                fontSize: L.fs(14.5),
-                fontWeight: on ? '700' : '600',
-                color: on ? onAccent : palette.mut,
+                fontSize: L.fs(14),
+                fontWeight: on ? '600' : '400',
+                color: on ? selectedText : palette.mut,
                 letterSpacing: -0.1,
                 flexShrink: 1,
               }}
@@ -496,7 +504,7 @@ export function Segmented<T extends string>({
                     fontFamily: FONT,
                     fontSize: L.fs(12.5),
                     fontWeight: '800',
-                    color: badge ? '#08120a' : on ? onAccent : palette.text,
+                    color: badge ? '#08120a' : on ? selectedText : palette.text,
                     ...TABULAR,
                   }}
                 >

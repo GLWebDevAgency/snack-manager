@@ -91,9 +91,18 @@
 .screen { opacity: 1; transform: none; transition: opacity 180ms cubic-bezier(.2,.8,.2,1), transform 180ms cubic-bezier(.2,.8,.2,1); }
 .screen[data-sm-tab-leaving="true"] { opacity: 0; transform: translateY(6px); transition-duration: 90ms; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+[data-sm-reduce-motion].root, [data-sm-reduce-motion].screen { transition: none; }
+[data-sm-reduce-transparency].root .falloff { background: var(--sm-background); }
+[data-sm-reduce-transparency].root .falloff > * { display: none; }
+[data-sm-reduce-transparency].root .capsule { background: var(--cf-surface); }
+@media (prefers-reduced-transparency: reduce) {
+  .falloff { background: var(--sm-background); }
+  .falloff > * { display: none; }
+  .root .capsule { background: var(--cf-surface); }
+}
 @media (prefers-reduced-motion: reduce) { .root, .screen { transition: none; } }
 @media (forced-colors: active) {
-  .capsule, .light .capsule { background: Canvas; border-color: CanvasText; }
+  .root .capsule, .root[data-sm-reduce-transparency] .capsule { background: Canvas; border-color: CanvasText; }
   .box, .light .box { background: Highlight; border-color: Highlight; }
   .tab[aria-selected="true"] { color: HighlightText; }
   .on, .label { color: currentColor; }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { dark } from "@sm/design-tokens";
+import { dark, light } from "@sm/design-tokens";
 import { melanger, ratioContraste } from "@sm/contracts";
 import { tenantAccentPalette } from "@/lib/tenant-accent";
-import { backofficeVisualStyle as style } from "./visual-style";
+import { backofficeStyle, backofficeVisualStyle as style } from "./visual-style";
 
 describe("staff presentation boundaries", () => {
   it("keeps readable text, focus and field boundaries on every new surface", () => {
@@ -50,3 +50,31 @@ describe("staff presentation boundaries", () => {
     }
   });
 });
+
+for (const mode of ["light", "dark"] as const) {
+  describe(`staff ${mode} appearance`, () => {
+    const tokens = mode === "light" ? light : dark;
+    it("keeps neutral and functional text AA in rows, hover and status washes", () => {
+      const current = backofficeStyle(mode);
+      for (const background of [tokens.canvas, tokens.surface, tokens.secondary]) {
+        for (const hover of [0, .04, .08]) {
+          const row = melanger(background, mode === "light" ? tokens.ink : "#ffffff", hover);
+          expect(ratioContraste(current["--cf-text"], row)).toBeGreaterThanOrEqual(4.5);
+          expect(ratioContraste(current["--cf-mut"], row)).toBeGreaterThanOrEqual(4.5);
+          for (const [key, fill] of [["--cf-red-t", "#c94b3f"], ["--cf-green-t", "#3fae4a"], ["--cf-amber-t", "#e0973f"], ["--cf-gold-ink", "#c9a15a"]] as const) {
+            for (const tint of [.1, .12, .15, .16]) expect(ratioContraste(current[key], melanger(row, fill, tint)), `${mode}/${key}/${hover}/${tint}`).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+      }
+    });
+    it("adapts accent ink while keeping brand fills and customer typography outside its ownership", () => {
+      for (const accent of ["#000000", "#ffffff", "#ed612e", "#c9a15a", "#0000ff", "#ffff00"]) {
+        const current = backofficeStyle(mode, accent);
+        for (const background of [tokens.canvas, tokens.surface, tokens.secondary]) {
+          expect(ratioContraste(current["--cf-accent-ink"], melanger(background, accent, .2))).toBeGreaterThanOrEqual(4.5);
+        }
+        for (const key of ["--cf-accent", "--cf-on-accent", "--cf-green", "--cf-red", "--cf-amber", "--cf-font-body", "--cf-font-display"]) expect(Object.hasOwn(current, key)).toBe(false);
+      }
+    });
+  });
+}

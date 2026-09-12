@@ -12,12 +12,24 @@ import { usePrefs } from './usePrefs';
 const APP_VERSION = (require('../package.json') as { version: string }).version;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  const { type } = useTheme();
+  const { type, palette } = useTheme();
   const L = useLayout();
-  return <View style={{ marginTop: L.sp(18), gap: L.sp(10) }}>
-    <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>{title}</Text>
-    {children}
+  return <View style={{ marginTop: L.sp(16), borderRadius: R.card, borderWidth: 1, borderColor: palette.line2, backgroundColor: palette.surface, overflow: 'hidden' }}>
+    <Text style={[type.h2, { fontSize: L.fs(18), padding: L.sp(16), borderBottomWidth: 1, borderBottomColor: palette.line2 }]}>{title}</Text>
+    <View style={{ padding: L.sp(16), gap: L.sp(16) }}>{children}</View>
   </View>;
+}
+
+function SettingToggle({ label, hint, value, onChange, disabled }: { label: string; hint: string; value: boolean; onChange: (value: boolean) => void; disabled: boolean }) {
+  const { palette, type } = useTheme();
+  const L = useLayout();
+  return <Press accessibilityRole="switch" selected={value} accessibilityLabel={label} disabled={disabled}
+    onPress={() => onChange(!value)} style={{ minHeight: L.touch(56), flexDirection: 'row', alignItems: 'center', gap: L.sp(16) }}>
+    <View style={{ flex: 1 }}><Text style={type.strong}>{label}</Text><Text style={[type.mut, { marginTop: 4 }]}>{hint}</Text></View>
+    <View style={{ width: 46, height: 28, padding: 3, borderRadius: R.pill, backgroundColor: value ? palette.green : palette.line, alignItems: value ? 'flex-end' : 'flex-start' }}>
+      <View style={{ width: 22, height: 22, borderRadius: R.pill, backgroundColor: '#ffffff' }} />
+    </View>
+  </Press>;
 }
 
 function Schema({ layout, brand }: { layout: PosLayoutId; brand: Brand }) {
@@ -45,7 +57,7 @@ export function SettingsModal({ brand, restaurant, deviceName = 'Poste 1', pendi
   onClose: () => void;
   onLayoutChange?: (layout: PosLayoutId) => void;
 }) {
-  const { prefs, setLayout, setTheme, setSplash, ready } = usePrefs();
+  const { prefs, setLayout, setTheme, setSplash, setCatalogDensity, setReduceMotion, setReduceTransparency, ready } = usePrefs();
   const { palette, type, semanticText } = useTheme();
   const L = useLayout();
   const values = [
@@ -54,9 +66,21 @@ export function SettingsModal({ brand, restaurant, deviceName = 'Poste 1', pendi
     ['File d’envoi', pending ? `${pending} en attente` : 'À jour'],
     ['Version', `Caisse ${APP_VERSION}`],
   ];
-  return <Overlay onClose={onClose} accessibilityLabel="Paramètres du poste" width={520}>
+  return <Overlay onClose={onClose} accessibilityLabel="Paramètres du poste" width={640}>
     <PanelHead title="Paramètres du poste" sub="Appliqués immédiatement · propres à ce poste" onClose={onClose} />
-    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingHorizontal: L.sp(20), paddingTop: L.sp(6), paddingBottom: L.sp(16) }}>
+    <ScrollView style={{ flexShrink: 1, backgroundColor: palette.bg }} contentContainerStyle={{ paddingHorizontal: L.sp(20), paddingTop: L.sp(6), paddingBottom: L.sp(16) }}>
+      <Section title="Apparence">
+        <Text style={type.strong}>Thème</Text>
+        <Segmented value={prefs.theme} options={[{ key: 'light', label: 'Clair', icon: 'sun' }, { key: 'dark', label: 'Sombre', icon: 'moon' }]}
+          onChange={setTheme} accent={brand.accent} onAccent={brand.onAccent} flex />
+        <SettingToggle label="Réduire les mouvements" hint="Transitions discrètes, sans animation décorative." value={prefs.reduceMotion} onChange={setReduceMotion} disabled={!ready} />
+        <SettingToggle label="Réduire la transparence" hint="Surfaces opaques, sans reflets décoratifs." value={prefs.reduceTransparency} onChange={setReduceTransparency} disabled={!ready} />
+      </Section>
+      <Section title="Catalogue">
+        <Text style={type.mut}>De grandes images pour choisir rapidement, ou plus de produits à l’écran.</Text>
+        <Segmented value={prefs.catalogDensity} options={[{ key: 'comfortable', label: 'Confortable', icon: 'grid' }, { key: 'compact', label: 'Compact', icon: 'list' }]}
+          onChange={setCatalogDensity} accent={brand.accent} onAccent={brand.onAccent} flex />
+      </Section>
       <Section title="Disposition de l’écran">
         <View role="radiogroup" accessibilityLabel="Disposition de l’écran" style={{ gap: L.sp(8) }}>
           {(Object.keys(LAYOUTS) as PosLayoutId[]).map((layout) => {
@@ -80,10 +104,6 @@ export function SettingsModal({ brand, restaurant, deviceName = 'Poste 1', pendi
             </Press>;
           })}
         </View>
-      </Section>
-      <Section title="Thème">
-        <Segmented value={prefs.theme} options={[{ key: 'dark', label: 'Sombre' }, { key: 'light', label: 'Clair' }]}
-          onChange={setTheme} accent={brand.accent} onAccent={brand.onAccent} flex />
       </Section>
       <Section title="Démarrage">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: L.sp(12), minHeight: L.touch(52), paddingVertical: L.sp(10), paddingHorizontal: L.sp(14), borderRadius: R.card, backgroundColor: palette.surface2, borderWidth: 1, borderColor: palette.line2 }}>
