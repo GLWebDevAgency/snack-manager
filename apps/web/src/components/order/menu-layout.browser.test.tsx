@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
+import { chromium, webkit, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { BrandShape } from "@sm/contracts";
 
-type FixtureConfiguration = { layout?: "rows" | "grid"; formats?: number; shape?: BrandShape; sheet?: boolean; variantLabels?: string[] };
+type FixtureConfiguration = { layout?: "rows" | "grid"; formats?: number; shape?: BrandShape; sheet?: boolean; variantLabels?: string[]; search?: boolean };
 declare global {
   interface Window {
     menuLayoutFixture: {
@@ -46,9 +46,9 @@ beforeAll(async () => {
           const brand={...marqueDeRepli(null,null),shape:config.shape};
           const products=Array.from({length:4},(_,index)=>product(index,config));
           return <div className="sm-order font-body min-h-dvh bg-bg text-ink" style={styleDuMasque(brand)}
-            data-fixture-layout={config.layout} data-fixture-shape={config.shape} data-fixture-formats={config.formats}>
+            data-fixture-layout={config.layout} data-fixture-shape={config.shape} data-fixture-formats={config.formats} data-fixture-search={!!config.search}>
             <main className="mx-auto w-full max-w-[1080px] px-4">
-              <MenuBoard categories={[{id:'menu',name:'Notre carte',products}]} inCart={{'product-0':2}} prixMono={false}
+              <MenuBoard categories={[{id:'menu',name:'Notre carte',products}]} inCart={{'product-0':2}} prixMono={false} search={config.search}
                 onPick={(product,variantKey)=>fixture.picks.push({productId:product.id,variantKey:variantKey??null})}/>
               <Sheet open={config.sheet} title="Configuration de recette" onClose={()=>setConfig(c=>({...c,sheet:false}))}>
                 <p className="p-4">Contenu de la feuille de recette.</p>
@@ -85,7 +85,7 @@ beforeAll(async () => {
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("No fixture port");
   origin = `http://127.0.0.1:${address.port}`;
-  browser = await chromium.launch({ headless: true });
+  browser = await (process.env.SM_MENU_LAYOUT_WEBKIT === "1" ? webkit : chromium).launch({ headless: true });
 }, 30_000);
 
 beforeEach(async () => {
@@ -110,6 +110,7 @@ async function configure(configuration: FixtureConfiguration, width = 390) {
   if (configuration.layout) await expect.poll(() => page.locator("[data-fixture-layout]").getAttribute("data-fixture-layout")).toBe(configuration.layout);
   if (configuration.formats !== undefined) await expect.poll(() => page.locator("[data-fixture-formats]").getAttribute("data-fixture-formats")).toBe(String(configuration.formats));
   if (configuration.shape) await expect.poll(() => page.locator("[data-fixture-shape]").getAttribute("data-fixture-shape")).toBe(configuration.shape);
+  if (configuration.search !== undefined) await expect.poll(() => page.locator("[data-fixture-search]").getAttribute("data-fixture-search")).toBe(String(configuration.search));
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
 const firstProduct = () => page.getByRole("article", { name: "Menu généreux aux légumes grillés", exact: true });
@@ -124,6 +125,39 @@ function expectContained(inner: Awaited<ReturnType<typeof bounds>>, outer: Await
 }
 
 describe("MenuBoard — géométrie responsive du catalogue réel", () => {
+  it.each([320, 390, 820])("efface la recherche puis permet de retaper sans perdre le focus à %i px", async width => {
+    await configure({ search: true }, width);
+    const input = page.getByRole("searchbox", { name: "Rechercher dans la carte", exact: true });
+    const clear = page.getByRole("button", { name: "Effacer la recherche", exact: true });
+    expect(await input.getAttribute("type")).toBe("search");
+    await input.fill("généreux");
+    await firstProduct().waitFor();
+    expect(await page.getByRole("article").count()).toBe(1);
+    const target = await bounds(clear), field = await bounds(input);
+    expect(target.width).toBeGreaterThanOrEqual(44); expect(target.height).toBeGreaterThanOrEqual(44);
+    expectContained(target, field, "clear button");
+    const paddingRight = await input.evaluate(element => parseFloat(getComputedStyle(element).paddingRight));
+    expect(field.right - paddingRight).toBeLessThanOrEqual(target.left - 4);
+    await clear.click();
+    await expect.poll(() => input.inputValue()).toBe("");
+    expect(await clear.count()).toBe(0);
+    expect(await input.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true);
+    await page.keyboard.type("suivant");
+    await expect.poll(() => page.getByRole("article").count()).toBe(3);
+    expect(await input.inputValue()).toBe("suivant");
+    // Safari's default keyboard setting reaches buttons with Option-Tab.
+    await page.keyboard.press(process.env.SM_MENU_LAYOUT_WEBKIT === "1" ? "Alt+Tab" : "Tab");
+    expect(await clear.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    expect(await input.evaluate(element => element === element.ownerDocument.activeElement)).toBe(true);
+    await page.keyboard.type("généreux");
+    await firstProduct().waitFor();
+    expect(await page.getByRole("article").count()).toBe(1);
+    expect(await page.evaluate(() => window.menuLayoutFixture.picks)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  });
+
   it("annonce un minimum de section pour les formats et réserve le prix unique aux produits sans variante", async () => {
     await configure({ layout: "rows", formats: 4 }, 320);
     const category = page.locator("#cat-menu");

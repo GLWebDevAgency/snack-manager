@@ -26,6 +26,7 @@
 .sm-order-categories a{height:38px;padding-inline:14px;position:relative}.sm-order-categories a::after{content:"";position:absolute;inset:-3px 0}
 .sm-order-search{padding:24px 0 8px}.sm-order-search h2,.sm-order-tab-page>h2{font-size:26px;font-weight:800;letter-spacing:-.035em;margin-bottom:18px}
 .sm-order-search input{height:48px;border-radius:var(--cf-r-sm);font-size:16px}
+.sm-order-search input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}
 .sm-order-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .sm-order-product-list{display:grid;grid-template-columns:minmax(0,1fr)}
 .sm-order-product-button{position:relative;width:100%;text-align:left;display:flex;align-items:center;gap:12px}
