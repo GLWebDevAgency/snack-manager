@@ -148,9 +148,8 @@ export function ProductSheet({
 
 /**
  * Visuel de tête. Avec photo : le plat entier, posé sur son plateau et fondu
- * vers la surface de la feuille — jamais recadré (les visuels de la carte sont
- * détourés, un `cover` leur couperait les deux bouts). Sans photo : bandeau
- * typographique — le nom du produit en très grand, en contour.
+ * vers la surface de la feuille — jamais recadré sans demande du catalogue.
+ * Sans photo : bandeau neutre, sans inventer une illustration du produit.
  */
 function ProductHero({
   name,
@@ -180,12 +179,8 @@ function ProductHero({
   return (
     <div
       aria-hidden
-      className="sm-grain relative h-[112px] overflow-hidden bg-[linear-gradient(180deg,var(--cf-surface-2),var(--cf-bg))]"
+      className="relative h-16 border-b border-ink/6 bg-surface2"
     >
-      <span className="sm-ghost font-display absolute -left-2 top-1/2 -translate-y-1/2 text-[clamp(3.25rem,2.6rem+2vw,4.5rem)] font-black">
-        {name}
-      </span>
-      <span className="absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--cf-accent),transparent)] opacity-60" />
     </div>
   );
 }

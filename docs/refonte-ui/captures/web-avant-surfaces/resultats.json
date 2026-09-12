@@ -1,0 +1,467 @@
+{
+  "phase": "avant-surfaces",
+  "base": "http://127.0.0.1:3092",
+  "note": "Before surface changes; shared icons may already be integrated. Actual Next routes, repository demos and local-only delivery/HQ fixtures.",
+  "results": [
+    {
+      "name": "commande-1440-default",
+      "surface": "commande",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-1440-default-carte.png",
+        "commande-1440-default-configuration.png",
+        "commande-1440-default-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "commande-390-default",
+      "surface": "commande",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-390-default-carte.png",
+        "commande-390-default-configuration.png",
+        "commande-390-default-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-1440-default",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-1440-default-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-390-default",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-390-default-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "livreur-1440-default",
+      "surface": "livreur",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-1440-default-missions.png",
+        "livreur-1440-default-mission.png",
+        "livreur-1440-default-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-1440-light",
+      "surface": "livreur",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-1440-light-missions.png",
+        "livreur-1440-light-mission.png",
+        "livreur-1440-light-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-390-default",
+      "surface": "livreur",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-390-default-missions.png",
+        "livreur-390-default-mission.png",
+        "livreur-390-default-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-390-light",
+      "surface": "livreur",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-390-light-missions.png",
+        "livreur-390-light-mission.png",
+        "livreur-390-light-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "restaurant-1440-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/dashboard?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard with repository demo transport"
+      ],
+      "shots": [
+        "restaurant-1440-default-dashboard.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-390-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/dashboard?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard with repository demo transport"
+      ],
+      "shots": [
+        "restaurant-390-default-dashboard.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "snackmanager-1440-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset"
+      ],
+      "shots": [
+        "snackmanager-1440-default-dashboard-vide.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-390-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset"
+      ],
+      "shots": [
+        "snackmanager-390-default-dashboard-vide.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ]
+      ]
+    }
+  ]
+}

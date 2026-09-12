@@ -1,0 +1,17 @@
+{
+  "svgXML": {
+    "files": 93,
+    "pass": true
+  },
+  "dialogFocusRestore": true,
+  "notePersistedInMemory": true,
+  "screenshots": 57,
+  "chromiumVersion": "144.0.7559.96",
+  "localHTTP": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "bytes": 127912
+  },
+  "headSVG": true,
+  "rejectPOST": true
+}

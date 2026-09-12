@@ -1,0 +1,20 @@
+
+> @sm/kds@1.0.0 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/kds
+> EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} vitest run
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/kds
+
+ ✓ src/device-boundary.test.ts (2 tests) 2ms
+ ✓ src/prefs.test.ts (12 tests) 3ms
+ ✓ src/api-origin.test.ts (16 tests) 16ms
+ ✓ server.test.mjs (13 tests) 175ms
+ ✓ src/format-options.test.ts (1 test) 1ms
+ ✓ src/demo-retour.test.ts (11 tests) 3ms
+ ✓ src/delivery-policy.test.ts (10 tests) 7ms
+ ✓ src/useLayout.test.ts (12 tests) 5ms
+
+ Test Files  8 passed (8)
+      Tests  77 passed (77)
+   Start at  18:05:03
+   Duration  901ms (transform 836ms, setup 0ms, collect 2.75s, tests 212ms, environment 1ms, prepare 648ms)

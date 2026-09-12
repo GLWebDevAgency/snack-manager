@@ -21,7 +21,7 @@
 .sm-order-hero[data-photo] .sm-order-rating{background:var(--cf-photo-pill);border-color:var(--cf-photo-line)}
 .sm-order-hero-action{position:absolute;right:14px;bottom:14px;display:flex;align-items:center;gap:5px;min-height:44px;padding:0 12px;border-radius:var(--cf-r-pill);background:var(--cf-accent);color:var(--cf-on-accent);font-size:13px;font-weight:800}
 .sm-order-highlights{padding-top:26px}.sm-order-highlight{border-radius:var(--cf-r-md)}.sm-order-highlight .sm-plate{height:118px}
-.sm-order-category{padding-top:26px}.sm-order-category h2,.sm-order-highlights h2{font-size:17px;letter-spacing:-.02em}
+.sm-order-category{padding-top:32px}.sm-order-category h2,.sm-order-highlights h2{font-size:20px;letter-spacing:-.025em}
 .sm-order-categories{min-height:54px;display:flex;align-items:center;margin-top:18px}.sm-order-categories>nav{width:calc(100% + 32px)}
 .sm-order-categories a{height:38px;padding-inline:14px;position:relative}.sm-order-categories a::after{content:"";position:absolute;inset:-3px 0}
 .sm-order-search{padding:24px 0 8px}.sm-order-search h2,.sm-order-tab-page>h2{font-size:26px;font-weight:800;letter-spacing:-.035em;margin-bottom:18px}
@@ -41,14 +41,14 @@
 .sm-order-product-row[data-photo] .sm-order-product-description{-webkit-line-clamp:2}
 .sm-order-product-row .sm-order-product-copy>.sm-order-product-price{display:block;margin-top:6px}
 .sm-order-product-thumbnail{width:72px;height:60px;border-radius:var(--cf-r-sm)}
-.sm-order-product-card{container-type:inline-size;display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid var(--cf-line-2);border-radius:var(--cf-r-md);background:linear-gradient(180deg,var(--cf-surface-3),transparent),var(--cf-surface);box-shadow:var(--cf-shadow-card)}
+.sm-order-product-card{container-type:inline-size;display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid var(--cf-line-2);border-radius:var(--cf-r-md);background:var(--cf-surface);box-shadow:var(--cf-shadow-card)}
 .sm-order-product-card .sm-order-product-button{flex:1;height:auto;flex-direction:column;align-items:stretch;gap:0}
 .sm-order-product-visual{position:relative;display:block;width:100%;flex-shrink:0}
 .sm-order-product-photo{aspect-ratio:4/3;max-height:220px;width:100%;border:0;border-bottom:1px solid var(--cf-line-2)}
 .sm-order-product-badge{position:absolute;top:8px;left:8px;right:8px;display:flex;pointer-events:none}
-.sm-order-product-card .sm-order-product-copy{padding:10px 12px 0}
-.sm-order-product-card .sm-order-product-name{font-size:14px;font-weight:800;line-height:1.2}
-.sm-order-product-card .sm-order-product-description{-webkit-line-clamp:2;font-size:12px;margin-top:3px}
+.sm-order-product-card .sm-order-product-copy{padding:12px 12px 0}
+.sm-order-product-card .sm-order-product-name{font-size:15px;font-weight:700;line-height:1.3}
+.sm-order-product-card .sm-order-product-description{-webkit-line-clamp:2;font-size:13px;margin-top:4px}
 .sm-order-product-card .sm-order-product-footer{justify-content:space-between;gap:8px;padding:10px 12px 12px;margin-top:auto}
 .sm-order-product-card .sm-order-product-price{min-width:0;flex:1}
 .sm-order-product-card .sm-order-product-price>span{max-width:100%;padding:0;border:0;background:none;flex-wrap:wrap;column-gap:4px}
@@ -73,7 +73,7 @@
 .sm-order-product-row .sm-order-variants[data-count="3"] { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .sm-order-variants[data-count="1"] { grid-template-columns:minmax(0,1fr); }
 .sm-order-product-card .sm-order-variants { padding:0 12px 12px; }
-.sm-order-variants button { min-width:0; min-height:44px; border:1px solid var(--cf-line); border-radius:var(--cf-r-sm); padding:6px; font-size:12px; font-weight:700; text-align:center; overflow-wrap:anywhere; }
+.sm-order-variants button { min-width:0; min-height:44px; border:1px solid var(--cf-line); border-radius:var(--cf-r-sm); background:var(--cf-surface-2); padding:6px; font-size:12px; font-weight:700; text-align:center; overflow-wrap:anywhere; }
 .sm-order-variants button span { display:block; font-weight:500; font-size:11px; color:var(--cf-mut); }
 @container(max-width:184px){
   .sm-order-product-card .sm-order-variants{grid-template-columns:minmax(0,1fr)}
@@ -100,3 +100,17 @@
 .sm-order-tracking-hero p { max-width:360px; margin:auto; font-size:14px; line-height:1.5; }
 .sm-order-tracking-seal { display:grid; place-items:center; width:72px; height:72px; border-radius:var(--cf-r-pill); margin:auto; border:2px solid currentColor; }
 .sm-order-tracking-body { margin-top:-44px; }.sm-order-tracking-number { border-radius:var(--cf-r-md); }
+
+/* Refonte RestoPilot : les informations restent sur des surfaces opaques.
+   Le masque du restaurant conserve toutes ses couleurs, polices et formes.
+   Ne pas modifier la géométrie sticky ni les seuils des cartes étroites. */
+.sm-order :is(.sm-order-product-button,.sm-order-variants button,.sm-order-icon):focus-visible{outline:2px solid var(--cf-focus);outline-offset:-3px}
+.sm-order-product-row .sm-order-product-button{border-radius:var(--cf-r-sm)}
+.sm-order-product-card .sm-plate{background:var(--cf-surface-2)}
+.sm-order-product-card .sm-plate::before{background:none}
+.sm-order-cart>div>button{box-shadow:var(--cf-shadow-card)}
+.sm-order-cart>div>button .uppercase{text-transform:none;letter-spacing:normal}
+@media(hover:hover){
+  .sm-order-product-row .sm-order-product-button:not(:disabled):hover{background:var(--cf-surface)}
+  .sm-order-variants button:not(:disabled):hover{border-color:var(--cf-accent)}
+}

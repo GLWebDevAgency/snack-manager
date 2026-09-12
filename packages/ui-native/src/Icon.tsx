@@ -1,6 +1,7 @@
 /** Tracés du kits POS et KDS, partagés entre react-native-web et le futur client natif. */
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, SvgXml } from 'react-native-svg';
 import { Platform, type StyleProp, type ViewStyle } from 'react-native';
+import { renderIcon, shapes, type IconName } from '@sm/design-icons';
 
 const PATHS: Record<string, string> = {
   'kds-list': 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
@@ -59,13 +60,19 @@ const PATHS: Record<string, string> = {
   "list": "M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21zM9 8h6M9 12h6"
 };
 
-export function Icon({ name, size = 18, color, strokeWidth = 1.9, style }: {
+export function Icon({ name, size = 18, color, strokeWidth = 1.75, style }: {
   name: string;
   size?: number;
   color?: string;
   strokeWidth?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  if (Object.hasOwn(shapes, name)) {
+    return <SvgXml xml={renderIcon(name as IconName)} width={size} height={size}
+      color={color ?? '#ffffff'} strokeWidth={strokeWidth}
+      {...(Platform.OS === 'web' ? { 'aria-hidden': true as const } : { accessible: false })} style={style} />;
+  }
+  // Les clés historiques sans équivalent conservent leur dessin (ex. bellOff).
   return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? '#ffffff'}
     strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
     {...(Platform.OS === 'web' ? { 'aria-hidden': true as const } : { accessible: false })} style={style}>

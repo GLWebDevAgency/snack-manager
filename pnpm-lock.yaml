@@ -138,6 +138,12 @@ importers:
       '@sm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@sm/design-icons':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/icons
+      '@sm/design-tokens':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/tokens
       '@sm/ui-native':
         specifier: workspace:*
         version: link:../../packages/ui-native
@@ -187,6 +193,12 @@ importers:
       '@sm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@sm/design-icons':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/icons
+      '@sm/design-tokens':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/tokens
       '@sm/ui-native':
         specifier: workspace:*
         version: link:../../packages/ui-native
@@ -242,6 +254,15 @@ importers:
       '@sm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@sm/design-assets':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/assets
+      '@sm/design-icons':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/icons
+      '@sm/design-tokens':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/tokens
       '@sm/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -303,6 +324,12 @@ importers:
       vitest:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  design/refonte-swiftui/packages/assets: {}
+
+  design/refonte-swiftui/packages/icons: {}
+
+  design/refonte-swiftui/packages/tokens: {}
 
   packages/client-core:
     dependencies:
@@ -463,6 +490,9 @@ importers:
 
   packages/ui-native:
     dependencies:
+      '@sm/design-icons':
+        specifier: workspace:*
+        version: link:../../design/refonte-swiftui/packages/icons
       expo:
         specifier: ~57.0.14
         version: 57.0.14(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)

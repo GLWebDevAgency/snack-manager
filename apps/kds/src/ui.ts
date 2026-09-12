@@ -1,11 +1,23 @@
 /** Tokens du KDS : présentation thémable, couleurs de statut fixes. */
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
-import { PALETTES, palette, radius, space, TOUCH_MIN } from '@sm/client-core';
+import { palette, radius as legacyRadius, TOUCH_MIN } from '@sm/client-core';
+import { radius as designRadius, space } from '@sm/design-tokens';
 import { ratioContraste } from '@sm/contracts';
 import type { KdsTheme } from './prefs';
 import { BRAND_FONT } from '@sm/ui-native/brand';
+import { visualPalette } from './visual-palette';
 
-export { palette, radius, space, TOUCH_MIN };
+export { palette, space, TOUCH_MIN };
+export const radius = {
+  ...legacyRadius,
+  sm: designRadius.button,
+  md: designRadius.field,
+  lg: designRadius.card,
+  xl: designRadius.sheet,
+  card: designRadius.card,
+  sheet: designRadius.sheet,
+  pill: designRadius.pill,
+} as const;
 
 /** Inter est embarquée par le socle UI ; aucune police distante au démarrage. */
 export const FONT = BRAND_FONT;
@@ -20,29 +32,29 @@ const elevate = (css: string, native: { color: string; opacity: number; radius: 
 
 function buildUi(theme: KdsTheme) {
   const light = theme === 'light';
-  const palette = PALETTES[theme];
+  const palette = visualPalette(theme);
   const surface = {
     bg: palette.bg, card: palette.surface, el: palette.surface2,
-    el2: light ? '#e6e4df' : '#242424', column: light ? '#e4e3df' : '#0c0c0c',
+    el2: palette.surface2, column: palette.bg,
   };
   const hair = palette.line;
   const hair2 = palette.line2;
   const ink = {
-    onRed: light ? '#b8362b' : '#ff8b7b',
-    onAmber: light ? '#9a5b12' : '#f2b56d',
-    onGreen: light ? '#267e31' : '#6ecf78',
+    onRed: palette.redText,
+    onAmber: palette.amberText,
+    onGreen: palette.greenText,
     onDark: '#ffffff',
-    dim: light ? '#6b6b6b' : '#9a9a9a',
-    dimmer: light ? '#6e6e6e' : '#858585',
+    dim: palette.mut,
+    dimmer: palette.dimText,
   };
   const shadow = {
     card: light
-      ? elevate('0 2px 8px rgba(0,0,0,.08)', { color: '#000', opacity: 0.08, radius: 8, y: 2, elevation: 2 })
-      : elevate('0 1px 0 rgba(0,0,0,.35), 0 10px 26px rgba(0,0,0,.45)', { color: '#000', opacity: 0.45, radius: 14, y: 8, elevation: 6 }),
+      ? elevate('0 2px 8px rgba(25,32,22,.04)', { color: '#192016', opacity: 0.04, radius: 8, y: 2, elevation: 1 })
+      : elevate('0 2px 8px rgba(0,0,0,.12)', { color: '#000', opacity: 0.12, radius: 8, y: 2, elevation: 1 }),
     panel: light
       ? elevate('0 24px 56px rgba(0,0,0,.22)', { color: '#000', opacity: 0.22, radius: 28, y: 24, elevation: 10 })
       : elevate('0 1px 0 rgba(0,0,0,.4), 0 18px 44px rgba(0,0,0,.5)', { color: '#000', opacity: 0.5, radius: 22, y: 12, elevation: 10 }),
-    alert: elevate('0 0 0 1px rgba(201,75,63,.55), 0 0 34px rgba(201,75,63,.30)', { color: palette.red, opacity: 0.55, radius: 18, y: 0, elevation: 12 }),
+    alert: elevate('0 0 0 1px rgba(201,75,63,.55)', { color: palette.red, opacity: 0.16, radius: 3, y: 0, elevation: 2 }),
   };
   const base: TextStyle = { fontFamily: FONT, color: palette.text };
   const type = StyleSheet.create({

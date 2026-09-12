@@ -1,0 +1,292 @@
+
+> snack-manager-visual-system@0.1.0 verify
+> npm run test && npm run build
+
+
+> snack-manager-visual-system@0.1.0 test
+> node --test tests/*.test.mjs
+
+TAP version 13
+# Subtest: light and dark expose identical semantic roles
+ok 1 - light and dark expose identical semantic roles
+  ---
+  duration_ms: 6.382198
+  type: 'test'
+  ...
+# Subtest: light: ink/surface contrast >= 4.5
+ok 2 - light: ink/surface contrast >= 4.5
+  ---
+  duration_ms: 0.961096
+  type: 'test'
+  ...
+# Subtest: light: muted/surface contrast >= 4.5
+ok 3 - light: muted/surface contrast >= 4.5
+  ---
+  duration_ms: 0.320098
+  type: 'test'
+  ...
+# Subtest: light: ink/canvas contrast >= 4.5
+ok 4 - light: ink/canvas contrast >= 4.5
+  ---
+  duration_ms: 0.188111
+  type: 'test'
+  ...
+# Subtest: light: muted/canvas contrast >= 4.5
+ok 5 - light: muted/canvas contrast >= 4.5
+  ---
+  duration_ms: 0.263915
+  type: 'test'
+  ...
+# Subtest: light: success/successSoft contrast >= 4.5
+ok 6 - light: success/successSoft contrast >= 4.5
+  ---
+  duration_ms: 0.239582
+  type: 'test'
+  ...
+# Subtest: light: warning/warningSoft contrast >= 4.5
+ok 7 - light: warning/warningSoft contrast >= 4.5
+  ---
+  duration_ms: 0.282971
+  type: 'test'
+  ...
+# Subtest: light: danger/dangerSoft contrast >= 4.5
+ok 8 - light: danger/dangerSoft contrast >= 4.5
+  ---
+  duration_ms: 0.112004
+  type: 'test'
+  ...
+# Subtest: light: info/infoSoft contrast >= 4.5
+ok 9 - light: info/infoSoft contrast >= 4.5
+  ---
+  duration_ms: 0.692758
+  type: 'test'
+  ...
+# Subtest: dark: ink/surface contrast >= 4.5
+ok 10 - dark: ink/surface contrast >= 4.5
+  ---
+  duration_ms: 0.879851
+  type: 'test'
+  ...
+# Subtest: dark: muted/surface contrast >= 4.5
+ok 11 - dark: muted/surface contrast >= 4.5
+  ---
+  duration_ms: 0.302369
+  type: 'test'
+  ...
+# Subtest: dark: ink/canvas contrast >= 4.5
+ok 12 - dark: ink/canvas contrast >= 4.5
+  ---
+  duration_ms: 0.464783
+  type: 'test'
+  ...
+# Subtest: dark: muted/canvas contrast >= 4.5
+ok 13 - dark: muted/canvas contrast >= 4.5
+  ---
+  duration_ms: 0.071997
+  type: 'test'
+  ...
+# Subtest: dark: success/successSoft contrast >= 4.5
+ok 14 - dark: success/successSoft contrast >= 4.5
+  ---
+  duration_ms: 0.055869
+  type: 'test'
+  ...
+# Subtest: dark: warning/warningSoft contrast >= 4.5
+ok 15 - dark: warning/warningSoft contrast >= 4.5
+  ---
+  duration_ms: 0.052246
+  type: 'test'
+  ...
+# Subtest: dark: danger/dangerSoft contrast >= 4.5
+ok 16 - dark: danger/dangerSoft contrast >= 4.5
+  ---
+  duration_ms: 0.050293
+  type: 'test'
+  ...
+# Subtest: dark: info/infoSoft contrast >= 4.5
+ok 17 - dark: info/infoSoft contrast >= 4.5
+  ---
+  duration_ms: 0.068867
+  type: 'test'
+  ...
+# Subtest: brand on-colors meet normal text contrast
+ok 18 - brand on-colors meet normal text contrast
+  ---
+  duration_ms: 0.663241
+  type: 'test'
+  ...
+# Subtest: unsupported themes and injected colors rejected
+ok 19 - unsupported themes and injected colors rejected
+  ---
+  duration_ms: 0.7544
+  type: 'test'
+  ...
+# Subtest: functional colors preserve existing meanings
+ok 20 - functional colors preserve existing meanings
+  ---
+  duration_ms: 0.198967
+  type: 'test'
+  ...
+# Subtest: legacy palette retains unknown keys
+ok 21 - legacy palette retains unknown keys
+  ---
+  duration_ms: 0.348242
+  type: 'test'
+  ...
+# Subtest: CSS exports deterministic kebab semantic names
+ok 22 - CSS exports deterministic kebab semantic names
+  ---
+  duration_ms: 4.021091
+  type: 'test'
+  ...
+# Subtest: motion reduced to zero with curve retained
+ok 23 - motion reduced to zero with curve retained
+  ---
+  duration_ms: 0.538879
+  type: 'test'
+  ...
+# Subtest: tokens are immutable and tactile minimum 44
+ok 24 - tokens are immutable and tactile minimum 44
+  ---
+  duration_ms: 0.134247
+  type: 'test'
+  ...
+# Subtest: uncertain state never exposes an enabled business action
+ok 25 - uncertain state never exposes an enabled business action
+  ---
+  duration_ms: 0.228983
+  type: 'test'
+  ...
+# Subtest: pending and denied actions disabled; error is not success
+ok 26 - pending and denied actions disabled; error is not success
+  ---
+  duration_ms: 0.195234
+  type: 'test'
+  ...
+# Subtest: all explicit presentation phases handled
+ok 27 - all explicit presentation phases handled
+  ---
+  duration_ms: 0.176524
+  type: 'test'
+  ...
+# Subtest: existing photo always takes precedence over illustration
+ok 28 - existing photo always takes precedence over illustration
+  ---
+  duration_ms: 0.130634
+  type: 'test'
+  ...
+# Subtest: no inferred recipe for missing media
+ok 29 - no inferred recipe for missing media
+  ---
+  duration_ms: 0.23343
+  type: 'test'
+  ...
+# Subtest: roving index wraps in both directions
+ok 30 - roving index wraps in both directions
+  ---
+  duration_ms: 0.201762
+  type: 'test'
+  ...
+# Subtest: asset IDs unique and all art deterministic
+ok 31 - asset IDs unique and all art deterministic
+  ---
+  duration_ms: 2.679979
+  type: 'test'
+  ...
+# Subtest: all SVG fragment references resolve
+ok 32 - all SVG fragment references resolve
+  ---
+  duration_ms: 2.119036
+  type: 'test'
+  ...
+# Subtest: art IDs isolate repeated instances
+ok 33 - art IDs isolate repeated instances
+  ---
+  duration_ms: 0.356047
+  type: 'test'
+  ...
+# Subtest: assets and icons contain no active or remote content
+ok 34 - assets and icons contain no active or remote content
+  ---
+  duration_ms: 3.257168
+  type: 'test'
+  ...
+# Subtest: art and icon allowlists reject injection
+ok 35 - art and icon allowlists reject injection
+  ---
+  duration_ms: 0.465185
+  type: 'test'
+  ...
+# Subtest: icons share viewport stroke and nonsemantic SVG role
+ok 36 - icons share viewport stroke and nonsemantic SVG role
+  ---
+  duration_ms: 1.028402
+  type: 'test'
+  ...
+# Subtest: screen manifest and JS registry identical
+ok 37 - screen manifest and JS registry identical
+  ---
+  duration_ms: 83.946645
+  type: 'test'
+  ...
+# Subtest: all seven application families represented
+ok 38 - all seven application families represented
+  ---
+  duration_ms: 0.47979
+  type: 'test'
+  ...
+# Subtest: all screens have unique IDs and a source path
+ok 39 - all screens have unique IDs and a source path
+  ---
+  duration_ms: 0.716796
+  type: 'test'
+  ...
+# Subtest: studio isolated from app APIs and real storage
+ok 40 - studio isolated from app APIs and real storage
+  ---
+  duration_ms: 3.574452
+  type: 'test'
+  ...
+# Subtest: KDS terminal label cannot trigger handoff action in the studio
+ok 41 - KDS terminal label cannot trigger handoff action in the studio
+  ---
+  duration_ms: 3.593407
+  type: 'test'
+  ...
+# Subtest: web CSS scopes typography and honors reduced motion
+ok 42 - web CSS scopes typography and honors reduced motion
+  ---
+  duration_ms: 1.195748
+  type: 'test'
+  ...
+# Subtest: six package manifests have no production dependency upgrade
+ok 43 - six package manifests have no production dependency upgrade
+  ---
+  duration_ms: 4.64452
+  type: 'test'
+  ...
+# Subtest: mobile content preserves intrinsic card heights
+ok 44 - mobile content preserves intrinsic card heights
+  ---
+  duration_ms: 1.213375
+  type: 'test'
+  ...
+1..44
+# tests 44
+# suites 0
+# pass 44
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 364.489077
+
+> snack-manager-visual-system@0.1.0 build
+> node tools/build.mjs
+
+{
+  "screens": 57,
+  "foodAssets": 24,
+  "icons": 69,
+  "out": "/mnt/data/snack-manager-design/design/refonte-swiftui/dist"
+}

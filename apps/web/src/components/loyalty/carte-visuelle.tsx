@@ -5,7 +5,8 @@ import type { ReactNode, Ref } from "react";
 import { Card, Icon, TuileDeLogo, Verrou } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { chiffre, unitePour, type Recompense } from "./paliers";
-import { MatiereCarte, SceauRecompense } from "./MatiereCarte";
+import { SceauRecompense } from "./MatiereCarte";
+import styles from "./carte-visuelle.module.css";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -79,10 +80,10 @@ export function EnTeteFidelite({
 }) {
   /* Le nom du programme — sous le nom écrit comme sous le verrou. */
   const sousTitre = (
-    <p className="font-display truncate text-[11px] text-mut">{programme}</p>
+    <p className="font-display truncate text-xs text-mut">{programme}</p>
   );
   return (
-    <header className="sticky top-0 z-30 border-b border-ink/8 bg-bg/85 px-4 py-3 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-ink/8 bg-bg px-4 py-3">
       <div className="mx-auto flex max-w-[1080px] items-center gap-3">
         {/*
           La tuile et le verrou viennent de `components/ui/identite`, comme sur
@@ -163,24 +164,7 @@ export function SoldeCarte({
       se joue au montage — donc une fois, à l'arrivée — et pas à chaque
       actualisation, puisque la section reste montée entre-temps.
     */
-    <section className="relative animate-carte overflow-hidden rounded-wide border border-accent/25 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none sm:p-7">
-      {/*
-        LA MATIÈRE REMPLACE LE HALO FLOU, ET C'EST UN GAIN SUR LES SIX
-        DIRECTIONS.
-
-        Le halo était un disque de lavis d'accent passé au flou. Il détachait
-        bien la carte en mode sombre — et sur les quatre directions CLAIRES il
-        lisait comme une auréole sale, d'autant que le dégradé de carte
-        assombrit ce même coin : le haut était simultanément noirci par l'un et
-        éclairci par l'autre.
-
-        `MatiereCarte` fait le même travail avec les moyens d'un objet :
-        un halo directionnel, un lustre, et un guilloché très discret dont les
-        arcs entrent par le coin d'où vient la lumière. Une seule couche, posée
-        ici — les deux surfaces qui montent `SoldeCarte` en héritent ensemble.
-      */}
-      <MatiereCarte />
-
+    <section className={cx(styles.balance, "relative animate-carte overflow-hidden rounded-wide border border-ink/8 p-5 motion-reduce:animate-none sm:p-7")}>
       {/*
         L'ÉTIQUETTE DU CHIFFRE PORTE LE PRÉNOM — et c'est ce qui remet le solde
         en tête de lecture.
@@ -191,7 +175,7 @@ export function SoldeCarte({
         première position sans perdre le « bonjour » — et l'état de la carte
         redescend au pied, avec la fraîcheur, là où un état se lit.
       */}
-      <p className="relative text-[11px] font-bold uppercase tracking-[0.09em] text-mut">
+      <p className="relative text-[13px] font-semibold text-mut">
         Solde de {alias}
       </p>
 
@@ -207,7 +191,7 @@ export function SoldeCarte({
         <h1
           ref={titreRef}
           tabIndex={-1}
-          className="font-display relative rounded-xs text-[clamp(2.75rem,2.3rem+1.8vw,3.5rem)] font-black leading-none tracking-[-0.055em] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          className="font-display relative rounded-xs text-[clamp(3.5rem,3rem+2vw,4.5rem)] font-bold leading-none tracking-[-0.045em] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
         >
           {/*
             LE LECTEUR D'ÉCRAN ENTEND LA VRAIE VALEUR, PAS LE COMPTEUR.
@@ -331,7 +315,8 @@ export function TuileRecompense({
   return (
     <Card
       className={cx(
-        "p-4 shadow-card",
+        styles.reward,
+        "p-4",
         acquise && "border-accent/30",
         fete && "animate-fete motion-reduce:animate-none",
       )}
@@ -357,10 +342,10 @@ export function TuileRecompense({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
             <p className="text-sm font-extrabold text-ink">{nom}</p>
             {acquise && (
-              <span className="shrink-0 rounded-pill border-[1.5px] border-accent/30 bg-accentwash px-[9px] py-[3px] text-[10px] font-bold uppercase tracking-[0.06em] text-accentink">
+              <span className="shrink-0 rounded-pill border-[1.5px] border-accent/30 bg-accentwash px-[9px] py-[3px] text-[11px] font-semibold text-accentink">
                 Acquise
               </span>
             )}
@@ -391,10 +376,10 @@ export function TitreSection({
 }) {
   return (
     <div className="mb-3">
-      <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">
+      <p className="text-[13px] font-semibold text-accentink">
         {sur}
       </p>
-      <h2 className="font-display mt-2 text-xl font-extrabold tracking-[-0.035em] text-ink">
+      <h2 className="font-display mt-2 text-xl font-bold tracking-[-0.025em] text-ink">
         {children}
       </h2>
       {note && <p className="mt-3 text-xs leading-5 text-mut">{note}</p>}
@@ -430,7 +415,7 @@ export function SqueletteCarte() {
       aria-hidden
       data-squelette="carte"
     >
-      <section className="rounded-wide border border-ink/8 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
+      <section className={cx(styles.balance, "rounded-wide border border-ink/8 p-5 sm:p-7")}>
         <Os className="h-3 w-28" />
         <Os className="mt-2 h-12 w-40" />
         <Os className="mt-2 h-4 w-24" />
@@ -471,7 +456,7 @@ export function ActionCommander({
   return (
     <Link
       href={href}
-      className="cf-press flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-6 text-[15px] font-extrabold text-onaccent shadow-[0_12px_30px_-12px_var(--cf-accent)]"
+      className="cf-press flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-6 py-3 text-center text-[15px] font-semibold text-onaccent"
     >
       Commander chez {nomRestaurant}
       <Icon name="arrow" size={17} stroke={2.6} />

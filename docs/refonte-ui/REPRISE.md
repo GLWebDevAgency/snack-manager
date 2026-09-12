@@ -1,0 +1,90 @@
+# Reprise de la refonte UI Snack Manager
+
+## Poste et autorisation — 12 septembre 2026
+
+- Worktree : `/Users/limameghassene/development/SnackManager-refonte-ui`.
+- Branche locale : **`refactor/apple-ui-integration`**, base `origin/develop` **`aefdf974`**.
+- Handoff `_handoff/snackmanager-ui/REPRENDRE-DANS-CODEX.md` lu intégralement. Les documents définissent une direction ; la demande utilisateur et le produit actuel définissent le périmètre autorisé.
+- Le checkout principal reste sur `feat/fidelite-design` (`588a0476`), avec l'audit modifié, `bonapps-kit`, `classfood-kit`, images et documents non suivis préservés. `develop` local est ancien et occupé dans un autre worktree ; `git fetch origin develop` a permis de partir de la référence actuelle. Refontes POS/KDS déjà intégrées par squash, puis correctifs de modales/rotation/démarrage/reprise conservés. Aucune branche ancienne réappliquée ni fusionnée.
+- Seul AGENTS applicable trouvé : `apps/web/AGENTS.md`, conservé. Guides Next locaux CSS, composants clients et images lus avant éditions. Aucun AGENTS/override dans les ascendants inspectés.
+- Aucun push, fusion, déploiement, compte réel, base ou paiement de production. Aucun framework mis à jour, aucun test supprimé. Les données de recette sont les snapshots anonymisés/démos du dépôt et des réponses locales explicites.
+
+## Import et décisions
+
+Destination absente : **copie** du kit vers `design/refonte-swiftui`. Le patch livré n'a jamais été appliqué. `_handoff/` exclu du suivi pour éviter le double versionnement ; les références RestoPilot originales restent dans ce dossier local.
+
+La demande additionnelle `SnackManager-Codex-Reprise-HalalAssets.zip` a été intégrée après comparaison séparée : huit sources du kit complétées, sans écraser les adaptations. Source de vérité finale : **41 illustrations et 78 icônes**. Une fermeture SVG surnuméraire de Samoussa a été corrigée, ainsi que la spécificité CSS du bouton primaire du studio. Voir `KIT-AUDIT.md` pour la provenance et les preuves.
+
+Trois workspaces imbriqués explicitement déclarés : `design/refonte-swiftui/packages/{tokens,assets,icons}`. Aucune copie parallèle sous `packages/design-*`. Les fixtures et calculs du studio ne sont jamais utilisés comme logique applicative. Les adapters et composants existants consomment les sources nécessaires.
+
+`pnpm-lock.yaml` ne contient que **30 lignes ajoutées** pour les importeurs/liens workspace, sans modification des versions ni des snapshots de dépendances externes. Installation finale `--frozen-lockfile --ignore-scripts` réussie. Metro ayant déjà `disableHierarchicalLookup`, le package d'icônes est déclaré explicitement dans POS/KDS, en plus de ui-native, pour la résolution du composant partagé.
+
+Node **24.20.0**, pnpm **10.14.0**. Le PATH initial était sur Node24.5 ; avant les commandes :
+
+```sh
+export PATH=/Users/limameghassene/.nvm/versions/node/v24.20.0/bin:$PATH
+```
+
+## Lots réellement intégrés
+
+| Lot | Présentation intégrée | Propriété métier conservée |
+| --- | --- | --- |
+| POS | Tokens clair/sombre, primitives 12/20/28, focus clavier, recherche large, cartes à grandes photos existantes, descriptifs/prix, catégories et ticket | Dispositions A/B/C, préférences, catalogues/médias/cadrages, configurateur, fidélité, calculs, handlers, trois règlements, contrôleurs, files et reprises inchangés. `PARITE-POS.md` |
+| KDS | Palette, surfaces/cartes opaques, titres/badges lisibles, CTA distinct, paramètres, focus, urgence statique | Statuts/couleurs fixes, timers, retraits/options, cumul À lancer, actions new→preparing→ready, remise passive, cache/file intactes. `LOT-KDS.md`, `PARITE-KDS.md` |
+| Commande | Carte/menu/variants plus lisibles, surfaces opaques, section/titres, feuille produit, focus | Masque tenant couleur/police/forme, géométrie sticky/mobile étroite, photos/cadrages et tous contrôleurs panier/paiement/reprise inchangés. `LOT-COMMANDE-FIDELITE.md` |
+| Fidélité | Solde, récompenses et états sans carte/offline plus sobres, hiérarchie texte, en-tête opaque | Vraie carte et démonstration partagent les pièces visuelles ; solde, QR/scanner, consentements, cookie/session, verdicts et reconnaissance restent existants. `LOT-COMMANDE-FIDELITE.md` |
+| Livreur | Palette kit clair/sombre, cartes opaques, filtres, titre, compte, focus, encres contrastées | Accent et rayons tenant, mission/départ/remise, session, journal/reprises, navigation externe et consentements inchangés. `LOT-LIVREUR.md` |
+| BO restaurant | Coque et primitives sur tokens sombres, cartes/champs/contrôles/tiroirs, navigation active sobre, icônes | Navigation/rôle/capacité/suspension, pause en ligne, compteurs et reconnexion, formulaires/validations/exports/brouillons conservés. `LOT-BACKOFFICES.md` |
+| BO Snack Manager | Même adaptateur de surfaces limité à la coque interne, hiérarchie/navigation, icônes ; retour du focus HqDrawer corrigé avec useDialogLayer existant | Rôle sm_admin, accent maison, routes Prospection/Restaurants/File du jour, données/agrégats CRM, handlers et protection des brouillons intacts. `LOT-BACKOFFICES.md` |
+| Médiathèques | Bibliothèque recherchable de 41 illustrations, 7 familles, PNG local depuis SVG versionné, icônes dédiées | Choix explicite seulement ; appelle deposer/envoiFichier existants, formats/quota/dédup/max3 et attachement inchangés. Pas de remplacement automatique des photos ni de qualification alimentaire ajoutée. `KIT-AUDIT.md` |
+
+## Fichiers modifiés
+
+Le manifeste exhaustif de fichiers est `FICHIERS.txt` (généré après le dernier contrôle Git). Groupes principaux :
+
+- `.gitignore`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, manifests POS/KDS/web/ui-native.
+- Kit sous `design/refonte-swiftui` ; composants partagés `packages/ui-native/src/Icon.tsx` et `apps/web/src/components/ui/{icons,Btn}`.
+- POS : `visual-palette.ts` + tests, `theme.ts`, `ui.tsx`, `Catalog.tsx`, `CategoryTabs.tsx`, `TicketPanel.tsx`.
+- KDS : `visual-palette.ts` + tests, `ui.ts`, `Board.tsx`, composants `AllDayPanel`, `OrderCard`, `SettingsSheet`, `StatusColumn`, `Toolbar`, `primitives`.
+- Web : `components/backoffice/*`, coques admin/sm et `sm/parts.tsx` (focus du tiroir), `app/livreur/{delivery-access,livreur.css,delivery-brand-shape.browser.test}`, `components/order/{order-v2.css,primitives,ProductSheet}`, `components/loyalty/{LoyaltyCardApp,carte-visuelle,carte-visuelle.module.css}`, `components/mediatheque/*`, `admin/menu/PhotosDuPlat.tsx`.
+- Recettes isolées `e2e/local/refonte-*`, docs/inventaires, logs et captures sous `docs/refonte-ui`.
+
+## Preuves exécutées
+
+| Contrôle | Résultat exécuté |
+| --- | --- |
+| Kit complété | Verify **44/44** ; build **57 vues / 41 illustrations / 78 icônes** ; analyse XML **119/119** |
+| POS final | Typecheck + build web réussis ; **22 fichiers / 290 tests Vitest + 5 Node** |
+| POS navigateur final | **7/7 parcours**, 29 captures : A/B/C, clair/sombre, desktop/tablette/mobile, config/ticket, note, paramètres, rotation web et focus clavier |
+| Reprises POS existantes | **15/15** : règlements simulés, réponse perdue, même operationId après reload, audit/reconciliation, concurrence, offline, droits et journal refusé ; aucun paiement réel |
+| KDS après | Typecheck + build web réussis ; **9 fichiers / 81 tests** ; **10/10** parcours navigateur, clair/sombre et 390/768/1024/1440, cache ancien/503, filtres, réglages, avancement/passivité |
+| Bundles natifs | Exports Hermes **iOS et Android POS + KDS réussis**, sorties `/tmp/snackmanager-refonte-{pos,kds}-native` ; pas de binaire signé ni d'exécution sur appareil |
+| Médiathèque | **39 tests ciblés** ; navigateur réel : 41 PNG1600×1100, doublon SHA identique, max3 photos, quota refusé, fermeture pendant préparation et canAct=false sans dépôt tardif |
+| Commande/fidélité | **14 fichiers / 176 tests ciblés** réussis, dont sticky/cartes étroites/masques et flux fidélité |
+| Livreur | **25 tests navigateur ciblés** réussis : formes tenant/contrastes, préférences/historique, invitation |
+| BO/icônes | **37 tests ciblés** puis **6 tests adaptateur** réussis après ajout des contrastes sémantiques composés ; aplats fonctionnels conservés |
+| Web typecheck final | Réussi après annotation CSSProperties explicite de l'adaptateur BO |
+| ESLint web modifié | **19 fichiers TypeScript/TSX, 0 erreur et 0 avertissement** |
+| Web build | **Next/Turbopack réussi**, TypeScript inclus, 62 pages statiques générées, API configurée localhost |
+| Web visuel final | **16/16 sur Next dev puis 16/16 sur le build compilé `next start`**, 42 captures par passe, desktop/mobile, masques client clair/sombre, nav et formulaires BO ; aucune exception JS, aucun débordement horizontal |
+| Web global | **185 fichiers / 2 861 tests réussis**, commande `pnpm --filter @sm/web test --no-file-parallelism`, 286,55 s ; aucun test retiré, ignoré ou timeout augmenté |
+
+Les prérequis `@sm/contracts`, `@sm/db` et `@sm/domain` ont été compilés TypeScript localement pour leurs déclarations ; aucun accès base. La première suite web globale a subi 28 délais d'initialisation de navigateurs en parallèle (154 fichiers/2843 tests passent), sans suppression ni allongement des tests. Elle est relancée avec `--no-file-parallelism`. Cette première exécution était après le début des ajouts partagés, ce n'est pas un baseline pristine.
+
+Captures réellement inspectées : références RestoPilot POS/KDS ; POS avant/après/final (dont catalogue clair et configuration mobile sombre) ; KDS après tableau desktop clair/mobile sombre/avancement prêt ; commande, fidélité, livreur et deux BO avant surfaces. Root a aussi regardé les captures finales de médiathèque desktop/mobile/Samoussa, les deux dashboards BO, la commande mobile claire, la fidélité mobile sombre et les missions mobile claires. Les inspections finales web/médiathèque sont consignées dans `QA-WEB.md` et `KIT-AUDIT.md`. Les résultats structurés sont `captures/*/resultats.json` ; logs de commandes `preuves/`.
+
+## Processus locaux
+
+Studio `http://127.0.0.1:4173`, POS `http://127.0.0.1:8092`, KDS `http://127.0.0.1:8093`, Next compilé de recette `http://127.0.0.1:3092` (dev arrêté, `next start` après build), fixture médiathèque `http://127.0.0.1:4178`. Les trois applications peuvent nécessiter leurs fixtures de session pour afficher un écran opérationnel ; ne pas y saisir de compte de production. Le serveur Next dev a été arrêté avant le build dans le même `.next`.
+
+## Limites et prochaine tranche précise
+
+Les preuves du studio ne valent pas des preuves applicatives. La recette navigateur utilise le vrai rendu applicatif avec données locales ; elle ne prouve pas l'intégration serveur ni la production. Aucun essai matériel POS, imprimante, tiroir-caisse, TPE, appareil iOS/Android, caméra/GPS ni lecteur d'écran. Pas de QR de fidélité client réel, de consentement réellement enregistré, de livraison ou de facture réelle. Les contrôleurs existants restent couverts par leurs tests ; tous les scénarios de chaque écran secondaire ne sont pas revendiqués comme exécutés.
+
+Le lot local est intégré et validé dans les limites ci-dessus. Revue indépendante du diff, vérification `git diff --check`, checkout initial préservé et lockfile sans changement de version confirmés. La tranche de recette suivante consiste à parcourir, sur fixtures locales enrichies ou environnement non-production autorisé, les listes CRM chargées/détails/formulaires longs et les états de reprise web, puis à inspecter le POS/KDS sur appareils. Aucun push, merge ni déploiement sans accord utilisateur.
+
+## État final de livraison locale
+
+Les sept familles applicatives ont reçu l'intégration de présentation ; la bibliothèque complète est proposée dans les médiathèques existantes. Les deux défauts repérés pendant la revue (contraste du badge Suspendu et retour du focus HQ) sont corrigés et vérifiés. Revue indépendante de la couche HQ : aucun défaut concret trouvé ; guardes, historique, empilement et déclencheur conservés.
+
+Aucun blocage de compilation, test ou recette locale dans le périmètre exécuté. Les validations backend réelles et appareils restent les limites documentées, et ne sont pas assimilées à des réussites. Aucune action distante effectuée. Les sources, recettes, captures et journaux sont conservés sur la branche dédiée ; le commit de livraison se retrouve par `git log -1`.

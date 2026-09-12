@@ -55,3 +55,9 @@ design_handoff_snack_manager/photo-base/
 # suivi des commandes ne se relisent par aucune route. Ces fichiers sont donc
 # précieux — et c'est exactement pour ça qu'ils ne doivent jamais être versionnés.
 .simulation/
+
+# Entrée de livraison locale ; le kit retenu vit dans design/refonte-swiftui.
+_handoff/
+
+# Preuves de recette locales de la refonte, sans données de production.
+!docs/refonte-ui/preuves/*.log

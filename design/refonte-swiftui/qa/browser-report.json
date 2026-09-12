@@ -1,0 +1,4264 @@
+{
+  "engine": "System Chromium via Playwright",
+  "method": "set_content of built standalone HTML; file navigation blocked by administrator",
+  "views": [
+    {
+      "id": "pos-sale",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 1440,
+      "height": 1000,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 1440,
+      "height": 1000,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 1024,
+      "height": 768,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 1024,
+      "height": 768,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 768,
+      "height": 1024,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "paymentVisible": true
+    },
+    {
+      "id": "pos-config",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 768,
+      "height": 1024,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-config",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 390,
+      "height": 844,
+      "theme": "light",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-sale",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-config",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-payment",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-service",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-loyalty",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pairing",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "pos-pin",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-board",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "kds-pin",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "online-menu",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-product",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-checkout",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-tracking",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-orders",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "online-account",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "loyalty-card",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true,
+      "balanceNotClipped": true
+    },
+    {
+      "id": "loyalty-scan",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-access",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "courier-tour",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-map",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-history",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "courier-account",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false,
+      "navVisible": true
+    },
+    {
+      "id": "admin-dashboard",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-orders",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-livraison",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-menu",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-ingredients",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-fidelite",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-promos",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-reviews",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-team",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-planning",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-stats",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-site",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-screens",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-encaissement",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-settings",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-hours",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-devices",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-abonnement",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-programme",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-recompenses",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-loyalty-clients",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "admin-login",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-dashboard",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-pipeline",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-clients",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-signals",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-facturation",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-production",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-erreurs",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "sm-reseaux",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-components",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-assets",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    },
+    {
+      "id": "system-tokens",
+      "width": 390,
+      "height": 844,
+      "theme": "dark",
+      "title": true,
+      "meaningful": true,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "interactions": [
+    {
+      "name": "product search",
+      "pass": true
+    },
+    {
+      "name": "product sheet",
+      "pass": true
+    },
+    {
+      "name": "add fixture product",
+      "pass": true
+    },
+    {
+      "name": "uncertain disables payment",
+      "pass": true
+    },
+    {
+      "name": "KDS fixture advances",
+      "pass": true
+    },
+    {
+      "name": "KDS ready has no serve action",
+      "pass": true
+    },
+    {
+      "name": "mobile ticket opens",
+      "pass": true
+    },
+    {
+      "name": "loyalty scanner navigation",
+      "pass": true
+    },
+    {
+      "name": "handoff requires explicit dialog",
+      "pass": true
+    },
+    {
+      "name": "reduced motion switch",
+      "pass": true
+    }
+  ],
+  "consoleErrors": []
+}

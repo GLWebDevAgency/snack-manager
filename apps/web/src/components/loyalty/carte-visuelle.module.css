@@ -1,0 +1,12 @@
+/* Solde et récompenses : des surfaces opaques, avec la palette, les rayons
+   et les polices résolus pour le restaurant. Ces classes sont locales aux
+   pièces partagées entre la carte réelle et sa démonstration. */
+.balance {
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-card);
+}
+
+.reward {
+  background: var(--cf-surface);
+  box-shadow: none;
+}

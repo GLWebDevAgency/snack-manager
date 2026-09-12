@@ -1,0 +1,15 @@
+{
+  "typescript": "5.8.3",
+  "files": [
+    "packages/assets/index.d.mts",
+    "packages/icons/index.d.mts",
+    "packages/presentation/index.d.mts",
+    "packages/tokens/index.d.mts",
+    "packages/ui-native/index.tsx",
+    "packages/ui-web/index.tsx",
+    "packages/ui-web/patterns.tsx",
+    "packages/ui-web/primitives.tsx"
+  ],
+  "syntaxErrors": [],
+  "semanticTypecheck": false
+}

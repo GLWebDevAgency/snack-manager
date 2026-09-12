@@ -1,0 +1,10 @@
+Scope: all 18 workspace projects
+ WARN  `node_modules` is present. Lockfile only installation will make it out-of-date
+Progress: resolved 1, reused 0, downloaded 0, added 0
+apps/web                                 |  WARN  deprecated eslint@9.39.5
+Progress: resolved 123, reused 0, downloaded 0, added 0
+Progress: resolved 1055, reused 0, downloaded 0, added 0
+ WARN  5 deprecated subdependencies found: @esbuild-kit/core-utils@3.3.2, @esbuild-kit/esm-loader@2.6.5, @xmldom/xmldom@0.8.14, @xmldom/xmldom@0.9.11, uuid@7.0.3
+
+Done in 3.1s using pnpm v10.14.0
+Progress: resolved 1323, reused 0, downloaded 0, added 0

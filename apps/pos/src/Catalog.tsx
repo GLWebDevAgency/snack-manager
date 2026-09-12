@@ -16,7 +16,7 @@ import { basePrice, euros, type Category, type Product } from '@sm/client-core';
 import { catalogueMedias, estPublic, mediasDuProduit, POINT_CENTRE, type MediaVue } from '@sm/contracts';
 import { photoDuPoste, monogramme } from './photo';
 import { FONT, R, S, useTheme, withAlpha, type Brand } from './theme';
-import { EmptyState, Press, Sheen, useReducedMotion } from './ui';
+import { EmptyState, Press, useReducedMotion } from './ui';
 import { CategoryTabs, categoryIcon, railLabel } from './CategoryTabs';
 import { Icon } from './Icon';
 import { PoweredBy } from './PoweredBy';
@@ -224,22 +224,21 @@ export function ProductArea({
 
   return (
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: L.sp(10) }}>
+      <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: L.sp(12) }}>
+        {L.catalogWideSearch ? <SearchField query={query} onQuery={onQuery} brand={brand} /> : null}
         {tabs ? (
           <View style={{ flexDirection: 'row', gap: L.sp(8), alignItems: 'center' }}>
             <CategoryTabs categories={categories} activeId={activeCat?._id ?? null} onSelect={selectCategory} brand={brand} />
-            {L.catalogWideSearch ? (
-              <View style={{ width: L.sp(210) }}><SearchField query={query} onQuery={onQuery} brand={brand} compactPlaceholder /></View>
-            ) : (
-              <Press onPress={() => setSearchOpen((open) => !open)} accessibilityLabel="Rechercher un produit" selected={searchOpen || !!query} style={{ width: L.touch(), height: L.touch(), alignItems: 'center', justifyContent: 'center', borderRadius: R.pill, backgroundColor: palette.surface2, borderWidth: 1, borderColor: searchOpen || query ? withAlpha(brand.accent, 0.5) : palette.line2 }}>
+            {!L.catalogWideSearch ? (
+              <Press onPress={() => setSearchOpen((open) => !open)} accessibilityLabel="Rechercher un produit" selected={searchOpen || !!query} style={{ width: L.touch(), height: L.touch(), alignItems: 'center', justifyContent: 'center', borderRadius: R.ctrl, backgroundColor: palette.surface, borderWidth: 1, borderColor: searchOpen || query ? withAlpha(brand.accent, 0.5) : palette.line2 }}>
                 <Icon name="search" size={L.fs(17)} color={searchOpen || query ? brand.accent : palette.mut} />
               </Press>
-            )}
+            ) : null}
           </View>
         ) : null}
-        {!tabs || (!L.catalogWideSearch && (searchOpen || !!query)) || filters ? (
+        {(!L.catalogWideSearch && (!tabs || searchOpen || !!query)) || filters ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: L.sp(8), alignItems: 'center', justifyContent: 'flex-end' }}>
-            {!tabs || (!L.catalogWideSearch && (searchOpen || !!query)) ? (
+            {!L.catalogWideSearch && (!tabs || searchOpen || !!query) ? (
               <View style={{ flex: 1, minWidth: L.sp(160) }}><SearchField query={query} onQuery={onQuery} brand={brand} autoFocus={tabs && searchOpen} /></View>
             ) : null}
             {filters}
@@ -266,7 +265,7 @@ export function ProductArea({
       </View>
       <ScrollView style={{ flex: 1, marginTop: S.md }} contentContainerStyle={{ paddingHorizontal: L.gridPad, paddingBottom: S.xl }} keyboardShouldPersistTaps="handled">
         <View style={[sheet.between, { marginBottom: S.md, gap: L.sp(8) }]}>
-          <Text style={[type.eyebrow, { fontSize: L.fs(12), flex: 1 }]}>{title}</Text>
+          <Text accessibilityRole="header" style={[type.strong, { fontSize: L.fs(17), letterSpacing: -0.3, flex: 1 }]}>{title}</Text>
           <Text style={[type.mut, { fontSize: L.fs(12.5) }]}>{shown.length} produit{shown.length > 1 ? 's' : ''}</Text>
         </View>
         <View onLayout={(event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: L.gridGap, rowGap: list ? L.sp(6) : L.gridGap }}>
@@ -288,26 +287,26 @@ function FilterChip({ label, icon, selected, onPress, brand }: {
 }) {
   const L = useLayout();
   const { palette } = useTheme();
-  const color = selected ? brand.onAccent : palette.text;
+  const color = palette.text;
   return (
     <Press onPress={onPress} selected={selected} accessibilityRole="checkbox" accessibilityLabel={label}
-      style={{ minHeight: L.touch(), paddingHorizontal: L.sp(14), borderRadius: R.pill, borderWidth: 1, borderColor: selected ? brand.accent : palette.line2, backgroundColor: selected ? brand.accent : palette.surface2, flexDirection: 'row', alignItems: 'center', gap: L.sp(7) }} activeStyle={{ opacity: 0.82 }}>
+      style={{ minHeight: L.touch(), paddingHorizontal: L.sp(14), borderRadius: R.ctrl, borderWidth: 1, borderColor: selected ? brand.accent : palette.line2, backgroundColor: selected ? brand.tint : palette.surface, flexDirection: 'row', alignItems: 'center', gap: L.sp(7) }} activeStyle={{ opacity: 0.82 }}>
       {icon ? <Icon name={icon} size={L.fs(14)} color={color} /> : null}
       <Text style={{ fontFamily: FONT, fontSize: L.fs(13.5), fontWeight: '600', color }}>{label}</Text>
     </Press>
   );
 }
 
-function SearchField({ query, onQuery, brand, autoFocus, compactPlaceholder }: {
-  query: string; onQuery: (query: string) => void; brand: Brand; autoFocus?: boolean; compactPlaceholder?: boolean;
+function SearchField({ query, onQuery, brand, autoFocus }: {
+  query: string; onQuery: (query: string) => void; brand: Brand; autoFocus?: boolean;
 }) {
   const L = useLayout();
   const { palette } = useTheme();
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ minHeight: L.touch(), borderRadius: R.card, backgroundColor: palette.surface2, borderWidth: 1, borderColor: focused ? brand.accent : palette.line2, flexDirection: 'row', alignItems: 'center', paddingLeft: L.sp(14), gap: L.sp(10) }}>
+    <View style={{ minHeight: L.touch(48), borderRadius: R.ctrl, backgroundColor: palette.surface, borderWidth: focused ? 2 : 1, borderColor: focused ? brand.accent : palette.line2, flexDirection: 'row', alignItems: 'center', paddingLeft: L.sp(14), gap: L.sp(10) }}>
       <Icon name="search" size={L.fs(17)} color={palette.mut} />
-      <TextInput value={query} onChangeText={onQuery} accessibilityLabel="Rechercher un produit" placeholder={compactPlaceholder ? 'Rechercher…' : 'Rechercher un produit…'} placeholderTextColor={palette.mut} autoFocus={autoFocus} autoCorrect={false} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      <TextInput value={query} onChangeText={onQuery} accessibilityLabel="Rechercher un produit" placeholder="Rechercher un produit…" placeholderTextColor={palette.mut} autoFocus={autoFocus} autoCorrect={false} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ flex: 1, minWidth: 0, minHeight: L.touch(), paddingVertical: L.sp(8), paddingRight: query ? 0 : L.sp(14), fontFamily: FONT, fontSize: L.fs(15), fontWeight: '500', color: palette.text }} />
       {query ? <Press onPress={() => onQuery('')} accessibilityLabel="Effacer la recherche" style={{ minHeight: L.touch(), width: L.touch(), alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={L.fs(16)} color={palette.mut} /></Press> : null}
     </View>
@@ -357,7 +356,7 @@ function CatalogEntryMotion({ children, width, index, reducedMotion }: {
  * condamner celle qui la remplace.
  */
 function Vignette({ uri, cote, media, nom }: {
-  uri: string;
+  uri: string | null;
   cote: number;
   media: MediaVue | null;
   nom: string;
@@ -366,7 +365,7 @@ function Vignette({ uri, cote, media, nom }: {
   const [etat, setEtat] = useState({ uri, casse: false });
   if (etat.uri !== uri) setEtat({ uri, casse: false });
   const point = media?.point ?? POINT_CENTRE;
-  const cadre = etat.casse
+  const cadre = !uri || etat.casse
     ? null
     : cadrageVignette(cote, media?.largeur, media?.hauteur, point.x, point.y);
 
@@ -375,17 +374,15 @@ function Vignette({ uri, cote, media, nom }: {
       style={{
         width: cote,
         height: cote,
-        borderRadius: 10,
+        borderRadius: R.ctrl,
         flexShrink: 0,
         overflow: 'hidden',
         backgroundColor: palette.surface2,
-        borderWidth: 1,
-        borderColor: palette.line2,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      {etat.casse ? (
+      {!uri || etat.casse ? (
         <Text
           style={{
             fontFamily: FONT,
@@ -425,28 +422,34 @@ function ProductCard({ product, catalogue, width, layout: L, brand, onPress }: {
   onPress: () => void;
 }) {
   const { palette, shadow } = useTheme();
-  const [priceWidth, setPriceWidth] = useState(0);
   const out = !!product.outOfStock;
   const required = (product.optionGroups ?? []).some((group) => (group.min ?? 0) > 0);
   const photo = photoDuPoste(product.photoUrl);
-  // Le nom occupe désormais toute la rangée haute. La vignette ne peut
-  // prendre la place du prix, y compris sur une petite carte de téléphone.
-  const photoFits = width - L.sp(13) * 2 - priceWidth >= L.sp(46);
+  // La photo garde son cadre carré et son point d'intérêt métier. Sa place
+  // grandit au-dessus du texte ; le prix ne partage plus sa rangée avec elle.
+  const photoSize = Math.max(1, Math.min(width - L.sp(8) * 2 - 2, L.sp(144)));
+  const showDescription = L.catalogDescriptions && !!product.description;
   return (
     <Press onPress={out ? undefined : onPress} disabled={out}
       accessibilityLabel={out ? `${product.name}, en rupture` : `${product.name}, ${euros(basePrice(product, product.variants?.[0]?.key ?? null))}${product.variants?.length ? ' et plus' : ''}`}
-      style={[{ width, height: L.cardH, borderRadius: R.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line2, padding: L.sp(13), justifyContent: 'space-between', overflow: 'hidden' }, out ? { opacity: 0.42 } : shadow(1)]}
+      style={[{ width, minHeight: L.cardH, borderRadius: R.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line2, padding: L.sp(8), gap: L.sp(12), overflow: 'hidden' }, out ? { opacity: 0.42 } : shadow(1)]}
       activeStyle={{ backgroundColor: palette.press, borderColor: withAlpha(brand.accent, 0.5) }}>
-      {!out ? <Sheen /> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: L.sp(6) }}>
-        <Text numberOfLines={2} style={{ flex: 1, fontFamily: FONT, color: palette.text, fontSize: L.fs(14.5), fontWeight: '700', lineHeight: L.fs(18), letterSpacing: -0.2 }}>{product.name}</Text>
-        {product.isNew && !out ? <ProductBadge kind="new" /> : required && !out ? <View style={{ width: L.sp(6), height: L.sp(6), borderRadius: R.pill, marginTop: L.sp(6), backgroundColor: brand.accent }} /> : null}
+      <View style={{ alignItems: 'center', justifyContent: 'center', minHeight: photoSize, backgroundColor: palette.surface2, borderRadius: R.ctrl, overflow: 'hidden' }}>
+        <Vignette uri={photo} cote={photoSize} media={mediaDeTete(product, catalogue)} nom={product.name} />
+        {product.isNew && !out ? <View style={{ position: 'absolute', left: L.sp(8), top: L.sp(8) }}><ProductBadge kind="new" /></View> : null}
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: L.sp(6) }}>
-        <View onLayout={(event) => setPriceWidth(event.nativeEvent.layout.width)}>
-          {out ? <ProductBadge kind="out" /> : <ProductPrice product={product} layout={L} />}
+      <View style={{ paddingHorizontal: L.sp(4), paddingBottom: L.sp(4), gap: L.sp(10) }}>
+        <View style={{ minHeight: L.fs(L.catalogDescriptions ? 76 : 38), gap: L.sp(4) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: L.sp(6) }}>
+            <Text numberOfLines={2} style={{ flex: 1, fontFamily: FONT, color: palette.text, fontSize: L.fs(14.5), fontWeight: '700', lineHeight: L.fs(19), letterSpacing: -0.2 }}>{product.name}</Text>
+            {required && !out ? <View style={{ width: L.sp(6), height: L.sp(6), borderRadius: R.pill, marginTop: L.sp(6), backgroundColor: brand.accent }} /> : null}
+          </View>
+          {showDescription ? <Text numberOfLines={2} style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(12), lineHeight: L.fs(17) }}>{product.description}</Text> : null}
         </View>
-        {photo && photoFits ? <Vignette uri={photo} cote={L.sp(40)} media={mediaDeTete(product, catalogue)} nom={product.name} /> : null}
+        <View style={{ minHeight: L.sp(32), flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: L.sp(4) }}>
+          {out ? <ProductBadge kind="out" /> : <ProductPrice product={product} layout={L} />}
+          {!out && width >= L.sp(175) ? <View accessible={false} style={{ width: L.sp(28), height: L.sp(28), borderRadius: R.pill, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}><Icon name="plus" size={L.fs(16)} color={palette.text} /></View> : null}
+        </View>
       </View>
     </Press>
   );
@@ -490,7 +493,7 @@ function ProductRow({ product, catalogue, width, layout: L, brand, onPress, onAd
 function ProductPrice({ product, layout: L, dense = false }: { product: Product; layout: Layout; dense?: boolean }) {
   const { palette } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: L.sp(4), flexShrink: 0 }}>
+    <View style={{ flexDirection: 'row', flexWrap: dense ? 'nowrap' : 'wrap', alignItems: 'baseline', gap: L.sp(4), flexShrink: dense ? 0 : 1, maxWidth: '100%' }}>
       {product.variants?.length ? <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(11.5), fontWeight: '700' }}>dès</Text> : null}
       <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(dense ? 17 : 19), fontWeight: '800', letterSpacing: dense ? -0.5 : -0.7, fontVariant: ['tabular-nums'] }}>{euros(basePrice(product, product.variants?.[0]?.key ?? null))}</Text>
     </View>

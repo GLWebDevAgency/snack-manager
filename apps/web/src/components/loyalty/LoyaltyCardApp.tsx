@@ -978,7 +978,7 @@ function CarteLocaleHorsLigne({
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-8">
-      <section className="relative overflow-hidden rounded-wide border border-prep/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
+      <section className="relative overflow-hidden rounded-wide border border-prep/30 bg-surface p-5 shadow-card sm:p-7">
         <Pill className="border-prep/30 bg-prep/10 text-prept">
           Solde enregistré hors ligne
         </Pill>
@@ -1114,11 +1114,7 @@ function EtatSansCarte({
   const uniteSinguliere = catalog.program.unitLabelSingular;
   return (
     <>
-      <section className="relative overflow-hidden rounded-wide border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
-        <div
-          className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-accentwash blur-3xl"
-          aria-hidden
-        />
+      <section className="relative overflow-hidden rounded-wide border border-accent/20 bg-surface p-5 shadow-card sm:p-7">
         <div className="relative">
           <Pill className="border-accent/30 bg-accentwash text-accentink">
             Carte digitale · gratuite

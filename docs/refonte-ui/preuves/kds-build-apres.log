@@ -1,0 +1,56 @@
+
+> @sm/kds@1.0.0 build /Users/limameghassene/development/SnackManager-refonte-ui/apps/kds
+> node ../../scripts/verifier-build-terrain.mjs && expo export --platform web --output-dir dist --clear
+
+✓ Origines du build terrain verrouillées sur local
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:70177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+Web Bundling failed 4327ms apps/kds/index.ts (546 modules)
+
+Error: Unable to resolve module @sm/design-icons from /Users/limameghassene/development/SnackManager-refonte-ui/packages/ui-native/src/Icon.tsx: @sm/design-icons could not be found within the project or in these directories:
+  node_modules
+  ../../node_modules
+[0m [90m 2 |[39m [36mimport[39m [33mSvg[39m[33m,[39m { [33mPath[39m[33m,[39m [33mSvgXml[39m } [36mfrom[39m [32m'react-native-svg'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { [33mPlatform[39m[33m,[39m type [33mStyleProp[39m[33m,[39m type [33mViewStyle[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mimport[39m { renderIcon[33m,[39m shapes[33m,[39m type [33mIconName[39m } [36mfrom[39m [32m'@sm/design-icons'[39m[33m;[39m
+ [90m   |[39m                                                    [31m[1m^[22m[39m
+ [90m 5 |[39m
+ [90m 6 |[39m [36mconst[39m [33mPATHS[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m string[33m>[39m [33m=[39m {
+ [90m 7 |[39m   [32m'kds-list'[39m[33m:[39m [32m'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'[39m[33m,[39m[0m
+
+Import stack:
+
+ packages/ui-native/src/Icon.tsx
+ | import "@sm/design-icons"
+
+ packages/ui-native/src/index.ts
+ | import "./Icon"
+
+ apps/kds/App.tsx
+ | import "@sm/ui-native"
+
+ apps/kds/index.ts
+ | import "./App"
+
+
+ | import "./apps/kds/index.ts"
+
+/Users/limameghassene/development/SnackManager-refonte-ui/apps/kds:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sm/kds@1.0.0 build: `node ../../scripts/verifier-build-terrain.mjs && expo export --platform web --output-dir dist --clear`
+Exit status 1

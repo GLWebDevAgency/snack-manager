@@ -32,6 +32,8 @@ import { Icon, IconBtn, ToastProvider } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
 import { crm, euroRound, HQ_ROLE, HqContext, isHqSession } from "./crm";
 import { BottomSheet } from "./mobile";
+import { backofficeVisualStyle } from "@/components/backoffice/visual-style";
+import "@/components/backoffice/backoffice.css";
 import {
   libelleCourt,
   MOBILE_MORE,
@@ -173,7 +175,7 @@ function HqShell({ children }: { children: ReactNode }) {
         classe sur chacun des dizaines de champs — un champ ajouté demain est
         couvert d'office.
       */}
-      <div className="flex h-dvh overflow-hidden bg-bg max-md:[&_input]:text-[16px] max-md:[&_select]:text-[16px] max-md:[&_textarea]:text-[16px]">
+      <div className="sm-backoffice flex h-dvh overflow-hidden bg-bg max-md:[&_input]:text-[16px] max-md:[&_select]:text-[16px] max-md:[&_textarea]:text-[16px]" style={backofficeVisualStyle}>
         {/* ── Colonne de navigation (232px) — bureau seulement : sous `md`,
             la barre basse prend le relais ── */}
         <aside className="flex w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-[18px] max-md:hidden">

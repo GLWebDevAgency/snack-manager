@@ -5,6 +5,7 @@
  */
 
 import type { SVGAttributes } from "react";
+import { shapes, iconNames, type IconName as DesignIconName } from "@sm/design-icons";
 
 const PATHS = {
   pin: ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0zM12 13a3 3 0 100-6 3 3 0 000 6z"],
@@ -119,9 +120,9 @@ const PATHS = {
   ],
 } as const;
 
-export type IconName = keyof typeof PATHS;
+export type IconName = keyof typeof PATHS | DesignIconName;
 
-export const ICON_NAMES = Object.keys(PATHS) as IconName[];
+export const ICON_NAMES = [...new Set<IconName>([...Object.keys(PATHS) as (keyof typeof PATHS)[], ...iconNames])];
 
 type IconProps = Omit<SVGAttributes<SVGSVGElement>, "children" | "stroke"> & {
   name: IconName;
@@ -131,7 +132,11 @@ type IconProps = Omit<SVGAttributes<SVGSVGElement>, "children" | "stroke"> & {
   stroke?: number;
 };
 
-export function Icon({ name, size = 18, stroke = 2, ...rest }: IconProps) {
+export function Icon({ name, size = 18, stroke = 1.75, ...rest }: IconProps) {
+  // Seul le registre de vecteurs versionnés peut produire ce fragment SVG.
+  // Les anciennes clés sans équivalent gardent leur dessin et leur sémantique.
+  const shape = Object.hasOwn(shapes, name) ? shapes[name as DesignIconName] : undefined;
+  const legacy = Object.hasOwn(PATHS, name) ? PATHS[name as keyof typeof PATHS] : [];
   return (
     <svg
       viewBox="0 0 24 24"
@@ -144,10 +149,9 @@ export function Icon({ name, size = 18, stroke = 2, ...rest }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
       {...rest}
-    >
-      {PATHS[name].map((d) => (
-        <path key={d} d={d} />
-      ))}
-    </svg>
+      {...(shape
+        ? { dangerouslySetInnerHTML: { __html: shape } }
+        : { children: legacy.map((d) => <path key={d} d={d} />) })}
+    />
   );
 }

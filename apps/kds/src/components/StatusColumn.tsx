@@ -15,10 +15,9 @@ import { CardSkeleton, EmptyState } from './primitives';
 import { OrderCard } from './OrderCard';
 
 /**
- * Une colonne de statut. L'en-tête porte la couleur fonctionnelle du statut —
- * c'est le seul aplat coloré large de l'écran, et il sert de repère à distance :
- * rouge = à prendre, ambre = en cours, vert = à remettre. Il suit donc l'échelle
- * `far()` : sur un mural, on doit reconnaître la colonne avant de lire un mot.
+ * Une colonne de statut. Le repère et le compteur gardent la couleur
+ * fonctionnelle : rouge = à prendre, ambre = en cours, vert = à remettre.
+ * Le titre suit `far()` pour rester lisible depuis le poste de cuisson.
  *
  * Les trois colonnes se partagent la largeur à parts égales (`flex: 1`) : leur
  * dimension n'est jamais codée en dur, c'est `useLayout` qui décide seulement
@@ -54,11 +53,12 @@ export function StatusColumn({
 
   return (
     <View style={styles.column}>
-      <View style={[styles.header, { backgroundColor: tone.bg }]}>
-        <Text style={[styles.headerLabel, { color: tone.fg }]} numberOfLines={1}>
+      <View style={styles.header}>
+        <View accessible={false} style={[styles.statusDot, { backgroundColor: tone.bg }]} />
+        <Text accessibilityRole="header" style={styles.headerLabel} numberOfLines={1}>
           {tone.label}
         </Text>
-        <View style={[styles.badge, { backgroundColor: tone.badge }]}>
+        <View style={[styles.badge, { backgroundColor: tone.bg }]}>
           <Text style={[styles.badgeText, { color: tone.fg }]}>{orders.length}</Text>
         </View>
       </View>
@@ -97,38 +97,35 @@ export function StatusColumn({
 }
 
 const columnStyles = scaledStyles((l: Layout, theme) => {
-  const { surface, hair2, type } = makeUi(theme);
+  const { surface, type, palette } = makeUi(theme);
   return StyleSheet.create({
     column: {
       flex: 1,
       minWidth: 0,
       minHeight: 0,
       backgroundColor: surface.column,
-      borderRadius: radius.lg,
-      borderWidth: 1,
-      borderColor: hair2,
-      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: space.sm,
-      paddingHorizontal: Math.round(14 * l.scale),
-      paddingVertical: Math.round(11 * l.scale),
+      paddingHorizontal: l.gap,
+      paddingVertical: Math.round(12 * l.scale),
     },
+    statusDot: { width: l.far(8), height: l.far(8), borderRadius: radius.pill },
     headerLabel: {
       fontFamily: type.title.fontFamily,
-      fontSize: l.far(15),
-      fontWeight: '800',
-      letterSpacing: 0.8,
-      textTransform: 'uppercase',
-      flexShrink: 1,
+      fontSize: l.far(17),
+      fontWeight: '700',
+      letterSpacing: -0.3,
+      flex: 1,
+      color: palette.text,
     },
     badge: {
       minWidth: l.far(30),
       height: l.far(26),
-      borderRadius: radius.pill,
+      borderRadius: radius.xs,
       paddingHorizontal: 9,
       alignItems: 'center',
       justifyContent: 'center',

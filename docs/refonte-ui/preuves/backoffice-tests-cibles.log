@@ -1,0 +1,16 @@
+
+> @sm/web@0.1.0 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+> vitest run src/components/backoffice/visual-style.test.ts src/components/ui/icons.test.tsx src/app/admin/navigation.test.ts src/app/sm/navigation.test.ts
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/app/sm/navigation.test.ts (6 tests) 3ms
+ ✓ src/components/ui/icons.test.tsx (2 tests) 13ms
+ ✓ src/components/backoffice/visual-style.test.ts (3 tests) 6ms
+ ✓ src/app/admin/navigation.test.ts (26 tests) 6ms
+
+ Test Files  4 passed (4)
+      Tests  37 passed (37)
+   Start at  18:20:57
+   Duration  469ms (transform 190ms, setup 0ms, collect 591ms, tests 29ms, environment 0ms, prepare 160ms)

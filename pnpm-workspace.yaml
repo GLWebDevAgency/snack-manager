@@ -1,6 +1,10 @@
 packages:
   - apps/*
   - packages/*
+  # Source unique du kit ; les fixtures et le studio ne sont pas des apps.
+  - design/refonte-swiftui/packages/tokens
+  - design/refonte-swiftui/packages/assets
+  - design/refonte-swiftui/packages/icons
   # Les scripts d'outillage : leurs garde-fous méritent une suite de tests,
   # au même titre que le code qui part en production.
   - scripts

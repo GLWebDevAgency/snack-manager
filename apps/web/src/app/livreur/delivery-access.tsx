@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ajusterJusquaAA, logoUrlDe, marqueDeRepli } from "@sm/contracts";
+import { dark, light, motion, typography } from "@sm/design-tokens";
 import { LogoMark } from "@/components/brand/Logo";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { DeliveryPowered, deliveryInitials } from "./delivery-presentation";
@@ -72,9 +73,33 @@ export function DeliveryAccess() {
       .filter(([key]) => key === "--cf-r" || key.startsWith("--cf-r-")),
   ), [brand]);
   const accent = brand?.palette.accent ?? "#c9a15a";
-  const surfaceColors = appearance.theme === "light" ? ["#ececea", "#fff", "#f2f1ee", "#e6e4df"] : ["#000", "#111", "#1a1a1a", "#242424"];
+  // La palette du téléphone et les fonds utilisés pour corriger l'encre
+  // viennent du même objet : un changement de surface garde l'accent lisible.
+  const palette = appearance.theme === "light" ? light : dark;
+  const surfaceColors = [palette.canvas, palette.surface, palette.secondary];
   const style = {
     ...radii,
+    "--lv-bg": palette.canvas,
+    "--lv-surface": palette.surface,
+    "--lv-surface2": palette.secondary,
+    "--lv-el2": palette.secondary,
+    "--lv-text": palette.ink,
+    "--lv-dim": palette.muted,
+    "--lv-line": palette.line,
+    "--lv-line2": appearance.theme === "light" ? "rgba(37,39,35,0.08)" : "rgba(245,247,242,0.10)",
+    "--lv-green-t": palette.success,
+    "--lv-red-t": palette.danger,
+    "--lv-amber-t": palette.warning,
+    "--lv-green-soft": palette.successSoft,
+    "--lv-red-soft": palette.dangerSoft,
+    "--lv-amber-soft": palette.warningSoft,
+    "--lv-foot": palette.surface,
+    "--lv-scrim": palette.scrim,
+    "--lv-focus": palette.focus,
+    "--lv-title": `${typography.title}px`,
+    "--lv-heading": `${typography.heading}px`,
+    "--lv-ease": motion.curve,
+    "--lv-press": `${motion.press}ms`,
     "--lv-accent": accent,
     "--lv-accent-text": ajusterJusquaAA(accent, surfaceColors).couleur,
     "--lv-on-accent": ajusterJusquaAA(brand?.palette.onAccent ?? "#12100d", [accent]).couleur,

@@ -1,5 +1,5 @@
 /**
- * Socle visuel de la caisse — « noir premium stratifié ».
+ * Socle visuel de la caisse — surfaces RestoPilot, thèmes du poste conservés.
  *
  * Trois niveaux de surface (fond / carte / élément), filets très fins,
  * typographie à fort contraste de graisse, accent parcimonieux.
@@ -9,9 +9,13 @@
  */
 import { createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
-import { PALETTES, palette, radius, type ColorTheme, type Palette } from '@sm/client-core';
+import { radius, type ColorTheme, type Palette } from '@sm/client-core';
+import { radius as visualRadius, space as visualSpace, motion } from '@sm/design-tokens';
+import { visualPalette } from './visual-palette';
 import { ratioContraste } from '@sm/contracts';
 import { BRAND_FONT } from '@sm/ui-native/brand';
+
+const palette = visualPalette('dark');
 
 /**
  * Variantes réservées au texte fonctionnel sur les surfaces sombres du POS.
@@ -29,12 +33,12 @@ export const semanticText = makeSemanticText(palette);
 /** Inter est embarquée et chargée par usePosFonts ; pile système en secours web. */
 export const FONT = BRAND_FONT;
 
-export const DUR = { fast: 200, base: 260, slow: 340 } as const;
+export const DUR = { fast: motion.state, base: motion.sheet, slow: 340 } as const;
 
 /** Espacements de la caisse (respiration : 12–16 px entre cartes). */
-export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;
+export const S = { ...visualSpace, xl: visualSpace.xl, xxl: visualSpace.xxl } as const;
 
-export const R = { ctrl: 8, card: 12, panel: 18, pill: 999 } as const;
+export const R = { ctrl: visualRadius.button, card: visualRadius.card, panel: visualRadius.sheet, pill: visualRadius.pill } as const;
 
 /**
  * La géométrie du poste (rail, ticket, barre haute) n'est plus figée ici : elle
@@ -108,7 +112,7 @@ export function makeBrand(name: string, accentHex?: string | null, logoUrl?: str
 
 function themedShadow(theme: ColorTheme, level: 1 | 2 | 3): ViewStyle {
   const conf = {
-    1: { h: 2, r: 8, o: theme === 'light' ? 0.08 : 0.35, e: 2 },
+    1: { h: 4, r: 16, o: theme === 'light' ? 0.04 : 0.16, e: 2 },
     2: { h: 10, r: 24, o: theme === 'light' ? 0.14 : 0.5, e: 8 },
     3: { h: 24, r: 56, o: theme === 'light' ? 0.22 : 0.65, e: 20 },
   }[level];
@@ -168,6 +172,7 @@ export const makeSheet = (palette: Palette, shadow: (level: 1 | 2 | 3) => ViewSt
   card: {
     backgroundColor: palette.surface,
     borderRadius: R.card,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: palette.line2,
     overflow: 'hidden',
@@ -183,6 +188,7 @@ export const makeSheet = (palette: Palette, shadow: (level: 1 | 2 | 3) => ViewSt
   panel: {
     backgroundColor: palette.surface,
     borderRadius: R.panel,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: palette.line,
     overflow: 'hidden',
@@ -200,7 +206,7 @@ export const type = makeType(palette);
 export const sheet = makeSheet(palette, shadow);
 
 function makeTheme(theme: ColorTheme) {
-  const palette = PALETTES[theme];
+  const palette = visualPalette(theme);
   const shadow = (level: 1 | 2 | 3) => themedShadow(theme, level);
   return { theme, palette, type: makeType(palette), sheet: makeSheet(palette, shadow), shadow, semanticText: makeSemanticText(palette) };
 }

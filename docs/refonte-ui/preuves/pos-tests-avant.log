@@ -1,0 +1,52 @@
+
+> @sm/pos@1.0.0 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+> EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} vitest run && node --test ../../scripts/verifier-build-terrain.node-test.mjs
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+
+ ✓ src/loyalty-state.test.ts (8 tests) 5ms
+ ✓ src/demo-loyalty.test.ts (7 tests) 13ms
+ ✓ src/demo-retour.test.ts (11 tests) 4ms
+ ✓ src/phone-order-flow.test.ts (7 tests) 15ms
+ ✓ src/layout.test.ts (45 tests) 29ms
+ ✓ src/journal-payment-reconciliation.test.ts (5 tests) 9ms
+ ✓ src/demo-payment.test.ts (3 tests) 8ms
+ ✓ src/QuickConfig.test.ts (3 tests) 16ms
+ ✓ src/photo.test.ts (8 tests) 4ms
+stderr | src/phone-order-attempt.test.ts > journal durable de la prise de commande téléphone > utilise la vraie frontière tenantStore : un ancien onglet ne peut réécrire après réappairage
+[sm] Aucun stockage persistant configuré : la file offline ne survivra pas à un redémarrage. Appelez setStore().
+
+ ✓ src/pos-safety.test.ts (10 tests) 4ms
+ ✓ src/phone-order-attempt.test.ts (51 tests) 25ms
+ ✓ src/service-state.test.ts (21 tests) 4ms
+ ✓ src/pos-state.test.ts (29 tests) 13ms
+ ✓ src/service-payment.test.ts (13 tests) 10ms
+ ✓ src/quick-config-options.test.ts (3 tests) 2ms
+ ✓ src/service-reconciliation.test.ts (14 tests) 7ms
+ ✓ src/service-handover.test.ts (6 tests) 11ms
+ ✓ src/device-boundary.test.ts (2 tests) 2ms
+ ✓ src/api-origin.test.ts (16 tests) 10ms
+ ✓ src/prefs.test.ts (11 tests) 3ms
+ ✓ server.test.mjs (13 tests) 160ms
+
+ Test Files  21 passed (21)
+      Tests  286 passed (286)
+   Start at  17:58:16
+   Duration  1.37s (transform 1.26s, setup 0ms, collect 6.14s, tests 354ms, environment 3ms, prepare 1.13s)
+
+▶ configuration des builds terrain
+  ✔ accepte uniquement les trois paires completes (0.381291ms)
+  ✔ refuse une configuration absente ou partielle (0.651416ms)
+  ✔ refuse tout mélange staging et production (0.099625ms)
+  ✔ refuse localhost sans le drapeau local et le drapeau local à distance (0.08075ms)
+  ✔ refuse les variantes et origines non prévues (0.097333ms)
+✔ configuration des builds terrain (1.893125ms)
+ℹ tests 5
+ℹ suites 1
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48.329

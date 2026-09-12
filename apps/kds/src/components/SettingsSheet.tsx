@@ -145,7 +145,7 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
         </View>)}</View>
         {layout.compact ? <Tap onPress={onLogout} label="Fermer le service" reducedMotion={reducedMotion}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: layout.fs(8), minHeight: layout.touch,
-            backgroundColor: surface.el, borderWidth: 1, borderColor: hair2, borderRadius: radius.pill }}>
+            backgroundColor: surface.card, borderWidth: 1, borderColor: hair2, borderRadius: radius.sm }}>
           <Icon name="lock" size={layout.fs(16)} color={palette.text} />
           <Text style={[type.action, { fontSize: layout.fs(14), color: palette.text }]}>Fermer le service</Text>
         </Tap> : null}
@@ -154,7 +154,7 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
     <View style={{ paddingHorizontal: layout.fs(20), paddingTop: layout.fs(14), paddingBottom: layout.fs(18),
       backgroundColor: palette.footBg, borderTopWidth: 1, borderTopColor: hair2 }}>
       <Tap onPress={onClose} label="Fermer" reducedMotion={reducedMotion}
-        style={{ minHeight: layout.actionH, borderRadius: radius.pill, backgroundColor: palette.btnDark,
+        style={{ minHeight: layout.actionH, borderRadius: radius.sm, backgroundColor: palette.btnDark,
           alignItems: 'center', justifyContent: 'center' }}>
         <Text style={[type.action, { fontSize: layout.fs(15), color: contrastOn(palette.btnDark), letterSpacing: -0.2 }]}>Fermer</Text>
       </Tap>

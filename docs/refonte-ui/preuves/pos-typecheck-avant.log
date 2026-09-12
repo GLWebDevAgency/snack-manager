@@ -1,0 +1,11 @@
+
+> @sm/pos@1.0.0 typecheck /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+> tsc --noEmit
+
+../api/src/modules/orders/price-order-lines.ts(3,30): error TS2307: Cannot find module '@sm/db' or its corresponding type declarations.
+../api/src/modules/orders/price-order-lines.ts(18,43): error TS7006: Parameter 'value' implicitly has an 'any' type.
+../api/src/modules/orders/price-order-lines.ts(24,45): error TS7006: Parameter 'value' implicitly has an 'any' type.
+../api/src/modules/orders/price-order-lines.ts(25,43): error TS7006: Parameter 'value' implicitly has an 'any' type.
+/Users/limameghassene/development/SnackManager-refonte-ui/apps/pos:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sm/pos@1.0.0 typecheck: `tsc --noEmit`
+Exit status 2

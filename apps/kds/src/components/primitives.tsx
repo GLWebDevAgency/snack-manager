@@ -100,11 +100,19 @@ export function Tap({
   selected,
   role = 'button',
 }: TapProps) {
+  const { palette } = useUi();
+  const [focused, setFocused] = useState(false);
   return (
     <Pressable
       nativeID={nativeID}
       onPress={onPress}
       disabled={disabled}
+      onFocus={(event) => {
+        if (Platform.OS !== 'web') return;
+        const target = event.target as unknown as { matches?: (selector: string) => boolean };
+        setFocused(target.matches?.(':focus-visible') ?? false);
+      }}
+      onBlur={() => setFocused(false)}
       accessibilityRole={role}
       accessibilityLabel={label}
       aria-checked={role === 'radio' || role === 'switch' ? !!selected : undefined}
@@ -137,9 +145,10 @@ export function Tap({
       } : {})}
       style={({ pressed }) => [
         style,
+        Platform.OS === 'web' && focused ? { outlineWidth: 3, outlineStyle: 'solid', outlineColor: palette.text, outlineOffset: 2 } as ViewStyle : null,
         disabled && { opacity: 0.4 },
         pressed && !disabled && [
-          !flat && !reducedMotion && { transform: [{ scale: 0.97 }] },
+          !flat && !reducedMotion && { transform: [{ scale: 0.985 }] },
           { opacity: 0.86 },
           pressedStyle,
         ],
@@ -238,7 +247,7 @@ export function Chip({
         { minHeight, minWidth: iconOnly ? minHeight : undefined, paddingHorizontal: iconOnly ? 0 : Math.round(minHeight * 0.36), flexDirection: 'row', alignItems: 'center', gap: layout ? layout.fs(7) : 7 },
         active
           ? { backgroundColor: on.bg, borderColor: on.bg }
-          : { backgroundColor: surface.el, borderColor: hair },
+          : { backgroundColor: surface.card, borderColor: hair },
       ]}
       pressedStyle={{ backgroundColor: active ? on.bg : surface.el2 }}
     >
@@ -434,7 +443,7 @@ function buildPrimitiveStyles({ hair, hair2, surface, ink, type }: Ui) { return 
     minHeight: TOUCH_MIN,
     justifyContent: 'center',
     paddingHorizontal: 16,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     borderWidth: 1,
   },
   chipText: { fontFamily: type.micro.fontFamily, fontSize: 13.5, fontWeight: '700' },
@@ -466,7 +475,7 @@ function buildPrimitiveStyles({ hair, hair2, surface, ink, type }: Ui) { return 
   },
   skeleton: {
     backgroundColor: surface.card,
-    borderRadius: radius.md,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: hair2,
     padding: 12,
@@ -847,8 +856,7 @@ export function Overlay({ layout, reducedMotion, onClose, label, returnFocusId, 
       onPress={requestClose} style={[StyleSheet.absoluteFill, { backgroundColor: scrim }]} />
     <Animated.View style={{ width: layout.modalW, maxWidth: '96%', maxHeight: layout.height - layout.pad * 2,
       flexShrink: 1, opacity: progress, transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }],
-      backgroundColor: surface.card, borderColor: hair, borderWidth: 1, borderRadius: 18, overflow: 'hidden', ...shadow.panel }}>
-      <Sheen />
+      backgroundColor: surface.card, borderColor: hair, borderWidth: 1, borderRadius: radius.sheet, overflow: 'hidden', ...shadow.panel }}>
       {children}
     </Animated.View>
   </View>;
@@ -871,7 +879,7 @@ export function PanelHead({ title, sub, onClose, right, layout, reducedMotion }:
     </View>
     {right}
     {onClose ? <Tap onPress={onClose} label="Fermer" reducedMotion={reducedMotion}
-      style={{ width: layout.touch, height: layout.touch, borderRadius: radius.pill, backgroundColor: surface.el,
+      style={{ width: layout.touch, height: layout.touch, borderRadius: radius.sm, backgroundColor: surface.el,
         borderWidth: 1, borderColor: hair2, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name="close" size={layout.fs(18)} color={ink.dim} />
     </Tap> : null}
@@ -901,12 +909,12 @@ export function Segmented<T extends string>({ value, options, onChange, accent, 
     return () => animation.stop();
   }, [position, target, reducedMotion]);
   return <View role="radiogroup" accessibilityLabel={label} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-    style={{ flexDirection: 'row', padding: inset, borderRadius: radius.pill, backgroundColor: surface.el, borderWidth: 1, borderColor: hair2 }}>
+    style={{ flexDirection: 'row', padding: inset, borderRadius: radius.sm, backgroundColor: surface.el, borderWidth: 1, borderColor: hair2 }}>
     {itemWidth > 0 ? <Animated.View style={{ position: 'absolute', top: inset, bottom: inset, left: inset,
-      width: itemWidth, borderRadius: radius.pill, backgroundColor: accent, transform: [{ translateX: position }], ...shadow.card }} /> : null}
+      width: itemWidth, borderRadius: radius.xs, backgroundColor: accent, transform: [{ translateX: position }], ...shadow.card }} /> : null}
     {options.map((option) => <Tap key={option.key} role="radio" selected={value === option.key} label={option.label}
       onPress={() => onChange(option.key)} reducedMotion={reducedMotion}
-      style={{ flex: 1, minHeight: layout.touch, justifyContent: 'center', alignItems: 'center', borderRadius: radius.pill }}>
+      style={{ flex: 1, minHeight: layout.touch, justifyContent: 'center', alignItems: 'center', borderRadius: radius.xs }}>
       <Text style={[type.body, { fontSize: layout.fs(14), fontWeight: '600', color: value === option.key ? contrastOn(accent) : ink.dim }]}>{option.label}</Text>
     </Tap>)}
   </View>;

@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@sm/design-icons": "workspace:*",
     "expo-font": "~57.0.3",
     "react-native-svg": "15.15.4"
   },
