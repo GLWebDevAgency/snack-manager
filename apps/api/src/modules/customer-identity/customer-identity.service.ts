@@ -13,7 +13,7 @@ import { protectCustomerEnrollment } from './customer-protection';
 import { loginCustomerPasskey } from './customer-passkey-login';
 import { recoverCustomerAccount } from './customer-account-recovery';
 import { CustomerCredentialAccessError, type CustomerCredentialAccessPort } from './customer-credential-access.port';
-import { costEvidenceReferenceOf, CustomerVerificationModeSchema, paidBudgetOf, planCustomerPhoneVerification,
+import { costEvidenceReferenceOf, CustomerVerificationModeSchema, paidBudgetOf, productionBudgetOf, planCustomerPhoneVerification,
   type CustomerVerificationMode, type ReservedCustomerVerificationPlan } from './verification-plan';
 
 const tenant = z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/);
@@ -26,7 +26,8 @@ type BrowserBinding = z.infer<typeof browserBindingSchema>;
 const intentBindingSchema = browserBindingSchema.extend({ operationId: uuid, intentProof: token });
 type IntentBinding = z.infer<typeof intentBindingSchema>;
 const intentSchema = browserBindingSchema.extend({ request: CustomerAccountBrowserRequests.intent,
-  candidateProof: token.nullable() }).refine(value => value.request.step === 'prepare' ? value.candidateProof !== null : value.candidateProof === null);
+  candidateProof: token.nullable(), clientIp: z.string().min(1).max(160).optional() })
+  .refine(value => value.request.step === 'prepare' ? value.candidateProof !== null : value.candidateProof === null);
 const startSchema = z.strictObject({
   tenantRef: tenant, phone, operationId: uuid, browserRef: uuid, browserSecret: token, intentProof: token,
   clientIp: z.string().min(1).max(160), humanVerified: z.literal(true),
@@ -43,7 +44,7 @@ const passkeyLoginSchema = browserBindingSchema.extend({ ...credentialAccessShap
 const accountRecoverySchema = browserBindingSchema.extend({ ...credentialAccessShape, request: CustomerAccountBrowserRequests.recovery });
 const sessionSchema = browserBindingSchema.extend({ token, expectedOperationId: uuid, expectedCheckId: uuid });
 const browserSchema = z.strictObject({ tenantRef: tenant, request: CustomerAccountBrowserRequests.browser,
-  browserSecret: token.nullable(), candidateSecret: token.nullable() }).refine(value =>
+  browserSecret: token.nullable(), candidateSecret: token.nullable(), clientIp: z.string().min(1).max(160).optional() }).refine(value =>
   value.request.step === 'prepare' ? value.browserSecret === null && value.candidateSecret === null
     : value.request.step === 'issue' ? value.candidateSecret !== null
       : value.browserSecret !== null && value.candidateSecret === null);
@@ -56,6 +57,9 @@ const SESSION_TTL_MS = 7 * 86_400_000;
 const fundingSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('trial') }),
   z.strictObject({ mode: z.literal('paid'), authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
+    currency: z.literal('USD'), reservedMicrousd: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }),
+  z.strictObject({ mode: z.literal('production_paid'), authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
     currency: z.literal('USD'), reservedMicrousd: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }),
 ]);
@@ -110,7 +114,8 @@ export class CustomerIdentityService {
       let result;
       switch (input.request.step) {
         case 'prepare':
-          result = { preparation: await this.repository.prepareBrowser({ ...scope, browserRef: input.request.browserRef }), emitCookie: false };
+          result = { preparation: await this.repository.prepareBrowser({ ...scope, browserRef: input.request.browserRef,
+            ...this.admission(scope, input.clientIp) }), emitCookie: false };
           break;
         case 'issue':
           result = await this.repository.issueBrowser({ ...scope, browserRef: input.request.browserRef,
@@ -187,7 +192,8 @@ export class CustomerIdentityService {
       const input = this.parse(intentSchema, raw);
       await this.requireBrowser(this.binding(input));
       const scope = { ...this.scope(input.tenantRef, this.configuration()), browserRef: input.browserRef,
-        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret), operationId: input.request.operationId };
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret), operationId: input.request.operationId,
+        ...this.admission(this.scope(input.tenantRef, this.configuration()), input.clientIp) };
       const result = input.request.step === 'prepare'
         ? await this.repository.prepareIntent({ ...scope, proofHash: this.crypto.hash('intent-proof', input.tenantRef, input.candidateProof!) })
         : { intent: await this.repository.closeIntent(scope), emitCookie: false };
@@ -251,6 +257,7 @@ export class CustomerIdentityService {
       });
       if (reserved.kind === 'pending') {
         await this.requireIntent(this.intentBinding(input));
+        await this.revalidateProductionFunding(scope, reserved.challenge);
         this.assertChallenge(scope, reserved.challenge, phoneHash, plan.serviceSid);
         this.assertFunding(scope, reserved.challenge, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
         return this.challengeView(reserved.challenge);
@@ -261,6 +268,10 @@ export class CustomerIdentityService {
       try {
         await this.beforeProvider();
         await this.requireIntent(this.intentBinding(input));
+        if (productionBudgetOf(plan) && !await this.repository.revalidateProductionFunding({ ...scope, challengeId: reserved.challengeId })) {
+          throw new CustomerIdentityError('unavailable');
+        }
+        if (productionBudgetOf(plan)) await this.beforeProvider();
         // Lock waits/configuration refreshes must not turn the old reservation
         // into permission for a different service, segment cost or allowance.
         const current = this.plan(this.configuration(), input.tenantRef, input.phone, this.now());
@@ -281,6 +292,7 @@ export class CustomerIdentityService {
       });
       if (!pending) throw new CustomerIdentityError('unavailable');
       await this.requireIntent(this.intentBinding(input));
+      await this.revalidateProductionFunding(scope, pending);
       this.assertChallenge(scope, pending, phoneHash, plan.serviceSid, reserved.challengeId);
       this.assertFunding(scope, pending, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
       return this.challengeView(pending);
@@ -316,6 +328,8 @@ export class CustomerIdentityService {
         await this.beforeProvider();
         browser = await this.requireBrowser(this.binding(input));
         await this.requireIntent(this.intentBinding(input));
+        await this.revalidateProductionFunding(scope, pending);
+        if (pending.funding.mode === 'production_paid') await this.beforeProvider();
         // No await between this fresh funding/policy decision and the provider.
         this.assertChallenge(scope, pending, pending.phoneHash, pending.serviceSid, input.challengeId);
         const plan = this.plan(this.configuration(), input.tenantRef, verifiedPhone, this.now());
@@ -514,10 +528,25 @@ export class CustomerIdentityService {
 
   private scope(tenantRef: string, config: CustomerIdentityConfiguration): CustomerScope {
     if (!CustomerVerificationModeSchema.safeParse(config.mode).success
-      || config.environment !== 'staging' || !/^AC[0-9a-fA-F]{32}$/.test(config.parentRef)) {
+      || (config.environment !== 'staging' && !(config.mode === 'production_paid' && config.environment === 'production'))
+      || !/^AC[0-9a-fA-F]{32}$/.test(config.parentRef)) {
       throw new CustomerIdentityError('unavailable');
     }
     return { tenantRef, parentRef: config.parentRef };
+  }
+
+  private admission(scope: CustomerScope, clientIp: string | undefined) {
+    if (this.configuration().mode !== 'production_paid') return {};
+    if (!clientIp) throw new CustomerIdentityError('unavailable');
+    return { admission: { mode: 'production_paid' as const,
+      sourceHash: this.crypto.hash('ip', scope.parentRef, clientIp) } };
+  }
+
+  private async revalidateProductionFunding(scope: CustomerScope, pending: PendingChallenge) {
+    if (pending.funding?.mode === 'production_paid'
+      && !await this.repository.revalidateProductionFunding({ ...scope, challengeId: pending.challengeId })) {
+      throw new CustomerIdentityError('unavailable');
+    }
   }
 
   private challengeView(challenge: PendingChallenge) {
@@ -531,6 +560,16 @@ export class CustomerIdentityService {
     }
     const funding = fundingSchema.safeParse(pending.funding);
     if (!funding.success) throw new CustomerIdentityError('unavailable');
+    const production = productionBudgetOf(plan);
+    if (production) {
+      // A newer grant B is for new sends. The repository revalidates the
+      // immutable original grant A before checking its already-reserved SMS.
+      if (funding.data.mode !== 'production_paid' || funding.data.currency !== production.currency
+        || funding.data.expiresAt <= this.now() || funding.data.reservedMicrousd < production.reservePerSendMicrousd) {
+        throw new CustomerIdentityError('unavailable');
+      }
+      return;
+    }
     const paid = paidBudgetOf(plan);
     if (!paid) {
       if (funding.data.mode !== 'trial') throw new CustomerIdentityError('unavailable');

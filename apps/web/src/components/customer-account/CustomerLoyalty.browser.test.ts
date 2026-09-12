@@ -295,7 +295,7 @@ async function verifyLoyalty(state: 'available' | 'terms_changed' | 'member' | '
     await page.getByText('25 points', { exact: true }).waitFor();
     if (state === 'card') await page.getByRole('img', { name: 'QR de votre carte fidélité' }).waitFor();
     else await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).waitFor();
-  } else await page.getByText(state === 'existing_card' ? /présentez votre carte existante/i : state === 'attachment_refused' ? /Cette carte ne peut pas être rattachée/ : /fidélité n’est pas disponible/).waitFor();
+  } else await page.getByText(state === 'existing_card' ? /Aucune nouvelle carte n’a été créée/ : state === 'attachment_refused' ? /Cette carte ne peut pas être rattachée/ : /fidélité n’est pas disponible/).waitFor();
   await markUI(paths.loyalty, state);
 }
 async function accept() { await page.getByRole('checkbox').check(); await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).click(); }
@@ -335,6 +335,45 @@ async function journalSelection(): Promise<Selection> {
   });
 }
 describe('account loyalty — native UI with isolated HTTP', () => {
+  it('recovers a phone collision by rereading terms and explicitly attaching the existing card without a second join', async () => {
+    await openLoyalty(); outcome = 'collision'; await accept(); await verifyLoyalty('existing_card');
+    expect(registered).toBe(false);
+    expect(calls.map(call => call.step)).toEqual(['view', 'join']);
+    expect(await page.getByText(/rattachez-la ici à votre compte pour retrouver les mêmes points/).count()).toBe(1);
+    expect(await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).count()).toBe(0);
+    expect(await page.getByText('25 points', { exact: true }).count()).toBe(0);
+    // A conflict does not authorize attachment with the earlier join consent.
+    // Only an explicit new view supplies the current programme version.
+    outcome = 'normal'; version = 2;
+    await page.getByRole('button', { name: 'Rattacher ma carte existante', exact: true }).click();
+    await verifyLoyalty('available');
+    expect(calls).toHaveLength(3); expect(calls[2]).toEqual({ step: 'view' });
+    await page.getByText(/Version 2\./).waitFor();
+    expect(await page.getByText(/vous gardez vos points et votre historique/).count()).toBe(1);
+    expect(await page.getByText(/Un nouveau QR remplacera l’ancien/).count()).toBe(1);
+    expect(await page.getByText(/numéro déjà vérifié dans votre compte/).count()).toBe(1);
+    expect(await page.locator('input[type="tel"]').count()).toBe(0);
+    const code = page.getByLabel('Code de votre carte', { exact: true });
+    const submit = page.getByRole('button', { name: 'Rattacher cette carte', exact: true });
+    expect(await code.inputValue()).toBe('');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
+    expect(await submit.isDisabled()).toBe(true);
+    await code.fill('A'.repeat(43));
+    expect(await submit.isDisabled()).toBe(true); expect(calls).toHaveLength(3);
+    await page.getByRole('checkbox').check(); await submit.click(); await verifyLoyalty('member');
+    expect(calls[3]).toMatchObject({ step: 'attach', qrToken: 'A'.repeat(43), programId: program().id, rulesVersion: 2,
+      termsAccepted: true, termsNoticeVersion: 'customer-loyalty-attach-2026-09' });
+    expect(calls[3]?.operationId).not.toBe(calls[1]?.operationId);
+    expect(calls.map(call => call.step)).toEqual(['view', 'join', 'view', 'attach']);
+    expect(calls.filter(call => call.step === 'join')).toHaveLength(1);
+    expect(calls.every(call => !('phone' in call) && !('phoneE164' in call))).toBe(true);
+    expect(profileWrites).toEqual([]);
+    expect(await page.getByText('Votre carte est liée à ce compte', { exact: true }).count()).toBe(1);
+    expect(await page.getByRole('img', { name: 'QR de votre carte fidélité' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).click(); await verifyLoyalty('card');
+    expect(calls.map(call => call.step)).toEqual(['view', 'join', 'view', 'attach', 'card']);
+    expect(await privateQrPersisted()).toBe(false);
+  });
   it('pastes an existing card without a name and requires a separate explicit attachment consent', async () => {
     name = null; await openLoyalty();
     expect(await page.getByRole('button', { name: 'J’ai déjà une carte', exact: true }).count()).toBe(1);
@@ -606,7 +645,7 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     expect(await page.getByRole('checkbox').isChecked()).toBe(false);
   });
   it('does not disclose any other member after a phone collision', async () => {
-    outcome = 'collision'; await openLoyalty(); await page.getByText(/présentez votre carte existante/i).waitFor();
+    outcome = 'collision'; await openLoyalty(); await page.getByText(/Aucun rattachement automatique n’a été effectué/).waitFor();
     expect(await page.getByRole('checkbox').count()).toBe(0); expect(await page.getByRole('button', { name: 'Afficher ma carte' }).count()).toBe(0);
     expect(await page.getByText('25 points', { exact: true }).count()).toBe(0); expect(calls).toHaveLength(1);
     await session.send('Runtime.evaluate', { expression: 'void 0' });

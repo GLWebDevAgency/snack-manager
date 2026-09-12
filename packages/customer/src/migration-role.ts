@@ -184,6 +184,40 @@ export async function grantCustomerRuntimeRole(
       GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${quotedRole};
     ALTER DEFAULT PRIVILEGES IN SCHEMA customer
       GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${quotedRole};
+    ${customerProductionRuntimeGrants(role)}
   `);
 }
 
+
+/** Apply after broad historical grants; production operator records are read-only. */
+export async function restrictCustomerProductionRuntimeRole(pool: Pick<Pool, 'query'>, role: string): Promise<void> {
+  assertRoleName(role);
+  await pool.query(customerProductionRuntimeGrants(role));
+}
+
+function customerProductionRuntimeGrants(role: string): string {
+  return `DO $grants$ BEGIN
+    ${['production_budget_authorizations','production_budget_activation','production_admission_policies','production_admissions'].map(table => `
+      IF pg_catalog.to_regclass('customer.${table}') IS NOT NULL THEN
+        REVOKE ALL ON customer.${table} FROM "${role}";
+        GRANT SELECT ON customer.${table} TO "${role}";
+      END IF;`).join('')}
+    END $grants$;`;
+}
+
+/** Narrow SQL grant shared with isolated PostgreSQL fixtures. No runtime connection receives it. A deployed third role requires a separately versioned bootstrap ACL policy. */
+export async function grantCustomerProductionOperatorPrivileges(pool: Pick<Pool, 'query'>, role: string, database: string): Promise<void> {
+  assertRoleName(role);
+  const target = `"${role}"`;
+  await pool.query(`GRANT CONNECT ON DATABASE "${database.replaceAll('"', '""')}" TO ${target};
+    GRANT USAGE ON SCHEMA customer TO ${target};
+    GRANT SELECT,UPDATE(parent_ref) ON customer.parent_budgets TO ${target};
+    GRANT SELECT ON customer.production_budget_authorizations,customer.production_budget_activation,customer.production_admission_policies,customer.production_admissions TO ${target};
+    GRANT INSERT(parent_ref,tenant_ref,authorization_ref,service_sid,currency,authorized_spend_microusd,reserve_per_send_microusd,
+      max_send_reservations,cost_evidence_reference,not_before,expires_at),UPDATE(revoked_at)
+      ON customer.production_budget_authorizations TO ${target};
+    GRANT INSERT(parent_ref,tenant_ref,authorization_ref),UPDATE(authorization_ref) ON customer.production_budget_activation TO ${target};
+    GRANT INSERT(parent_ref,tenant_ref,policy_ref,window_ms,browser_source_limit,browser_tenant_limit,browser_parent_limit,
+      intent_browser_limit,intent_source_limit,intent_tenant_limit,intent_parent_limit),UPDATE(revoked_at)
+      ON customer.production_admission_policies TO ${target};`);
+}

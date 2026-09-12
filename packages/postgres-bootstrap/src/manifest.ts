@@ -22,6 +22,8 @@ export const CUSTOMER_SESSION_PUBLICATIONS_MIGRATION = 1_788_908_400_000;
 export const CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION = 1_788_915_600_000;
 export const CUSTOMER_PROTECTED_ACCESS_MIGRATION = 1_788_922_800_000;
 export const CUSTOMER_LOYALTY_MEMBERSHIPS_MIGRATION = 1_788_930_000_000;
+export const CUSTOMER_PRODUCTION_FUNDING_MIGRATION = 1_788_937_200_000;
+export const CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION = 1_788_944_400_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -54,6 +56,15 @@ const introduced = (
  * un `COLLATE` non qualifié, son inventaire devra rejoindre ce préflight.
  */
 export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
+  ...['production_budget_authorizations','production_budget_activation'].map(name =>
+    introduced('table','customer',name,'customer',CUSTOMER_PRODUCTION_FUNDING_MIGRATION)),
+  ...['preserve_production_authorization','activate_production_authorization','reserve_production_funding'].map(name =>
+    introduced('function','customer',name,'customer',CUSTOMER_PRODUCTION_FUNDING_MIGRATION)),
+  ...['production_admission_policies','production_admissions'].map(name =>
+    introduced('table','customer',name,'customer',CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION)),
+  ...['preserve_production_admission_policy','guard_production_cutover','guard_production_admission'].map(name =>
+    introduced('function','customer',name,'customer',CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION)),
+
   managed('schema', 'drizzle', 'drizzle'),
   introduced(
     'schema',

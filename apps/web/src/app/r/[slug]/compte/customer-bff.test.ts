@@ -32,9 +32,9 @@ const mockFetch = vi.fn<typeof fetch>();
 const view = () => ({ expiresAt: Date.now() + 60_000,
   profile: { name: 'Client test', phoneE164: '+33600000000', phoneVerifiedAt: Date.now() - 1_000, revision: 0 } });
 
-function req(path: string, method = 'POST', body: unknown = path === 'navigateur' ? { step: 'prepare', browserRef } : {}, headers: Record<string, string> = {}) {
-  return new NextRequest(`${origin}/r/classfood/compte/${path}`, { method,
-    headers: { host: 'staging.snackmanager.fr', origin, 'sec-fetch-site': 'same-origin',
+function req(path: string, method = 'POST', body: unknown = path === 'navigateur' ? { step: 'prepare', browserRef } : {}, headers: Record<string, string> = {}, requestOrigin = origin) {
+  return new NextRequest(`${requestOrigin}/r/classfood/compte/${path}`, { method,
+    headers: { host: new URL(requestOrigin).host, origin: requestOrigin, 'sec-fetch-site': 'same-origin',
       'x-real-ip': '192.0.2.10', 'content-type': 'application/json', 'x-sm-customer-browser-ref': browserRef,
       'x-sm-customer-operation-id': operationId, 'x-sm-customer-check-id': checkId, ...headers },
     ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) });
@@ -48,6 +48,7 @@ beforeEach(() => {
   vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'staging');
   vi.stubEnv('SM_ENV', 'staging');
   vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', 'closed_trial');
+  vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', undefined);
   const environmentId = randomUUID(), projectId = randomUUID();
   vi.stubEnv('RAILWAY_ENVIRONMENT_ID', environmentId);
   vi.stubEnv('SM_CUSTOMER_PILOT_ENVIRONMENT_ID', environmentId);
@@ -291,6 +292,122 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
         expect(mockFetch).not.toHaveBeenCalled();
       });
   });
+  describe('explicit production deployment target', () => {
+    const productionOrigin = 'https://snackmanager.fr';
+    function configure(environment: 'staging' | 'production' = 'production', allowedOrigin = productionOrigin) {
+      const target = { version: 1, environment, railwayProjectId: randomUUID(), railwayEnvironmentId: randomUUID(),
+        tenantRef: 'a'.repeat(24), slug: 'classfood', verifyAccountSid: `AC${'1'.repeat(32)}`, verifyServiceSid: `VA${'2'.repeat(32)}`,
+        origins: [allowedOrigin], apiOrigin };
+      vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', 'production_paid');
+      vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', environment); vi.stubEnv('SM_ENV', environment);
+      vi.stubEnv('RAILWAY_PROJECT_ID', target.railwayProjectId); vi.stubEnv('RAILWAY_ENVIRONMENT_ID', target.railwayEnvironmentId);
+      vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', JSON.stringify(target));
+      return target;
+    }
+    function productionRequest(path: string, method = 'POST', body?: unknown, headers: Record<string, string> = {}) {
+      return req(path, method, body, headers, productionOrigin);
+    }
+    async function expectClosed() {
+      const response = await status(productionRequest('capacites', 'GET'), context);
+      expect(await response.json()).toEqual({ available: false }); privateHeaders(response);
+      expect(response.headers.get('set-cookie')).toBeNull();
+      const mutation = await browser(productionRequest('navigateur'), context);
+      expect(mutation.status).toBe(503); privateHeaders(mutation);
+      expect(mutation.headers.get('set-cookie')).toBeNull(); expect(mockFetch).not.toHaveBeenCalled();
+    }
+    it.each(['staging', 'production'] as const)('relays only the exact %s target and keeps upstream readiness authoritative', async environment => {
+      const allowedOrigin = environment === 'staging' ? origin : productionOrigin;
+      configure(environment, allowedOrigin);
+      // Pilot settings are neither a fallback nor a prerequisite in this mode.
+      for (const name of ['SM_CUSTOMER_PILOT_ORIGINS', 'SM_CUSTOMER_PILOT_SLUGS',
+        'SM_CUSTOMER_PILOT_ENVIRONMENT_ID', 'SM_CUSTOMER_PILOT_PROJECT_ID']) vi.stubEnv(name, undefined);
+      mockFetch.mockResolvedValueOnce(Response.json({ available: false }));
+      const response = await status(req('capacites', 'GET', {}, {}, allowedOrigin), context);
+      expect(await response.json()).toEqual({ available: false }); privateHeaders(response);
+      expect(response.headers.get('set-cookie')).toBeNull(); expect(mockFetch).toHaveBeenCalledTimes(1);
+      const relay = mockFetch.mock.calls.at(-1)!;
+      expect(relay[0]).toBe(`${apiOrigin}/public/customer/classfood/status`);
+      expect(relay[1]).toMatchObject({ method: 'POST', redirect: 'error', cache: 'no-store' });
+      expect(new Headers(relay[1]!.headers).get('x-sm-customer-origin')).toBe(allowedOrigin);
+    });
+    it('preserves protected-session selectors and never emits a cookie or OTP during a production session read', async () => {
+      configure(); const current = view();
+      mockFetch.mockResolvedValueOnce(Response.json(current));
+      const response = await session(productionRequest('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
+      expect(response.status).toBe(200); expect(await response.json()).toEqual(current); privateHeaders(response);
+      expect(response.headers.get('set-cookie')).toBeNull(); expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/session`);
+      expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
+        browserRef, browserSecret: browserToken, expectedOperationId: operationId, expectedCheckId: checkId, sessionToken, request: {} });
+      expect(new Headers(mockFetch.mock.calls[0]![1]!.headers).get('cookie')).toBeNull();
+    });
+    it.each([undefined, '', 'null', '[]', '{invalid'])('never falls back to pilot settings with an absent or invalid target (%#)', async raw => {
+      configure(); vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', raw); await expectClosed();
+    });
+    it('bounds the target before parsing even when its JSON and shared schema would otherwise be valid', async () => {
+      const target = configure();
+      vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', JSON.stringify(target) + ' '.repeat(8192)); await expectClosed();
+    });
+    it.each<Record<string, unknown>>([
+      { version: 2 }, { environment: 'preview' }, { railwayProjectId: 'invalid' }, { railwayEnvironmentId: 'invalid' },
+      { tenantRef: 'invalid' }, { slug: 'other-restaurant' }, { verifyAccountSid: 'invalid' }, { verifyServiceSid: 'invalid' },
+      { origins: [] }, { origins: [productionOrigin, productionOrigin] }, { origins: [origin] },
+      { origins: [`${productionOrigin}/`] }, { origins: ['http://snackmanager.fr'] },
+      { origins: [`${productionOrigin},https://other.example.test`] }, { apiOrigin: `${apiOrigin}/` },
+      { apiOrigin: 'https://other-api.example.test' }, { unexpected: true },
+    ])('refuses a malformed or nonmatching deployment target (%#)', async patch => {
+      const target = configure(); vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', JSON.stringify({ ...target, ...patch })); await expectClosed();
+    });
+    it.each(['version', 'environment', 'railwayProjectId', 'railwayEnvironmentId', 'tenantRef', 'slug',
+      'verifyAccountSid', 'verifyServiceSid', 'origins', 'apiOrigin'])('requires the complete shared target, including %s', async field => {
+      const target: Record<string, unknown> = configure(); delete target[field];
+      vi.stubEnv('SM_CUSTOMER_PRODUCTION_TARGET', JSON.stringify(target)); await expectClosed();
+    });
+    it.each([
+      ['RAILWAY_ENVIRONMENT_NAME', 'staging'], ['RAILWAY_ENVIRONMENT_NAME', 'development'], ['RAILWAY_ENVIRONMENT_NAME', ''],
+      ['RAILWAY_PROJECT_ID', randomUUID()], ['RAILWAY_ENVIRONMENT_ID', randomUUID()],
+      ['RAILWAY_PROJECT_ID', ''], ['RAILWAY_ENVIRONMENT_ID', ''], ['SM_ENV', 'staging'], ['SM_ENV', ''],
+      ['NEXT_PUBLIC_API_URL', 'https://other-api.example.test'], ['NEXT_PUBLIC_API_URL', `${apiOrigin}/`],
+      ['SM_CUSTOMER_RELAY_SIGNING_KEY', ''], ['SM_CUSTOMER_RELAY_SIGNING_KEY', `${key}\n`],
+      ['SM_CUSTOMER_RELAY_SIGNING_KEY', `${'A'.repeat(42)}B=`],
+    ])('refuses contradictory native identity or relay configuration %s (%#)', async (field, value) => {
+      configure(); vi.stubEnv(field, value); await expectClosed();
+    });
+    it('allows SM_ENV to be absent only when the native deployment still exactly matches', async () => {
+      configure(); vi.stubEnv('SM_ENV', undefined);
+      mockFetch.mockResolvedValueOnce(Response.json({ available: false }));
+      await status(productionRequest('capacites', 'GET'), context); expect(mockFetch).toHaveBeenCalledTimes(1);
+      mockFetch.mockClear(); vi.stubEnv('RAILWAY_ENVIRONMENT_ID', randomUUID()); await expectClosed();
+    });
+    it('does not let an admitted target open a different request slug', async () => {
+      configure();
+      const request = new NextRequest(`${productionOrigin}/r/other/compte/capacites`, {
+        headers: { host: new URL(productionOrigin).host, origin: productionOrigin, 'x-real-ip': '192.0.2.10' } });
+      expect(await (await status(request, { params: Promise.resolve({ slug: 'other' }) })).json()).toEqual({ available: false });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+    it.each(['closed_trial', 'closed_paid_pilot'])('keeps %s staging-only even with a valid production target', async mode => {
+      configure(); vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', mode); await expectClosed();
+    });
+    it.each(['https://restaurant.example.test', 'https://classfood.snackmanager.fr'])('resolves admitted custom domain %s freshly and refuses a changed restaurant before forwarding credentials', async custom => {
+      configure('production', custom);
+      mockFetch.mockResolvedValueOnce(Response.json({ slug: 'classfood' })).mockResolvedValueOnce(Response.json(view()));
+      const request = () => req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}`, 'x-sm-tenant': 'classfood' }, custom);
+      expect((await session(request(), context)).status).toBe(200);
+      expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/resolve?host=${new URL(custom).host}`);
+      const resolutionHeaders = new Headers(mockFetch.mock.calls[0]![1]!.headers);
+      expect(resolutionHeaders.has('x-sm-customer-proof')).toBe(false); expect(resolutionHeaders.has('cookie')).toBe(false);
+      mockFetch.mockClear(); mockFetch.mockResolvedValueOnce(Response.json({ slug: 'other' }));
+      const refused = await session(request(), context); expect(refused.status).toBe(403); privateHeaders(refused);
+      expect(refused.headers.get('set-cookie')).toBeNull(); expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+    it('does not treat the production platform as a platform bypass in a staging target', async () => {
+      configure('staging', productionOrigin); mockFetch.mockResolvedValueOnce(Response.json({ slug: 'other' }));
+      const response = await status(productionRequest('capacites', 'GET'), context);
+      expect(response.status).toBe(403); expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/resolve?host=snackmanager.fr`);
+    });
+  });
   it.each(['', 'paid', 'Full', 'active', 'production', 'closed_paid_pilot ', 'closed_trial,closed_paid_pilot'])(
     'refuses unsupported account mode %j without a fallback', async mode => {
       vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', mode);
@@ -304,7 +421,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       expect(await response.json()).toEqual({ available: false });
       privateHeaders(response); expect(mockFetch).not.toHaveBeenCalled();
     });
-  it('never opens production or a local fallback', async () => {
+  it('never opens production or a local fallback in a pilot mode', async () => {
     vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'production');
     expect((await browser(req('navigateur'), context)).status).toBe(503);
     expect(mockFetch).not.toHaveBeenCalled();

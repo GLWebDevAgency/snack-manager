@@ -357,6 +357,10 @@ type DiscoveredMigrationObject = {
 };
 
 const ALLOWED_DYNAMIC_MIGRATION_BLOCKS = new Set([
+  // Production 0009/0010: remove inherited DML grants on the exact operator tables.
+  // No object discovery/creation; checked identifiers only enter REVOKE/SELECT.
+  'customer:1788937200000:0009_customer_production_funding:6a84e59bf9942aab24b057c795e5247ec43edd2470f570271eabcdc1d9fdd01e',
+  'customer:1788944400000:0010_customer_production_admissions:59197209eb98f98cc86f8b29d0568cb41a83c362ba3774b3ab6d2c2a05859947',
   // loyalty/0000 : boucle RLS historique, qui n'introduit que les policies
   // tenant_isolation liées aux tables. Toute modification du bloc exige une
   // revue explicite et la mise à jour de cette empreinte.
@@ -715,14 +719,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 96 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(96);
+  it('énumère exactement les 106 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(106);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(50);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(54);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(19);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(96);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(25);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(106);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,

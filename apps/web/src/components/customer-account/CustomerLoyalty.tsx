@@ -30,7 +30,7 @@ function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJo
     <div className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
       <span className="inline-flex min-h-6 items-center rounded-pill bg-accentwash px-2.5 text-xs font-bold text-accentink">Carte gratuite · adhésion facultative</span>
       <h4 className="mt-4 font-display text-xl font-extrabold leading-tight tracking-tight">{program.name}</h4>
-      <p className="mt-2 text-sm leading-6 text-mut">Retrouvez votre carte et votre solde depuis ce compte, pour ce restaurant.</p>
+      <p className="mt-2 text-sm leading-6 text-mut">Une seule carte pour ce restaurant, utilisable au comptoir et depuis votre compte.</p>
       {profileReady && name && <p className="mt-4 break-words border-t border-ink/10 pt-3 text-sm"><span className="text-mut">Au nom de </span><span className="font-bold">{name}</span></p>}
     </div>
     <section aria-label="Conditions du programme" className="rounded-card border border-ink/10 bg-surface2 p-4">
@@ -113,6 +113,8 @@ function AttachmentOffer({ slug, program, changed, onAttach, onCancel }: {
       <p className="text-xs font-bold text-accentink">Votre carte existante</p>
       <h4 ref={heading} tabIndex={-1} className="mt-2 font-display text-xl font-extrabold tracking-tight outline-none">Rattacher ma carte</h4>
       <p className="mt-2 text-sm leading-6 text-mut">Scannez ou collez le code de votre carte pour la retrouver dans ce compte. Rien n’est envoyé avant votre confirmation.</p>
+      <p className="mt-2 text-sm leading-6 text-mut">Après confirmation du rattachement, vous gardez vos points et votre historique. Un nouveau QR remplacera l’ancien.</p>
+      <p className="mt-2 text-sm leading-6 text-mut">Le téléphone de cette carte doit correspondre au numéro déjà vérifié dans votre compte.</p>
     </div>
     {changed && <p role="alert" className="rounded-card border border-prep/30 bg-prep/10 p-3 text-sm leading-6 text-prept">Les conditions ont changé. Relisez-les, saisissez à nouveau votre carte et confirmez votre choix.</p>}
     <Tap ref={scan} className={secondary + ' w-full'} onClick={() => setScanning(true)} disabled={scanning}>Scanner ma carte</Tap>
@@ -206,8 +208,8 @@ export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, p
         : <Tap className={primary} onClick={() => void client.card()}><Icon name="gift" size={18} />Afficher ma carte</Tap>}
     </div>}
     {response?.state === 'name_required' && (profileEditor ?? <div className="space-y-3"><p role="status" className="text-sm leading-6 text-mut">Votre profil doit comporter un prénom ou nom pour créer une carte.</p><Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil</Tap></div>)}
-    {(response?.state === 'existing_card' || response?.state === 'attachment_refused') && <div className="space-y-3"><p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">{response.state === 'existing_card' ? 'La création d’une nouvelle carte n’est pas possible depuis ce compte. Présentez votre carte existante au restaurant ou demandez son aide. Aucun rattachement automatique n’a été effectué.' : 'Cette carte ne peut pas être rattachée à ce compte. Vérifiez votre carte ou demandez l’aide du restaurant. Aucun rattachement n’a été effectué.'}</p>
-      <Tap className={secondary + ' w-full'} onClick={() => { setAttachment(true); void client.load(); }}>Relire les conditions pour rattacher ma carte</Tap></div>}
+    {(response?.state === 'existing_card' || response?.state === 'attachment_refused') && <div className="space-y-3"><p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">{response.state === 'existing_card' ? 'Aucune nouvelle carte n’a été créée. Si vous avez déjà une carte de ce restaurant, rattachez-la ici à votre compte pour retrouver les mêmes points. Aucun rattachement automatique n’a été effectué.' : 'Cette carte ne peut pas être rattachée à ce compte. Vérifiez votre carte ou demandez l’aide du restaurant. Aucun rattachement n’a été effectué.'}</p>
+      <Tap className={secondary + ' w-full'} onClick={() => { setAttachment(true); void client.load(); }}>{response.state === 'existing_card' ? 'Rattacher ma carte existante' : 'Relire les conditions pour rattacher ma carte'}</Tap></div>}
     {response?.state === 'unavailable' && <p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">La fidélité n’est pas disponible pour le moment. Votre compte reste accessible indépendamment.</p>}
     {response?.state === 'conflict' && <p role="status" className="rounded-card border border-prep/30 bg-prep/5 p-4 text-sm leading-6 text-prept">Votre carte ne peut pas être vérifiée dans son état actuel. Actualisez ou demandez l’aide du restaurant.</p>}
     {!busy && <Tap className={secondary + ' w-full'} onClick={() => void client.retry()}>{state.pendingAttachment ? 'Reprendre mon rattachement' : state.pendingJoin ? 'Reprendre ma demande' : state.status === 'error' || state.status === 'idle' ? 'Réessayer la lecture' : 'Actualiser ma fidélité'}</Tap>}

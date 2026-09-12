@@ -44,6 +44,7 @@ export * from './order-recovery';
 export * from './customer-orders';
 export * from './guest-order-reorder';
 export * from './customer-loyalty';
+export * from './customer-deployment';
 export * from './menu-legacy-options';
 export * from './menu-featured';
 export * from './order-notifications';

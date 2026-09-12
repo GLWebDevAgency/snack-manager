@@ -4,6 +4,7 @@ import { assertCustomerTestTarget } from './test-fixture';
 
 assertCustomerTestTarget(process.env.CUSTOMER_TEST_DATABASE_URL);
 const result = spawnSync(process.execPath, [require.resolve('vitest/vitest.mjs'), 'run',
+  'src/production.integration.test.ts', 'src/production-migration.integration.test.ts',
   'src/repository.integration.test.ts', 'src/orchestration.integration.test.ts', 'src/paid-reservation.integration.test.ts',
   'src/paid-migration.integration.test.ts', 'src/browser-continuity.integration.test.ts', 'src/browser-preparation.integration.test.ts',
   'src/verification-intents.integration.test.ts', 'src/session-publications.integration.test.ts',

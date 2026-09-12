@@ -4,6 +4,11 @@ import type { CustomerProtectedAccessRepository } from './access-port';
  * All dates are server epoch milliseconds. No browser supplies a tenant, parent
  * account, verified phone, quota plan or account identity to this boundary. */
 export type CustomerScope = { tenantRef: string; parentRef: string };
+/** Trusted server source, never a browser-selected quota or funding authority. */
+export type CustomerProductionAdmission = {
+  mode: 'production_paid'; sourceHash: string;
+};
+export type CustomerAdmissionInput = { admission?: CustomerProductionAdmission };
 export type CustomerBrowserPreparation = {
   browserRef: string;
   state: 'prepared' | 'issued' | 'confirmed' | 'expired';
@@ -60,6 +65,12 @@ export type PaidVerificationLimits = VerificationLimits & {
     authorizedSpendMicrousd: number; reservePerSendMicrousd: number; expiresAt: number;
   };
 };
+export type ProductionVerificationLimits = VerificationLimits & {
+  productionBudget: {
+    mode: 'production_paid'; authorizationRef: string; costEvidenceReference: string;
+    currency: 'USD'; reservePerSendMicrousd: number;
+  };
+};
 type ReservationIdentity = CustomerScope & {
   proofHash: string;
   browserRef: string;
@@ -79,9 +90,10 @@ type ReservationIdentity = CustomerScope & {
 };
 export type TrialVerificationReservation = ReservationIdentity & { limits: TrialVerificationLimits };
 export type PaidVerificationReservation = ReservationIdentity & { limits: PaidVerificationLimits };
-export type VerificationReservation = ReservationIdentity & { limits: TrialVerificationLimits | PaidVerificationLimits };
+export type ProductionVerificationReservation = ReservationIdentity & { limits: ProductionVerificationLimits };
+export type VerificationReservation = ReservationIdentity & { limits: TrialVerificationLimits | PaidVerificationLimits | ProductionVerificationLimits };
 export type VerificationFunding = { mode: 'trial' } | {
-  mode: 'paid'; authorizationRef: string; currency: 'USD'; reservedMicrousd: number; expiresAt: number;
+  mode: 'paid' | 'production_paid'; authorizationRef: string; currency: 'USD'; reservedMicrousd: number; expiresAt: number;
 };
 export type PendingChallenge = {
   challengeId: string;
@@ -116,7 +128,7 @@ export type CheckResult = 'approved' | 'pending' | 'expired' | 'locked' | 'uncer
  * Check claims must be single-flight: expired leases NEVER re-execute a remote
  * check whose outcome may have been approved. No raw token, OTP or phone here. */
 export interface CustomerIdentityRepository extends CustomerEnrollmentRepository, CustomerProtectedAccessRepository {
-  prepareBrowser(input: CustomerScope & { browserRef: string }): Promise<CustomerBrowserPreparation | null>;
+  prepareBrowser(input: CustomerScope & { browserRef: string } & CustomerAdmissionInput): Promise<CustomerBrowserPreparation | null>;
   issueBrowser(input: CustomerBrowserBinding & { currentBrowserHash: string | null }): Promise<{
     preparation: CustomerBrowserPreparation; emitCookie: boolean;
   } | null>;
@@ -124,10 +136,13 @@ export interface CustomerIdentityRepository extends CustomerEnrollmentRepository
   validateBrowser(input: CustomerBrowserBinding): Promise<{ expiresAt: number } | null>;
   /** Read the confirmed browser selected by its cookie; no session authority or TTL renewal. */
   restoreBrowser(input: CustomerScope & { browserHash: string }): Promise<CustomerBrowserPreparation | null>;
-  prepareIntent(input: CustomerIntentBinding): Promise<{ intent: CustomerVerificationIntent; emitCookie: boolean } | null>;
-  closeIntent(input: CustomerBrowserBinding & { operationId: string }): Promise<CustomerVerificationIntent | null>;
+  prepareIntent(input: CustomerIntentBinding & CustomerAdmissionInput): Promise<{ intent: CustomerVerificationIntent; emitCookie: boolean } | null>;
+  closeIntent(input: CustomerBrowserBinding & { operationId: string } & CustomerAdmissionInput): Promise<CustomerVerificationIntent | null>;
   validateIntent(input: CustomerIntentBinding): Promise<{ expiresAt: number } | null>;
   resultIntent(input: CustomerIntentBinding & { checkId: string | null; sessionHash: string | null }): Promise<CustomerIntentResult | null>;
+  productionSendAvailability(input: CustomerScope & { authorizationRef: string; serviceSid: string;
+    costEvidenceReference: string; reservePerSendMicrousd: number }): Promise<boolean>;
+  revalidateProductionFunding(input: CustomerScope & { challengeId: string }): Promise<boolean>;
   reserve(input: VerificationReservation): Promise<ReservationResult>;
   settleSend(input: CustomerScope & {
     challengeId: string;

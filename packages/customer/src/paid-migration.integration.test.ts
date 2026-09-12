@@ -47,7 +47,7 @@ integration('paid migration — historical rows and old SQL writer, native Postg
     try {
       await assertCustomerMigrationsCurrent(fixture.app);
       expect((await fixture.admin.query('SELECT * FROM customer.reservations WHERE id=$1', [input.operationId])).rows[0])
-        .toEqual({ ...original, funding_kind: 'trial', authorization_ref: null, reserved_microusd: '0', funding_expires_at: null, cost_evidence_reference: null });
+        .toEqual({ ...original, funding_kind: 'trial', authorization_ref: null, reserved_microusd: '0', funding_expires_at: null, cost_evidence_reference: null, production_authorization_ref: null });
       expect((await fixture.admin.query('SELECT reserved_sends, reserved_sms, reserved_verifications,send_limit,sms_limit,verification_limit FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0])
         .toEqual({ reserved_sends: '1', reserved_sms: '2', reserved_verifications: '1', send_limit: '5', sms_limit: '20', verification_limit: '10' });
       const repo = new PostgresCustomerIdentityRepository(fixture.app);
@@ -55,7 +55,7 @@ integration('paid migration — historical rows and old SQL writer, native Postg
       expect(await repo.settleSend({ ...input, verificationSid: `VE${randomUUID().replaceAll('-', '')}` })).toBeNull();
       expect(await repo.claimCheck({ ...input, checkId: randomUUID() })).toBeNull();
       const history = (await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-      expect(history).toHaveLength(9); expect(history[0].hash).toBe(originalHash);
+      expect(history).toHaveLength(11); expect(history[0].hash).toBe(originalHash);
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(history);
     } finally { await fixture.close(); }

@@ -1,31 +1,31 @@
 import type { PoolClient } from 'pg';
-import type { CustomerBrowserBinding, CustomerIdentityRepository, CustomerIntentBinding, CustomerIntentResult } from './port';
+import type { CustomerAdmissionInput, CustomerBrowserBinding, CustomerIdentityRepository, CustomerIntentBinding, CustomerIntentResult } from './port';
 import { validateBrowser } from './browser-preparation';
 import { intentGeneration, intentRow, intentView, validOpenIntent, type IntentRow } from './intent-queries';
 import { dbTime, session } from './queries';
 import { CustomerRepositoryError } from './client';
 import { readEnrollment } from './enrollment';
 
-type CloseInput = CustomerBrowserBinding & { operationId: string };
+type CloseInput = CustomerBrowserBinding & { operationId: string } & CustomerAdmissionInput;
 async function insertIntent(client: PoolClient, input: CloseInput, proofHash: string | null) {
   const counts = (await client.query<{ total: number; live: number }>(`SELECT count(*)::int AS total,
     count(*) FILTER (WHERE browser_ref=$3 AND proof_hash IS NOT NULL AND expires_at>clock_timestamp())::int AS live
     FROM customer.verification_intents WHERE parent_ref=$1 AND tenant_ref=$2`,
   [input.parentRef, input.tenantRef, input.browserRef])).rows[0]!;
-  if (counts.total >= 128 || (proofHash !== null && counts.live >= 3)) return null;
+  if ((!input.admission && counts.total >= 128) || (proofHash !== null && counts.live >= 3)) return null;
   const generation = await intentGeneration(client, input);
   if (proofHash !== null && BigInt(generation) >= BigInt(Number.MAX_SAFE_INTEGER) - 1n) return null;
   return (await client.query<IntentRow>(`WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS now)
     INSERT INTO customer.verification_intents(parent_ref,tenant_ref,operation_id,browser_ref,browser_hash,proof_hash,
-      browser_generation,state,created_at,expires_at,closed_at)
+      browser_generation,state,created_at,expires_at,closed_at,production_admission_policy_ref,admission_source_hash)
     SELECT $1,$2,$3,$4,$5,$6,$7,CASE WHEN $6::text IS NULL THEN 'closed' ELSE 'open' END,
-      stamp.now,LEAST(stamp.now+interval '10 minutes',p.expires_at),CASE WHEN $6::text IS NULL THEN stamp.now ELSE NULL END
+      stamp.now,LEAST(stamp.now+interval '10 minutes',p.expires_at),CASE WHEN $6::text IS NULL THEN stamp.now ELSE NULL END,$8,$9
     FROM customer.browser_preparations p CROSS JOIN stamp WHERE p.parent_ref=$1 AND p.tenant_ref=$2
       AND p.browser_ref=$4 AND p.browser_hash=$5 AND p.confirmed_at IS NOT NULL AND p.expires_at>stamp.now
     ON CONFLICT DO NOTHING RETURNING *`,
-  [input.parentRef, input.tenantRef, input.operationId, input.browserRef, input.browserHash, proofHash, generation])).rows[0] ?? null;
+  [input.parentRef, input.tenantRef, input.operationId, input.browserRef, input.browserHash, proofHash, generation, null, input.admission?.sourceHash ?? null])).rows[0] ?? null;
 }
-export async function prepareIntent(client: PoolClient, input: CustomerIntentBinding) {
+export async function prepareIntent(client: PoolClient, input: CustomerIntentBinding & CustomerAdmissionInput) {
   if (!await validateBrowser(client, input)) return null;
   const existing = await intentRow(client, input);
   if (existing) return { intent: await intentView(client, existing), emitCookie: false };

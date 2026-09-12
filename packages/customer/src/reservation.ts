@@ -1,19 +1,21 @@
 import type { PoolClient } from 'pg';
 import type { ReservationResult, VerificationReservation } from './port';
-import { challenge, currentChallenge, currentBrowserGeneration, dbTime, pendingView } from './queries';
+import { challenge, currentChallenge, currentBrowserGeneration, dbTime, pendingView, lockParent, fundingAllowsCheck } from './queries';
 import { lockVerificationBudget } from './budgets';
 import { validOpenIntent } from './intent-queries';
 
 export async function reserveVerification(client: PoolClient, input: VerificationReservation): Promise<ReservationResult> {
   const l = input.limits;
   if (!await validOpenIntent(client, input)) return { kind: 'denied' };
-  const budget = await lockVerificationBudget(client, input);
-  if (!budget) return { kind: 'denied' };
+  const production = 'productionBudget' in input.limits;
+  if (production && !await lockParent(client, input)) return { kind: 'denied' };
+  let budget = production ? null : await lockVerificationBudget(client, input);
+  if (!production && !budget) return { kind: 'denied' };
   const intent = await validOpenIntent(client, input);
   if (!intent) return { kind: 'denied' };
   // Always read wall-clock AFTER the lock; input.now is not an authority.
   const now = await dbTime(client);
-  if (budget.planExpiresAt <= now) return { kind: 'denied' };
+  if ((!production && budget!.planExpiresAt <= now) || input.planExpiresAt<=now) return { kind: 'denied' };
   const existingId = (await client.query<{ id: string }>(`SELECT id FROM customer.challenges
     WHERE parent_ref=$1 AND tenant_ref=$2 AND operation_id=$3`, [input.parentRef, input.tenantRef, input.operationId])).rows[0];
   const existing = existingId ? await challenge(client, input, existingId.id) : null;
@@ -22,9 +24,12 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
       || existing.browser_ref !== input.browserRef || existing.intent_operation_id !== input.operationId) return { kind: 'denied' };
     if (!await currentChallenge(client, existing)) return { kind: 'denied' };
     if (existing.expires_at.getTime() <= now) return { kind: 'denied' };
+    if (production && (existing.funding_kind!=='production_paid' || (existing.state==='pending' && !fundingAllowsCheck(existing, now)))) return { kind: 'denied' };
     if (existing.state === 'pending') return { kind: 'pending', challenge: pendingView(existing) };
     return { kind: ['reserved', 'checking', 'uncertain'].includes(existing.state) ? 'uncertain' : 'denied' };
   }
+  if (production) budget = await lockVerificationBudget(client, input);
+  if (!budget) return { kind: 'denied' };
   if (input.expiresAt <= now) return { kind: 'denied' };
   if (!budget.canReserve) return { kind: 'denied' };
   const counts = (await client.query<{ total: number; tenant: number; phone: number; ip: number; cooldown: boolean }>(`
@@ -72,11 +77,12 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
   await client.query('RELEASE SAVEPOINT browser_reservation');
   const funding = budget.funding;
   await client.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,sms_units,
-    funding_kind,authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [input.operationId, input.parentRef, input.tenantRef, input.challengeId,
+    funding_kind,authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference,production_authorization_ref)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [input.operationId, input.parentRef, input.tenantRef, input.challengeId,
     input.globalPhoneHash, input.ipHash, input.evidenceReference, l.smsUnitsReservedPerSend, funding.mode,
-    funding.mode === 'paid' ? funding.authorizationRef : null, funding.mode === 'paid' ? funding.reservedMicrousd : 0,
-    funding.mode === 'paid' ? new Date(funding.expiresAt) : null, 'paidBudget' in l ? l.paidBudget.costEvidenceReference : null]);
+    funding.mode === 'paid' ? funding.authorizationRef : null, funding.mode !== 'trial' ? funding.reservedMicrousd : 0,
+    funding.mode !== 'trial' ? new Date(funding.expiresAt) : null, 'paidBudget' in l ? l.paidBudget.costEvidenceReference
+      : 'productionBudget' in l ? l.productionBudget.costEvidenceReference : null, funding.mode==='production_paid' ? funding.authorizationRef : null]);
   // Provider exclusion is independent of a shorter application/evidence expiry.
   // Pilot prerequisite: provider validity is attested at 10 min; 5 s covers transport.
   await client.query(`INSERT INTO customer.phone_guards(parent_ref,global_phone_hash,active_until)

@@ -10,16 +10,21 @@ import { CustomerAccountRuntime } from './customer-account.runtime';
 import type { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
 import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
+import { customerProductionFixture } from './customer-production.test-fixture';
+import type { TwilioProductionObserver } from './twilio-production-observer';
 import type { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 
-function fixture(paid = false) {
+function fixture(paid: boolean | 'production' = false) {
   const browserRef = randomUUID(), operationId = randomUUID();
-  const now = Date.now(); const env = paid ? customerPaidTestEnvironment(now) : customerTestEnvironment(now);
+  const now = Date.now(); const production = customerProductionFixture(now);
+  const env = paid === 'production' ? production.env : paid ? customerPaidTestEnvironment(now) : customerTestEnvironment(now);
   const crypto = new CustomerIdentityCrypto(env.SM_CUSTOMER_IDENTITY_KEY!);
   const tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!; const phone = '+33612345678';
   const phoneHash = crypto.hash('phone', tenantRef, phone);
   const pending = { challengeId: randomUUID(), phoneHash, serviceSid: `VA${'b'.repeat(32)}`,
-    funding: paid ? { mode: 'paid' as const, authorizationRef: 'fixture-authorization', currency: 'USD' as const,
+    funding: paid === 'production' ? { mode: 'production_paid' as const, authorizationRef: 'operator-budget-A',
+      currency: 'USD' as const, reservedMicrousd: 15, expiresAt: now + 86_400_000 }
+      : paid ? { mode: 'paid' as const, authorizationRef: 'fixture-authorization', currency: 'USD' as const,
       reservedMicrousd: 70, expiresAt: now + 86_400_000 } : { mode: 'trial' as const },
     verificationSid: `VE${'c'.repeat(32)}`, expiresAt: now + 600_000,
     encryptedPhone: crypto.seal('phone', tenantRef, phoneHash, phone) };
@@ -38,6 +43,7 @@ function fixture(paid = false) {
     updateName: vi.fn<CustomerIdentityRepository['updateName']>().mockResolvedValue(session),
     revoke: vi.fn<CustomerIdentityRepository['revoke']>().mockResolvedValue(undefined),
   } satisfies CustomerIdentityRepository;
+  if (paid === 'production') repository.revalidateProductionFunding.mockResolvedValue(true);
   const row = { _id: tenantRef, slug: 'fixture', account: { status: 'trial' } };
   const executeQuery = vi.fn().mockImplementation(async () => row);
   const query = { read: vi.fn().mockReturnThis(), readConcern: vi.fn().mockReturnThis(), maxTimeMS: vi.fn().mockReturnThis(),
@@ -57,15 +63,17 @@ function fixture(paid = false) {
       payment: { method: 'counter', status: 'pending', refundedCents: 0, pendingRefundCents: 0 },
       totals: { subtotal: 1250, deliveryFee: 0, discount: null, total: 1250 }, lines: [], note: null, statusHistory: [], delivery: null }),
     createForCustomer: vi.fn().mockRejectedValue(new ConflictException({ code: 'ORDER_ATTEMPT_REJECTED', reason: 'slot_unavailable' })) };
+  const observer = { observe: vi.fn().mockResolvedValue(production.observation) };
   const runtime = new CustomerAccountRuntime(config, tenants as unknown as Model<Tenant>, repository,
-    human as unknown as CustomerAccountHumanVerifier, transportFactory, checkout as unknown as OnlineOrderCheckoutService);
+    human as unknown as CustomerAccountHumanVerifier, transportFactory, checkout as unknown as OnlineOrderCheckoutService,
+    undefined, undefined, observer as unknown as TwilioProductionObserver);
   const relay: CustomerRelay = { slug: 'fixture', action: 'start', origin: 'https://fixture.example', client: Buffer.alloc(32, 41).toString('base64url') };
   const browserSecret = Buffer.alloc(32, 42).toString('base64url');
   const intentProof = Buffer.alloc(32, 46).toString('base64url');
   const start = { browserRef, browserSecret, intentProof, request: { phone, operationId, turnstileToken: 'fixture-human-token' } };
   const check = { browserRef, browserSecret, intentProof, sessionToken: null, request: { operationId, challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
   const publication = { expectedOperationId: operationId, expectedCheckId: check.request.checkId };
-  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending, publication, checkout, reorderSource };
+  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending, publication, checkout, reorderSource, observer, production };
 }
 describe('customer runtime tenant and purpose boundary', () => {
   it('reads reorder through the exact protected principal without requiring or constructing an SMS provider', async () => {
@@ -511,8 +519,9 @@ describe('closed paid pilot runtime funding', () => {
       expect(rejected).toBe(true); expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
     });
   }
-  it.each(['recover', 'session', 'name', 'logout'] as const)('keeps paid %s available without spending evidence or provider credentials', async action => {
-    const f = fixture(true); delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_POLICY;
+  it.each(([true, 'production'] as const).flatMap(mode => (['recover', 'session', 'name', 'logout'] as const).map(action => ({ mode, action }))))
+  ('keeps $mode $action available without spending evidence or provider credentials', async ({ mode, action }) => {
+    const f = fixture(mode); delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_POLICY;
     delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     f.repository.resultIntent.mockImplementation(approvedCustomerIntentResult({ operationId: f.start.request.operationId,
       challengeId: f.pending.challengeId, checkId: f.check.request.checkId, expiresAt: f.pending.expiresAt }, f.session));
@@ -527,6 +536,111 @@ describe('closed paid pilot runtime funding', () => {
     expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
     expect(f.provider.check).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
     expect(f.repository.claimCheck).not.toHaveBeenCalled();
+  });
+});
+
+describe('production customer runtime', () => {
+  it.each(['start', 'check'] as const)('does not %s after tenant suspension during the final funding read', async action => {
+    const f = fixture('production');
+    f.repository.revalidateProductionFunding.mockImplementation(async () => {
+      f.row.account.status = 'suspended';
+      return true;
+    });
+    await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check).catch(() => {});
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+  });
+  it.each(['start', 'check'] as const)('does not %s after the observer credential is withdrawn during the final funding read', async action => {
+    const f = fixture('production');
+    f.repository.revalidateProductionFunding.mockImplementation(async () => {
+      delete f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET;
+      return true;
+    });
+    await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check).catch(() => {});
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+  });
+  it('does not publish stale SMS availability after a configuration change during the budget read', async () => {
+    const f = fixture('production');
+    f.repository.productionSendAvailability.mockImplementation(async () => {
+      delete f.env.SM_CUSTOMER_VERIFY_POLICY;
+      return true;
+    });
+    expect(await f.runtime.execute({ ...f.relay, action: 'status' }, {})).toMatchObject({ available: false, accessAvailable: true });
+  });
+  it('reports SMS availability only after a real observer result and persisted funding check', async () => {
+    const f = fixture('production');
+    expect(await f.runtime.execute({ ...f.relay, action: 'status' }, {})).toEqual({
+      available: false, registrationAvailable: true, accessAvailable: true });
+    f.repository.productionSendAvailability.mockResolvedValue(true);
+    expect(await f.runtime.execute({ ...f.relay, action: 'status' }, {})).toEqual({
+      available: true, registrationAvailable: true, accessAvailable: true });
+    expect(f.repository.productionSendAvailability).toHaveBeenCalledWith({
+      parentRef: f.production.target.accountSid, tenantRef: f.production.target.tenantRef,
+      serviceSid: f.production.target.serviceSid, authorizationRef: 'operator-budget-A',
+      costEvidenceReference: 'operator-costs', reservePerSendMicrousd: 15 });
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it('keeps access available when provider observation fails, and refuses a send before Turnstile', async () => {
+    const f = fixture('production'); f.observer.observe.mockResolvedValue(null);
+    expect(await f.runtime.execute({ ...f.relay, action: 'status' }, {})).toMatchObject({ available: false, accessAvailable: true });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.human.verify).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
+    expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it('reserves against the selected operator grant and revalidates its receipt before sending', async () => {
+    const f = fixture('production');
+    await f.runtime.execute(f.relay, f.start);
+    expect(f.repository.reserve).toHaveBeenCalledWith(expect.objectContaining({ limits: expect.objectContaining({
+      productionBudget: { mode: 'production_paid', authorizationRef: 'operator-budget-A',
+        currency: 'USD', costEvidenceReference: 'operator-costs', reservePerSendMicrousd: 15 } }) }));
+    expect(f.repository.revalidateProductionFunding).toHaveBeenCalledWith({
+      parentRef: f.production.target.accountSid, tenantRef: f.production.target.tenantRef, challengeId: f.pending.challengeId });
+    expect(f.provider.start).toHaveBeenCalledExactlyOnceWith({ phone: f.start.request.phone, serviceSid: f.pending.serviceSid });
+  });
+  it('does not send when the original authorization was revoked after reservation', async () => {
+    const f = fixture('production'); f.repository.revalidateProductionFunding.mockResolvedValue(false);
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.repository.reserve).toHaveBeenCalledOnce(); expect(f.provider.start).not.toHaveBeenCalled();
+    expect(f.repository.settleSend).toHaveBeenCalledWith(expect.objectContaining({ verificationSid: null }));
+  });
+  it('checks a still-funded SMS from A after B becomes the selected authorization', async () => {
+    const f = fixture('production');
+    f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify({ ...f.production.policy, authorizationRef: 'operator-budget-B' });
+    await f.runtime.execute({ ...f.relay, action: 'check' }, f.check);
+    expect(f.repository.revalidateProductionFunding).toHaveBeenCalledWith(expect.objectContaining({ challengeId: f.pending.challengeId }));
+    expect(f.provider.check).toHaveBeenCalledOnce(); expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it.each(['revoked', 'insufficient-original-reservation', 'foreign-funding'] as const)('does not check %s funding', async reason => {
+    const f = fixture('production');
+    if (reason === 'revoked') f.repository.revalidateProductionFunding.mockResolvedValue(false);
+    if (reason === 'insufficient-original-reservation') f.pending.funding = { mode: 'production_paid', authorizationRef: 'operator-budget-A',
+      currency: 'USD', reservedMicrousd: 14, expiresAt: Date.now() + 60_000 };
+    if (reason === 'foreign-funding') f.pending.funding = { mode: 'trial' };
+    await f.runtime.execute({ ...f.relay, action: 'check' }, f.check).catch(() => {});
+    expect(f.provider.check).not.toHaveBeenCalled();
+    expect(f.repository.completeCheck).toHaveBeenCalledWith(expect.objectContaining({ result: 'uncertain' }));
+  });
+  it('closes SMS on service setting drift without rewriting the operator attestation', async () => {
+    const f = fixture('production');
+    f.observer.observe.mockResolvedValue({ ...f.production.observation, settingsFingerprint: 'b'.repeat(64) });
+    expect(await f.runtime.execute({ ...f.relay, action: 'status' }, {})).toMatchObject({ available: false, accessAvailable: true });
+    expect(f.env.SM_CUSTOMER_VERIFY_EVIDENCE).toBe(JSON.stringify(f.production.attestations));
+    expect(f.repository.productionSendAvailability).not.toHaveBeenCalled();
+  });
+  it('prepares browser access with a trusted source quota independently of all SMS settings', async () => {
+    const f = fixture('production');
+    delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET; delete f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET;
+    const browserRef = randomUUID();
+    f.repository.prepareBrowser.mockResolvedValue({ browserRef, state: 'prepared',
+      admissionExpiresAt: Date.now() + 60_000, expiresAt: Date.now() + 604_800_000 });
+    await f.runtime.execute({ ...f.relay, action: 'browser' }, {
+      request: { step: 'prepare', browserRef }, browserSecret: null, candidateSecret: null });
+    const crypto = new CustomerIdentityCrypto(f.env.SM_CUSTOMER_IDENTITY_KEY!);
+    expect(f.repository.prepareBrowser).toHaveBeenCalledWith({ parentRef: f.production.target.accountSid,
+      tenantRef: f.production.target.tenantRef, browserRef, admission: { mode: 'production_paid',
+        sourceHash: crypto.hash('ip', f.production.target.accountSid, `relay:${f.relay.client}`) } });
+    expect(f.observer.observe).not.toHaveBeenCalled(); expect(f.repository.productionSendAvailability).not.toHaveBeenCalled();
+    expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
   });
 });
 

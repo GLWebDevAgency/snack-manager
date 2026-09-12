@@ -197,7 +197,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationsTable: '__drizzle_customer_migrations',
       };
       const customerMigrations = readMigrationFiles(customerMigrationConfig);
-      expect(customerMigrations).toHaveLength(9);
+      expect(customerMigrations).toHaveLength(11);
       const customerDialect = new PgDialect();
       const customerDriver = new NodePgDriver(freshMigrationPool, customerDialect);
       // Rejoue les trois SQL historiques inchangés avec le vrai migrateur :
@@ -392,7 +392,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       });
       expect(protectedReport.issues).toEqual([]);
       // The manifest includes future objects; the 0008 bridge is still absent.
-      expect(protectedReport.objects).toHaveLength(96);
+      expect(protectedReport.objects).toHaveLength(106);
       for (const name of protectedTables) {
         await expect(freshMigrationPool.query(
           `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
@@ -464,7 +464,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationRole, runtimeRole,
       });
       expect(accessReport.issues).toEqual([]);
-      expect(accessReport.objects).toHaveLength(96);
+      expect(accessReport.objects).toHaveLength(106);
       expect((await freshMigrationPool.query(`SELECT 1 FROM pg_catalog.pg_constraint
         WHERE conrelid='customer.passkey_credentials'::regclass
           AND conname='passkey_credentials_parent_ref_tenant_ref_account_id_key'`)).rows).toEqual([]);
@@ -540,7 +540,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       const afterMemberships = (await freshMigrationPool.query(
         'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
       )).rows;
-      expect(afterMemberships).toHaveLength(9);
+      expect(afterMemberships).toHaveLength(11);
       expect(afterMemberships.slice(0, 8)).toEqual(afterAccess.rows);
       expect(afterMemberships[8]).toEqual({ hash: customerMigrations[8]!.hash, created_at: '1788930000000' });
       await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
@@ -574,6 +574,26 @@ integration('bootstrap PostgreSQL — base réelle', () => {
           runtimeRole,
         }),
       ).resolves.toMatchObject({ issues: [] });
+      // Runtime is SELECT-only on operator records, both after migration and repair.
+      const productionTables = ['production_budget_authorizations','production_budget_activation','production_admission_policies','production_admissions'];
+      for (const table of productionTables) {
+        expect((await freshMigrationPool.query(`SELECT has_table_privilege($1,$2,'SELECT') AS read,
+          has_table_privilege($1,$2,'INSERT') AS insert,has_table_privilege($1,$2,'UPDATE') AS update,
+          has_table_privilege($1,$2,'DELETE') AS delete`, [runtimeRole, `customer.${table}`])).rows[0])
+          .toEqual({ read: true, insert: false, update: false, delete: false });
+      }
+      await freshMigrationPool.query(`GRANT INSERT,UPDATE,DELETE ON customer.production_budget_authorizations TO ${identifier(runtimeRole)}`);
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), { migrationRole, runtimeRole })).rejects.toMatchObject({
+        report: { issues: expect.arrayContaining([expect.objectContaining({ code: 'application_privilege_excessive', target: 'customer.production_budget_authorizations' })]) },
+      });
+      const productionRepair = await repairPostgresBootstrap(bootstrapPool(freshAdminPool), {
+        migrationRole, runtimeRole, expectedDatabase: freshDatabaseName,
+      });
+      expect(productionRepair.changed).toContain(`revoke:customer.production_budget_authorizations:EXCESSIVE:${runtimeRole}`);
+      expect((await freshMigrationPool.query(`SELECT has_table_privilege($1,'customer.production_budget_authorizations','INSERT') AS insert,
+        has_table_privilege($1,'customer.production_budget_authorizations','UPDATE') AS update,
+        has_table_privilege($1,'customer.production_budget_authorizations','DELETE') AS delete`, [runtimeRole])).rows[0])
+        .toEqual({ insert: false, update: false, delete: false });
       const freshSecondRepair = await repairPostgresBootstrap(bootstrapPool(freshAdminPool), {
         migrationRole,
         runtimeRole,
@@ -700,7 +720,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       ).resolves.toMatchObject({ rows: [{ count: 0 }] });
       await expect(
         runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
-      ).resolves.toMatchObject({ rows: [{ count: 9 }] });
+      ).resolves.toMatchObject({ rows: [{ count: 11 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont
