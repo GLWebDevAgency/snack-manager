@@ -1,0 +1,646 @@
+{
+  "phase": "apres",
+  "environment": "staging",
+  "startedAt": "2026-09-12T21:17:07.571Z",
+  "completedAt": "2026-09-12T21:17:08.424Z",
+  "source": "scripts/smoke.mjs CIBLES.staging; same-origin assets discovered from returned HTML",
+  "method": "GET only, no credentials/cookies/authentication, no account or business operation; remote origins explicitly restricted to the four staging hosts",
+  "expectedRevision": "7e0746653b3710e98637f824e7d83e0719163527",
+  "apiRevisionMatchesExpected": true,
+  "frontRevisionClaim": null,
+  "frontRevisionLimitation": "HTML and asset fingerprints identify observed bytes only. They do not assert a Git SHA for a frontend that publishes no revision.",
+  "workflow": {
+    "workflowId": "34718235062",
+    "headSha": "7e0746653b3710e98637f824e7d83e0719163527",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34718235062",
+    "deployJob": {
+      "id": 103621225572,
+      "name": "Mise en ligne des quatre services",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T21:06:16Z",
+      "completedAt": "2026-09-12T21:13:50Z",
+      "steps": [
+        {
+          "completedAt": "2026-09-12T21:09:41Z",
+          "conclusion": "success",
+          "name": "Déployer api — schémas PostgreSQL vérifiés",
+          "number": 11,
+          "startedAt": "2026-09-12T21:06:33Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:13:47Z",
+          "conclusion": "success",
+          "name": "Déployer web, pos et kds",
+          "number": 12,
+          "startedAt": "2026-09-12T21:09:41Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:13:47Z",
+          "conclusion": "success",
+          "name": "Récapituler les déploiements",
+          "number": 13,
+          "startedAt": "2026-09-12T21:13:47Z",
+          "status": "completed"
+        }
+      ]
+    },
+    "matchingLogLines": [
+      "Mise en ligne des quatre services\tDéployer api — schémas PostgreSQL vérifiés\t2026-09-12T21:09:41.6532574Z ✓ api — déploiement 7d887342-d1a8-4a58-b0d3-b20cce38e998 en service",
+      "Mise en ligne des quatre services\tDéployer web, pos et kds\t2026-09-12T21:13:47.6948869Z ✓ web — déploiement 3f3dab52-a370-4b59-8917-d573ae185181 en service",
+      "Mise en ligne des quatre services\tDéployer web, pos et kds\t2026-09-12T21:13:47.7056032Z ✓ pos — déploiement e61962c0-6291-448a-97f9-45e2cb11f5b9 en service",
+      "Mise en ligne des quatre services\tDéployer web, pos et kds\t2026-09-12T21:13:47.7157310Z ✓ kds — déploiement 071d83c3-2a9f-4124-922e-3c033b07c8fe en service"
+    ]
+  },
+  "deployments": [
+    {
+      "service": "web",
+      "environment": "staging",
+      "observedAt": "2026-09-12T21:14:39.836Z",
+      "id": "3f3dab52-a370-4b59-8917-d573ae185181",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-12T21:09:50.095Z",
+      "metaKeys": [
+        "buildOnly",
+        "fileServiceManifest",
+        "imageDigest",
+        "logsV2",
+        "nixpacksProviders",
+        "propertyFileMapping",
+        "reason",
+        "rootDirectory",
+        "runtime",
+        "serviceManifest",
+        "volumeMounts"
+      ],
+      "commitHash": null,
+      "reason": "deploy",
+      "previousDeployment": {
+        "id": "ad4771d5-63a4-466e-b683-3986693f3312",
+        "status": "REMOVED",
+        "createdAt": "2026-09-12T19:50:54.561Z"
+      },
+      "workflowLogMatchesId": true,
+      "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+    },
+    {
+      "service": "pos",
+      "environment": "staging",
+      "observedAt": "2026-09-12T21:14:39.667Z",
+      "id": "e61962c0-6291-448a-97f9-45e2cb11f5b9",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-12T21:09:50.181Z",
+      "metaKeys": [
+        "buildOnly",
+        "fileServiceManifest",
+        "imageDigest",
+        "logsV2",
+        "nixpacksProviders",
+        "propertyFileMapping",
+        "reason",
+        "rootDirectory",
+        "runtime",
+        "serviceManifest",
+        "volumeMounts"
+      ],
+      "commitHash": null,
+      "reason": "deploy",
+      "previousDeployment": {
+        "id": "9e26194b-befe-46f1-93c9-e2d1497f809c",
+        "status": "REMOVED",
+        "createdAt": "2026-09-12T19:50:54.368Z"
+      },
+      "workflowLogMatchesId": true,
+      "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+    },
+    {
+      "service": "kds",
+      "environment": "staging",
+      "observedAt": "2026-09-12T21:14:39.682Z",
+      "id": "071d83c3-2a9f-4124-922e-3c033b07c8fe",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-12T21:09:50.736Z",
+      "metaKeys": [
+        "buildOnly",
+        "fileServiceManifest",
+        "imageDigest",
+        "logsV2",
+        "nixpacksProviders",
+        "propertyFileMapping",
+        "reason",
+        "rootDirectory",
+        "runtime",
+        "serviceManifest",
+        "volumeMounts"
+      ],
+      "commitHash": null,
+      "reason": "deploy",
+      "previousDeployment": {
+        "id": "17f1b70e-271b-4265-839d-7b45d3172c3a",
+        "status": "REMOVED",
+        "createdAt": "2026-09-12T19:50:54.524Z"
+      },
+      "workflowLogMatchesId": true,
+      "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+    }
+  ],
+  "targets": {
+    "api": "https://api-staging-a5e8.up.railway.app",
+    "web": "https://web-staging-6f5f.up.railway.app",
+    "pos": "https://pos-staging-7f92.up.railway.app",
+    "kds": "https://kds-staging-90da.up.railway.app"
+  },
+  "api": {
+    "requestedUrl": "https://api-staging-a5e8.up.railway.app/health",
+    "url": "https://api-staging-a5e8.up.railway.app/health",
+    "status": 200,
+    "mime": "application/json; charset=utf-8",
+    "bytes": 240,
+    "sha256": "f7a26635fd8a0b067d4d5abc4203e2d82033b6fd3b2d9c9d3f1d302dec4c3dd7",
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "content-length": "240",
+      "etag": "W/\"f0-zm8E4JtWrnJHuUpdBgfJ3FMQPag\"",
+      "date": "Sat, 12 Sep 2026 21:17:07 GMT"
+    },
+    "redirects": [],
+    "observedAt": "2026-09-12T21:17:07.810Z",
+    "durationMs": 238,
+    "publicHealth": {
+      "ok": true,
+      "service": "snack-manager-api",
+      "revision": "7e0746653b3710e98637f824e7d83e0719163527",
+      "deploiement": "7d887342-d1a8-4a58-b0d3-b20cce38e998"
+    }
+  },
+  "pages": [
+    {
+      "surface": "web",
+      "path": "/",
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/",
+      "url": "https://web-staging-6f5f.up.railway.app/",
+      "status": 200,
+      "mime": "text/html; charset=utf-8",
+      "bytes": 127864,
+      "sha256": "e781985271b8b2727176ae9c12fd5a1bd6d9e06774edd71d327016145aa33ce6",
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "etag": "\"h80jw14iji2pkk\"",
+        "cache-control": "s-maxage=60, stale-while-revalidate=31535940",
+        "date": "Sat, 12 Sep 2026 21:17:07 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:07.910Z",
+      "durationMs": 317,
+      "title": "Snack Manager — Plus de commandes, moins de galère, zéro commission",
+      "referencedAssets": [
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3r0ppge-13kr5.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/10n-p5z-lx4sq.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/turbopack-0xy-7x3hfl0f5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/31wgsa7qnifa5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/19si-9a-hw-f5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3_a_01z8t653m.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1lzk4k02_me45.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0cz1d0mv5g_q7.js"
+      ]
+    },
+    {
+      "surface": "web",
+      "path": "/r/classfood",
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/r/classfood",
+      "url": "https://web-staging-6f5f.up.railway.app/r/classfood",
+      "status": 200,
+      "mime": "text/html; charset=utf-8",
+      "bytes": 670210,
+      "sha256": "50f838b368c4935cd9d9467de0e847232ef83948703146e3623b6e326465eb5d",
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:07.962Z",
+      "durationMs": 368,
+      "title": "CLASS&#x27;FOOD — Commander en ligne à Perriers-sur-Andelle",
+      "referencedAssets": [
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0yfm7a7-y7qho.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3num2ikedoe4q.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3g82ik73lozq3.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/10n-p5z-lx4sq.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/turbopack-0xy-7x3hfl0f5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/31wgsa7qnifa5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/147d_71ng3ggs.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0wzz653jvz89z.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/09lcqln539w5d.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3lmzjx5ipmfly.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1yo_onk73z96p.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2_q7eprv8p7_q.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1jhtlh-6fn39g.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0cz1d0mv5g_q7.js"
+      ]
+    },
+    {
+      "surface": "web",
+      "path": "/r/classfood/fidelite",
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite",
+      "url": "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite",
+      "status": 200,
+      "mime": "text/html; charset=utf-8",
+      "bytes": 584965,
+      "sha256": "80c6528a0b9489a5a37f9e881847f641ee2ef171296634e681b41c58465e5cef",
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:07.964Z",
+      "durationMs": 370,
+      "title": "La carte Classfood — CLASS&#x27;FOOD",
+      "referencedAssets": [
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0yfm7a7-y7qho.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3g82ik73lozq3.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3num2ikedoe4q.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/10n-p5z-lx4sq.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/turbopack-0xy-7x3hfl0f5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/31wgsa7qnifa5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/147d_71ng3ggs.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0wzz653jvz89z.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0qflg4u0ljis-.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3lmzjx5ipmfly.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0jajic2nri7lf.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/09lcqln539w5d.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1yo_onk73z96p.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2_q7eprv8p7_q.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1jhtlh-6fn39g.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0cz1d0mv5g_q7.js"
+      ]
+    },
+    {
+      "surface": "pos",
+      "path": "/",
+      "requestedUrl": "https://pos-staging-7f92.up.railway.app/",
+      "url": "https://pos-staging-7f92.up.railway.app/",
+      "status": 200,
+      "mime": "text/html; charset=utf-8",
+      "bytes": 1229,
+      "sha256": "19b1ccf6d9e6758e0bc1ded45449e68299fafd710b703ba4295e670b875c24f1",
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-cache",
+        "date": "Sat, 12 Sep 2026 21:17:07 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:07.850Z",
+      "durationMs": 255,
+      "title": "Snack Manager — Caisse",
+      "referencedAssets": [
+        "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js"
+      ]
+    },
+    {
+      "surface": "kds",
+      "path": "/",
+      "requestedUrl": "https://kds-staging-90da.up.railway.app/",
+      "url": "https://kds-staging-90da.up.railway.app/",
+      "status": 200,
+      "mime": "text/html; charset=utf-8",
+      "bytes": 1230,
+      "sha256": "97687fae573997fa454856f4d91beccbfc18728bf35af8b4c5ca3aee77ee988c",
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-cache",
+        "date": "Sat, 12 Sep 2026 21:17:07 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:07.863Z",
+      "durationMs": 268,
+      "title": "Snack Manager — Cuisine",
+      "referencedAssets": [
+        "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js"
+      ]
+    }
+  ],
+  "assetSelection": "Up to the first 3 JS and 3 CSS per page, plus the penultimate web JS reference (to sample later page chunks), deduplicated; same-origin only; complete bodies hashed in memory without storing assets.",
+  "assets": [
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/",
+        "https://web-staging-6f5f.up.railway.app/r/classfood",
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+      "status": 200,
+      "mime": "text/css; charset=UTF-8",
+      "bytes": 10903,
+      "sha256": "f077b9c52a7757548ef2dd09378ad119e6655f9d4d5d42f346fd24e3fa166e42",
+      "headers": {
+        "content-type": "text/css; charset=UTF-8",
+        "etag": "W/\"2a97-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.031Z",
+      "durationMs": 66
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/",
+        "https://web-staging-6f5f.up.railway.app/r/classfood",
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+      "status": 200,
+      "mime": "text/css; charset=UTF-8",
+      "bytes": 124946,
+      "sha256": "718a08705fa77a8138fd03b08b88a6935ba44164ba26f282765787f9c0a7fd59",
+      "headers": {
+        "content-type": "text/css; charset=UTF-8",
+        "etag": "W/\"1e812-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.034Z",
+      "durationMs": 68
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3r0ppge-13kr5.css",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3r0ppge-13kr5.css",
+      "status": 200,
+      "mime": "text/css; charset=UTF-8",
+      "bytes": 87515,
+      "sha256": "f0240060de9d437b4ff3d657c46f750f5a4ef25ba730ff342ba8b83ecb6d852d",
+      "headers": {
+        "content-type": "text/css; charset=UTF-8",
+        "etag": "W/\"155db-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.035Z",
+      "durationMs": 69
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/",
+        "https://web-staging-6f5f.up.railway.app/r/classfood",
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 13846,
+      "sha256": "76abc4a98ce11a222ebe41007878de013c986bf8da12b3c7a18a3a73154c98bf",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"3616-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.138Z",
+      "durationMs": 172
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/",
+        "https://web-staging-6f5f.up.railway.app/r/classfood",
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 31346,
+      "sha256": "a4590375a64190f57d18b357bf576bf111bd5f02f3c93cad0f65fdf176689f46",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"7a72-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.139Z",
+      "durationMs": 172
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/",
+        "https://web-staging-6f5f.up.railway.app/r/classfood",
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 227963,
+      "sha256": "42501e1043967038f0addfa4e31b7ce9cfcbc3ebf7c844f4a3e7faa99a60d7e4",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"37a7b-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.155Z",
+      "durationMs": 187
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1lzk4k02_me45.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1lzk4k02_me45.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 41312,
+      "sha256": "13480154b7129931fad41f1652214520a4304c99e13d74f3eef257f8528a99bf",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"a160-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.139Z",
+      "durationMs": 171
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/r/classfood"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+      "status": 200,
+      "mime": "text/css; charset=UTF-8",
+      "bytes": 8308,
+      "sha256": "5b0ff1a9be801433d451922367c28fe86158683730f8b6f1918d9e40d0a34ab5",
+      "headers": {
+        "content-type": "text/css; charset=UTF-8",
+        "etag": "W/\"2074-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.139Z",
+      "durationMs": 170
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/r/classfood"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 299049,
+      "sha256": "5e046666114171db1ca4ebd0365f89847d13cca93be9875eee150ca51d7e6c3c",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"49029-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.158Z",
+      "durationMs": 189
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+      "status": 200,
+      "mime": "text/css; charset=UTF-8",
+      "bytes": 48205,
+      "sha256": "38d0268faf1ea1f694b830d9ab01cd1f4f0085800185f702ae1b9a2a462705c1",
+      "headers": {
+        "content-type": "text/css; charset=UTF-8",
+        "etag": "W/\"bc4d-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.145Z",
+      "durationMs": 175
+    },
+    {
+      "surface": "web",
+      "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+      "referencedBy": [
+        "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite"
+      ],
+      "requestedUrl": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+      "status": 200,
+      "mime": "application/javascript; charset=UTF-8",
+      "bytes": 38890,
+      "sha256": "7e78857cb3a17910843b5858ce5b67933441bd299fcaac673951590be72541a6",
+      "headers": {
+        "content-type": "application/javascript; charset=UTF-8",
+        "etag": "W/\"97ea-1a097761b58\"",
+        "last-modified": "Sat, 12 Sep 2026 21:11:35 GMT",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.145Z",
+      "durationMs": 175
+    },
+    {
+      "surface": "pos",
+      "url": "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js",
+      "referencedBy": [
+        "https://pos-staging-7f92.up.railway.app/"
+      ],
+      "requestedUrl": "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js",
+      "status": 200,
+      "mime": "text/javascript; charset=utf-8",
+      "bytes": 1705255,
+      "sha256": "218a6c18e8cb5054eb56498d8e1fdc333f62129992a5bbcc4a396a0f2e3fa643",
+      "headers": {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.424Z",
+      "durationMs": 454
+    },
+    {
+      "surface": "kds",
+      "url": "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js",
+      "referencedBy": [
+        "https://kds-staging-90da.up.railway.app/"
+      ],
+      "requestedUrl": "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js",
+      "status": 200,
+      "mime": "text/javascript; charset=utf-8",
+      "bytes": 1473955,
+      "sha256": "f2d267cd8384269007f8241d8961bc3d738549b7052e0dbaee1f0dc73ecb962b",
+      "headers": {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "public, max-age=31536000, immutable",
+        "date": "Sat, 12 Sep 2026 21:17:08 GMT"
+      },
+      "redirects": [],
+      "observedAt": "2026-09-12T21:17:08.361Z",
+      "durationMs": 391
+    }
+  ]
+}

@@ -101,12 +101,19 @@ scenario(
     // ── Le créneau de retrait ──
     const retrait = page.getByRole('dialog', { name: 'Créneau de retrait' });
     await retrait.waitFor({ state: 'visible' });
-    await retrait.getByRole('radio', { name: /Choisir une heure/ }).click();
-
-    // Un créneau libre porte l'heure et rien d'autre ; « 12:50 — complet » et
-    // « 18:40 — créneau chargé » sont d'autres libellés, le premier désactivé.
-    const libre = retrait.getByRole('button', { name: /^\d{2}:\d{2}$/ });
+    const manuel = retrait.getByRole('radio', { name: /Choisir une heure/ });
     const aucun = retrait.getByText('Aucun créneau ce jour-là');
+    // Après la fermeture, le choix d'heure n'est proposé qu'une fois un jour
+    // ouvert sélectionné. Suivre ce chemin avant de chercher la grille.
+    await manuel.or(aucun).first().waitFor({ state: 'visible' });
+    if (await aucun.isVisible()) {
+      await retrait.getByRole('button', { name: 'Demain', exact: true }).click();
+    }
+    await manuel.click();
+
+    // Un créneau chargé reste réservable. En fin de journée, il peut être le
+    // seul disponible ; les créneaux complets restent exclus de la sélection.
+    const libre = retrait.getByRole('button', { name: /^\d{2}:\d{2}(?: — créneau chargé)?$/ });
 
     // Entre 23 h 40 et minuit, le délai de préparation pousse le dernier
     // créneau au lendemain : la page propose alors « Demain », et le client

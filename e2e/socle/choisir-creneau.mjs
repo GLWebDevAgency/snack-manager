@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
  */
 export async function choisirCreneau(retrait, heure) {
   assert.match(heure ?? '', /^\d{2}:\d{2}$/, 'le créneau doit être une heure lisible');
-  const choix = retrait.getByRole('button', { name: heure, exact: true });
+  // Une charge accrue conserve la disponibilité et l'identité de cette heure.
+  // « Complet » reste exclu et Playwright refuse aussi un bouton désactivé.
+  const choix = retrait.getByRole('button', { name: new RegExp(`^${heure}(?: — créneau chargé)?$`) });
   await choix.click();
   await choix.and(retrait.locator('[aria-pressed="true"]')).waitFor({ state: 'visible' });
   await retrait.getByRole('button', { name: `Continuer · retrait ${heure}`, exact: true }).click();

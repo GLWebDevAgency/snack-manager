@@ -76,3 +76,40 @@ test('Créneau — refuse de continuer quand le bouton suivant rappelle une autr
     assert.equal(await page.locator('body').getAttribute('data-continued'), null);
   });
 });
+
+test('Créneau — conserve la même heure devenue chargée après lecture', async () => {
+  await grille(async (page, retrait) => {
+    const heure = await retrait.getByRole('button', { name: '18:00', exact: true }).textContent();
+    await page.locator('#slots button').first().evaluate((button) => {
+      button.setAttribute('aria-label', `${button.textContent} — créneau chargé`);
+    });
+    await choisirCreneau(retrait, heure);
+    assert.equal(await page.locator('#chosen').textContent(), '18:00');
+    assert.equal(await page.locator('body').getAttribute('data-continued'), 'true');
+  });
+});
+
+test('Créneau — refuse une heure devenue complète sans choisir sa voisine', async () => {
+  await grille(async (page, retrait) => {
+    const heure = await retrait.getByRole('button', { name: '18:00', exact: true }).textContent();
+    await page.locator('#slots button').first().evaluate((button) => {
+      button.setAttribute('aria-label', `${button.textContent} — complet`);
+    });
+    await assert.rejects(choisirCreneau(retrait, heure), /18:00/);
+    assert.equal(await page.locator('#chosen').textContent(), '');
+    assert.equal(await page.locator('body').getAttribute('data-continued'), null);
+  });
+});
+
+test('Créneau — refuse une heure chargée désactivée sans choisir sa voisine', async () => {
+  await grille(async (page, retrait) => {
+    const heure = await retrait.getByRole('button', { name: '18:00', exact: true }).textContent();
+    await page.locator('#slots button').first().evaluate((button) => {
+      button.setAttribute('aria-label', `${button.textContent} — créneau chargé`);
+      button.disabled = true;
+    });
+    await assert.rejects(choisirCreneau(retrait, heure), /18:00/);
+    assert.equal(await page.locator('#chosen').textContent(), '');
+    assert.equal(await page.locator('body').getAttribute('data-continued'), null);
+  });
+});
