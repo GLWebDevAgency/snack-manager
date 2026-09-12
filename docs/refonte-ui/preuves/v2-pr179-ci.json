@@ -1,0 +1,342 @@
+{
+  "conclusion": "success",
+  "createdAt": "2026-09-12T20:33:42Z",
+  "databaseId": 34717459341,
+  "headSha": "a91e82429630e1789b267ac24d8bce153544026d",
+  "jobs": [
+    {
+      "completedAt": "2026-09-12T20:48:54Z",
+      "conclusion": "success",
+      "databaseId": 103617213925,
+      "name": "Vérification du monorepo",
+      "startedAt": "2026-09-12T20:34:19Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-09-12T20:34:20Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-09-12T20:34:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:34:41Z",
+          "conclusion": "success",
+          "name": "Initialize containers",
+          "number": 2,
+          "startedAt": "2026-09-12T20:34:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:34:45Z",
+          "conclusion": "success",
+          "name": "Récupérer le code",
+          "number": 3,
+          "startedAt": "2026-09-12T20:34:41Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:34:49Z",
+          "conclusion": "success",
+          "name": "Installer pnpm",
+          "number": 4,
+          "startedAt": "2026-09-12T20:34:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:34:55Z",
+          "conclusion": "success",
+          "name": "Installer Node",
+          "number": 5,
+          "startedAt": "2026-09-12T20:34:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:35:00Z",
+          "conclusion": "success",
+          "name": "Restaurer le cache Turborepo",
+          "number": 6,
+          "startedAt": "2026-09-12T20:34:55Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:35:04Z",
+          "conclusion": "success",
+          "name": "Installer les dépendances",
+          "number": 7,
+          "startedAt": "2026-09-12T20:35:00Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:36:03Z",
+          "conclusion": "success",
+          "name": "Typage",
+          "number": 8,
+          "startedAt": "2026-09-12T20:35:04Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:36:47Z",
+          "conclusion": "success",
+          "name": "Analyse statique",
+          "number": 9,
+          "startedAt": "2026-09-12T20:36:03Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:37:09Z",
+          "conclusion": "success",
+          "name": "Navigateur des tests IndexedDB",
+          "number": 10,
+          "startedAt": "2026-09-12T20:36:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:43:42Z",
+          "conclusion": "success",
+          "name": "Tests",
+          "number": 11,
+          "startedAt": "2026-09-12T20:37:09Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:43:44Z",
+          "conclusion": "success",
+          "name": "Gardes des outils de reprise Mongo",
+          "number": 12,
+          "startedAt": "2026-09-12T20:43:42Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:43:46Z",
+          "conclusion": "success",
+          "name": "Tests du smoke public — réponses HTTP locales",
+          "number": 13,
+          "startedAt": "2026-09-12T20:43:44Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:44:01Z",
+          "conclusion": "success",
+          "name": "Tests PostgreSQL réels — bootstrap et fidélité",
+          "number": 14,
+          "startedAt": "2026-09-12T20:43:46Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:44:06Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB et PostgreSQL réels — reprise des gains fidélité",
+          "number": 15,
+          "startedAt": "2026-09-12T20:44:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:13Z",
+          "conclusion": "success",
+          "name": "Tests PostgreSQL réels — identité client et quotas durables",
+          "number": 16,
+          "startedAt": "2026-09-12T20:44:06Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:18Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — commandes privées et isolation des comptes",
+          "number": 17,
+          "startedAt": "2026-09-12T20:46:13Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:20Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — notifications durables de commande",
+          "number": 18,
+          "startedAt": "2026-09-12T20:46:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:22Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB et Redis réels — domaines des wallets",
+          "number": 19,
+          "startedAt": "2026-09-12T20:46:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:25Z",
+          "conclusion": "success",
+          "name": "Tests Redis réels — quotas de rattachement fidélité",
+          "number": 20,
+          "startedAt": "2026-09-12T20:46:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:27Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — émission durable des factures",
+          "number": 21,
+          "startedAt": "2026-09-12T20:46:25Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:34Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — concurrence paiement, annulation et remboursements",
+          "number": 22,
+          "startedAt": "2026-09-12T20:46:27Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:37Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — admission et reprise de commande",
+          "number": 23,
+          "startedAt": "2026-09-12T20:46:34Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:42Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — tables et admissions de salle",
+          "number": 24,
+          "startedAt": "2026-09-12T20:46:37Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:45Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — accès livreur et révocation",
+          "number": 25,
+          "startedAt": "2026-09-12T20:46:42Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:50Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — affectation et départ des missions livreur",
+          "number": 26,
+          "startedAt": "2026-09-12T20:46:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:57Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — preuve de remise, dérogation et reprise livreur",
+          "number": 27,
+          "startedAt": "2026-09-12T20:46:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:46:59Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — promotion et compteur concurrent",
+          "number": 28,
+          "startedAt": "2026-09-12T20:46:57Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:47:02Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — construction des index de capacité",
+          "number": 29,
+          "startedAt": "2026-09-12T20:46:59Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:47:20Z",
+          "conclusion": "success",
+          "name": "Tests MongoDB réels — capacité et bootstrap reprenable",
+          "number": 30,
+          "startedAt": "2026-09-12T20:47:02Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:47:22Z",
+          "conclusion": "success",
+          "name": "Régression runtime — dernière place après expiration Redis",
+          "number": 31,
+          "startedAt": "2026-09-12T20:47:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:44Z",
+          "conclusion": "success",
+          "name": "Compilation",
+          "number": 32,
+          "startedAt": "2026-09-12T20:47:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:45Z",
+          "conclusion": "success",
+          "name": "Chargement du module API compilé",
+          "number": 33,
+          "startedAt": "2026-09-12T20:48:44Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:46Z",
+          "conclusion": "success",
+          "name": "Chargement des contrats client compilés sans cycle",
+          "number": 34,
+          "startedAt": "2026-09-12T20:48:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:50Z",
+          "conclusion": "success",
+          "name": "Post Restaurer le cache Turborepo",
+          "number": 64,
+          "startedAt": "2026-09-12T20:48:46Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:50Z",
+          "conclusion": "success",
+          "name": "Post Installer Node",
+          "number": 65,
+          "startedAt": "2026-09-12T20:48:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:50Z",
+          "conclusion": "success",
+          "name": "Post Installer pnpm",
+          "number": 66,
+          "startedAt": "2026-09-12T20:48:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:51Z",
+          "conclusion": "success",
+          "name": "Post Récupérer le code",
+          "number": 67,
+          "startedAt": "2026-09-12T20:48:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:53Z",
+          "conclusion": "success",
+          "name": "Stop containers",
+          "number": 68,
+          "startedAt": "2026-09-12T20:48:51Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T20:48:53Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 69,
+          "startedAt": "2026-09-12T20:48:53Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34717459341/job/103617213925"
+    }
+  ],
+  "status": "completed",
+  "updatedAt": "2026-09-12T20:49:08Z",
+  "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34717459341"
+}

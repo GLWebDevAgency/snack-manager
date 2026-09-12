@@ -34,9 +34,29 @@
 import assert from 'node:assert/strict';
 import { cibles } from '../socle/cibles.mjs';
 import { attendreTexte } from '../socle/attentes.mjs';
-import { FORMATS, scenario } from '../socle/navigateur.mjs';
+import { FORMATS, scenario as scenarioNavigateur } from '../socle/navigateur.mjs';
 
 const { kds } = cibles();
+
+/** Aucun statut ne doit sortir du transport de démonstration de cette page. */
+function scenario(nom, options, corps) {
+  scenarioNavigateur(nom, options, async (page, session) => {
+    const inattendues = [];
+    await session.contexte.routeWebSocket('**/*', (socket) => {
+      const url = new URL(socket.url());
+      inattendues.push(`WebSocket ${url.origin}${url.pathname}`);
+      socket.close();
+    });
+    await session.contexte.route('**/*', (route) => {
+      const request = route.request(), url = new URL(request.url());
+      if (request.method() === 'GET' && url.origin === new URL(kds).origin) return route.continue();
+      inattendues.push(`${request.method()} ${url.origin}${url.pathname}`);
+      return route.abort();
+    });
+    try { await corps(page, session); }
+    finally { assert.deepEqual(inattendues, [], 'les changements de statut doivent rester dans la démo, sans API ni mutation réseau'); }
+  });
+}
 
 /** Ce que porte l'étiquette d'un bouton, par colonne. */
 const ACCEPTER = /^Accepter — commande numéro (\d+)$/;
@@ -76,12 +96,13 @@ scenario(
     const numero = Number.parseInt(etiquette.match(ACCEPTER)?.[1] ?? '', 10);
     assert.ok(Number.isInteger(numero), `numéro de commande illisible dans « ${etiquette} »`);
 
-    const carte = bouton.locator('xpath=..');
+    const carte = page.getByLabel(`Commande ${numero}`, { exact: true });
     const contenu = (await carte.textContent()) ?? '';
-    assert.ok(
-      new RegExp(`N°\\s*${numero}`).test(contenu),
-      `la carte doit afficher le numéro de retrait ${numero} — lue : ${JSON.stringify(contenu.slice(0, 200))}`,
-    );
+    // Lire le nœud du numéro, pas le textContent concaténé de la carte :
+    // « #5 » suivi de « 09:00 » donne sinon « #509:00 » et fausse la frontière.
+    const numeroAffiche = carte.getByText(`#${numero}`, { exact: true });
+    await numeroAffiche.waitFor({ state: 'visible' });
+    assert.equal(await numeroAffiche.count(), 1, 'le numéro visible doit être celui du ticket ciblé, sans confusion avec le minuteur');
     assert.ok(
       /\d+×/.test(contenu),
       `la carte doit détailler les articles à préparer — lue : ${JSON.stringify(contenu.slice(0, 200))}`,
