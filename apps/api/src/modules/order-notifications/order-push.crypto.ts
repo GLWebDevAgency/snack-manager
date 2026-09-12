@@ -12,10 +12,15 @@ export function orderPushConfig(env: Record<string, string | undefined>): OrderP
     const encryptionKey = Buffer.from(env.ORDER_PUSH_ENCRYPTION_KEY_BASE64 ?? '', 'base64');
     const url = new URL(subject);
     if (url.protocol !== 'https:' || url.username || url.password || encryptionKey.length !== 32) return null;
+    const privateBytes = Buffer.from(privateKey, 'base64url');
+    if (privateBytes.length < 1 || privateBytes.length > 32 || privateBytes.toString('base64url') !== privateKey) return null;
     const ecdh = createECDH('prime256v1');
-    ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'));
+    ecdh.setPrivateKey(privateBytes);
     if (Buffer.from(publicKey, 'base64url').length !== 65 || ecdh.getPublicKey().toString('base64url') !== publicKey) return null;
-    return { publicKey, privateKey, subject, encryptionKey };
+    // Node may omit leading zeroes from a valid EC scalar; web-push requires
+    // its fixed 32-byte VAPID encoding. Padding preserves the validated key pair.
+    const normalizedPrivateKey = Buffer.concat([Buffer.alloc(32 - privateBytes.length), privateBytes]).toString('base64url');
+    return { publicKey, privateKey: normalizedPrivateKey, subject, encryptionKey };
   } catch { return null; }
 }
 
