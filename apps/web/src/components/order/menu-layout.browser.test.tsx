@@ -8,7 +8,7 @@ import { chromium, type Browser, type BrowserContext, type Locator, type Page } 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { BrandShape } from "@sm/contracts";
 
-type FixtureConfiguration = { layout?: "rows" | "grid"; formats?: number; shape?: BrandShape; sheet?: boolean };
+type FixtureConfiguration = { layout?: "rows" | "grid"; formats?: number; shape?: BrandShape; sheet?: boolean; variantLabels?: string[] };
 declare global {
   interface Window {
     menuLayoutFixture: {
@@ -37,7 +37,7 @@ beforeAll(async () => {
         function product(index,config){return{
           id:'product-'+index,name:index===0?'Menu généreux aux légumes grillés':'Le suivant '+index,
           description:'Préparé minute, légumes grillés et sauce maison.',price:11990,
-          variants:Array.from({length:config.formats},(_,i)=>({key:'format-'+i,name:['M','L','XL','XXL'][i],price:11990+i*100})),
+          variants:Array.from({length:config.formats},(_,i)=>({key:'format-'+i,name:(config.variantLabels??['M','L','XL','XXL'])[i],price:11990+i*100})),
           groups:[],removables:[],supplements:[],tags:[],isNew:false,popular:false,outOfStock:false,
           photoUrl:config.layout==='grid'?'/photo.svg':null,photoCover:false,fromPrice:11990,configurable:true,
         }}
@@ -196,8 +196,8 @@ describe("MenuBoard — géométrie responsive du catalogue réel", () => {
     }
   });
 
-  it("répartit quatre formats sur deux colonnes sans doubler la hauteur de la carte mobile", async () => {
-    await configure({ layout: "grid", formats: 4 });
+  it("répartit quatre formats sur deux colonnes quand la carte mobile est assez large", async () => {
+    await configure({ layout: "grid", formats: 4 }, 430);
     const chips = firstProduct().getByRole("group").getByRole("button");
     expect(await chips.count()).toBe(4);
     const rectangles = await Promise.all([0, 1, 2, 3].map(index => bounds(chips.nth(index))));
@@ -206,6 +206,31 @@ describe("MenuBoard — géométrie responsive du catalogue réel", () => {
     expect(rectangles[2].top).toBeGreaterThan(rectangles[0].bottom);
     expect(rectangles[1].left).toBeGreaterThan(rectangles[0].right);
     for (const rectangle of rectangles) { expect(rectangle.height).toBeGreaterThanOrEqual(44); expectContained(rectangle, await bounds(firstProduct()), "format chip"); }
+  });
+
+  it("garde Classique entier et les prix contenus dans la carte étroite, puis rétablit deux colonnes de formats", async () => {
+    for (const width of [330, 390, 430, 820]) {
+      await configure({ layout: "grid", formats: 2, variantLabels: ["Classique", "XL"] }, width);
+      const card = firstProduct(), group = card.getByRole("group"), chips = group.getByRole("button");
+      const columns = await group.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+      expect(columns).toBe(width <= 390 ? 1 : 2);
+      expect(await page.locator(".sm-order-product-grid").evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(width === 820 ? 3 : 2);
+      const rectangles = await chips.first().evaluate(element => {
+        const label = Array.from(element.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim() === "Classique")!;
+        const range = document.createRange(); range.selectNodeContents(label);
+        return Array.from(range.getClientRects()).map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }));
+      });
+      expect(rectangles, `Classique reste sur une ligne à ${width} px, y compris avec la police de repli`).toHaveLength(1);
+      for (const rectangle of rectangles) expectContained(rectangle, await bounds(chips.first()), "Classique label");
+      for (let index = 0; index < await chips.count(); index++) {
+        const button = chips.nth(index), target = await bounds(button);
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expectContained(target, await bounds(card), "variant target");
+        expectContained(await bounds(button.locator("span")), target, "variant price");
+      }
+    }
+    await firstProduct().getByRole("group").getByRole("button").last().click();
+    expect(await page.evaluate(() => window.menuLayoutFixture.picks)).toEqual([{ productId: "product-0", variantKey: "format-1" }]);
   });
 
   it.each([
