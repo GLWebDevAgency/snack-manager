@@ -1,0 +1,476 @@
+{
+  "environment": "staging",
+  "comparedAt": "2026-09-12T21:17:45.316Z",
+  "beforeFile": "v2-staging-fronts-avant.json",
+  "afterFile": "v2-staging-fronts-apres.json",
+  "workflow": {
+    "id": "34718235062",
+    "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34718235062",
+    "headSha": "7e0746653b3710e98637f824e7d83e0719163527",
+    "conclusion": "success"
+  },
+  "api": {
+    "beforeRevision": "80f2eac593863dfcfc1f9e5962c09db38fe6db24",
+    "afterRevision": "7e0746653b3710e98637f824e7d83e0719163527",
+    "expectedRevision": "7e0746653b3710e98637f824e7d83e0719163527",
+    "expectedRevisionMatches": true,
+    "afterDeploymentId": "7d887342-d1a8-4a58-b0d3-b20cce38e998"
+  },
+  "limitations": [
+    "Frontend Git SHA is not publicly exposed; no frontend SHA assertion is made.",
+    "HTML can vary because of dynamic data. Asset URL/body fingerprints and exact Railway deployment IDs provide stronger change evidence.",
+    "Asset sampling is identical before/after, but changed page asset order may change the sampled set. Missing sample URLs are not proof that the server deleted an old asset.",
+    "GET-only public evidence does not validate private operational flows, payments, accounts, hardware or offline behavior."
+  ],
+  "fronts": [
+    {
+      "surface": "web",
+      "deployment": {
+        "service": "web",
+        "environment": "staging",
+        "observedAt": "2026-09-12T21:14:39.836Z",
+        "id": "3f3dab52-a370-4b59-8917-d573ae185181",
+        "status": "SUCCESS",
+        "createdAt": "2026-09-12T21:09:50.095Z",
+        "metaKeys": [
+          "buildOnly",
+          "fileServiceManifest",
+          "imageDigest",
+          "logsV2",
+          "nixpacksProviders",
+          "propertyFileMapping",
+          "reason",
+          "rootDirectory",
+          "runtime",
+          "serviceManifest",
+          "volumeMounts"
+        ],
+        "commitHash": null,
+        "reason": "deploy",
+        "previousDeployment": {
+          "id": "ad4771d5-63a4-466e-b683-3986693f3312",
+          "status": "REMOVED",
+          "createdAt": "2026-09-12T19:50:54.561Z"
+        },
+        "workflowLogMatchesId": true,
+        "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+      },
+      "pages": [
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/",
+          "statusBefore": 200,
+          "statusAfter": 200,
+          "mimeAfter": "text/html; charset=utf-8",
+          "sha256Before": "292938aef0e53fe2d1f2926a9d564ea0be0cd9cb85bbee3afd74eeee42150ff7",
+          "sha256After": "e781985271b8b2727176ae9c12fd5a1bd6d9e06774edd71d327016145aa33ce6",
+          "hashChanged": true
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/r/classfood",
+          "statusBefore": 200,
+          "statusAfter": 200,
+          "mimeAfter": "text/html; charset=utf-8",
+          "sha256Before": "4cd022e9e08a78ca58da841410fe994236d8efbfcf245d55c72256f207c68f27",
+          "sha256After": "50f838b368c4935cd9d9467de0e847232ef83948703146e3623b6e326465eb5d",
+          "hashChanged": true
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/r/classfood/fidelite",
+          "statusBefore": 200,
+          "statusAfter": 200,
+          "mimeAfter": "text/html; charset=utf-8",
+          "sha256Before": "b25d149ea21c97b1d0c34254d75aa79fe4ea4b9b8b418c8bae9cfd815b8c2fff",
+          "sha256After": "80c6528a0b9489a5a37f9e881847f641ee2ef171296634e681b41c58465e5cef",
+          "hashChanged": true
+        }
+      ],
+      "newlyReferencedAssetUrls": [
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/31wgsa7qnifa5.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3g82ik73lozq3.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0wzz653jvz89z.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3lmzjx5ipmfly.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1yo_onk73z96p.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js"
+      ],
+      "noLongerReferencedByObservedPages": [
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0dnr4xhuwphx2.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0wfm4tidsth98.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/26xuuzbdo5v3z.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2acd4_ixcd4gz.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1_rjw1jgdvp3q.css",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2-k52loea1dq-.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/05l9p_92zghua.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/14umnrjxesobl.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/43-vkhrj8wgh-.js",
+        "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0p-fuw2-_xz9l.js"
+      ],
+      "sampledAssetsAfter": [
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 10903,
+          "sha256": "f077b9c52a7757548ef2dd09378ad119e6655f9d4d5d42f346fd24e3fa166e42",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 124946,
+          "sha256": "718a08705fa77a8138fd03b08b88a6935ba44164ba26f282765787f9c0a7fd59",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3r0ppge-13kr5.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 87515,
+          "sha256": "f0240060de9d437b4ff3d657c46f750f5a4ef25ba730ff342ba8b83ecb6d852d",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 13846,
+          "sha256": "76abc4a98ce11a222ebe41007878de013c986bf8da12b3c7a18a3a73154c98bf",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 31346,
+          "sha256": "a4590375a64190f57d18b357bf576bf111bd5f02f3c93cad0f65fdf176689f46",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 227963,
+          "sha256": "42501e1043967038f0addfa4e31b7ce9cfcbc3ebf7c844f4a3e7faa99a60d7e4",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1lzk4k02_me45.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 41312,
+          "sha256": "13480154b7129931fad41f1652214520a4304c99e13d74f3eef257f8528a99bf",
+          "sameUrlSampledBefore": true,
+          "hashChangedForSameUrl": false
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 8308,
+          "sha256": "5b0ff1a9be801433d451922367c28fe86158683730f8b6f1918d9e40d0a34ab5",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 299049,
+          "sha256": "5e046666114171db1ca4ebd0365f89847d13cca93be9875eee150ca51d7e6c3c",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 48205,
+          "sha256": "38d0268faf1ea1f694b830d9ab01cd1f4f0085800185f702ae1b9a2a462705c1",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 38890,
+          "sha256": "7e78857cb3a17910843b5858ce5b67933441bd299fcaac673951590be72541a6",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        }
+      ],
+      "allSampledAssets200": true,
+      "changedReferencedSet": true,
+      "sampledAssetsBefore": [
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1edf0rcjw2u6v.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 10903,
+          "sha256": "f077b9c52a7757548ef2dd09378ad119e6655f9d4d5d42f346fd24e3fa166e42"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0dnr4xhuwphx2.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 124800,
+          "sha256": "8b09e5da557a65a7bb521275be47076947298eb8a9a6e20f00e581375eb27890"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3r0ppge-13kr5.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 87515,
+          "sha256": "f0240060de9d437b4ff3d657c46f750f5a4ef25ba730ff342ba8b83ecb6d852d"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1wu0q9fn_k7mj.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 13846,
+          "sha256": "76abc4a98ce11a222ebe41007878de013c986bf8da12b3c7a18a3a73154c98bf"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2i51e627rllld.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 31346,
+          "sha256": "a4590375a64190f57d18b357bf576bf111bd5f02f3c93cad0f65fdf176689f46"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2tm56lt1u9cfk.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 227963,
+          "sha256": "42501e1043967038f0addfa4e31b7ce9cfcbc3ebf7c844f4a3e7faa99a60d7e4"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/26xuuzbdo5v3z.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 7510,
+          "sha256": "94a621a8301a39f062cf7c8ebef5f936e8e5303428a7b71bff55de22f37f244c"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/2acd4_ixcd4gz.css",
+          "status": 200,
+          "mime": "text/css; charset=UTF-8",
+          "bytes": 46922,
+          "sha256": "04f04146093b28cd94477cffb4e188c2300d2fa3bda05b2db5a7d080425b3bb3"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1lzk4k02_me45.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 41312,
+          "sha256": "13480154b7129931fad41f1652214520a4304c99e13d74f3eef257f8528a99bf"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/0p-fuw2-_xz9l.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 299504,
+          "sha256": "1d0b4dad53914a92b6f7a73ca480fcae82e745a3a8651a688c3a22825614872d"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/43-vkhrj8wgh-.js",
+          "status": 200,
+          "mime": "application/javascript; charset=UTF-8",
+          "bytes": 38422,
+          "sha256": "a0a74b51ce978188c330347db169c283bb18894b295d8375ae0688fff7fe6c53"
+        }
+      ],
+      "newBodyHashesInAfterSample": [
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/248vij_nhioi2.css",
+          "sha256": "718a08705fa77a8138fd03b08b88a6935ba44164ba26f282765787f9c0a7fd59"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3mhq9_rht-yj4.css",
+          "sha256": "5b0ff1a9be801433d451922367c28fe86158683730f8b6f1918d9e40d0a34ab5"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/1i8bae0s8rrho.js",
+          "sha256": "5e046666114171db1ca4ebd0365f89847d13cca93be9875eee150ca51d7e6c3c"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3dfoi0vb___br.css",
+          "sha256": "38d0268faf1ea1f694b830d9ab01cd1f4f0085800185f702ae1b9a2a462705c1"
+        },
+        {
+          "url": "https://web-staging-6f5f.up.railway.app/_next/static/chunks/3p_vavu2gpghr.js",
+          "sha256": "7e78857cb3a17910843b5858ce5b67933441bd299fcaac673951590be72541a6"
+        }
+      ]
+    },
+    {
+      "surface": "pos",
+      "deployment": {
+        "service": "pos",
+        "environment": "staging",
+        "observedAt": "2026-09-12T21:14:39.667Z",
+        "id": "e61962c0-6291-448a-97f9-45e2cb11f5b9",
+        "status": "SUCCESS",
+        "createdAt": "2026-09-12T21:09:50.181Z",
+        "metaKeys": [
+          "buildOnly",
+          "fileServiceManifest",
+          "imageDigest",
+          "logsV2",
+          "nixpacksProviders",
+          "propertyFileMapping",
+          "reason",
+          "rootDirectory",
+          "runtime",
+          "serviceManifest",
+          "volumeMounts"
+        ],
+        "commitHash": null,
+        "reason": "deploy",
+        "previousDeployment": {
+          "id": "9e26194b-befe-46f1-93c9-e2d1497f809c",
+          "status": "REMOVED",
+          "createdAt": "2026-09-12T19:50:54.368Z"
+        },
+        "workflowLogMatchesId": true,
+        "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+      },
+      "pages": [
+        {
+          "url": "https://pos-staging-7f92.up.railway.app/",
+          "statusBefore": 200,
+          "statusAfter": 200,
+          "mimeAfter": "text/html; charset=utf-8",
+          "sha256Before": "24aa68615e14e89759088f220660c92fe3f21e75388d349416334b334f86b67e",
+          "sha256After": "19b1ccf6d9e6758e0bc1ded45449e68299fafd710b703ba4295e670b875c24f1",
+          "hashChanged": true
+        }
+      ],
+      "newlyReferencedAssetUrls": [
+        "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js"
+      ],
+      "noLongerReferencedByObservedPages": [
+        "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-4d5f626f02d0e55178af354c2fa830c0.js"
+      ],
+      "sampledAssetsAfter": [
+        {
+          "url": "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js",
+          "status": 200,
+          "mime": "text/javascript; charset=utf-8",
+          "bytes": 1705255,
+          "sha256": "218a6c18e8cb5054eb56498d8e1fdc333f62129992a5bbcc4a396a0f2e3fa643",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        }
+      ],
+      "allSampledAssets200": true,
+      "changedReferencedSet": true,
+      "sampledAssetsBefore": [
+        {
+          "url": "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-4d5f626f02d0e55178af354c2fa830c0.js",
+          "status": 200,
+          "mime": "text/javascript; charset=utf-8",
+          "bytes": 1670644,
+          "sha256": "c16284ad361bc515c21a1241d3ec18056cdb9c6931d04f8ade890509a7783bb8"
+        }
+      ],
+      "newBodyHashesInAfterSample": [
+        {
+          "url": "https://pos-staging-7f92.up.railway.app/_expo/static/js/web/index-391fe8b479ac7bb47399cabb0a7e7055.js",
+          "sha256": "218a6c18e8cb5054eb56498d8e1fdc333f62129992a5bbcc4a396a0f2e3fa643"
+        }
+      ]
+    },
+    {
+      "surface": "kds",
+      "deployment": {
+        "service": "kds",
+        "environment": "staging",
+        "observedAt": "2026-09-12T21:14:39.682Z",
+        "id": "071d83c3-2a9f-4124-922e-3c033b07c8fe",
+        "status": "SUCCESS",
+        "createdAt": "2026-09-12T21:09:50.736Z",
+        "metaKeys": [
+          "buildOnly",
+          "fileServiceManifest",
+          "imageDigest",
+          "logsV2",
+          "nixpacksProviders",
+          "propertyFileMapping",
+          "reason",
+          "rootDirectory",
+          "runtime",
+          "serviceManifest",
+          "volumeMounts"
+        ],
+        "commitHash": null,
+        "reason": "deploy",
+        "previousDeployment": {
+          "id": "17f1b70e-271b-4265-839d-7b45d3172c3a",
+          "status": "REMOVED",
+          "createdAt": "2026-09-12T19:50:54.524Z"
+        },
+        "workflowLogMatchesId": true,
+        "association": "Exact deployment ID appears in successful workflow deployment step; Railway metadata does not publish frontend commit hash."
+      },
+      "pages": [
+        {
+          "url": "https://kds-staging-90da.up.railway.app/",
+          "statusBefore": 200,
+          "statusAfter": 200,
+          "mimeAfter": "text/html; charset=utf-8",
+          "sha256Before": "02f46409472c6e7eb11cd2170b39cba409d15f1ab2957a005e15b88f2e5092a2",
+          "sha256After": "97687fae573997fa454856f4d91beccbfc18728bf35af8b4c5ca3aee77ee988c",
+          "hashChanged": true
+        }
+      ],
+      "newlyReferencedAssetUrls": [
+        "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js"
+      ],
+      "noLongerReferencedByObservedPages": [
+        "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-8e44dee3e19f063233316837ee39d340.js"
+      ],
+      "sampledAssetsAfter": [
+        {
+          "url": "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js",
+          "status": 200,
+          "mime": "text/javascript; charset=utf-8",
+          "bytes": 1473955,
+          "sha256": "f2d267cd8384269007f8241d8961bc3d738549b7052e0dbaee1f0dc73ecb962b",
+          "sameUrlSampledBefore": false,
+          "hashChangedForSameUrl": null
+        }
+      ],
+      "allSampledAssets200": true,
+      "changedReferencedSet": true,
+      "sampledAssetsBefore": [
+        {
+          "url": "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-8e44dee3e19f063233316837ee39d340.js",
+          "status": 200,
+          "mime": "text/javascript; charset=utf-8",
+          "bytes": 1471645,
+          "sha256": "70b248d2c8874f705392c21c7a56d803a4db170361d6698643830f454d7c2b24"
+        }
+      ],
+      "newBodyHashesInAfterSample": [
+        {
+          "url": "https://kds-staging-90da.up.railway.app/_expo/static/js/web/index-ce74187d4bd53a593ae20b1269f9b8f0.js",
+          "sha256": "f2d267cd8384269007f8241d8961bc3d738549b7052e0dbaee1f0dc73ecb962b"
+        }
+      ]
+    }
+  ],
+  "allPages200": true,
+  "allSampledAssets200": true,
+  "allNewDeploymentsSuccessfulAndMatchedToWorkflow": true
+}

@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-09-12T21:10:41.795428+00:00",
+  "environment": "staging",
+  "service": "api",
+  "workflow": {
+    "id": 34718235062,
+    "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34718235062",
+    "headSha": "7e0746653b3710e98637f824e7d83e0719163527",
+    "statusAtObservation": "in_progress",
+    "deploymentJobId": 103621225572,
+    "apiStep": {
+      "name": "Déployer api — schémas PostgreSQL vérifiés",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T21:06:33Z",
+      "completedAt": "2026-09-12T21:09:41Z"
+    }
+  },
+  "deployment": {
+    "id": "7d887342-d1a8-4a58-b0d3-b20cce38e998",
+    "status": "SUCCESS",
+    "createdAt": "2026-09-12T21:06:37.493Z",
+    "previousId": "4125d500-ce3f-4cdc-90c4-6d3c2249cd60",
+    "association": "Nouvel ID API staging apparu pendant l'étape API de ce workflow ; état SUCCESS confirmé par Railway et étape API terminée avec succès."
+  },
+  "bootstrap": {
+    "filter": "\"Schémas et index du service à table préparés.\" OR \"Service à table indisponible : préparation des index refusée.\"",
+    "success": true,
+    "failureMessageMatches": 0,
+    "lines": [
+      {
+        "timestamp": "2026-09-12T21:09:37.419461018Z",
+        "message": "[Nest] 1  - 09/12/2026, 9:09:37 PM     LOG [DiningSchemaBootstrap] Schémas et index du service à table préparés."
+      }
+    ]
+  },
+  "evidence": {
+    "cli": "railway 4.16.1",
+    "linkedWorkingDirectory": "/Users/limameghassene/development/SnackManager",
+    "deploymentCommand": "railway deployment list --environment staging --service api --limit 2 --json",
+    "logsCommand": "railway logs --environment staging --service api --deployment --lines 20 --filter '\"Schémas et index du service à table préparés.\" OR \"Service à table indisponible : préparation des index refusée.\"' --json 7d887342-d1a8-4a58-b0d3-b20cce38e998",
+    "readOnly": true,
+    "remoteMutations": false,
+    "productionAccess": false,
+    "limits": "Preuve du démarrage et de la préparation additive des schémas Salle sur cette API. Aucun compte applicatif, parcours métier Salle ou paiement testé dans cette lecture ; état global du workflow et interfaces suivis séparément."
+  }
+}

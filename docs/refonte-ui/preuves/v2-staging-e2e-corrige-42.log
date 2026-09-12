@@ -1,0 +1,80 @@
+
+  Tests de bout en bout — cible « staging »
+     caisse  https://pos-staging-7f92.up.railway.app
+     cuisine https://kds-staging-90da.up.railway.app
+     web     https://web-staging-6f5f.up.railway.app
+     api     https://api-staging-a5e8.up.railway.app
+
+  ▸ Démonstrations — caisse · cuisine · commande en ligne · back-office — fixture, aucun état partagé
+
+✔ Back-office — un changement de prix est enregistré et relu (3076.722083ms)
+✔ Caisse — reprise d’encaissement après démarrage naturelle, 820px (7469.396792ms)
+ℹ {"width":820,"exit":"naturelle","focus":{"present":true,"inert":false,"focused":true}}
+ℹ {"width":820,"exit":"naturelle","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage passer, 820px (3339.636084ms)
+ℹ {"width":820,"exit":"passer","focus":{"present":true,"inert":false,"focused":true}}
+ℹ {"width":820,"exit":"passer","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage désactivée, 820px (2548.138167ms)
+ℹ {"width":820,"exit":"désactivée","proof":{"splashSeen":false,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage mouvement réduit, 820px (2615.008792ms)
+ℹ {"width":820,"exit":"mouvement réduit","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage naturelle, 1280px (5616.918834ms)
+ℹ {"width":1280,"exit":"naturelle","focus":{"present":true,"inert":false,"focused":true}}
+ℹ {"width":1280,"exit":"naturelle","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage passer, 1280px (3165.26325ms)
+ℹ {"width":1280,"exit":"passer","focus":{"present":true,"inert":false,"focused":true}}
+ℹ {"width":1280,"exit":"passer","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage désactivée, 1280px (2318.284458ms)
+ℹ {"width":1280,"exit":"désactivée","proof":{"splashSeen":false,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — reprise d’encaissement après démarrage mouvement réduit, 1280px (2614.836333ms)
+ℹ {"width":1280,"exit":"mouvement réduit","proof":{"splashSeen":true,"overlap":false,"skipInert":false},"reads":2,"unexpected":[],"businessPosts":[],"incidents":[]}
+✔ Caisse — modale persistante 1280 vers 820, focus et fermeture après rotation (3158.257291ms)
+✔ Caisse — modale persistante 820 vers 1280, focus et fermeture après rotation (1772.671917ms)
+✔ Caisse — espèces, double rotation et fermeture sans encaisser ni perdre le ticket (2067.840875ms)
+✔ Caisse — préférences visuelles, édition, attente et retour du service sans perte du ticket (2508.133917ms)
+✔ Caisse — édition inline, mutation du ticket et encaissement sans écraser le brouillon (2123.805ms)
+✔ Caisse — petit téléphone 320 × 568, configuration, espèces et pavé PIN accessibles (2366.475041ms)
+✔ Caisse — téléphone 390 px, tiroir gauche B et édition modale sans perte du ticket (1752.202625ms)
+✔ Caisse — rotation tablette 1280 vers 820 et retour du service conservent le brouillon de configuration (2085.879875ms)
+✔ Caisse — commande complète, encaissement espèces et numéro de retrait (4821.724542ms)
+✔ Créneau — garde la même heure quand la grille change d’ordre après lecture (1395.950541ms)
+✔ Créneau — refuse une heure disparue au lieu de cliquer une autre disponibilité (1004.929917ms)
+✔ Créneau — refuse de continuer quand le bouton suivant rappelle une autre heure (885.721375ms)
+✔ Commande en ligne — parcours complet sur un écran de 390 px (3700.722375ms)
+✔ Commande — panier et recherche conservés entre onglets à 320 px (4665.610667ms)
+✔ Commande — panier et recherche conservés entre onglets à 820 px (2062.83625ms)
+✔ Commande — panier et recherche conservés entre onglets à 1440 px (1801.068292ms)
+✔ Cuisine — thème et densité conservent les tickets, les options et la lisibilité des alertes (3962.703ms)
+✔ Cuisine — rotation, onglets et filtre compact conservent les commandes et le cumul à lancer (2412.226167ms)
+✔ Cuisine — paramètres ouverts pendant les rotations, isolation et retour clavier au rouage actuel (3299.684542ms)
+✔ Cuisine — téléphone 320 × 568, réglages et progression jusqu’à Prêt sans remise (2211.678625ms)
+✔ Cuisine — clavier des réglages et PIN explicite 4 à 6 chiffres après fermeture du service (2880.628292ms)
+✔ Cuisine — un ticket du comptoir passe de nouveau à prêt (3472.789709ms)
+✔ Caisse — démarrage complet, passage explicite et préférence persistante au rechargement (9466.02325ms)
+ℹ Séquence complète pos : 3074 ms, API simulée
+✔ Caisse — mouvement réduit, démarrage statique sans délai imposé (2082.396583ms)
+ℹ Mouvement réduit pos : 1 montage(s), durée(s) 215 ms
+✔ Caisse — clavier physique inactif sous le démarrage puis PIN et passage accessibles (3146.495ms)
+✔ Cuisine — démarrage complet, passage explicite et préférence persistante au rechargement (7814.961708ms)
+ℹ Séquence complète kds : 3064 ms, API simulée
+✔ Cuisine — mouvement réduit, démarrage statique sans délai imposé (2210.767917ms)
+ℹ Mouvement réduit kds : 1 montage(s), durée(s) 231 ms
+✔ Cuisine — clavier physique inactif sous le démarrage puis PIN et passage accessibles (3198.697792ms)
+✔ Écrans TV — tuiles visibles, pause réelle et enregistrement explicite en démo (19170.649125ms)
+✔ Identité — aperçu TV du brouillon sans enregistrement (5002.114333ms)
+✔ Écrans TV — rejouer une scène en pause sans changer le contenu ni enregistrer (3563.8665ms)
+✔ Carte — sélection éditoriale ordonnée, limite et brouillon préservé (1440px) (2709.215917ms)
+✔ Carte — sélection éditoriale ordonnée, limite et brouillon préservé (390px) (2476.884833ms)
+ℹ tests 42
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32132.784875
+
+  ─────────────────────────────────────────────────────────────
+  ✔ vert   Démonstrations   32.2 s
+           total            32.2 s
+  ─────────────────────────────────────────────────────────────

@@ -7,9 +7,29 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { cibles } from '../socle/cibles.mjs';
 import { deborde } from '../socle/attentes.mjs';
-import { scenario } from '../socle/navigateur.mjs';
+import { scenario as scenarioNavigateur } from '../socle/navigateur.mjs';
 
 const { kds } = cibles();
+
+/** Le transport démo vit dans ce document : seuls la page et ses assets sont lus. */
+function scenario(nom, options, corps) {
+  scenarioNavigateur(nom, options, async (page, session) => {
+    const inattendues = [];
+    await session.contexte.routeWebSocket('**/*', (socket) => {
+      const url = new URL(socket.url());
+      inattendues.push(`WebSocket ${url.origin}${url.pathname}`);
+      socket.close();
+    });
+    await session.contexte.route('**/*', (route) => {
+      const request = route.request(), url = new URL(request.url());
+      if (request.method() === 'GET' && url.origin === new URL(kds).origin) return route.continue();
+      inattendues.push(`${request.method()} ${url.origin}${url.pathname}`);
+      return route.abort();
+    });
+    try { await corps(page, session); }
+    finally { assert.deepEqual(inattendues, [], 'la démonstration cuisine ne doit contacter aucune API ni émettre de mutation réseau'); }
+  });
+}
 const REGLAGES = /^Paramètres de l['’]écran$/;
 const CARTES = /^Commande \d+$/;
 const STATUTS = [
@@ -76,6 +96,9 @@ async function preuve(page, nom) {
 scenario('Cuisine — thème et densité conservent les tickets, les options et la lisibilité des alertes',
   { format: { width: 1280, height: 800 } }, async (page) => {
     await ouvrirCuisine(page);
+    // Le thème initial est Clair depuis la refonte. Poser la référence sombre
+    // explicitement avant de comparer les fonds, sans dépendre du choix initial.
+    await preferences(page, { densite: 'Confort', theme: 'Sombre' });
     const avant = await tickets(page);
     assert.ok(avant.length >= 3, 'le service doit porter plusieurs commandes et statuts');
     assert.ok(avant.some((ticket) => ticket.texte.includes('SANS OIGNONS')));
@@ -84,13 +107,14 @@ scenario('Cuisine — thème et densité conservent les tickets, les options et 
     assert.ok(avant.some((ticket) => ticket.texte.includes('À encaisser')));
     assert.ok(avant.some((ticket) => ticket.texte.includes('Payé')));
 
-    const carte = page.getByRole('button', { name: /^Accepter — commande numéro \d+$/ }).first().locator('xpath=..');
+    const numero = (await page.getByRole('button', { name: /^Accepter — commande numéro \d+$/ }).first().getAttribute('aria-label')).match(/\d+$/)?.[0];
+    assert.match(numero ?? '', /^\d+$/, 'le numéro doit venir du bouton du ticket choisi');
+    const nom = `Commande ${numero}`;
+    const carte = page.getByLabel(nom, { exact: true });
     const noeud = await carte.elementHandle();
-    const nom = await carte.getAttribute('aria-label');
-    const numero = nom.match(/\d+/)?.[0];
     const mesures = async () => ({
       hauteur: (await page.getByLabel(nom, { exact: true }).boundingBox()).height,
-      numero: await page.getByLabel(nom, { exact: true }).getByText(numero, { exact: true }).evaluate((el) => getComputedStyle(el).fontSize),
+      numero: await page.getByLabel(nom, { exact: true }).getByText(`#${numero}`, { exact: true }).evaluate((el) => getComputedStyle(el).fontSize),
       minuteur: await page.getByLabel(nom, { exact: true }).getByLabel(/^Depuis \d+ minutes$/).evaluate((el) => getComputedStyle(el).fontSize),
       retrait: await page.getByLabel(nom, { exact: true }).getByText('SANS OIGNONS', { exact: true }).evaluate((el) => getComputedStyle(el).fontSize),
     });
@@ -114,6 +138,7 @@ scenario('Cuisine — thème et densité conservent les tickets, les options et 
       }
       const couleur = await page.getByLabel(nom, { exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor);
       if (theme === 'Clair') assert.notEqual(couleur, couleurSombre, 'le thème clair doit effectivement changer le fond des cartes');
+      else assert.equal(couleur, couleurSombre, 'changer la densité doit conserver le fond du thème sombre');
       assert.equal(await deborde(page), false);
       await preuve(page, `kds-dense-${theme === 'Clair' ? 'clair' : 'sombre'}-tablette`);
     }
@@ -216,10 +241,15 @@ scenario('Cuisine — paramètres ouverts pendant les rotations, isolation et re
         await panneau.getByRole('button', { name: 'Fermer', exact: true }).last().click({ trial: true });
 
         const clair = panneau.getByRole('radio', { name: 'Clair', exact: true });
-        await clair.focus();
-        await clair.press('Home');
+        const sombre = panneau.getByRole('radio', { name: 'Sombre', exact: true });
+        await sombre.focus();
+        await sombre.press('Home');
+        await panneau.getByRole('radio', { name: 'Clair', exact: true, checked: true }).waitFor({ state: 'visible' });
+        assert.equal(await clair.evaluate((el) => el === document.activeElement), true);
+        await clair.press('End');
         await panneau.getByRole('radio', { name: 'Sombre', exact: true, checked: true }).waitFor({ state: 'visible' });
-        await panneau.getByRole('radio', { name: 'Sombre', exact: true }).press('End');
+        assert.equal(await sombre.evaluate((el) => el === document.activeElement), true);
+        await sombre.press('Home');
         await verifierChoix();
         for (const touche of ['Tab', 'Tab', 'Shift+Tab']) {
           await page.keyboard.press(touche);
@@ -296,10 +326,13 @@ scenario('Cuisine — clavier des réglages et PIN explicite 4 à 6 chiffres apr
     await sombre.focus();
     await sombre.press('ArrowRight');
     await panneau.getByRole('radio', { name: 'Clair', exact: true, checked: true }).waitFor({ state: 'visible' });
-    await clair.press('Home');
+    assert.equal(await clair.evaluate((el) => el === document.activeElement), true);
+    await clair.press('End');
     await panneau.getByRole('radio', { name: 'Sombre', exact: true, checked: true }).waitFor({ state: 'visible' });
-    await sombre.press('End');
+    assert.equal(await sombre.evaluate((el) => el === document.activeElement), true);
+    await sombre.press('Home');
     await panneau.getByRole('radio', { name: 'Clair', exact: true, checked: true }).waitFor({ state: 'visible' });
+    assert.equal(await clair.evaluate((el) => el === document.activeElement), true);
     for (let i = 0; i < 12; i++) {
       await page.keyboard.press('Tab');
       assert.equal(await panneau.evaluate((el) => el.contains(document.activeElement)), true,

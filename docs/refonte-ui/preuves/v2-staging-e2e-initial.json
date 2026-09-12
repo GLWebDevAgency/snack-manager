@@ -1,0 +1,187 @@
+{
+  "conclusion": "failure",
+  "createdAt": "2026-09-12T21:14:06Z",
+  "databaseId": 34719365013,
+  "headSha": "fc566737e04019cc79524ceac1fbd18865fc3035",
+  "jobs": [
+    {
+      "completedAt": "2026-09-12T21:14:12Z",
+      "conclusion": "success",
+      "databaseId": 103622255489,
+      "name": "Cible des parcours",
+      "startedAt": "2026-09-12T21:14:09Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-09-12T21:14:10Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-09-12T21:14:10Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:10Z",
+          "conclusion": "success",
+          "name": "Résoudre le parc à contrôler",
+          "number": 2,
+          "startedAt": "2026-09-12T21:14:10Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:10Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 3,
+          "startedAt": "2026-09-12T21:14:10Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34719365013/job/103622255489"
+    },
+    {
+      "completedAt": "2026-09-12T21:17:20Z",
+      "conclusion": "failure",
+      "databaseId": 103622267384,
+      "name": "Parcours sur démonstration",
+      "startedAt": "2026-09-12T21:14:14Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-09-12T21:14:17Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-09-12T21:14:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:22Z",
+          "conclusion": "success",
+          "name": "Récupérer le code",
+          "number": 2,
+          "startedAt": "2026-09-12T21:14:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:26Z",
+          "conclusion": "success",
+          "name": "Installer pnpm",
+          "number": 3,
+          "startedAt": "2026-09-12T21:14:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:35Z",
+          "conclusion": "success",
+          "name": "Installer Node",
+          "number": 4,
+          "startedAt": "2026-09-12T21:14:26Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:41Z",
+          "conclusion": "success",
+          "name": "Installer les dépendances",
+          "number": 5,
+          "startedAt": "2026-09-12T21:14:35Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:14:46Z",
+          "conclusion": "success",
+          "name": "Restaurer le navigateur",
+          "number": 6,
+          "startedAt": "2026-09-12T21:14:41Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:15:06Z",
+          "conclusion": "success",
+          "name": "Installer Chromium",
+          "number": 7,
+          "startedAt": "2026-09-12T21:14:46Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:16Z",
+          "conclusion": "failure",
+          "name": "Jouer les parcours",
+          "number": 8,
+          "startedAt": "2026-09-12T21:15:06Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:17Z",
+          "conclusion": "success",
+          "name": "Conserver les traces d'échec",
+          "number": 9,
+          "startedAt": "2026-09-12T21:17:16Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:17Z",
+          "conclusion": "success",
+          "name": "Annoncer la panne",
+          "number": 10,
+          "startedAt": "2026-09-12T21:17:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:17Z",
+          "conclusion": "skipped",
+          "name": "Post Restaurer le navigateur",
+          "number": 17,
+          "startedAt": "2026-09-12T21:17:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:17Z",
+          "conclusion": "skipped",
+          "name": "Post Installer Node",
+          "number": 18,
+          "startedAt": "2026-09-12T21:17:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:17Z",
+          "conclusion": "success",
+          "name": "Post Installer pnpm",
+          "number": 19,
+          "startedAt": "2026-09-12T21:17:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:18Z",
+          "conclusion": "success",
+          "name": "Post Récupérer le code",
+          "number": 20,
+          "startedAt": "2026-09-12T21:17:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-12T21:17:18Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 21,
+          "startedAt": "2026-09-12T21:17:18Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34719365013/job/103622267384"
+    },
+    {
+      "completedAt": "2026-09-12T21:17:21Z",
+      "conclusion": "skipped",
+      "databaseId": 103622673801,
+      "name": "Parcours sur le parc réel",
+      "startedAt": "2026-09-12T21:17:21Z",
+      "status": "completed",
+      "steps": [],
+      "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34719365013/job/103622673801"
+    }
+  ],
+  "status": "completed",
+  "updatedAt": "2026-09-12T21:17:21Z",
+  "url": "https://github.com/GLWebDevAgency/snack-manager/actions/runs/34719365013"
+}
