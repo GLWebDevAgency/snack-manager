@@ -40,3 +40,11 @@ ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-orde
 # Le littéral est remplacé par construction URL dans l'arbre courant.
 # Seule cette empreinte historique est exemptée, pas le fichier ni la règle.
 eb0e7d5a8a88aae8941c39def4a0e197834e533d:apps/api/src/modules/delivery/delivery-handoff.integration.test.ts:uri-connexion-avec-identifiants:33
+
+# PR #179, commit 53aba2b (12/09/2026) : deux fixtures loopback inventées
+# vérifient le refus des URL Mongo authentifiées AVANT toute connexion.
+# Aucune valeur réelle ; l'arbre courant construit ces fixtures avec URL.
+# Seules ces deux occurrences historiques sont exemptées, jamais les fichiers
+# ni la règle de détection des URI portant des identifiants.
+53aba2b750a28062d31ba07ed2d16f7c55e83f23:apps/api/src/modules/orders/dining-pricing.test.ts:uri-connexion-avec-identifiants:37
+53aba2b750a28062d31ba07ed2d16f7c55e83f23:apps/api/src/modules/orders/dining.integration.test.ts:uri-connexion-avec-identifiants:40

@@ -1,4 +1,6 @@
+.github/gitleaks.toml
 .github/workflows/ci.yml
+.gitleaksignore
 apps/api/src/modules/audit/audit.module.ts
 apps/api/src/modules/ordering/dining-ticket.test.ts
 apps/api/src/modules/ordering/ticket.service.ts
@@ -1017,6 +1019,8 @@ docs/refonte-ui/preuves/staging-fronts-apres.json
 docs/refonte-ui/preuves/staging-fronts-avant.json
 docs/refonte-ui/preuves/staging-smoke.log
 docs/refonte-ui/preuves/staging-workflow.json
+docs/refonte-ui/preuves/v2-gitleaks-canaries.json
+docs/refonte-ui/preuves/v2-staging-fronts-avant.json
 docs/refonte-ui/preuves/web-v2-build-final.log
 docs/refonte-ui/preuves/web-v2-build-metadata.json
 docs/refonte-ui/preuves/web-v2-lint-final.json

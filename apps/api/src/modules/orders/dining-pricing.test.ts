@@ -33,8 +33,11 @@ export function pricingTestDatabase(raw: string) {
   return url.toString();
 }
 describe('pricing fixture database boundary', () => {
+  const authenticatedLocal = new URL('mongodb://localhost/snackmanager_dining_pricing_test_ci');
+  authenticatedLocal.username = 'a';
+  authenticatedLocal.password = 'b';
   it.each(['mongodb://remote.example/snackmanager_dining_pricing_test_ci', 'mongodb://localhost/snackmanager',
-    'mongodb://a:b@localhost/snackmanager_dining_pricing_test_ci', 'mongodb://localhost/snackmanager_dining_pricing_test_ci?replicaSet=production'])('refuses %s before I/O', value => {
+    authenticatedLocal.toString(), 'mongodb://localhost/snackmanager_dining_pricing_test_ci?replicaSet=production'])('refuses %s before I/O', value => {
     expect(() => pricingTestDatabase(value)).toThrow();
   });
 });

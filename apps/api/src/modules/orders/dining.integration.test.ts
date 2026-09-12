@@ -36,8 +36,11 @@ export function diningTestDatabase(raw: string): string {
 const uri = process.env.DINING_TEST_MONGO_URL ? diningTestDatabase(process.env.DINING_TEST_MONGO_URL) : null;
 const integration = uri ? describe : describe.skip;
 describe('dining test database boundary', () => {
+  const authenticatedLocal = new URL('mongodb://localhost/snackmanager_dining_test_ci');
+  authenticatedLocal.username = 'a';
+  authenticatedLocal.password = 'b';
   it.each(['mongodb://remote.example/snackmanager_dining_test_ci', 'mongodb://localhost/snackmanager', 'mongodb://localhost/admin',
-    'mongodb://localhost/snackmanager_dining_test_ci?replicaSet=production', 'mongodb://a:b@localhost/snackmanager_dining_test_ci'])('refuses %s before I/O', (value) => expect(() => diningTestDatabase(value)).toThrow());
+    'mongodb://localhost/snackmanager_dining_test_ci?replicaSet=production', authenticatedLocal.toString()])('refuses %s before I/O', (value) => expect(() => diningTestDatabase(value)).toThrow());
 });
 function barrier() {
   let release!: () => void;
