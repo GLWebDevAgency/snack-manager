@@ -1,8 +1,10 @@
 import https from 'node:https';
 import { Socket } from 'node:net';
+import { createECDH } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderPushSender } from './order-push.sender';
 import { pushFixture } from './order-push.test-fixture';
+import { orderPushConfig } from './order-push.crypto';
 
 // Garder le vrai web-push : son parseur legacy diffère de new URL().
 // Le transport est interrompu AVANT toute connexion, même pour les contrôles valides.
@@ -17,6 +19,25 @@ afterEach(() => {
 });
 
 describe('destination effective du vrai transport web-push', () => {
+  it.each([1, 31, 32])('envoie avec un scalaire VAPID valide de %i octets sans changer sa clé publique', async width => {
+    // Données cryptographiques synthétiques : reproduire les zéros de tête
+    // omis par getPrivateKey(), sans attendre une génération aléatoire rare.
+    const key = createECDH('prime256v1'); key.setPrivateKey(Buffer.alloc(width, 1));
+    const { config, subscription } = pushFixture();
+    const publicKey = key.getPublicKey().toString('base64url');
+    const normalized = orderPushConfig({
+      ORDER_PUSH_VAPID_PUBLIC_KEY: publicKey,
+      ORDER_PUSH_VAPID_PRIVATE_KEY: key.getPrivateKey().toString('base64url'),
+      ORDER_PUSH_VAPID_SUBJECT: config.subject,
+      ORDER_PUSH_ENCRYPTION_KEY_BASE64: config.encryptionKey.toString('base64'),
+    });
+    expect(normalized?.publicKey).toBe(publicKey);
+    expect(await new OrderPushSender(normalized).send(subscription, 'restaurant')).toBe('retry');
+    expect(https.request).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      hostname: 'fcm.googleapis.com', path: '/fcm/send/opaque-test', method: 'POST',
+    }), expect.any(Function));
+  });
+
   it.each([
     'https://fcm%2Egoogleapis.com/a', 'https://updates%2epush.services.mozilla.com/a',
     'https://web%2Epush.apple.com/a', 'https://%66cm.googleapis.com/a',
