@@ -14,9 +14,11 @@ export function customerProductionFixture(now = Date.now(), environment: 'stagin
   const policy = { mode: 'production_paid', environment, ...target, authorizationRef: 'operator-budget-A',
     costEvidenceReference: 'operator-costs', evidenceNotBefore: now - 60_000, expiresAt: now + 86_400_000,
     globalSendReservations: 100, tenantSendReservations: 100, ipSendReservations: 30 };
-  const observation = { reference: 'live-observation', ...target, accountType: 'Full', accountStatus: 'active',
+  const observation = { reference: 'live-observation', ...target,
     codeLength: 6, observedAt: now, settingsFingerprint: 'a'.repeat(64) };
   const attestations = {
+    account: { reference: 'operator-account', ...target, accountType: 'Full', accountStatus: 'active',
+      attestedAt: now - 60_000, expiresAt: now + 86_400_000 },
     safeguards: { reference: 'operator-safeguards', ...target, smsEnabled: true, fraudGuardEnabled: true,
       maxTokenValiditySeconds: 600, maxSmsSegmentsPerSend: 1, settingsFingerprint: observation.settingsFingerprint,
       attestedAt: now - 60_000, expiresAt: now + 86_400_000 },
@@ -26,7 +28,5 @@ export function customerProductionFixture(now = Date.now(), environment: 'stagin
   };
   env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify(policy);
   env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(attestations);
-  env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID = `SK${'d'.repeat(32)}`;
-  env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET = 'fixture-observer-secret';
   return { env, target, policy, attestations, observation, evidence: { ...attestations, serverObservation: observation } };
 }

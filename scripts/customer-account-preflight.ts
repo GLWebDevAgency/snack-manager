@@ -211,19 +211,22 @@ export function customerAccountPreflight(raw: unknown, now = Date.now()): Custom
       && parsedPolicy.data.accountSid === apiTarget?.verifyAccountSid && parsedPolicy.data.serviceSid === apiTarget?.verifyServiceSid
       && parsedPolicy.data.tenantRef === target.tenantId;
     check('funding.policy', policyValid, expired ? 'funding_expired' : 'production_policy_invalid');
-    const configuredShape = object(configuredEvidence) && exactKeys(configuredEvidence, ['safeguards', 'costs']);
+    const configuredShape = object(configuredEvidence) && exactKeys(configuredEvidence, ['account', 'safeguards', 'costs']);
+    const a = ProductionVerificationEvidenceSchema.shape.account.safeParse(configuredShape ? configuredEvidence.account : null);
     const s = ProductionVerificationEvidenceSchema.shape.safeguards.safeParse(configuredShape ? configuredEvidence.safeguards : null);
     const c = ProductionVerificationEvidenceSchema.shape.costs.safeParse(configuredShape ? configuredEvidence.costs : null);
     const current = (v: { accountSid: string; serviceSid: string; tenantRef: string; attestedAt: number; expiresAt: number }) =>
       v.accountSid === apiTarget?.verifyAccountSid && v.serviceSid === apiTarget?.verifyServiceSid && v.tenantRef === target.tenantId
       && v.attestedAt <= now && v.expiresAt > now && v.expiresAt <= v.attestedAt + PRODUCTION_ATTESTATION_MAX_AGE_MS;
-    const attestationsValid = s.success && c.success && current(s.data) && current(c.data)
+    const accountValid = a.success && current(a.data);
+    check('provider.account_attestation', accountValid, 'operator_account_attestation_invalid_or_expired', 'operator_attestation_current');
+    const attestationsValid = accountValid && s.success && c.success && current(s.data) && current(c.data)
       && parsedPolicy.success && c.data.reference === parsedPolicy.data.costEvidenceReference;
     check('funding.attestations', attestationsValid, 'operator_attestations_invalid_or_expired');
     check('provider.environment', configuredShape, 'provider_observation_forbidden_in_config');
     const observer = access ? customerObservationConfiguration(reader, access) : null;
-    const observerValid = observer !== null && observer.apiKeySid !== api.SM_CUSTOMER_VERIFY_API_KEY_SID;
-    check('provider.credentials', observerValid, 'observer_credentials_missing_or_not_distinct');
+    const observerValid = observer !== null;
+    check('provider.credentials', observerValid, 'verify_service_credentials_missing_or_invalid');
     productionConfigValid = policyValid && attestationsValid && !!configuredShape && observerValid;
   }
   if (awaitingProvider) unverified('funding.plan', 'provider_observation_required');

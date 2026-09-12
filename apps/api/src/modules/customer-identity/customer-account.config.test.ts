@@ -106,12 +106,14 @@ describe('explicit customer production deployment', () => {
     expect(customerSendConfiguration(getter(f.env), access!)).toBeNull();
     expect(customerObservationConfiguration(getter(f.env), access!)).toBeNull();
   });
-  it('requires a separate observer credential instead of silently borrowing the send key', () => {
+  it('uses the existing Verify key for service observation without account access credentials', () => {
     const f = customerProductionFixture(); const access = customerAccessConfiguration(getter(f.env))!;
-    expect(customerObservationConfiguration(getter(f.env), access)?.apiKeySid).toBe(f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID);
-    f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID = f.env.SM_CUSTOMER_VERIFY_API_KEY_SID!;
+    expect(customerObservationConfiguration(getter(f.env), access)).toEqual({
+      ...f.target, apiKeySid: f.env.SM_CUSTOMER_VERIFY_API_KEY_SID,
+      apiKeySecret: f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET });
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     expect(customerObservationConfiguration(getter(f.env), access)).toBeNull();
-    delete f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SID;
     expect(customerObservationConfiguration(getter(f.env), access)).toBeNull();
   });
 });

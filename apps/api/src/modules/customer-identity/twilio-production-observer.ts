@@ -5,7 +5,6 @@ import { ProductionServerObservationSchema, type ProductionVerificationEvidence 
 const sid = (prefix: string) => z.string().regex(new RegExp(`^${prefix}[0-9a-fA-F]{32}$`));
 const inputSchema = z.strictObject({ accountSid: sid('AC'), serviceSid: sid('VA'), tenantRef: z.string().regex(/^[0-9a-f]{24}$/),
   apiKeySid: sid('SK'), apiKeySecret: z.string().regex(/^[\x21-\x7e]{1,256}$/) });
-const accountSchema = z.object({ sid: sid('AC'), type: z.literal('Full'), status: z.literal('active') });
 const settingsSchema = z.object({ friendly_name: z.string().min(1).max(256), code_length: z.number().int().min(4).max(10),
   custom_code_enabled: z.boolean(), lookup_enabled: z.boolean(), psd2_enabled: z.boolean(),
   do_not_share_warning_enabled: z.boolean(), default_template_sid: sid('HJ').nullable() });
@@ -27,10 +26,11 @@ export function twilioVerifySettingsFingerprint(value: unknown): string | null {
     do_not_share_warning_enabled: s.do_not_share_warning_enabled, default_template_sid: s.default_template_sid })).digest('hex');
 }
 
-/** Read-only facts, not permission to spend. The caller supplies a separately
- * provisioned SK credential; this adapter never sends an SMS or changes settings.
- * Cache keys contain only digests, and provider bodies/errors are never logged.
- * https://www.twilio.com/docs/iam/api/account */
+/** Read-only Verify Service facts, not permission to spend or proof of account
+ * type/status. Account metadata is never requested: its response may contain
+ * credentials. The caller supplies the existing Verify SK credential;
+ * this adapter never sends an SMS or changes settings. Cache keys contain only
+ * digests, and provider bodies/errors are never logged. */
 export class TwilioProductionObserver {
   private readonly entries = new Map<string, Entry>();
   constructor(private readonly fetcher: typeof fetch = fetch, private readonly now: () => number = Date.now) {}
@@ -79,9 +79,6 @@ export class TwilioProductionObserver {
     });
     const work = async () => {
       const authorization = `Basic ${Buffer.from(`${target.apiKeySid}:${target.apiKeySecret}`).toString('base64')}`;
-      const account = accountSchema.safeParse(await this.json(
-        `https://api.twilio.com/2010-04-01/Accounts/${target.accountSid}.json`, authorization, controller.signal));
-      if (!account.success || account.data.sid !== target.accountSid) return null;
       const service = serviceSchema.safeParse(await this.json(
         `https://verify.twilio.com/v2/Services/${target.serviceSid}`, authorization, controller.signal));
       if (!service.success || service.data.sid !== target.serviceSid || service.data.account_sid !== target.accountSid
@@ -89,7 +86,7 @@ export class TwilioProductionObserver {
       const settingsFingerprint = twilioVerifySettingsFingerprint(service.data);
       const observation = ProductionServerObservationSchema.safeParse({ reference: `twilio_${randomUUID()}`,
         accountSid: target.accountSid, serviceSid: target.serviceSid, tenantRef: target.tenantRef,
-        accountType: account.data.type, accountStatus: account.data.status, codeLength: service.data.code_length,
+        codeLength: service.data.code_length,
         observedAt: this.now(), settingsFingerprint });
       return observation.success ? observation.data : null;
     };

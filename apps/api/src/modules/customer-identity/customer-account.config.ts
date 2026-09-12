@@ -61,7 +61,7 @@ export function customerSendConfiguration(config: CustomerConfigReader, access: 
     // A timestamp in an environment variable never proves a provider read.
     // Production observation comes exclusively from the server adapter.
     const evidence = access.mode === 'production_paid'
-      ? { ...z.strictObject({ safeguards: z.unknown(), costs: z.unknown() }).parse(configuredEvidence),
+      ? { ...z.strictObject({ account: z.unknown(), safeguards: z.unknown(), costs: z.unknown() }).parse(configuredEvidence),
         serverObservation: productionObservation ?? null } : configuredEvidence;
     // A pure eligibility probe, never handed to the transport. Production
     // validates the FR mobile range; a pilot still requires its real allowlist.
@@ -83,16 +83,16 @@ export function customerSendConfiguration(config: CustomerConfigReader, access: 
         apiKeySecret: secret.parse(config.get('SM_CUSTOMER_VERIFY_API_KEY_SECRET')) } };
   } catch { return null; }
 }
-/** Read-only observer credentials are separate from the key allowed to send.
- * An absent/forbidden account read closes SMS, without disabling passkeys. */
+/** Observe only the Verify service with the existing restricted Verify key.
+ * Never request Accounts access: its response may expose the master auth token.
+ * An unavailable service read closes SMS, without disabling passkeys. */
 export function customerObservationConfiguration(config: CustomerConfigReader, access: CustomerAccessConfiguration) {
   try {
     if (access.mode !== 'production_paid' || !access.serviceSid) return null;
-    const apiKeySid = z.string().regex(/^SK[0-9a-fA-F]{32}$/).parse(config.get('SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID'));
-    if (apiKeySid === config.get('SM_CUSTOMER_VERIFY_API_KEY_SID')) return null;
+    const apiKeySid = z.string().regex(/^SK[0-9a-fA-F]{32}$/).parse(config.get('SM_CUSTOMER_VERIFY_API_KEY_SID'));
     return { accountSid: access.parentRef, serviceSid: access.serviceSid, tenantRef: access.tenantRef,
       apiKeySid,
-      apiKeySecret: secret.parse(config.get('SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET')) };
+      apiKeySecret: secret.parse(config.get('SM_CUSTOMER_VERIFY_API_KEY_SECRET')) };
   } catch { return null; }
 }
 function json(config: CustomerConfigReader, name: string): unknown {

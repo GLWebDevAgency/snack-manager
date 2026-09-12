@@ -36,13 +36,13 @@ function productionFixture(environment: 'staging' | 'production' = 'production',
     env.SM_CUSTOMER_PRODUCTION_TARGET = JSON.stringify(deployment);
     for (const name of Object.keys(env)) if (name.startsWith('SM_CUSTOMER_PILOT_')) delete env[name];
   }
-  f.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID = `SK${'d'.repeat(32)}`;
-  f.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET = 'SYNTHETIC_OBSERVER_SECRET';
   f.api.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify({ mode: 'production_paid', environment, ...scope,
     authorizationRef: 'production-authorization-fixture', costEvidenceReference: 'production-cost-fixture',
     evidenceNotBefore: at - 3_600_000, expiresAt: at + 30 * 86_400_000, globalSendReservations: 1000, tenantSendReservations: 500, ipSendReservations: 50 });
   const settingsFingerprint = 'e'.repeat(64);
   f.api.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify({
+    account: { reference: 'operator-account-fixture', ...scope, accountType: 'Full', accountStatus: 'active',
+      attestedAt: at - 86_400_000, expiresAt: at + 86_400_000 },
     safeguards: { reference: 'safeguards-fixture', ...scope, smsEnabled: true, fraudGuardEnabled: true,
       maxTokenValiditySeconds: 600, maxSmsSegmentsPerSend: 2, settingsFingerprint, attestedAt: at - 86_400_000, expiresAt: at + 86_400_000 },
     costs: { reference: 'production-cost-fixture', ...scope, currency: 'USD', allFeesIncluded: true,
@@ -50,7 +50,7 @@ function productionFixture(environment: 'staging' | 'production' = 'production',
       attestedAt: at - 86_400_000, expiresAt: at + 86_400_000 },
   });
   return { ...f, observations: { ...f.observations, production: {
-    provider: { reference: 'server-read-fixture', ...scope, accountType: 'Full', accountStatus: 'active', codeLength: 6, observedAt: at, settingsFingerprint },
+    provider: { reference: 'service-read-fixture', ...scope, codeLength: 6, observedAt: at, settingsFingerprint },
     budget: { parentRef: scope.accountSid, tenantRef: scope.tenantRef, authorizationRef: 'production-authorization-fixture',
       serviceSid: scope.serviceSid, costEvidenceReference: 'production-cost-fixture', reservePerSendMicrousd: 70, available: true },
     admissions: { parentRef: scope.accountSid, tenantRef: scope.tenantRef, policyRef: 'admissions-fixture', windowMs: 86_400_000,
@@ -71,8 +71,39 @@ describe('production snapshots without auto-attesting provider or SQL funding', 
     expect(report.decision).toBe('configuration_valid');
     expect(report.access).toBe('configuration_valid');
     expect(check(report, 'production.provider')?.source).toBe('operator_observation');
+    expect(check(report, 'provider.account_attestation')).toMatchObject({ source: 'configuration', status: 'pass', code: 'operator_attestation_current' });
     expect(check(report, 'production.budget')?.code).toBe('operator_reports_verified');
-    expect(JSON.stringify(report)).not.toContain(input.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET);
+    expect(check(report, 'provider.credentials')?.status).toBe('pass');
+    expect(JSON.stringify(report)).not.toContain(input.api.SM_CUSTOMER_VERIFY_API_KEY_SECRET);
+  });
+  it.each([undefined, null, {}])('does not substitute a valid service read for a missing operator account attestation (%#)', account => {
+    const input = productionFixture(); input.api.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify({
+      ...JSON.parse(input.api.SM_CUSTOMER_VERIFY_EVIDENCE!), account });
+    const report = customerAccountPreflight(input, now);
+    expect(report).toMatchObject({ decision: 'blocked', sms: 'blocked', access: 'configuration_valid' });
+    expect(check(report, 'provider.account_attestation')?.code).toBe('operator_account_attestation_invalid_or_expired');
+    expect(check(report, 'production.provider')?.status).toBe('pass');
+  });
+  it.each([
+    { accountType: undefined }, { accountType: 'Trial' }, { accountStatus: undefined }, { accountStatus: 'suspended' },
+    { accountSid: undefined }, { serviceSid: undefined }, { tenantRef: undefined },
+    { accountSid: `AC${'f'.repeat(32)}` }, { serviceSid: `VA${'f'.repeat(32)}` }, { tenantRef: 'foreign-tenant' },
+    { attestedAt: undefined }, { expiresAt: undefined }, { attestedAt: now + 1 }, { expiresAt: now },
+    { expiresAt: now + 7 * 86_400_000 }, { source: 'server' },
+  ])('rejects incomplete, foreign or expired account attestation without confusing the service observation (%#)', patch => {
+    const input = productionFixture(); const evidence = JSON.parse(input.api.SM_CUSTOMER_VERIFY_EVIDENCE!);
+    input.api.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify({ ...evidence, account: { ...evidence.account, ...patch } });
+    const report = customerAccountPreflight(input, now);
+    expect(report).toMatchObject({ decision: 'blocked', sms: 'blocked', access: 'configuration_valid' });
+    expect(check(report, 'provider.account_attestation')?.status).toBe('blocked');
+    expect(check(report, 'production.provider')?.status).toBe('pass');
+  });
+  it.each([{ accountType: 'Full' }, { accountStatus: 'active' }, { auth_token: 'SYNTHETIC_NOT_A_CREDENTIAL' }])('refuses account facts or credentials inside the automatic service observation (%#)', extra => {
+    const input = productionFixture();
+    const report = customerAccountPreflight({ ...input, observations: { ...input.observations,
+      production: { ...input.observations.production, provider: { ...input.observations.production.provider, ...extra } } } }, now);
+    expect(report.decision).toBe('invalid_input');
+    expect(JSON.stringify(report)).not.toContain('SYNTHETIC_NOT_A_CREDENTIAL');
   });
   it('keeps missing provider, budget and admission observations incomplete rather than positive', () => {
     const input = productionFixture(); const report = customerAccountPreflight({ ...input,
@@ -106,13 +137,15 @@ describe('production snapshots without auto-attesting provider or SQL funding', 
     expect(check(report, 'funding.attestations')?.status).toBe('blocked');
     expect(check(report, 'production.provider')?.status).toBe('pass');
   });
-  it.each(['missing', 'same'])('requires separate observer credentials (%s)', mode => {
+  it.each(['SM_CUSTOMER_VERIFY_API_KEY_SID', 'SM_CUSTOMER_VERIFY_API_KEY_SECRET'])('requires the existing Verify credential %s and never falls back to an account-observer key', name => {
     const input = productionFixture();
-    if (mode === 'missing') delete input.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET;
-    else input.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID = input.api.SM_CUSTOMER_VERIFY_API_KEY_SID!;
+    input.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID = `SK${'d'.repeat(32)}`;
+    input.api.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET = 'SYNTHETIC_OBSOLETE_CREDENTIAL';
+    delete input.api[name];
     const report = customerAccountPreflight(input, now);
-    expect(check(report, 'provider.credentials')?.status).toBe('blocked');
+    expect(check(report, 'provider.credentials')).toMatchObject({ status: 'blocked', code: 'verify_service_credentials_missing_or_invalid' });
     expect(report.passkeys).toBe('configuration_valid');
+    expect(JSON.stringify(report)).not.toContain('SYNTHETIC_OBSOLETE_CREDENTIAL');
   });
   it.each([
     { available: false }, { authorizationRef: 'other-authorization' }, { parentRef: `AC${'f'.repeat(32)}` },

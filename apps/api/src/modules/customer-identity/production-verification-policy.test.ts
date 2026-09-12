@@ -18,8 +18,10 @@ function fixture() {
       evidenceNotBefore: now - 3_600_000, expiresAt: now + 30 * day,
       globalSendReservations: 1000, tenantSendReservations: 500, ipSendReservations: 50 },
     evidence: {
-      serverObservation: { reference: 'account-service-read-fixture', ...scope, accountType: 'Full',
-        accountStatus: 'active', codeLength: 6, observedAt: now - 60_000, settingsFingerprint },
+      serverObservation: { reference: 'service-read-fixture', ...scope,
+        codeLength: 6, observedAt: now - 60_000, settingsFingerprint },
+      account: { reference: 'operator-account-fixture', ...scope, accountType: 'Full', accountStatus: 'active',
+        attestedAt: now - 3 * day, expiresAt: now + 4 * day },
       safeguards: { reference: 'safeguards-fixture', ...scope, smsEnabled: true, fraudGuardEnabled: true,
         maxTokenValiditySeconds: 600, maxSmsSegmentsPerSend: 2, settingsFingerprint,
         attestedAt: now - 3 * day, expiresAt: now + 4 * day },
@@ -35,7 +37,7 @@ describe('production paid verification — pure observation and SQL funding refe
   it('requires the complete worst-case reservation without granting any funding or lifetime send allowance', () => {
     expect(planProductionPhoneVerification(fixture())).toEqual({
       kind: 'reservation_required', accountSid, serviceSid, tenantRef,
-      evidenceReference: 'account-service-read-fixture', costEvidenceReference: 'cost-fixture', expiresAt: now + 840_000,
+      evidenceReference: 'service-read-fixture', costEvidenceReference: 'cost-fixture', expiresAt: now + 840_000,
       limits: { productionBudget: { mode: 'production_paid', authorizationRef: 'sql-authorization-fixture',
         costEvidenceReference: 'cost-fixture', currency: 'USD', reservePerSendMicrousd: 70 },
       smsUnitsReservedPerSend: 2, cooldownMs: 60_000, windowMs: day, globalSendReservations: 1000,
@@ -81,6 +83,7 @@ describe('production paid verification — pure observation and SQL funding refe
   });
   it.each([
     { accountType: 'Trial' }, { accountStatus: 'suspended' }, { codeLength: 4 },
+    { accountType: 'Full' }, { accountStatus: 'active' }, { auth_token: 'SYNTHETIC_NOT_A_CREDENTIAL' },
     { observedAt: now + 1 }, { observedAt: now - 900_000 }, { observedAt: now - 3_600_001 },
     { settingsFingerprint: 'INVALID' }, { settingsFingerprint: 'd'.repeat(64) },
     { smsEnabled: true }, { fraudGuardEnabled: true }, { maxTokenValiditySeconds: 600 }, { source: 'server' },
@@ -89,6 +92,23 @@ describe('production paid verification — pure observation and SQL funding refe
     expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
       serverObservation: { ...input.evidence.serverObservation, ...patch } } }))
       .toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+
+  it.each([undefined, null, {}])('requires a separate operator account attestation (%#)', account => {
+    const input = fixture();
+    expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence, account } }))
+      .toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+  it.each([
+    { reference: undefined }, { reference: '' }, { accountSid: undefined }, { serviceSid: undefined }, { tenantRef: undefined },
+    { accountType: undefined }, { accountType: 'Trial' }, { accountStatus: undefined }, { accountStatus: 'suspended' },
+    { accountStatus: 'closed' }, { attestedAt: undefined }, { expiresAt: undefined },
+    { attestedAt: now + 1 }, { expiresAt: now }, { expiresAt: now - 1 }, { attestedAt: now - 3 * day - 1 },
+    { attestedAt: 'today' }, { source: 'server' }, { observedAt: now }, { auth_token: 'SYNTHETIC_NOT_A_CREDENTIAL' },
+  ])('rejects missing, invalid, stale or falsely automatic account attestation fields (%#)', patch => {
+    const input = fixture();
+    expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+      account: { ...input.evidence.account, ...patch } } })).toEqual({ kind: 'denied', reason: 'evidence' });
   });
 
   it.each([
@@ -118,7 +138,7 @@ describe('production paid verification — pure observation and SQL funding refe
       costs: { ...input.evidence.costs, ...patch } } })).toEqual({ kind: 'denied', reason: 'evidence' });
   });
 
-  it.each(['serverObservation', 'safeguards', 'costs'] as const)('pins all account/service/tenant scopes in %s', section => {
+  it.each(['serverObservation', 'account', 'safeguards', 'costs'] as const)('pins all account/service/tenant scopes in %s', section => {
     for (const patch of [{ accountSid: `AC${'d'.repeat(32)}` }, { serviceSid: `VA${'e'.repeat(32)}` }, { tenantRef: 'foreign-tenant' }]) {
       const input = fixture();
       expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
@@ -150,7 +170,7 @@ describe('production paid verification — pure observation and SQL funding refe
     input.evidence.serverObservation.observedAt--;
     expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
   });
-  it.each(['safeguards', 'costs'] as const)('accepts only the bounded remaining validity of %s', section => {
+  it.each(['account', 'safeguards', 'costs'] as const)('accepts only the bounded remaining validity of %s', section => {
     const input = fixture(); const value = input.evidence[section];
     value.attestedAt = now - PRODUCTION_ATTESTATION_MAX_AGE_MS + 1; value.expiresAt = now + 1;
     expect(planProductionPhoneVerification(input)).toMatchObject({ kind: 'reservation_required', expiresAt: now + 1 });
@@ -160,7 +180,7 @@ describe('production paid verification — pure observation and SQL funding refe
     expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
   });
 
-  it('a technical refresh preserves the financial reference and cannot revive expired safeguards or costs', () => {
+  it('a service refresh preserves the financial reference and cannot revive expired operator account, safeguards or costs', () => {
     const input = fixture(); const before = planProductionPhoneVerification(input);
     input.evidence.serverObservation.observedAt = now;
     input.evidence.serverObservation.reference = 'fresh-read-fixture';
@@ -173,9 +193,11 @@ describe('production paid verification — pure observation and SQL funding refe
     expect(planProductionPhoneVerification(input).kind).toBe('denied');
     input.evidence.safeguards.expiresAt = now + 4 * day; input.evidence.costs.expiresAt = now;
     expect(planProductionPhoneVerification(input).kind).toBe('denied');
+    input.evidence.costs.expiresAt = now + 4 * day; input.evidence.account.expiresAt = now;
+    expect(planProductionPhoneVerification(input).kind).toBe('denied');
   });
 
-  it('expires at the first independently expiring policy, observation, safeguard or cost', () => {
+  it('expires at the first independently expiring policy, observation, account, safeguard or cost', () => {
     const input = fixture(); input.policy.expiresAt = now + 3;
     input.evidence.safeguards.expiresAt = now + 2; input.evidence.costs.expiresAt = now + 1;
     expect(planProductionPhoneVerification(input)).toMatchObject({ expiresAt: now + 1 });
@@ -183,6 +205,8 @@ describe('production paid verification — pure observation and SQL funding refe
     expect(planProductionPhoneVerification(input)).toMatchObject({ expiresAt: now + 2 });
     input.evidence.safeguards.expiresAt = now + 4;
     expect(planProductionPhoneVerification(input)).toMatchObject({ expiresAt: now + 3 });
+    input.evidence.account.expiresAt = now + 1;
+    expect(planProductionPhoneVerification(input)).toMatchObject({ expiresAt: now + 1 });
   });
 
   it('uses exact integer arithmetic for every possible SMS segment plus the successful verification fee', () => {

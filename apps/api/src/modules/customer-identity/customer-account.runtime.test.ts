@@ -549,10 +549,10 @@ describe('production customer runtime', () => {
     await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check).catch(() => {});
     expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
   });
-  it.each(['start', 'check'] as const)('does not %s after the observer credential is withdrawn during the final funding read', async action => {
+  it.each(['start', 'check'] as const)('does not %s after the Verify credential is withdrawn during the final funding read', async action => {
     const f = fixture('production');
     f.repository.revalidateProductionFunding.mockImplementation(async () => {
-      delete f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET;
+      delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
       return true;
     });
     await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check).catch(() => {});
@@ -629,7 +629,7 @@ describe('production customer runtime', () => {
   it('prepares browser access with a trusted source quota independently of all SMS settings', async () => {
     const f = fixture('production');
     delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
-    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET; delete f.env.SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SECRET;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     const browserRef = randomUUID();
     f.repository.prepareBrowser.mockResolvedValue({ browserRef, state: 'prepared',
       admissionExpiresAt: Date.now() + 60_000, expiresAt: Date.now() + 604_800_000 });

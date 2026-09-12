@@ -116,7 +116,7 @@ Ces observations restent dans le document privé transmis sur stdin.
 
 | Champ de `observations.production` | Projection attendue |
 |---|---|
-| `provider` | Résultat réel de `TwilioProductionObserver.observe` : `reference`, `accountSid`, `serviceSid`, `tenantRef`, `accountType: Full`, `accountStatus: active`, `codeLength: 6`, `observedAt`, `settingsFingerprint`. |
+| `provider` | Résultat réel de `TwilioProductionObserver.observe` : `reference`, `accountSid`, `serviceSid`, `tenantRef`, `codeLength: 6`, `observedAt`, `settingsFingerprint`. |
 | `budget` | Paramètres exacts de `productionSendAvailability` (`parentRef`, `tenantRef`, `authorizationRef`, `serviceSid`, `costEvidenceReference`, `reservePerSendMicrousd`) et son résultat booléen `available`. Aucun montant total autorisé n’est requis dans le préflight. |
 | `admissions` | Projection `CustomerProductionAdmissionPolicy` relue : `parentRef`, `tenantRef`, `policyRef`, `windowMs`, `browserSourceLimit`, `browserTenantLimit`, `browserParentLimit`, `intentBrowserLimit`, `intentSourceLimit`, `intentTenantLimit`, `intentParentLimit`. |
 
@@ -183,32 +183,35 @@ n’est accepté dans cette politique.** Le périmètre reste les mobiles franç
 normalisés `+336`/`+337`, sans liste fermée de destinataires ; les protections par
 téléphone, source et intention restent appliquées.
 
-`SM_CUSTOMER_VERIFY_EVIDENCE` contient strictement `{ safeguards, costs }`.
+`SM_CUSTOMER_VERIFY_EVIDENCE` contient strictement `{ account, safeguards, costs }`.
 Les schémas exacts sont exportés par
 [`production-verification-policy.ts`](../../apps/api/src/modules/customer-identity/production-verification-policy.ts).
-L’ajout de `serverObservation` dans cette variable est refusé : cette observation
-provient exclusivement du serveur, en mémoire. La clé d’observation
-`SM_CUSTOMER_VERIFY_OBSERVER_API_KEY_SID`/`SECRET` doit être distincte de la clé
-`SM_CUSTOMER_VERIFY_API_KEY_SID`/`SECRET` qui permet les opérations Verify ; le
-préflight refuse le même SID pour les deux usages.
+`account` est une attestation opérateur distincte : `reference`, `accountSid`,
+`serviceSid`, `tenantRef`, `accountType: "Full"`, `accountStatus: "active"`,
+`attestedAt` et `expiresAt` en millisecondes Unix. L’opérateur doit vérifier le
+type et l’état réels ; un solde positif ou le seul libellé « Active » ne prouve
+pas le type Full. Le préflight identifie explicitement cette attestation comme
+une configuration opérateur, jamais comme une observation automatique.
 
-La clé d'observation à provisionner est une clé Twilio **Restricted**, avec les
-permissions `/twilio/iam/accounts/read` et `twilio/verify/service/read` seulement.
-Une clé Standard ne peut pas lire la ressource Accounts ; remplacer son refus
-par une clé Main dans l'application n'est pas le parcours prévu. Références
-opérateur : [types de clés](https://www.twilio.com/docs/iam/api-keys),
-[permissions IAM](https://docs-resources.prod.twilio.com/documents/Twilio_Restricted_API_Keys_Permissions_-_IAM_Permissons.pdf),
-[permissions Verify](https://docs-resources.prod.twilio.com/documents/Twilio_Restricted_API_Keys_Permissions_-_Verify_Permissions.pdf).
+L’ajout de `serverObservation` dans cette variable est refusé : l’observation du
+service provient exclusivement du serveur, en mémoire. L’adaptateur utilise la
+clé Verify existante `SM_CUSTOMER_VERIFY_API_KEY_SID`/`SECRET`, avec la permission
+`twilio/verify/service/read` en plus des permissions nécessaires à l’envoi et à
+la vérification. Aucune clé supplémentaire ni permission IAM Accounts n’est
+requise. La [réponse Accounts GET](https://www.twilio.com/docs/iam/api/account#fetch-an-account-resource)
+documente un champ secret `auth_token` : ce runtime ne lit jamais cette ressource
+et ne doit pas recevoir une clé Main ou des droits de lecture Accounts.
+Référence : [permissions Verify](https://docs-resources.prod.twilio.com/documents/Twilio_Restricted_API_Keys_Permissions_-_Verify_Permissions.pdf).
 
-L’adaptateur relit le compte et le service en GET authentifiés, conserve un cache
-de cinq minutes et effectue une nouvelle lecture au besoin après cette durée.
+L’adaptateur relit uniquement le service Verify en GET authentifié, conserve un
+cache de cinq minutes et effectue une nouvelle lecture au besoin après cette durée.
 La validité technique maximale du plan est de quinze minutes. Un échec de
 lecture ne rajeunit pas l’ancien succès. L’API de service ne prouve pas à elle
 seule que SMS et Fraud Guard sont activés ni la durée maximale du code : ces
 protections sont attestées séparément dans `safeguards`. L’empreinte des sept
 paramètres exposés doit encore correspondre au service réellement lu.
 
-Les attestations `safeguards` et `costs` ont chacune une validité explicite d’au
+Les attestations `account`, `safeguards` et `costs` ont chacune une validité explicite d’au
 plus **sept jours**. Le rafraîchissement automatique de l’observation technique
 ne modifie jamais leur date, leur contenu ou leur portée. Leur renouvellement
 nécessite une nouvelle vérification opérateur ; aucune borne de segmentation,
