@@ -88,3 +88,11 @@ Le lot local est intégré et validé dans les limites ci-dessus. Revue indépen
 Les sept familles applicatives ont reçu l'intégration de présentation ; la bibliothèque complète est proposée dans les médiathèques existantes. Les deux défauts repérés pendant la revue (contraste du badge Suspendu et retour du focus HQ) sont corrigés et vérifiés. Revue indépendante de la couche HQ : aucun défaut concret trouvé ; guardes, historique, empilement et déclencheur conservés.
 
 Aucun blocage de compilation, test ou recette locale dans le périmètre exécuté. Les validations backend réelles et appareils restent les limites documentées, et ne sont pas assimilées à des réussites. Aucune action distante effectuée. Les sources, recettes, captures et journaux sont conservés sur la branche dédiée ; le commit de livraison se retrouve par `git log -1`.
+
+## Recette minimale avant fusion — 12 septembre 2026
+
+Suite à la demande « ok testons un minimum puis je testerais sur staging apres le merge complet », poursuite autorisée vers `develop` et son déploiement staging automatique. La livraison concerne tout le lot de présentation de cette branche ; elle ne signifie pas que chaque écran secondaire a déjà reçu une refonte exhaustive. Aucune fusion vers `main` ni intervention en production.
+
+Recette rejouée sur les applications compilées locales, sans changement du code : **33/33 parcours réussis**, soit POS **7/7**, KDS **10/10**, web **16/16**. Commandes `REFONTE_PHASE=pre-merge node e2e/local/refonte-{pos,kds,web}-visual.mjs` exécutées séparément. Résumé conservé dans `preuves/pre-merge-smoke.log` ; captures de cette répétition conservées localement sous `_handoff/pre-merge/`, en complément des captures finales déjà versionnées. Les limites fixtures et appareils de la section précédente restent applicables.
+
+`origin/develop` rafraîchi reste `aefdf974f3c24dfb7d2d7ab484eb297a0502aa1c`. Audit indépendant : packages tokens/assets/icons suivis et résolus par pnpm, sources présentes dans le checkout CI et l'envoi Railway ; aucun changement API, migration ou workflow. Prochaine étape : PR vers `develop`, contrôles CI, fusion du lot puis vérification de la révision servie en staging.
