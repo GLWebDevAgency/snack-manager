@@ -83,11 +83,30 @@ describe('accès public au programme de fidélité', () => {
     // `isAccessBlocked` répond faux aux deux : rien à fermer, ni avant ni après
     // la réconciliation de la passe mensuelle.
     expect(publicLoyaltyAvailable({ status: 'trial' }, souscrite({ plan: 'boost' }))).toBe(true);
-    expect(publicLoyaltyAvailable({ status: 'churned' }, souscrite({ plan: 'boost' }))).toBe(true);
-    // Le parc d'avant le champ `account` : un statut jamais écrit n'a jamais
-    // fermé un restaurant, et ce n'est pas cette règle qui commencera.
-    expect(publicLoyaltyAvailable(null, souscrite({ plan: 'boost' }))).toBe(true);
-    expect(publicLoyaltyAvailable({}, souscrite({ plan: 'boost' }))).toBe(true);
+  });
+
+  it.each([undefined, null, {}, { status: undefined }, { status: null }])(
+    'conserve le statut historique absent sans accorder de module : %j', (account) => {
+      expect(publicLoyaltyAvailable(account, souscrite({ plan: 'boost' }))).toBe(true);
+      expect(publicLoyaltyAvailable(account, souscrite({ plan: null }))).toBe(false);
+    },
+  );
+
+  it.each([
+    { plan: 'boost' },
+    { standaloneLoyalty: true },
+    { onlineOrdering: true },
+    { onlineDelivery: true },
+    { plan: 'complet', derogationsCapacite: [DEROGATION_ACCORDEE] },
+  ])('ferme un compte résilié malgré ses droits enregistrés : %j', (offre) => {
+    expect(souscrite(offre)).toBe(true);
+    expect(publicLoyaltyAvailable({ status: 'churned' }, souscrite(offre))).toBe(false);
+    expect(publicLoyaltyAvailable({ status: 'trial' }, souscrite(offre))).toBe(true);
+    expect(publicLoyaltyAvailable({ status: 'active' }, souscrite(offre))).toBe(true);
+    expect(publicLoyaltyAvailable({ status: 'suspended' }, souscrite(offre))).toBe(false);
+    expect(publicLoyaltyAvailable({ status: 'active' }, souscrite({ ...offre,
+      derogationsCapacite: [{ ...DEROGATION_ACCORDEE, sens: 'retiree' }],
+    }))).toBe(false);
   });
 
   it('ferme un restaurant qui n’a pas acheté la fidélité — Complet ne la comprend pas', () => {

@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { loadSite, PublicApiError } from "@/components/order/api";
 import { cityOf, euros } from "@/components/order/helpers";
 import { altDuHero, imageDePartage } from "@/components/order/hero";
 import { resumeFidelite } from "@/components/order/fidelite";
 import { restaurantJsonLd, serializeJsonLd } from "@/components/order/jsonld";
 import { Storefront } from "@/components/order/Storefront";
-import { loadPublicLoyalty } from "@/components/loyalty/public-api";
+import { LoyaltyCardApp } from "@/components/loyalty/LoyaltyCardApp";
+import { customerSurface, loadCustomerPublicSurfaces } from "@/components/customer-account/customer-public-surfaces";
 import { restaurantMetadata } from "@/lib/restaurant-metadata";
 
 /**
@@ -32,8 +32,13 @@ function siteOrigin(): string {
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
-  const site = await loadSite(slug).catch(() => null);
-  if (!site) return { title: "Restaurant introuvable" };
+  const surfaces = await loadCustomerPublicSurfaces(slug);
+  if (surfaces.site.state !== 'available') {
+    if (surfaces.catalog.state === 'available') return { title: `${surfaces.catalog.value.restaurant.name} — Compte et fidélité`, robots: { index: false } };
+    return { title: surfaces.site.state === 'unavailable' || surfaces.catalog.state === 'unavailable'
+      ? "Restaurant temporairement indisponible" : "Restaurant introuvable", robots: { index: false } };
+  }
+  const site = surfaces.site.value;
 
   const city = cityOf(site.tenant.address);
   const title = city
@@ -114,15 +119,16 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
  */
 export async function generateViewport({ params }: Params): Promise<Viewport> {
   const { slug } = await params;
-  const site = await loadSite(slug).catch(() => null);
+  const { site, catalog } = await loadCustomerPublicSurfaces(slug);
+  const brand = site.state === 'available' ? site.value.tenant.brand : catalog.state === 'available' ? catalog.value.restaurant.brand : undefined;
   return {
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
-    ...(site
+    ...(brand
       ? {
-          themeColor: site.tenant.brand.palette.ground,
-          colorScheme: site.tenant.brand.mode,
+          themeColor: brand.palette.ground,
+          colorScheme: brand.mode,
         }
       : {}),
   };
@@ -148,22 +154,14 @@ export default async function RestaurantPage({ params }: Params) {
    * publique — aucun cookie n'est lu, la page reste statiquement rendue, et
    * rien de ce qui la fait indexer ne change.
    *
-   * Un restaurant sans programme (l'immense majorité) répond 404 : on retombe
-   * sur `null`, et la vitrine est au pixel celle d'hier.
+   * Une absence de programme (404) ne change pas la vitrine. Une panne est
+   * signalée distinctement ; la surface saine conserve l'accès au compte.
    */
-  let site;
-  let fidelite;
-  try {
-    [site, fidelite] = await Promise.all([
-      loadSite(slug),
-      loadPublicLoyalty(slug).catch(() => null),
-    ]);
-  } catch (err) {
-    // 404 côté API = restaurant inconnu ; toute autre panne remonte à error.tsx.
-    if (err instanceof PublicApiError && err.status === 404) notFound();
-    throw err;
-  }
-  if (!site) notFound();
+  const surface = customerSurface(await loadCustomerPublicSurfaces(slug));
+  if (surface.kind === 'absent') notFound();
+  if (surface.kind === 'loyalty') return <LoyaltyCardApp catalog={surface.catalog} orderingAvailable={false}
+    unavailableService={surface.unavailableService} />;
+  const { site, catalog: fidelite } = surface;
 
   const jsonLd = serializeJsonLd(
     restaurantJsonLd(site, `${siteOrigin()}/r/${site.tenant.slug}`),
@@ -175,7 +173,8 @@ export default async function RestaurantPage({ params }: Params) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />
-      <Storefront site={site} mode="site" loyalty={resumeFidelite(fidelite)} />
+      <Storefront site={site} mode="site" loyalty={resumeFidelite(fidelite ?? null)} loyaltyCatalog={fidelite}
+        unavailableService={surface.unavailableService} />
     </>
   );
 }

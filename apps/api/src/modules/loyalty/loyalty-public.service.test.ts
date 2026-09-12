@@ -233,12 +233,15 @@ describe('LoyaltyPublicService — compte et souscription', () => {
 
   /** Les deux routes publiques, refusées de la même façon et sans détail. */
   async function attendreIndisponible(tenant: Record<string, unknown>) {
-    const { service, loyalty } = build('active', tenant);
+    const { service, loyalty, members } = build('active', tenant);
     await expect(service.catalog('classfood')).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.card('classfood', TOKEN)).rejects.toBeInstanceOf(NotFoundException);
     // Fermé AVANT la lecture du programme : rien à lire chez un restaurant
     // qu'on ne sert pas.
     expect(loyalty.getProgram).not.toHaveBeenCalled();
+    expect(loyalty.listRewards).not.toHaveBeenCalled();
+    expect(members.resolveMember).not.toHaveBeenCalled();
+    expect(members.getMemberDetail).not.toHaveBeenCalled();
     return service;
   }
 
@@ -246,14 +249,14 @@ describe('LoyaltyPublicService — compte et souscription', () => {
     await attendreIndisponible({ account: { status: 'suspended' } });
   });
 
-  it('rend au compte suspendu le MÊME message qu’à un programme en brouillon', async () => {
+  it.each(['suspended', 'churned'])('rend au compte %s le MÊME message qu’à un programme en brouillon', async (status) => {
     // Sans quoi la route deviendrait un oracle : n'importe qui, avec un slug,
     // saurait dire l'impayé du module non souscrit et du programme non publié.
-    const suspendu = build('active', { account: { status: 'suspended' } }).service;
+    const ferme = build('active', { account: { status } }).service;
     const brouillon = build('active', {});
     brouillon.loyalty.getProgram.mockResolvedValue({ ...PROGRAM, status: 'draft' });
     const messages = await Promise.all(
-      [suspendu.catalog('classfood'), brouillon.service.catalog('classfood')].map((p) =>
+      [ferme.catalog('classfood'), ferme.card('classfood', TOKEN), brouillon.service.catalog('classfood')].map((p) =>
         p.then(
           () => null,
           (error: unknown) => (error as Error).message,
@@ -262,13 +265,11 @@ describe('LoyaltyPublicService — compte et souscription', () => {
     );
     expect(messages[0]).toBe('Programme de fidélité indisponible');
     expect(messages[1]).toBe(messages[0]);
+    expect(messages[2]).toBe(messages[0]);
   });
 
-  it('sert un ESSAI et un compte PARTI — seule la suspension ferme', async () => {
-    // `isAccessBlocked` répond faux à `trial` comme à `churned`, et un essai
-    // dont le terme est passé vaut `active` : aucun des trois ne ferme une
-    // carte. Le parc d'avant le champ `account` non plus.
-    for (const account of [{ status: 'trial' }, { status: 'churned' }, undefined]) {
+  it('sert les essais, comptes actifs et statuts historiques absents', async () => {
+    for (const account of [{ status: 'trial' }, { status: 'active' }, undefined, null, {}, { status: null }]) {
       const { service } = build('active', { account });
       await expect(service.catalog('classfood')).resolves.toMatchObject({
         restaurant: { slug: 'classfood' },
@@ -296,6 +297,32 @@ describe('LoyaltyPublicService — compte et souscription', () => {
       });
       await expect(service.card('classfood', TOKEN)).resolves.toMatchObject({
         member: { balanceUnits: 125 },
+      });
+    },
+  );
+
+  it.each([
+    { plan: 'boost' },
+    { plan: null, standaloneLoyalty: true },
+    { plan: null, onlineOrdering: true },
+    { plan: null, onlineDelivery: true },
+    { plan: 'complet', derogationsCapacite: [DEROGATION] },
+  ])('ferme catalogue et carte après résiliation sans lire le programme ou le porteur : %j', async (offre) => {
+    await attendreIndisponible({ ...offre, account: { status: 'churned' } });
+  });
+
+  it.each([{ onlineOrdering: true }, { onlineDelivery: true }, { standaloneLoyalty: true }])(
+    'un module souscrit ne publie pas un programme absent, brouillon ou en pause : %j', async (offre) => {
+      for (const program of [null, { ...PROGRAM, status: 'draft' }, { ...PROGRAM, status: 'paused' }]) {
+        const { service, loyalty, members } = build('active', { plan: null, ...offre });
+        loyalty.getProgram.mockResolvedValue(program);
+        await expect(service.catalog('classfood')).rejects.toBeInstanceOf(NotFoundException);
+        await expect(service.card('classfood', TOKEN)).rejects.toBeInstanceOf(NotFoundException);
+        expect(members.resolveMember).not.toHaveBeenCalled();
+        expect(members.getMemberDetail).not.toHaveBeenCalled();
+      }
+      await attendreIndisponible({ plan: null, ...offre,
+        derogationsCapacite: [{ ...DEROGATION, sens: 'retiree' }],
       });
     },
   );

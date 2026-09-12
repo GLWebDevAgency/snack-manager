@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { LoyaltyCardApp } from "@/components/loyalty/LoyaltyCardApp";
-import { LoyaltyPublicApiError, loadPublicLoyalty } from "@/components/loyalty/public-api";
+import { loadPublicLoyalty } from "@/components/loyalty/public-api";
+import { Storefront } from "@/components/order/Storefront";
+import { resumeFidelite } from "@/components/order/fidelite";
+import { customerSurface, loadCustomerPublicSurfaces } from "@/components/customer-account/customer-public-surfaces";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -50,20 +53,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * la racine cliente ne soit peinte.
  *
  * `loadPublicLoyalty` est mémorisé par `cache()` : `generateMetadata`, ce
- * viewport et la page se partagent UN seul appel. Un programme introuvable
- * retombe sur l'absence de couleur plutôt que d'échouer au rendu — c'est
- * `notFound()` qui tranchera dans la page.
+ * viewport et la page se partagent UN seul appel. Si la fidélité ne répond
+ * pas, la vitrine saine peut encore fournir sa marque. La page distingue
+ * ensuite l'absence explicite d'une indisponibilité temporaire.
  */
 export async function generateViewport({ params }: Props): Promise<Viewport> {
   const { slug } = await params;
-  const catalog = await loadPublicLoyalty(slug).catch(() => null);
+  const { site, catalog } = await loadCustomerPublicSurfaces(slug);
+  const brand = catalog.state === 'available' ? catalog.value.restaurant.brand : site.state === 'available' ? site.value.tenant.brand : undefined;
   return {
     width: "device-width",
     initialScale: 1,
-    ...(catalog
+    viewportFit: "cover",
+    ...(brand
       ? {
-          themeColor: catalog.restaurant.brand.palette.ground,
-          colorScheme: catalog.restaurant.brand.mode,
+          themeColor: brand.palette.ground,
+          colorScheme: brand.mode,
         }
       : {}),
   };
@@ -71,9 +76,10 @@ export async function generateViewport({ params }: Props): Promise<Viewport> {
 
 export default async function LoyaltyCustomerPage({ params }: Props) {
   const { slug } = await params;
-  const catalog = await loadPublicLoyalty(slug).catch((cause: unknown) => {
-    if (cause instanceof LoyaltyPublicApiError && cause.status === 404) notFound();
-    throw cause;
-  });
-  return <LoyaltyCardApp catalog={catalog} />;
+  const surface = customerSurface(await loadCustomerPublicSurfaces(slug));
+  if (surface.kind === 'storefront') return <Storefront site={surface.site} loyalty={resumeFidelite(surface.catalog ?? null)}
+    loyaltyCatalog={surface.catalog} unavailableService={surface.unavailableService} />;
+  if (surface.kind === 'loyalty') return <LoyaltyCardApp catalog={surface.catalog} orderingAvailable={false}
+    unavailableService={surface.unavailableService} />;
+  notFound();
 }

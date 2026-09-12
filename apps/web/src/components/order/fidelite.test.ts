@@ -111,7 +111,7 @@ describe("la promesse écrite sur la bande", () => {
   it("dit l'avantage ET son prix — un lien sans contenu ne se clique pas", () => {
     const resume = resumeFidelite(catalogue([recompense("a", "Boisson offerte", 8)]))!;
     expect(promesseFidelite(resume)).toBe(
-      "« Boisson offerte » dès 8 points. Gratuit, sans compte.",
+      "« Boisson offerte » dès 8 points. Carte gratuite, avec votre compte ou un QR existant.",
     );
   });
 
@@ -123,7 +123,7 @@ describe("la promesse écrite sur la bande", () => {
   it("ne chiffre rien quand aucune récompense n'est publiée", () => {
     const resume = resumeFidelite(catalogue([]))!;
     expect(promesseFidelite(resume)).toBe(
-      "Cumulez des avantages à chaque commande. Gratuit, sans compte.",
+      "Découvrez les avantages du programme. Carte gratuite, avec votre compte ou un QR existant.",
     );
   });
 });
@@ -198,10 +198,10 @@ describe("provenance du solde dans la vitrine", () => {
 
 describe("la fidélité après une commande en ligne", () => {
   it("ne prétend plus qu'un QR rattache rétroactivement la commande créée", () => {
-    expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain(
-      "cette commande en ligne ne crédite pas la fidélité",
-    );
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain("solde affiché reste celui confirmé par le programme");
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain("ne rattache pas rétroactivement cette commande");
     expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain("votre solde");
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).not.toMatch(/cette commande en ligne ne crédite|crédité|points gagnés|à chaque commande/i);
     expect(CONSEIL_FIDELITE_APRES_COMMANDE).not.toMatch(/\bQR\b/i);
     expect(CONSEIL_FIDELITE_APRES_COMMANDE).not.toContain("rattacher cette commande");
   });

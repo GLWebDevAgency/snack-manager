@@ -81,14 +81,14 @@ export function resumeFidelite(
  */
 export function promesseFidelite(resume: VitrineFidelite): string {
   if (!resume.premiere) {
-    return "Cumulez des avantages à chaque commande. Gratuit, sans compte.";
+    return "Découvrez les avantages du programme. Carte gratuite, avec votre compte ou un QR existant.";
   }
   const unite = unitePour(
     resume.premiere.cout,
     resume.uniteSingulier,
     resume.unitePluriel,
   );
-  return `« ${resume.premiere.nom} » dès ${resume.premiere.cout.toLocaleString("fr-FR")} ${unite}. Gratuit, sans compte.`;
+  return `« ${resume.premiere.nom} » dès ${resume.premiere.cout.toLocaleString("fr-FR")} ${unite}. Carte gratuite, avec votre compte ou un QR existant.`;
 }
 
 /** Ce que la bande affiche quand ce navigateur porte déjà une carte ici. */
@@ -184,4 +184,4 @@ export function provenanceSoldeVitrine(
 }
 
 export const CONSEIL_FIDELITE_APRES_COMMANDE =
-  "Pendant le pilote, cette commande en ligne ne crédite pas la fidélité. Ouvrez le programme pour voir les récompenses et, si vous avez une carte, votre solde.";
+  "Retrouvez votre carte, les récompenses et votre solde dans l’espace fidélité du restaurant. Le solde affiché reste celui confirmé par le programme ; ouvrir une carte ne rattache pas rétroactivement cette commande.";

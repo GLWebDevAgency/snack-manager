@@ -36,7 +36,7 @@ function resolvesTo(slug: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("routes privées compte client sur domaine restaurant", () => {
-  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'protection', 'cle-acces', 'secours', 'session', 'profil', 'commandes', 'commandes/recherche', 'commandes/detail'])(
+  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'protection', 'cle-acces', 'secours', 'session', 'profil', 'fidelite', 'commandes', 'commandes/recherche', 'commandes/detail', 'commandes/recommander'])(
     'autorise uniquement le point d’entrée exact %s du restaurant', async action => {
       resolvesTo('classfood');
       const response = await proxy(request(`/r/classfood/compte/${action}`, `compte-${action.replaceAll('/', '-')}.example`, { 'sec-fetch-mode': 'cors' }));
@@ -44,9 +44,18 @@ describe("routes privées compte client sur domaine restaurant", () => {
       expect(isRewrite(response)).toBe(false);
       expectSameOrigin(response);
     });
-  it.each(['/r/concurrent/compte/session', '/r/classfood/compte', '/r/classfood/compte/session/nested',
+  it('sert la page du compte sur le domaine de son restaurant sans ouvrir un autre tenant', async () => {
+    resolvesTo('classfood');
+    const response = await proxy(request('/r/classfood/compte', 'compte-page.example', { 'sec-fetch-mode': 'navigate' }));
+    expect(response.status).toBe(200); expect(isRewrite(response)).toBe(false); expectSameOrigin(response);
+    const other = await proxy(request('/r/concurrent/compte', 'compte-page.example', { 'sec-fetch-mode': 'navigate' }));
+    expect(other.status).toBe(308); expect(getRedirectUrl(other)).toBe('https://compte-page.example/');
+  });
+  it.each(['/r/concurrent/compte/session', '/r/concurrent/compte', '/r/classfood/compte/session/nested',
     '/r/classfood/compte/admin', '/r/classfood/compte/session/', '/r/classfood/compte/SESSION', '/api/customer/session',
-    '/r/classfood/compte/commandes/export', '/r/classfood/compte/commandes/detail/nested', '/r/concurrent/compte/commandes/recherche'])(
+    '/r/classfood/compte/commandes/export', '/r/classfood/compte/commandes/detail/nested', '/r/concurrent/compte/commandes/recherche',
+    '/r/concurrent/compte/fidelite', '/r/concurrent/compte/commandes/recommander', '/r/classfood/compte/fidelite/nested',
+    '/r/classfood/compte/commandes/recommander/nested', '/r/classfood/compte/fidelite/', '/r/classfood/compte/fidelite-admin'])(
     'ne crée aucune exception large : %s', async path => {
       resolvesTo('classfood');
       expect((await proxy(request(path, 'compte-denied.example', { 'sec-fetch-mode': 'cors' }))).status).toBe(404);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { IScannerControls } from '@zxing/browser';
 import { CUSTOMER_LOYALTY_NOTICE, CUSTOMER_LOYALTY_ATTACHMENT_NOTICE, loyaltyTokenFromQrPayload, type CustomerLoyaltyProgram } from '@sm/contracts';
 import { Icon } from '../ui/icons';
@@ -18,9 +18,10 @@ function runtime(slug: string, access: CustomerAccountAccess, currentAccess: () 
       ? async job => { await navigator.locks.request(`sm:customer:${slug}`, { mode: 'exclusive', signal: AbortSignal.timeout(15_000) }, job); } : undefined });
   return { client, start: () => { alive = true; }, stop: () => { alive = false; client.invalidate(); } };
 }
-function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJoin, onAttach }: {
+function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJoin, onAttach, profileEditor }: {
   program: CustomerLoyaltyProgram; name: string | null; profileReady: boolean; changed: boolean;
   onProfile: () => void; onJoin: (accepted: boolean) => void; onAttach: () => void;
+  profileEditor?: ReactNode;
 }) {
   const id = useId(), termsId = useId();
   const [accepted, setAccepted] = useState(false);
@@ -36,7 +37,7 @@ function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJo
       <h4 className="text-sm font-bold">Conditions du programme</h4>
       <p id={termsId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-mut">{program.termsSummary || 'Aucune condition complémentaire publiée.'}</p>
     </section>
-    {!profileReady ? <div className="space-y-3 rounded-card border border-ink/15 p-4">
+    {!profileReady ? profileEditor ?? <div className="space-y-3 rounded-card border border-ink/15 p-4">
       <p className="text-sm leading-6 text-mut">Ajoutez votre prénom ou nom à votre profil pour créer une nouvelle carte. Si vous avez déjà une carte, vous pouvez la rattacher sans compléter ce champ.</p>
       <Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil <Icon name="arrow" size={14} /></Tap>
     </div> : <form onSubmit={event => { event.preventDefault(); onJoin(accepted); }} className="space-y-4">
@@ -153,17 +154,24 @@ function CardQr({ token }: { token: string }) {
 
 /** No private SSR props or persistent card storage. Removing the authoritative
  * account view unmounts this screen and every private projection it contains. */
-export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, profileName, onBack, onProfile }: {
+export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, profileName, onBack, onProfile, profileEditor, showHeading = true, showBack = true, onBusyChange }: {
   slug: string; access: CustomerAccountAccess; currentAccess: () => CustomerAccountAccess | null;
   restaurantName: string; profileName: string | null; onBack: () => void; onProfile: () => void;
+  profileEditor?: ReactNode;
+  showHeading?: boolean;
+  showBack?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
+  const section = useRef<HTMLElement>(null);
   const [attachment, setAttachment] = useState(false);
   const store = useMemo(() => runtime(slug, access, currentAccess), [slug, access, currentAccess]);
   const { client } = store;
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getServerSnapshot);
+  const mutating = state.status === 'loading' && (state.pendingJoin || state.pendingAttachment);
+  useEffect(() => { onBusyChange?.(mutating); return () => onBusyChange?.(false); }, [mutating, onBusyChange]);
   useEffect(() => {
-    store.start(); void client.load(); heading.current?.focus();
+    store.start(); void client.load(); (heading.current ?? section.current)?.focus();
     const pause = () => client.invalidate(), hidden = () => { if (document.visibilityState !== 'visible') pause(); };
     window.addEventListener('offline', pause); window.addEventListener('pagehide', pause); document.addEventListener('visibilitychange', hidden);
     return () => { store.stop(); window.removeEventListener('offline', pause); window.removeEventListener('pagehide', pause); document.removeEventListener('visibilitychange', hidden); };
@@ -174,18 +182,18 @@ export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, p
     return () => clearTimeout(timer);
   }, [client, state.response?.expiresAt, access.expiresAt]);
   const response = state.response, busy = state.status === 'loading';
-  return <section aria-label="Fidélité de votre compte" className="space-y-4">
-    <Tap className={secondary + ' w-full justify-start'} onClick={onBack}><Icon name="arrow" size={14} className="rotate-180" />Revenir à mon compte</Tap>
-    <header><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">{restaurantName}</p>
+  return <section ref={section} tabIndex={-1} aria-label="Fidélité de votre compte" className="space-y-4 outline-none">
+    {showBack && <Tap className={secondary + ' w-full justify-start'} disabled={mutating} onClick={onBack}><Icon name="arrow" size={14} className="rotate-180" />Revenir à mon compte</Tap>}
+    {showHeading && <header><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">{restaurantName}</p>
       <h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-2xl font-extrabold tracking-tight outline-none">Ma fidélité</h3>
-      <p className="mt-2 text-sm leading-6 text-mut">Votre carte et vos avantages, réunis dans votre compte.</p></header>
+      <p className="mt-2 text-sm leading-6 text-mut">Votre carte et vos avantages, réunis dans votre compte.</p></header>}
     {state.message && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{state.message}</p>}
     {busy && <p role="status" className="rounded-card border border-ink/10 bg-surface2 p-4 text-sm leading-6 text-mut">{state.pendingAttachment ? 'Vérification de votre rattachement…' : state.pendingJoin ? 'Vérification de votre demande de carte…' : 'Lecture de votre fidélité…'}</p>}
     {response && (response.state === 'available' || response.state === 'terms_changed') && (attachment ? <AttachmentOffer
       key={`${response.program.id}:${response.program.version}:${response.state}`} slug={slug} program={response.program} changed={response.state === 'terms_changed'}
-      onAttach={(token, accepted) => void client.attach(token, accepted)} onCancel={() => { setAttachment(false); heading.current?.focus(); }} /> : <EnrollmentOffer
+      onAttach={(token, accepted) => void client.attach(token, accepted)} onCancel={() => { setAttachment(false); (heading.current ?? section.current)?.focus(); }} /> : <EnrollmentOffer
       key={`${response.program.id}:${response.program.version}:${response.state}`} program={response.program} name={profileName}
-      profileReady={response.profileReady} changed={response.state === 'terms_changed'} onProfile={onProfile} onJoin={accepted => void client.join(accepted)} onAttach={() => setAttachment(true)} />)}
+      profileReady={response.profileReady} changed={response.state === 'terms_changed'} onProfile={onProfile} onJoin={accepted => void client.join(accepted)} onAttach={() => setAttachment(true)} profileEditor={profileEditor} />)}
     {response && (response.state === 'member' || response.state === 'card') && <div className="space-y-4">
       <div className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 text-center">
         <span aria-hidden className="mx-auto grid size-11 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="gift" size={22} /></span>
@@ -197,7 +205,7 @@ export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, p
         <Tap className={secondary + ' w-full'} onClick={client.hideCard}>Masquer ma carte</Tap></>
         : <Tap className={primary} onClick={() => void client.card()}><Icon name="gift" size={18} />Afficher ma carte</Tap>}
     </div>}
-    {response?.state === 'name_required' && <div className="space-y-3"><p role="status" className="text-sm leading-6 text-mut">Votre profil doit comporter un prénom ou nom pour créer une carte.</p><Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil</Tap></div>}
+    {response?.state === 'name_required' && (profileEditor ?? <div className="space-y-3"><p role="status" className="text-sm leading-6 text-mut">Votre profil doit comporter un prénom ou nom pour créer une carte.</p><Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil</Tap></div>)}
     {(response?.state === 'existing_card' || response?.state === 'attachment_refused') && <div className="space-y-3"><p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">{response.state === 'existing_card' ? 'La création d’une nouvelle carte n’est pas possible depuis ce compte. Présentez votre carte existante au restaurant ou demandez son aide. Aucun rattachement automatique n’a été effectué.' : 'Cette carte ne peut pas être rattachée à ce compte. Vérifiez votre carte ou demandez l’aide du restaurant. Aucun rattachement n’a été effectué.'}</p>
       <Tap className={secondary + ' w-full'} onClick={() => { setAttachment(true); void client.load(); }}>Relire les conditions pour rattacher ma carte</Tap></div>}
     {response?.state === 'unavailable' && <p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">La fidélité n’est pas disponible pour le moment. Votre compte reste accessible indépendamment.</p>}

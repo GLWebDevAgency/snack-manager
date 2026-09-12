@@ -25,8 +25,8 @@ beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url));
   const cssPath = fileURLToPath(new URL('../../app/globals.css', import.meta.url));
   const options: BuildOptions & { write: false } = { stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';
-      import{CustomerAccountEntry}from'./CustomerAccountEntry';import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
-      function Fixture(){return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" loyaltyHref="/r/recette/fidelite" onDeviceOrders={()=>window.customerAccountUiFixture.calls.push(['orders'])}/><button>Commander en invité</button></main>}
+      import{CustomerAccountEntry}from'./CustomerAccountEntry';import{CustomerAccountPage}from'./CustomerAccountPage';import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
+      function Fixture(){return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1>{location.pathname==='/page'?<CustomerAccountPage slug="recette" restaurantName="Le Comptoir" loyaltyHref={location.search.includes('without-loyalty')?undefined:'/r/recette/fidelite'} onOrders={()=>window.customerAccountUiFixture.calls.push(['account-orders'])} onLoyalty={()=>window.customerAccountUiFixture.calls.push(['account-loyalty'])} onDevicePreferences={()=>window.customerAccountUiFixture.calls.push(['preferences'])}/>:<CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" loyaltyHref="/r/recette/fidelite" onDeviceOrders={()=>window.customerAccountUiFixture.calls.push(['orders'])}/>}<button>Commander en invité</button></main>}
       createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);`,
       resolveDir: root, sourcefile: 'customer-account-ui.tsx', loader: 'tsx' }, bundle: true, write: false,
       format: 'esm', outdir: '/virtual-customer-account', platform: 'browser', jsx: 'automatic', target: 'es2022',
@@ -54,7 +54,7 @@ beforeAll(async () => {
     define: { ...options.define, 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
     plugins: [{ name: 'local-navigation-provider-boundaries', setup(builder) {
       builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
-      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ resolveDir: root, contents: `import{useSyncExternalStore}from'react';const subscribe=callback=>{window.addEventListener('popstate',callback);window.addEventListener('sm:order-navigation',callback);return()=>{window.removeEventListener('popstate',callback);window.removeEventListener('sm:order-navigation',callback)}};export const usePathname=()=>useSyncExternalStore(subscribe,()=>window.location.pathname);export const useRouter=()=>({push:href=>window.location.assign(href)});` }));
+      builder.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, () => ({ resolveDir: root, contents: `import{useSyncExternalStore}from'react';const subscribe=callback=>{window.addEventListener('popstate',callback);window.addEventListener('sm:order-navigation',callback);return()=>{window.removeEventListener('popstate',callback);window.removeEventListener('sm:order-navigation',callback)}};export const usePathname=()=>useSyncExternalStore(subscribe,()=>window.location.pathname);export const useRouter=()=>({push:href=>{window.history.pushState(null,"",href);window.dispatchEvent(new Event("sm:order-navigation"))}});` }));
       // Navigation only: no checkout/payment or Next font download is exercised.
       builder.onResolve({ filter: /\/StripeCard$/ }, () => ({ path: 'stripe', namespace: 'account-navigation' }));
       builder.onLoad({ filter: /^stripe$/, namespace: 'account-navigation' }, () => ({ contents: 'export const apparenceStripeDe=()=>({});export function StripeCard(){return null}' }));
@@ -74,7 +74,7 @@ beforeAll(async () => {
     if (request.url === '/navigation.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(navigationBundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
     if (request.url === '/style.css') { response.setHeader('Content-Type', 'text/css'); response.end(css.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '') + (navigationBundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '')); return; }
     if (request.url === '/favicon.ico') { response.writeHead(204).end(); return; }
-    if (['/', '/real', '/storefront', '/loyalty'].includes(request.url ?? '')) { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer account UI fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/${request.url === '/real' ? 'real' : request.url === '/' ? 'app' : 'navigation'}.js"></script></html>`); return; }
+    if (['/', '/real', '/storefront', '/loyalty'].includes(request.url ?? '') || request.url?.startsWith('/page')) { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer account UI fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/${request.url === '/real' ? 'real' : request.url === '/' || request.url?.startsWith('/page') ? 'app' : 'navigation'}.js"></script></html>`); return; }
     if (request.url === '/api/public/funnel') { response.writeHead(204).end(); return; }
     response.writeHead(404).end();
   });
@@ -200,25 +200,20 @@ describe('customer entry placement — real Storefront and loyalty components', 
     expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
     expect(requests.mutations).toEqual([]);
   });
-  it('opens local orders from the account panel without competing dialogs', async () => {
+  it('opens orders from the common navigation while account is a page, without competing dialogs', async () => {
     const phase = navigationDiagnostic('account-to-device-orders');
     const requests = await openStorefrontNavigation(phase);
-    // The original aggregate finished its viewport loop on desktop before
-    // exercising this interaction. Keep that same navigation surface here.
-    phase('navigation-viewport'); await page.setViewportSize({ width: 1440, height: 900 });
-    phase('account-open');
-    await open(); await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
-    phase('device-orders-click');
-
-    await page.getByRole('dialog', { name: 'Mon compte' }).getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).click();
-    phase('device-orders-visible');
-    await page.getByRole('dialog', { name: 'Mes commandes', exact: true }).waitFor();
-    phase('single-dialog');
-    await expect.poll(() => page.getByRole('dialog').count()).toBe(1);
-    phase('escape-closes-dialog');
-    await page.keyboard.press('Escape'); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
-    phase('network-boundary');
-    expect(requests.accountRequests).toEqual(['GET /r/recette/compte/capacites']);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    await page.getByRole('tab', { name: 'Commandes', exact: true }).click();
+    await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    await page.goBack();
+    await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    expect(requests.accountRequests.every(request => request === 'GET /r/recette/compte/capacites')).toBe(true);
     expect(requests.mutations).toEqual([]);
   });
   it('isolates the reflow counterexample in one browser turn and rejects a displaced sibling', async () => {
@@ -234,37 +229,42 @@ describe('customer entry placement — real Storefront and loyalty components', 
   });
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
+    await page.getByText('Carte remise par le restaurant', { exact: true }).click();
     await page.getByText('Solde de Camille recette', { exact: true }).waitFor();
     const panelId = await page.getByRole('main').getByRole('tabpanel', { name: 'Fidélité', exact: true }).getAttribute('id');
     expect(panelId).toBeTruthy();
     expect(await page.getByRole('tab', { name: 'Fidélité', exact: true }).getAttribute('aria-controls')).toBe(panelId);
     expect(await page.getByRole('tab', { name: 'Fidélité', exact: true }).getAttribute('aria-selected')).toBe('true');
-    expect(requests.reads()).toBe(0);
+    expect(requests.accountRequests.every(request => request === 'GET /r/recette/compte/capacites')).toBe(true);
     for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).count()).toBe(1);
+      expect(await page.getByRole('tab', { name: 'Compte', exact: true }).count()).toBe(1);
       expect(await page.getByRole('link', { name: /Commander/ }).count()).toBe(1);
       expect(await page.getByRole('link', { name: /Commander/ }).getAttribute('href')).toBe('/r/recette');
       expect(await page.getByRole('button', { name: 'Scanner mon QR', exact: true }).count()).toBe(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       if (evidence) await page.screenshot({ path: join(evidence, `loyalty-${width}.png`) });
     }
-    await open(); await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
-    expect(await page.getByRole('dialog').getByRole('link', { name: 'Fidélité du restaurant', exact: true }).count()).toBe(0);
-    expect(await page.getByRole('dialog').getByText('+33600000000', { exact: true }).count()).toBe(0);
+    await page.getByRole('tab', { name: 'Compte', exact: true }).click();
+    await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.getByRole('link', { name: 'Fidélité du restaurant', exact: true }).count()).toBe(0);
+    expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(0);
     expect(requests.mutations).toEqual([]);
   });
-  it.each([['storefront', 'Revenir au menu'], ['loyalty', 'Revenir à la fidélité']])('names the actual return destination on %s', async (path, label) => {
-    const requests = await navigationFixture(false); await page.goto(`${origin}/${path}`); await open();
-    const back = page.getByRole('button', { name: label, exact: true });
-    await back.waitFor(); await back.click();
-    await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
-    expect(page.url()).toBe(`${origin}/${path}`);
-    expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).evaluate(node => document.activeElement === node)).toBe(true);
+  it.each([['storefront', 'Carte'], ['loyalty', 'Fidélité']])('returns to the actual destination through the common navigation on %s', async (path, label) => {
+    const requests = await navigationFixture(false); await page.goto(`${origin}/${path}`);
+    await page.getByRole('tab', { name: 'Compte', exact: true }).click();
+    await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await page.getByRole('tab', { name: label, exact: true }).click();
+    await page.getByRole('tabpanel', { name: label, exact: true }).waitFor();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.getByRole('tab', { name: label, exact: true }).getAttribute('aria-selected')).toBe('true');
     expect(requests.mutations).toEqual([]);
   });
   it('describes the scanner before opening it, without inventing a saved card or an account', async () => {
     const requests = await navigationFixture(false); await page.goto(`${origin}/loyalty`);
+    await page.getByText('Carte remise par le restaurant', { exact: true }).click();
     const scan = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scan.waitFor();
     expect(await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).count()).toBe(0);
     expect(await page.getByRole('link', { name: 'Voir le menu du restaurant', exact: true }).getAttribute('href')).toBe('/r/recette');
@@ -272,7 +272,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await scan.click(); await page.getByRole('dialog', { name: 'Scanner ma carte fidélité', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Fermer le scanner', exact: true }).click();
     await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
-    expect(requests.reads()).toBe(0); expect(requests.mutations).toEqual([]);
+    expect(requests.accountRequests.every(request => request === 'GET /r/recette/compte/capacites')).toBe(true); expect(requests.mutations).toEqual([]);
   });
 });
 
@@ -446,6 +446,27 @@ function assertAccountNavigationAligned(geometry: Awaited<ReturnType<typeof acco
 }
 
 describe('customer account panel — rendered boundaries', () => {
+  it.each([320, 390, 820, 1440])('renders account as a destination without a dialog at %ipx', async width => {
+    await page.setViewportSize({ width, height: 900 }); await page.goto(`${origin}/page`);
+    await page.waitForFunction(() => Boolean(window.customerAccountUiFixture)); await authenticate();
+    await page.getByRole('heading', { name: 'Mon compte', exact: true }).waitFor();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    const navigation = page.getByRole('navigation', { name: 'Votre espace personnel' });
+    await navigation.getByRole('button', { name: /Mes commandes/ }).click();
+    await navigation.getByRole('button', { name: /Ma carte fidélité/ }).click();
+    expect(await calls()).toContainEqual(['account-orders']); expect(await calls()).toContainEqual(['account-loyalty']);
+    expect(await page.getByRole('link', { name: 'Fidélité du restaurant' }).count()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    for (const button of await navigation.getByRole('button').all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    if (evidence) await page.screenshot({ path: join(evidence, `account-page-${width}.png`) });
+  });
+  it('keeps the account usable without advertising loyalty when the restaurant has no loyalty destination', async () => {
+    await page.goto(`${origin}/page?without-loyalty`); await page.waitForFunction(() => Boolean(window.customerAccountUiFixture)); await authenticate();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: /Ma carte fidélité/ }).count()).toBe(0);
+    expect(await page.getByRole('navigation', { name: 'Votre espace personnel' }).getByRole('button', { name: /Mes commandes/ }).count()).toBe(1);
+    expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(1);
+  });
   it.each([
     ['guest', 'Vous naviguez en invité'],
     ['unavailable', 'Compte indisponible pour le moment'],

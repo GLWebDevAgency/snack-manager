@@ -40,9 +40,11 @@ function ordersRuntime(slug: string, access: CustomerAccountAccess) {
 
 /** Mounted by an explicit account action. The parent drops this component as
  * soon as its displayed publication is invalidated, even for identical profiles. */
-export function CustomerOrders({ slug, access, onBack, currentAccess, onClose, onCatalogVerified }: { slug: string; access: CustomerAccountAccess; onBack: () => void;
-  currentAccess?: () => CustomerAccountAccess | null; onClose?: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void }) {
+export function CustomerOrders({ slug, access, onBack, currentAccess, onClose, onCatalogVerified, presentation = 'section', onNavigationLockedChange }: { slug: string; access: CustomerAccountAccess; onBack: () => void;
+  currentAccess?: () => CustomerAccountAccess | null; onClose?: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void;
+  presentation?: 'section' | 'page'; onNavigationLockedChange?: (locked: boolean) => void }) {
   const heading = useRef<HTMLHeadingElement>(null);
+  const section = useRef<HTMLElement>(null);
   const [reorderId, setReorderId] = useState<string | null>(null);
   const runtime = useMemo(() => ordersRuntime(slug, access), [slug, access]);
   const { client } = runtime;
@@ -61,16 +63,16 @@ export function CustomerOrders({ slug, access, onBack, currentAccess, onClose, o
     const timer = setTimeout(() => client.invalidate(), until - Date.now());
     return () => clearTimeout(timer);
   }, [client, state.expiresAt, access.expiresAt]);
-  useEffect(() => { heading.current?.focus(); }, [state.orderId]);
+  useEffect(() => { (heading.current ?? section.current)?.focus(); }, [state.orderId]);
   const busy = state.status === 'loading';
   const backToList = () => { client.back(); if (!client.getSnapshot().orders.length) void client.load(); };
   const retry = () => { if (state.orderId) void client.open(state.orderId); else void client.load(); };
   if (reorderId && currentAccess && onClose) return <ReorderFlow slug={slug} orderId={reorderId} access={access} currentAccess={currentAccess}
-    onBack={() => { setReorderId(null); void client.open(reorderId); }} onClose={onClose} onCatalogVerified={onCatalogVerified} />;
-  return <section aria-label="Commandes de votre compte" className="space-y-4">
-    <Tap className={action + ' w-full justify-start'} onClick={state.orderId ? backToList : onBack}><Icon name="arrow" size={14} className="rotate-180" />{state.orderId ? 'Revenir à mes commandes' : 'Revenir à mon compte'}</Tap>
-    <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">Compte personnel</p><h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-xl font-extrabold tracking-tight outline-none">{state.orderId ? state.detail ? `Commande n° ${state.detail.number}` : 'Détail de la commande' : 'Mes commandes'}</h3>
-      <p className="mt-2 text-sm leading-6 text-mut">{state.orderId ? 'État confirmé par le restaurant lors de cette lecture.' : 'Uniquement les commandes liées à ce compte, dans ce restaurant. Les suivis invités restent dans « Sur cet appareil ».'}</p></div>
+    onBack={() => { setReorderId(null); void client.open(reorderId); }} onClose={onClose} onCatalogVerified={onCatalogVerified} onNavigationLockedChange={onNavigationLockedChange} presentation={presentation} />;
+  return <section ref={section} tabIndex={presentation === 'page' ? -1 : undefined} aria-label="Commandes de votre compte" className="space-y-4 outline-none">
+    {(state.orderId || presentation !== 'page') && <Tap className={action + ' w-full justify-start'} onClick={state.orderId ? backToList : onBack}><Icon name="arrow" size={14} className="rotate-180" />{state.orderId ? 'Revenir à mes commandes' : 'Revenir à mon compte'}</Tap>}
+    <div>{(state.orderId || presentation !== 'page') && <><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">Compte personnel</p><h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-xl font-extrabold tracking-tight outline-none">{state.orderId ? state.detail ? `Commande n° ${state.detail.number}` : 'Détail de la commande' : 'Mes commandes'}</h3></>}
+      <p className="mt-2 text-sm leading-6 text-mut">{state.orderId ? 'État confirmé par le restaurant lors de cette lecture.' : `Uniquement les commandes liées à ce compte, dans ce restaurant. Les reçus invités restent dans « ${presentation === 'page' ? 'Cet appareil' : 'Sur cet appareil'} ».`}</p></div>
     {!state.orderId && <div role="group" aria-label="Filtrer mes commandes" className="grid grid-cols-3 gap-1 rounded-ctrl bg-ink/5 p-1">{([['all', 'Toutes'], ['active', 'En cours'], ['past', 'Terminées']] as const).map(([filter, label]) => <Tap key={filter} disabled={busy} aria-pressed={state.filter === filter} onClick={() => void client.load(filter)} className={`min-h-11 rounded-ctrl px-1 text-xs font-bold sm:text-sm ${state.filter === filter ? 'bg-surface text-ink shadow-sm' : 'text-mut'}`}>{label}</Tap>)}</div>}
     {state.message && <p role="alert" className="rounded-card border border-prep/30 bg-prep/5 p-3 text-sm leading-6 text-prept">{state.message}</p>}
     {busy && <p role="status" className="rounded-card border border-ink/10 bg-surface2 p-4 text-sm text-mut">Lecture de {state.orderId ? 'votre commande' : 'vos commandes'}…</p>}
