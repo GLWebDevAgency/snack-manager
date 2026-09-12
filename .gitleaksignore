@@ -41,6 +41,17 @@ ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-orde
 # Seule cette empreinte historique est exemptée, pas le fichier ni la règle.
 eb0e7d5a8a88aae8941c39def4a0e197834e533d:apps/api/src/modules/delivery/delivery-handoff.integration.test.ts:uri-connexion-avec-identifiants:33
 
+# PR #180, commit 24d2a1c (12/09/2026) : cinq fixtures PostgreSQL inventées
+# pour la CLI opérateur, sans connexion distante ni identifiant réel.
+# L'arbre courant emploie désormais le gabarit de test déjà autorisé.
+# Seules ces cinq empreintes historiques sont exemptées ; aucun fichier,
+# aucune règle et aucun futur ajout ne sont exclus du balayage.
+24d2a1c3b868593c52739ac0cb04d293aca50c35:scripts/customer-account-operator.test.ts:uri-connexion-avec-identifiants:28
+24d2a1c3b868593c52739ac0cb04d293aca50c35:scripts/customer-account-operator.test.ts:uri-connexion-avec-identifiants:178
+24d2a1c3b868593c52739ac0cb04d293aca50c35:scripts/customer-account-operator.test.ts:uri-connexion-avec-identifiants:179
+24d2a1c3b868593c52739ac0cb04d293aca50c35:scripts/customer-account-operator.test.ts:uri-connexion-avec-identifiants:180
+24d2a1c3b868593c52739ac0cb04d293aca50c35:scripts/customer-account-operator.test.ts:uri-connexion-avec-identifiants:181
+
 # PR #179, commit 53aba2b (12/09/2026) : deux fixtures loopback inventées
 # vérifient le refus des URL Mongo authentifiées AVANT toute connexion.
 # Aucune valeur réelle ; l'arbre courant construit ces fixtures avec URL.

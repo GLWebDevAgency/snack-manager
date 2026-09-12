@@ -8,6 +8,7 @@ import { CustomerAccountHumanVerifier, CUSTOMER_HUMAN_FETCH } from './customer-a
 import { CustomerAccountRuntime, CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICATION_TRANSPORT_FACTORY,
   type CustomerVerificationTransportFactory } from './customer-account.runtime';
 import { TwilioVerifyTransport } from './twilio-verify.transport';
+import { TwilioProductionObserver } from './twilio-production-observer';
 import { OrdersModule } from '../orders/orders.module';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
 import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
@@ -16,6 +17,7 @@ import { CustomerSaleAttributionService } from './customer-sale-attribution.serv
   imports: [OrdersModule],
   controllers: [CustomerAccountController],
   providers: [CustomerAccountGuard, CustomerAccountRuntime, CustomerAccountHumanVerifier, CustomerLoyaltyService, CustomerSaleAttributionService,
+    { provide: TwilioProductionObserver, useFactory: () => new TwilioProductionObserver() },
     { provide: CUSTOMER_HUMAN_FETCH, useValue: globalThis.fetch },
     { provide: CUSTOMER_IDENTITY_REPOSITORY, inject: [POSTGRES_POOL],
       useFactory: (pool: Pool) => new PostgresCustomerIdentityRepository(pool) },

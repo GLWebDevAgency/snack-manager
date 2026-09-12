@@ -7,7 +7,9 @@ import { CustomerIdentityCrypto, type CustomerIdentityRepository } from '@sm/cus
 import { aLaCapacite, publicLoyaltyAvailable, CustomerAccountEnvelopes, CustomerAccountResponses, customerAccountResponseLimit, type CustomerAccountAction,
   type CustomerAccountEnvelope } from '@sm/contracts';
 import { CustomerIdentityError, CustomerIdentityService, type CustomerSessionView } from './customer-identity.service';
-import { customerAccessConfiguration, customerSendConfiguration, type CustomerAccessConfiguration } from './customer-account.config';
+import { customerAccessConfiguration, customerObservationConfiguration, customerSendConfiguration, type CustomerAccessConfiguration } from './customer-account.config';
+import { productionBudgetOf } from './verification-plan';
+import { TwilioProductionObserver } from './twilio-production-observer';
 import { customerSafeError } from './customer-account.error';
 import { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
@@ -35,22 +37,45 @@ export class CustomerAccountRuntime {
     @Inject(CUSTOMER_VERIFICATION_TRANSPORT_FACTORY) private readonly transportFactory: CustomerVerificationTransportFactory,
     @Optional() @Inject(OnlineOrderCheckoutService) private readonly checkout?: OnlineOrderCheckoutService,
     @Optional() @Inject(CustomerLoyaltyService) private readonly loyalty?: CustomerLoyaltyService,
-    @Optional() @Inject(CustomerSaleAttributionService) private readonly saleAttribution?: CustomerSaleAttributionService) {}
+    @Optional() @Inject(CustomerSaleAttributionService) private readonly saleAttribution?: CustomerSaleAttributionService,
+    @Optional() @Inject(TwilioProductionObserver) private readonly observer?: TwilioProductionObserver) {}
 
   async execute(relay: CustomerRelay, raw: unknown): Promise<unknown> {
     try {
       const access = this.access(relay); await this.tenant(access);
-      const send = customerSendConfiguration(this.config, access);
-      if (relay.action === 'status') {
-        this.access(relay, access); return { available: send !== null, registrationAvailable: true, accessAvailable: true };
-      }
       const spends = relay.action === 'start' || relay.action === 'check';
+      let observation: unknown;
+      let observationConfiguration: ReturnType<typeof customerObservationConfiguration> | undefined;
+      const observe = async () => {
+        if (access.mode !== 'production_paid') return;
+        const credentials = customerObservationConfiguration(this.config, access);
+        observationConfiguration = credentials;
+        observation = credentials && this.observer ? await this.observer.observe(credentials) : null;
+      };
+      const currentSend = () => {
+        if (access.mode === 'production_paid'
+          && JSON.stringify(customerObservationConfiguration(this.config, access)) !== JSON.stringify(observationConfiguration)) return null;
+        return customerSendConfiguration(this.config, access, Date.now(), observation);
+      };
+      if (spends || relay.action === 'status') await observe();
+      const send = currentSend();
+      if (relay.action === 'status') {
+        const budget = send ? productionBudgetOf(send.plan) : null;
+        const available = send !== null && (!budget || await this.repository.productionSendAvailability({
+          parentRef: access.parentRef, tenantRef: access.tenantRef, serviceSid: send.plan.serviceSid,
+          authorizationRef: budget.authorizationRef, costEvidenceReference: budget.costEvidenceReference,
+          reservePerSendMicrousd: budget.reservePerSendMicrousd }));
+        await this.tenant(access); this.access(relay, access);
+        const current = currentSend();
+        return { available: available && current !== null && JSON.stringify(current) === JSON.stringify(send),
+          registrationAvailable: true, accessAvailable: true };
+      }
       if (spends && !send) throw new CustomerIdentityError('unavailable');
       const transport = spends && send ? this.transportFactory(send.transport) : closedTransport;
       const beforeProvider = async () => {
         // A PG lock wait must not preserve permission to spend for a tenant
         // suspended while waiting. Check again at the last controllable boundary.
-        await this.tenant(access); this.access(relay, access);
+        await observe(); await this.tenant(access); this.access(relay, access);
         // The core revalidates its plan and immutable funding synchronously
         // after this await, immediately before the provider. A check may use a
         // fresh cost attestation only when its original reservation covers it.
@@ -58,7 +83,7 @@ export class CustomerAccountRuntime {
       const core = new CustomerIdentityService(this.repository, new CustomerIdentityCrypto(access.identityKey),
         transport, () => {
           this.access(relay, access);
-          const current = spends ? customerSendConfiguration(this.config, access) : null;
+          const current = spends ? currentSend() : null;
           if (spends && !current) throw new CustomerIdentityError('unavailable');
           if (send && current && (send.transport.apiKeySid !== current.transport.apiKeySid
             || send.transport.apiKeySecret !== current.transport.apiKeySecret
@@ -78,10 +103,10 @@ export class CustomerAccountRuntime {
       }
       switch (relay.action) {
         case 'browser': {
-          result = await core.browser({ tenantRef, ...this.input('browser', raw) }); break;
+          result = await core.browser({ tenantRef, ...this.input('browser', raw), clientIp: `relay:${relay.client}` }); break;
         }
         case 'intent': {
-          result = await core.intent({ tenantRef, ...this.input('intent', raw) }); break;
+          result = await core.intent({ tenantRef, ...this.input('intent', raw), clientIp: `relay:${relay.client}` }); break;
         }
         case 'start': {
           const input = this.input('start', raw);

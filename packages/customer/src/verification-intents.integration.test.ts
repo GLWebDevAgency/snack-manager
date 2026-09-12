@@ -273,7 +273,7 @@ integration('verification intentions — PostgreSQL, no provider', () => {
       await expect(fixture.admin.query(sql, [i.operationId])).rejects.toMatchObject({ code: '23514' });
     }
     const before = (await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-    expect(before).toHaveLength(9); await migrateCustomer(fixture.admin);
+    expect(before).toHaveLength(11); await migrateCustomer(fixture.admin);
     expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(before);
   });
 });

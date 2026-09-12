@@ -13,6 +13,10 @@ export const browserBindingSchema = browserPreparationSchema.extend({ browserHas
 export const browserIssueSchema = browserBindingSchema.extend({ currentBrowserHash: hash.nullable() });
 export const intentCloseSchema = browserBindingSchema.extend({ operationId: uuid });
 export const intentBindingSchema = intentCloseSchema.extend({ proofHash: hash });
+const productionAdmission = z.strictObject({ mode: z.literal('production_paid'), sourceHash: hash });
+export const browserAdmissionSchema = browserPreparationSchema.extend({ admission: productionAdmission.optional() });
+export const intentAdmissionSchema = intentBindingSchema.extend({ admission: productionAdmission.optional() });
+export const intentCloseAdmissionSchema = intentCloseSchema.extend({ admission: productionAdmission.optional() });
 export const intentResultSchema = intentBindingSchema.extend({ checkId: uuid.nullable(), sessionHash: hash.nullable() })
   .refine(value => value.checkId !== null || value.sessionHash === null);
 const sharedLimits = {
@@ -29,7 +33,19 @@ const fundingLimits = z.union([
     costEvidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
     authorizedSpendMicrousd: bounded(Number.MAX_SAFE_INTEGER), reservePerSendMicrousd: bounded(Number.MAX_SAFE_INTEGER), expiresAt: time,
   }) }),
+  z.strictObject({ ...sharedLimits,
+    globalSendReservations: bounded(100_000), tenantSendReservations: bounded(100_000),
+    productionBudget: z.strictObject({ mode: z.literal('production_paid'),
+      authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), currency: z.literal('USD'),
+      costEvidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), reservePerSendMicrousd: bounded(Number.MAX_SAFE_INTEGER),
+    }),
+  }),
 ]).refine(limits => limits.cooldownMs >= 60_000 && limits.windowMs >= 86_400_000);
+export const productionSendAvailabilitySchema = browserPreparationSchema.omit({ browserRef: true }).extend({
+  authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), serviceSid: z.string().regex(/^VA[0-9a-fA-F]{32}$/),
+  costEvidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), reservePerSendMicrousd: bounded(Number.MAX_SAFE_INTEGER),
+});
+export const productionFundingSchema = browserPreparationSchema.omit({ browserRef: true }).extend({ challengeId: uuid });
 export const reservationSchema = scopeSchema.extend({ operationId: uuid, requestHash: hash, challengeId: uuid,
   browserRef: uuid, browserHash: hash, proofHash: hash, phoneHash: hash, globalPhoneHash: hash, ipHash: hash, encryptedPhone: ciphertext,
   serviceSid: z.string().regex(/^VA[0-9a-fA-F]{32}$/), evidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),

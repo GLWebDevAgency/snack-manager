@@ -10,6 +10,8 @@
     { "idx": 5, "version": "7", "when": 1788908400000, "tag": "0005_customer_session_publications", "breakpoints": true },
     { "idx": 6, "version": "7", "when": 1788915600000, "tag": "0006_customer_protected_enrollment", "breakpoints": true },
     { "idx": 7, "version": "7", "when": 1788922800000, "tag": "0007_customer_protected_access", "breakpoints": true },
-    { "idx": 8, "version": "7", "when": 1788930000000, "tag": "0008_customer_loyalty_memberships", "breakpoints": true }
+    { "idx": 8, "version": "7", "when": 1788930000000, "tag": "0008_customer_loyalty_memberships", "breakpoints": true },
+    { "idx": 9, "version": "7", "when": 1788937200000, "tag": "0009_customer_production_funding", "breakpoints": true },
+    { "idx": 10, "version": "7", "when": 1788944400000, "tag": "0010_customer_production_admissions", "breakpoints": true }
   ]
 }

@@ -5,6 +5,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { NodePgDriver } from 'drizzle-orm/node-postgres';
 import { Pool, type PoolClient } from 'pg';
 import { migrateCustomer } from './migration';
+import { restrictCustomerProductionRuntimeRole, grantCustomerProductionOperatorPrivileges } from './migration-role';
 
 export function trackCustomerTestPool(pool: Pool): () => Promise<void> {
   // Attach immediately after construction, before any connect/query. pg-pool
@@ -52,17 +53,22 @@ export function assertCustomerTestTarget(raw: unknown): string {
 
 export async function customerTestFixture(raw: unknown, options: {
   beforeUpgrade?: (admin: Pool) => Promise<void>;
-  beforeUpgradeMigrations?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  beforeUpgradeMigrations?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 } = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');
   const database = `snackmanager_customer_test_${suffix}`;
   const role = `customer_test_${suffix}`;
+  const operatorRole = `customer_operator_${suffix}`;
+  const operatorPassword = randomUUID();
   const password = randomUUID();
   const root = new Pool({ connectionString: base.toString(), max: 1, connectionTimeoutMillis: 3000 });
   const closeRoot = trackCustomerTestPool(root);
   let admin: Pool | undefined;
   let app: Pool | undefined;
+  let operator: Pool | undefined;
+  let closeOperator: (() => Promise<void>) | undefined;
+  let operatorCreated = false;
   let closeAdmin: (() => Promise<void>) | undefined;
   let closeApp: (() => Promise<void>) | undefined;
   let databaseCreated = false;
@@ -70,11 +76,12 @@ export async function customerTestFixture(raw: unknown, options: {
   let closing: Promise<void> | undefined;
   const close = () => closing ??= (async () => {
     try {
-      await Promise.all([closeApp?.(), closeAdmin?.()]);
+      await Promise.all([closeApp?.(), closeOperator?.(), closeAdmin?.()]);
       if (databaseCreated) {
         await root.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()', [database]);
         await root.query(`DROP DATABASE "${database}"`);
       }
+      if (operatorCreated) await root.query(`DROP ROLE "${operatorRole}"`);
       if (roleCreated) await root.query(`DROP ROLE "${role}"`);
     } finally {
       await closeRoot();
@@ -85,6 +92,8 @@ export async function customerTestFixture(raw: unknown, options: {
     databaseCreated = true;
     await root.query(`CREATE ROLE "${role}" LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`);
     roleCreated = true;
+    await root.query(`CREATE ROLE "${operatorRole}" LOGIN PASSWORD '${operatorPassword}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`);
+    operatorCreated = true;
     base.pathname = `/${database}`;
     admin = new Pool({ connectionString: base.toString(), max: 4, connectionTimeoutMillis: 3000 });
     closeAdmin = trackCustomerTestPool(admin);
@@ -108,10 +117,16 @@ export async function customerTestFixture(raw: unknown, options: {
       GRANT USAGE ON SCHEMA customer,drizzle TO "${role}";
       GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA customer TO "${role}";
       GRANT SELECT ON ALL TABLES IN SCHEMA drizzle TO "${role}";`);
+    await restrictCustomerProductionRuntimeRole(admin, role);
+    await grantCustomerProductionOperatorPrivileges(admin, operatorRole, database);
+    base.username = operatorRole;
+    base.password = operatorPassword;
+    operator = new Pool({ connectionString: base.toString(), max: 4, connectionTimeoutMillis: 3000 });
+    closeOperator = trackCustomerTestPool(operator);
     base.username = role;
     base.password = password;
     app = new Pool({ connectionString: base.toString(), max: 8, connectionTimeoutMillis: 3000 });
     closeApp = trackCustomerTestPool(app);
-    return { app, admin, close, database, role };
+    return { app, admin, operator, operatorRole, close, database, role };
   } catch (error) { await close(); throw error; }
 }

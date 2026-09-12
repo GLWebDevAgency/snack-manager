@@ -9,6 +9,7 @@ export type ChallengeRow = {
   verification_sid: string | null; state: string; max_checks: number; checks_used: number;
   check_id: string | null; expires_at: Date;
   funding_kind: string | null; authorization_ref: string | null; reserved_microusd: string | null; funding_expires_at: Date | null;
+  production_authorization_ref?: string | null; production_expiry?: Date | null; production_revoked?: Date | null; production_service?: string | null;
   paid_parent_ref: string | null; paid_authorization_ref: string | null; paid_currency: string | null; paid_expires_at: Date | null;
 };
 export async function lockParent(client: PoolClient, scope: CustomerScope): Promise<boolean> {
@@ -19,11 +20,14 @@ export async function dbTime(client: PoolClient): Promise<number> {
   return result.rows[0]!.now.getTime();
 }
 export async function challenge(client: PoolClient, scope: CustomerScope, id: string): Promise<ChallengeRow | null> {
-  return (await client.query<ChallengeRow>(`SELECT c.*,r.funding_kind,r.authorization_ref,r.reserved_microusd,r.funding_expires_at,
+  return (await client.query<ChallengeRow>(`SELECT c.*,r.funding_kind,r.authorization_ref,r.reserved_microusd,r.funding_expires_at,r.production_authorization_ref,
+    a.expires_at AS production_expiry,a.revoked_at AS production_revoked,a.service_sid AS production_service,
     p.parent_ref AS paid_parent_ref,p.authorization_ref AS paid_authorization_ref,p.currency AS paid_currency,p.expires_at AS paid_expires_at
     FROM customer.challenges c LEFT JOIN customer.reservations r
       ON (r.parent_ref,r.tenant_ref,r.challenge_id)=(c.parent_ref,c.tenant_ref,c.id)
     LEFT JOIN customer.paid_budgets p ON p.parent_ref=r.parent_ref
+    LEFT JOIN customer.production_budget_authorizations a ON (a.parent_ref,a.tenant_ref,a.authorization_ref)
+      =(r.parent_ref,r.tenant_ref,r.production_authorization_ref)
     WHERE c.parent_ref=$1 AND c.tenant_ref=$2 AND c.id=$3 FOR UPDATE OF c`, [scope.parentRef, scope.tenantRef, id])).rows[0] ?? null;
 }
 export function pendingView(row: ChallengeRow): PendingChallenge {
@@ -40,13 +44,19 @@ export function pendingView(row: ChallengeRow): PendingChallenge {
       reservedMicrousd: Number(row.reserved_microusd),
       // Effective authorization can only shorten; the stored receipt is untouched.
       expiresAt: Math.min(row.funding_expires_at.getTime(), row.paid_expires_at.getTime()) };
+  } else if (row.funding_kind==='production_paid' && row.production_authorization_ref
+    && row.production_service===row.service_sid && row.production_expiry instanceof Date
+    && row.funding_expires_at instanceof Date && Number.isSafeInteger(Number(row.reserved_microusd)) && Number(row.reserved_microusd)>0) {
+    funding = { mode: 'production_paid', authorizationRef: row.production_authorization_ref, currency: 'USD',
+      reservedMicrousd: Number(row.reserved_microusd), expiresAt: Math.min(row.production_expiry.getTime(), row.funding_expires_at.getTime()) };
   } else throw new Error('Preuve de financement absente');
   return { challengeId: row.id, phoneHash: row.phone_hash, expiresAt: row.expires_at.getTime(),
     verificationSid: row.verification_sid, serviceSid: row.service_sid, encryptedPhone: row.encrypted_phone, funding };
 }
 export function fundingAllowsCheck(row: ChallengeRow, now: number): boolean {
   const funding = pendingView(row).funding;
-  return funding.mode === 'paid' ? funding.expiresAt > now : row.paid_parent_ref === null;
+  return funding.mode==='production_paid' ? funding.expiresAt>now && row.production_revoked===null
+    : funding.mode === 'paid' ? funding.expiresAt > now : row.paid_parent_ref === null;
 }
 /** All callers hold the shared parent lock, including publication and logout. */
 export async function currentBrowserGeneration(client: PoolClient, scope: CustomerScope, browserHash: string): Promise<string | null> {

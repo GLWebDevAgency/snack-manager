@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { CustomerBrowserBinding, CustomerBrowserPreparation, CustomerScope } from './port';
+import { lockIntentParent } from './intent-queries';
+import type { CustomerAdmissionInput, CustomerBrowserBinding, CustomerBrowserPreparation, CustomerScope } from './port';
 
 type PreparationRow = {
   browser_ref: string; browser_hash: string | null; admission_expires_at: Date;
@@ -16,7 +17,8 @@ async function read(client: PoolClient, input: CustomerScope & { browserRef: str
     WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_ref=$3`,
   [input.parentRef, input.tenantRef, input.browserRef])).rows[0];
 }
-export async function prepareBrowser(client: PoolClient, input: CustomerScope & { browserRef: string }) {
+export async function prepareBrowser(client: PoolClient, input: CustomerScope & { browserRef: string } & CustomerAdmissionInput) {
+  await lockIntentParent(client, input);
   // Separate namespace and no SMS-budget dependency. A public, non-destructible
   // journal has a lifetime cap; old references remain readable at saturation.
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
@@ -25,11 +27,11 @@ export async function prepareBrowser(client: PoolClient, input: CustomerScope & 
   if (existing) return view(existing);
   const count = (await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM customer.browser_preparations
     WHERE parent_ref=$1 AND tenant_ref=$2`, [input.parentRef, input.tenantRef])).rows[0]!.count;
-  if (count >= 128) return null;
+  if (!input.admission && count >= 128) return null;
   await client.query(`WITH instant AS (SELECT clock_timestamp() AS at)
-    INSERT INTO customer.browser_preparations (parent_ref,tenant_ref,browser_ref,created_at,admission_expires_at,expires_at)
-    SELECT $1,$2,$3,at,at+interval '10 minutes',at+interval '168 hours' FROM instant
-    ON CONFLICT (parent_ref,tenant_ref,browser_ref) DO NOTHING`, [input.parentRef, input.tenantRef, input.browserRef]);
+    INSERT INTO customer.browser_preparations (parent_ref,tenant_ref,browser_ref,created_at,admission_expires_at,expires_at,production_admission_policy_ref,admission_source_hash)
+    SELECT $1,$2,$3,at,at+interval '10 minutes',at+interval '168 hours',$4,$5 FROM instant
+    ON CONFLICT (parent_ref,tenant_ref,browser_ref) DO NOTHING`, [input.parentRef, input.tenantRef, input.browserRef, null, input.admission?.sourceHash ?? null]);
   const row = await read(client, input);
   return row ? view(row) : null;
 }

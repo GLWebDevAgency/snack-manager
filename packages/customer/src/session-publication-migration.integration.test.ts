@@ -73,7 +73,7 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
         [randomUUID(), legacy!.parentRef, legacy!.tenantRef])).rejects.toMatchObject({ code: '23514' });
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT * FROM customer.session_publications')).rows).toEqual(previous);
-      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(9);
+      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(11);
     } finally { await fixture.close(); }
   }, 20_000);
   it('backfills only exact live approvals after intent expiry; restores FORCE on success and failed migration', async () => {
@@ -181,7 +181,7 @@ integration('0004→0005 publication migration — limited owner, native SQL', (
             has_table_privilege(current_user,'loyalty.operations','SELECT') AS can_read_operations
             FROM pg_roles WHERE rolname=current_user`)).rows)
             .toEqual([{ rolsuper: false, rolbypassrls: false, can_read_operations: false }]);
-          expect((await admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(9);
+          expect((await admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(11);
           expect((await admin.query(`SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             WHERE n.nspname='customer' AND c.relname=ANY($1) AND c.relrowsecurity AND c.relforcerowsecurity`, [[...sources, 'session_publications']])).rows[0].n).toBe(9);
         } finally { spy.mockRestore(); await drain(); }

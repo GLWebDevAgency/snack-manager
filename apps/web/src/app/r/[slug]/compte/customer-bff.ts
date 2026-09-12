@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
-  CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
+  CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CustomerAccountDeploymentTargetSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
   CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit, customerAccountResponseLimit,
   type CustomerEnrollment, type CustomerAccountAction } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
@@ -64,22 +64,41 @@ function list(raw: string | undefined, valid: (item: string) => boolean): string
       && new Set(value).size === value.length ? value : null;
   } catch { return null; }
 }
+function deploymentTarget(raw: string | undefined) {
+  if (!raw || Buffer.byteLength(raw, 'utf8') > 8_192) return null;
+  try {
+    const parsed = CustomerAccountDeploymentTargetSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch { return null; }
+}
 function configuration(slug: string, origin: string) {
   const env = process.env;
-  if (env.RAILWAY_ENVIRONMENT_NAME !== 'staging' || (env.SM_ENV !== undefined && env.SM_ENV !== 'staging')
-    || (env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_trial' && env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_paid_pilot')
-    || !UUID.test(env.RAILWAY_ENVIRONMENT_ID ?? '') || !UUID.test(env.RAILWAY_PROJECT_ID ?? '')
-    || env.SM_CUSTOMER_PILOT_ENVIRONMENT_ID !== env.RAILWAY_ENVIRONMENT_ID
-    || env.SM_CUSTOMER_PILOT_PROJECT_ID !== env.RAILWAY_PROJECT_ID) return null;
-  const origins = list(env.SM_CUSTOMER_PILOT_ORIGINS, item => originOf(item) !== null);
-  const slugs = list(env.SM_CUSTOMER_PILOT_SLUGS, item => item.length <= 63 && SLUG.test(item));
-  const rawKey = env.SM_CUSTOMER_RELAY_SIGNING_KEY;
   const apiOrigin = originOf(env.NEXT_PUBLIC_API_URL ?? null);
-  if (!apiOrigin || !origins?.includes(origin) || !slugs?.includes(slug)
-    || !rawKey || !/^[A-Za-z0-9+/]{43}=$/.test(rawKey)) return null;
+  if (!apiOrigin) return null;
+  let production = false;
+  if (env.SM_CUSTOMER_ACCOUNT_MODE === 'production_paid') {
+    const target = deploymentTarget(env.SM_CUSTOMER_PRODUCTION_TARGET);
+    if (!target || target.environment !== env.RAILWAY_ENVIRONMENT_NAME
+      || (env.SM_ENV !== undefined && env.SM_ENV !== target.environment)
+      || target.railwayProjectId !== env.RAILWAY_PROJECT_ID || target.railwayEnvironmentId !== env.RAILWAY_ENVIRONMENT_ID
+      || target.slug !== slug || !target.origins.includes(origin) || target.apiOrigin !== apiOrigin) return null;
+    production = target.environment === 'production';
+  } else {
+    // The production target never widens or supplies missing pilot settings.
+    if (env.RAILWAY_ENVIRONMENT_NAME !== 'staging' || (env.SM_ENV !== undefined && env.SM_ENV !== 'staging')
+      || (env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_trial' && env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_paid_pilot')
+      || !UUID.test(env.RAILWAY_ENVIRONMENT_ID ?? '') || !UUID.test(env.RAILWAY_PROJECT_ID ?? '')
+      || env.SM_CUSTOMER_PILOT_ENVIRONMENT_ID !== env.RAILWAY_ENVIRONMENT_ID
+      || env.SM_CUSTOMER_PILOT_PROJECT_ID !== env.RAILWAY_PROJECT_ID) return null;
+    const origins = list(env.SM_CUSTOMER_PILOT_ORIGINS, item => originOf(item) !== null);
+    const slugs = list(env.SM_CUSTOMER_PILOT_SLUGS, item => item.length <= 63 && SLUG.test(item));
+    if (!origins?.includes(origin) || !slugs?.includes(slug)) return null;
+  }
+  const rawKey = env.SM_CUSTOMER_RELAY_SIGNING_KEY;
+  if (!rawKey || !/^[A-Za-z0-9+/]{43}=$/.test(rawKey)) return null;
   const key = Buffer.from(rawKey, 'base64');
   if (key.byteLength !== 32 || key.toString('base64') !== rawKey) return null;
-  return { key, apiOrigin };
+  return { key, apiOrigin, production };
 }
 
 /** Deployment prerequisite: Railway must overwrite x-real-ip at its trusted
@@ -223,10 +242,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (proof?.kind === 'absent') return unauthorized();
     if (proof?.kind === 'invalid') return failure(409, 'CUSTOMER_CONFLICT', 'La preuve de cette tentative est ambiguë.');
 
-    // Platform paths may serve any pilot tenant; a custom domain must resolve
+    // Platform paths may serve an admitted tenant; a custom domain must resolve
     // freshly to this exact tenant. Never adopt the proxy's stale cache or a
     // caller-supplied x-sm-tenant header as account authority.
     const platforms = new Set(['https://staging.snackmanager.fr', 'https://web-staging-6f5f.up.railway.app']);
+    // Only the separately validated production target admits this exact
+    // platform origin. Tenant subdomains still require a fresh resolution.
+    if (config.production) platforms.add('https://snackmanager.fr');
     if (!platforms.has(origin)) {
       const resolution = await within(fetch(`${config.apiOrigin}/public/resolve?host=${encodeURIComponent(new URL(origin).host)}`, {
         cache: 'no-store', redirect: 'error', signal, headers: { Accept: 'application/json' },

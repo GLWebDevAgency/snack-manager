@@ -75,6 +75,10 @@ describe('rôle runtime des migrations identité client', () => {
     expect(grants).toMatch(/GRANT SELECT, INSERT, UPDATE, DELETE/);
     expect(grants).toMatch(/ALTER DEFAULT PRIVILEGES/);
     expect(grants).not.toMatch(/SUPERUSER|BYPASSRLS|GRANT CREATE/);
+    const restricted = grants;
+    expect(restricted).toContain('REVOKE ALL ON customer.production_budget_authorizations');
+    expect(restricted).toContain('GRANT SELECT ON customer.production_budget_authorizations');
+    expect(restricted).toContain('REVOKE ALL ON customer.production_admission_policies');
   });
 
   it.each([

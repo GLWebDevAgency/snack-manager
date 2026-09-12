@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { VerificationFunding, VerificationReservation } from './port';
 import { dbTime } from './queries';
+import { lockProductionBudget } from './production-budget';
 
 type ParentBudget = { send_limit: string; sms_limit: string; verification_limit: string;
   reserved_sends: string; reserved_sms: string; reserved_verifications: string };
@@ -12,6 +13,9 @@ export async function lockVerificationBudget(client: PoolClient, input: Verifica
   funding: VerificationFunding; canReserve: boolean; planExpiresAt: number;
 } | null> {
   const l = input.limits;
+  if ('productionBudget' in l) return lockProductionBudget(client, { ...input, limits: l });
+  if ((await client.query(`SELECT 1 FROM customer.production_budget_activation WHERE parent_ref=$1
+    UNION ALL SELECT 1 FROM customer.production_admission_policies WHERE parent_ref=$1`, [input.parentRef])).rowCount) return null;
   const paid = 'paidBudget' in l ? l.paidBudget : null;
   const sendLimit = 'paidBudget' in l ? l.maxSendReservations : l.trialSendReservations;
   const smsLimit = 'paidBudget' in l ? 0 : l.freeSmsUnitsRemainingAtObservation;

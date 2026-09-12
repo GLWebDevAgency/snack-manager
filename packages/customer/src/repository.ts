@@ -3,10 +3,11 @@ import type { CustomerIdentityRepository, CustomerScope } from './port';
 import { withCustomerScope } from './client';
 import { lockParent, session } from './queries';
 import { reserveVerification } from './reservation';
+import * as production from './production-budget';
 import { claimVerification, completeVerification, recoverVerification, settleVerification } from './checks';
 import { claimSchema, completionSchema, nameSchema, recoverySchema, reservationSchema, revocationSchema,
-  sessionSchema, settlementSchema, validate, browserPreparationSchema, browserBindingSchema, browserIssueSchema,
-  intentBindingSchema, intentCloseSchema, intentResultSchema } from './validation';
+  sessionSchema, settlementSchema, validate, browserAdmissionSchema, browserBindingSchema, browserIssueSchema,
+  intentBindingSchema, intentAdmissionSchema, intentCloseAdmissionSchema, intentResultSchema, productionSendAvailabilitySchema, productionFundingSchema } from './validation';
 import { prepareBrowser, issueBrowser, confirmBrowser, validateBrowser, restoreBrowser } from './browser-preparation';
 import { lockIntentParent } from './intent-queries';
 import { prepareIntent, closeIntent, validateIntent, resultIntent } from './verification-intents';
@@ -26,7 +27,7 @@ const browserRestoreSchema = browserBindingSchema.omit({ browserRef: true });
 export class PostgresCustomerIdentityRepository implements CustomerIdentityRepository {
   constructor(private readonly pool: Pool) {}
   prepareBrowser(raw: Input<'prepareBrowser'>) {
-    const input = validate(browserPreparationSchema, raw);
+    const input = validate(browserAdmissionSchema, raw);
     return withCustomerScope(this.pool, input, client => prepareBrowser(client, input));
   }
   issueBrowser(raw: Input<'issueBrowser'>) {
@@ -153,11 +154,11 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
     });
   }
   prepareIntent(raw: Input<'prepareIntent'>) {
-    const input = validate(intentBindingSchema, raw);
+    const input = validate(intentAdmissionSchema, raw);
     return this.intentLocked(input, client => prepareIntent(client, input));
   }
   closeIntent(raw: Input<'closeIntent'>) {
-    const input = validate(intentCloseSchema, raw);
+    const input = validate(intentCloseAdmissionSchema, raw);
     return this.intentLocked(input, client => closeIntent(client, input));
   }
   validateIntent(raw: Input<'validateIntent'>) {
@@ -173,6 +174,14 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
       await lockIntentParent(client, scope);
       return await lockParent(client, scope) ? work(client) : null;
     });
+  }
+  productionSendAvailability(raw: Input<'productionSendAvailability'>) {
+    const input = validate(productionSendAvailabilitySchema, raw);
+    return withCustomerScope(this.pool, input, client => production.productionSendAvailability(client, input));
+  }
+  revalidateProductionFunding(raw: Input<'revalidateProductionFunding'>) {
+    const input = validate(productionFundingSchema, raw);
+    return withCustomerScope(this.pool, input, client => production.revalidateProductionFunding(client, input));
   }
   reserve(raw: Input<'reserve'>) {
     const input = validate(reservationSchema, raw);

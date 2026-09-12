@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { customerAccessConfiguration, customerSendConfiguration } from './customer-account.config';
+import { customerAccessConfiguration, customerObservationConfiguration, customerSendConfiguration } from './customer-account.config';
+import { customerProductionFixture } from './customer-production.test-fixture';
 
 import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
 const getter = (env: Record<string, string>) => ({ get: (key: string) => env[key] });
@@ -68,5 +69,51 @@ describe('closed customer runtime configuration', () => {
     expect(customerSendConfiguration(getter(customerTestEnvironment(Date.now() - 900_001)), access)).toBeNull();
     env.SM_CUSTOMER_TURNSTILE_SECRET_KEY = '1x0000000000000000000000000000000AA';
     expect(customerSendConfiguration(getter(env), access)).toBeNull();
+  });
+});
+
+describe('explicit customer production deployment', () => {
+  it.each(['staging', 'production'] as const)('accepts a separately pinned %s target without pilot variables', environment => {
+    const f = customerProductionFixture(Date.now(), environment);
+    for (const name of Object.keys(f.env)) if (name.startsWith('SM_CUSTOMER_PILOT_')) delete f.env[name];
+    const access = customerAccessConfiguration(getter(f.env));
+    expect(access).toMatchObject({ mode: 'production_paid', environment, tenantRef: f.target.tenantRef, serviceSid: f.target.serviceSid });
+    expect(customerSendConfiguration(getter(f.env), access!, Date.now(), f.observation)?.plan.kind).toBe('reservation_required');
+  });
+  it.each(['RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID',
+    'SM_CUSTOMER_VERIFY_ACCOUNT_SID', 'SM_CUSTOMER_PRODUCTION_TARGET'])('closes a mismatched %s', key => {
+    const f = customerProductionFixture(); f.env[key] = 'wrong';
+    expect(customerAccessConfiguration(getter(f.env))).toBeNull();
+  });
+  it('refuses a policy pointing to a different service or deployment', () => {
+    const f = customerProductionFixture(); const access = customerAccessConfiguration(getter(f.env))!;
+    for (const patch of [{ environment: 'staging' }, { serviceSid: `VA${'e'.repeat(32)}` }]) {
+      f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify({ ...f.policy, ...patch });
+      expect(customerSendConfiguration(getter(f.env), access, Date.now(), f.observation)).toBeNull();
+    }
+  });
+  it('never accepts a provider observation from environment JSON', () => {
+    const f = customerProductionFixture(); const access = customerAccessConfiguration(getter(f.env))!;
+    expect(customerSendConfiguration(getter(f.env), access)).toBeNull();
+    f.env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(f.evidence);
+    expect(customerSendConfiguration(getter(f.env), access, Date.now(), f.observation)).toBeNull();
+  });
+  it('preserves account access without any provider or budget configuration', () => {
+    const f = customerProductionFixture();
+    for (const name of Object.keys(f.env)) if (name.startsWith('SM_CUSTOMER_VERIFY_') && name !== 'SM_CUSTOMER_VERIFY_ACCOUNT_SID') delete f.env[name];
+    const access = customerAccessConfiguration(getter(f.env));
+    expect(access).not.toBeNull();
+    expect(customerSendConfiguration(getter(f.env), access!)).toBeNull();
+    expect(customerObservationConfiguration(getter(f.env), access!)).toBeNull();
+  });
+  it('uses the existing Verify key for service observation without account access credentials', () => {
+    const f = customerProductionFixture(); const access = customerAccessConfiguration(getter(f.env))!;
+    expect(customerObservationConfiguration(getter(f.env), access)).toEqual({
+      ...f.target, apiKeySid: f.env.SM_CUSTOMER_VERIFY_API_KEY_SID,
+      apiKeySecret: f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET });
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    expect(customerObservationConfiguration(getter(f.env), access)).toBeNull();
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SID;
+    expect(customerObservationConfiguration(getter(f.env), access)).toBeNull();
   });
 });

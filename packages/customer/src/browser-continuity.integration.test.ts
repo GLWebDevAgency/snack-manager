@@ -123,7 +123,7 @@ integration('browser continuity — native PostgreSQL, both credentials required
       expect(await withCustomerScope(fixture.app, scope, async client => (await client.query('SELECT * FROM customer.browser_contexts')).rowCount)).toBe(0);
     }
     const before = (await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-    expect(before).toHaveLength(9); await migrateCustomer(fixture.admin);
+    expect(before).toHaveLength(11); await migrateCustomer(fixture.admin);
     expect((await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(before);
   });
 
@@ -261,7 +261,7 @@ integration('browser continuity migration — preexisting identities remain iner
       expect((await fixture.admin.query('SELECT revision,session_version FROM customer.accounts WHERE id=$1', [accountId])).rows[0])
         .toEqual({ revision: '0', session_version: '0' });
       await migrateCustomer(fixture.admin);
-      expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(9);
+      expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(11);
     } finally { await fixture.close(); }
   }, 20_000);
 });

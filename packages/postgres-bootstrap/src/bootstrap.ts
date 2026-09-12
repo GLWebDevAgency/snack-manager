@@ -16,6 +16,9 @@ const ROLE_NAME = /^[a-z][a-z0-9_]{2,62}$/;
 // La frontière runtime interdit le DDL persistant. PostgreSQL conserve TEMP
 // (et son pg_temp propre à la session) : ce bootstrap ne prétend pas le retirer.
 const SAFE_SEARCH_PATH = 'public,pg_catalog';
+const customerOperatorTables = new Set(['production_budget_authorizations','production_budget_activation',
+  'production_admission_policies','production_admissions']);
+const isRuntimeReadOnly = (schema: string, name: string) => schema==='customer' && customerOperatorTables.has(name);
 
 export type BootstrapRoles = Readonly<{
   migrationRole: string;
@@ -1113,14 +1116,17 @@ SELECT wanted.table_name,
 
 const APPLICATION_PRIVILEGE_QUERY = `
 WITH wanted AS (
-  SELECT schema_name, table_name
+  SELECT schema_name, table_name, read_only
     FROM pg_catalog.jsonb_to_recordset($1::pg_catalog.jsonb)
-      AS entry(schema_name pg_catalog.text, table_name pg_catalog.text)
+      AS entry(schema_name pg_catalog.text, table_name pg_catalog.text, read_only pg_catalog.bool)
 )
 SELECT wanted.schema_name,
        wanted.table_name,
        relation.oid IS NOT NULL AS relation_exists,
-       CASE WHEN relation.oid IS NULL THEN false ELSE
+       CASE WHEN relation.oid IS NULL THEN false WHEN wanted.read_only THEN EXISTS (
+         SELECT 1 FROM pg_catalog.aclexplode(COALESCE(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) privilege
+         WHERE privilege.grantee=runtime.oid AND privilege.privilege_type='SELECT'
+       ) ELSE
          EXISTS (
            SELECT 1 FROM pg_catalog.aclexplode(
              COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
@@ -1144,7 +1150,10 @@ SELECT wanted.schema_name,
          )
        END AS runtime_has_required,
        COALESCE(
-         pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'TRUNCATE')
+         (wanted.read_only AND (pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'INSERT')
+           OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'UPDATE')
+           OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'DELETE')))
+         OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'TRUNCATE')
          OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'REFERENCES')
          OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'TRIGGER')
          OR pg_catalog.has_table_privilege(runtime.oid, relation.oid, 'MAINTAIN'),
@@ -1352,6 +1361,7 @@ function applicationPrivilegePayload(): string {
     applicationTables().map((table) => ({
       schema_name: table.schema,
       table_name: table.name,
+      read_only: isRuntimeReadOnly(table.schema, table.name),
     })),
   );
 }
@@ -1542,7 +1552,7 @@ function appendApplicationPrivilegeIssues(
       issues.push({
         code: 'application_privilege_missing',
         target: `${privilege.schema}.${privilege.tableName}`,
-        expected: `${runtimeRole}=SELECT,INSERT,UPDATE,DELETE`,
+        expected: `${runtimeRole}=${isRuntimeReadOnly(privilege.schema, privilege.tableName) ? 'SELECT' : 'SELECT,INSERT,UPDATE,DELETE'}`,
         actual: 'au moins un privilège DML effectif manque',
       });
     }
@@ -2573,7 +2583,7 @@ export async function repairPostgresBootstrap(
       }
       if (privilege.runtimeHasDisallowed) {
         await client.query(
-          `REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE ${table} FROM ${quotedRuntimeRole}`,
+          `REVOKE ${isRuntimeReadOnly(privilege.schema, privilege.tableName) ? 'INSERT, UPDATE, DELETE, ' : ''}TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE ${table} FROM ${quotedRuntimeRole}`,
         );
         changed.push(
           `revoke:${privilege.schema}.${privilege.tableName}:EXCESSIVE:${options.runtimeRole}`,
@@ -2589,7 +2599,7 @@ export async function repairPostgresBootstrap(
       }
       if (!privilege.runtimeHasRequired) {
         await client.query(
-          `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${table} TO ${quotedRuntimeRole}`,
+          `GRANT ${isRuntimeReadOnly(privilege.schema, privilege.tableName) ? 'SELECT' : 'SELECT, INSERT, UPDATE, DELETE'} ON TABLE ${table} TO ${quotedRuntimeRole}`,
         );
         changed.push(
           `grant:${privilege.schema}.${privilege.tableName}:DML:${options.runtimeRole}`,

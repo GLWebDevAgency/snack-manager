@@ -61,7 +61,8 @@ beforeAll(async () => {
           stripeApparence={{}} mode="dark" prixMono={false} cart={cart} paused={false} pauseMessage={null} initialSlots={${JSON.stringify(slots)}}
           onClose={()=>setOpen(false)} onBrowse={()=>{}} onEditLine={()=>{}}/></main>}
     async function start(){let node=<App/>;if(location.pathname==='/embed-storefront'){
-      const raw=demoSite(new Date(),()=>0);raw.tenant.slug='recette';raw.tenant.brand=marqueDeRepli(null,null);
+      // Fixed HTTP fixture: Monday noon in Europe/Paris, with bookable pickup slots regardless of runner time.
+      const raw=demoSite(new Date('2030-09-09T10:00:00.000Z'),()=>0);raw.tenant.slug='recette';raw.tenant.brand=marqueDeRepli(null,null);
       raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
       const api=orderingApi({send:async request=>({status:200,body:request.path.includes('/slots')?raw.slots:raw})});
       node=<Storefront site={await api.loadSite('recette')} api={api} mode="embed" demo={false}/>;
