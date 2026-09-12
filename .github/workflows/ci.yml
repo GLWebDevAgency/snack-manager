@@ -190,6 +190,18 @@ jobs:
       - name: Tests du smoke public — réponses HTTP locales
         run: pnpm --filter @sm/api exec vitest run ../../scripts/smoke.test.mjs --root ../..
 
+      # Ces outils vivent hors des packages Turbo : leur validation doit aussi
+      # bloquer une livraison. Aucun secret ni service distant n'est utilisé.
+      - name: Vérifier les outils opérateur — préflight et financement client
+        run: |
+          pnpm exec tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler \
+            --strict --noUncheckedIndexedAccess --skipLibCheck --esModuleInterop \
+            scripts/customer-account-preflight.ts scripts/customer-account-preflight.test.ts \
+            scripts/customer-account-operator.ts scripts/customer-account-operator.test.ts
+          pnpm --filter @sm/api exec vitest run \
+            ../../scripts/customer-account-preflight.test.ts \
+            ../../scripts/customer-account-operator.test.ts --root ../..
+
       # Les suites générales restent rapides et hermétiques. Ces fichiers
       # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
       # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et

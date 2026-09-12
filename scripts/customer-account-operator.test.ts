@@ -25,7 +25,7 @@ function fixture(environment: 'staging' | 'production' = 'production') {
     intentSourceLimit: 10, intentTenantLimit: 500, intentParentLimit: 1000 };
   const env: Record<string, string | undefined> = { RAILWAY_PROJECT_ID: target.railwayProjectId,
     RAILWAY_ENVIRONMENT_ID: target.railwayEnvironmentId, RAILWAY_ENVIRONMENT_NAME: environment, SM_ENV: environment,
-    DATABASE_MIGRATION_URL: 'postgresql://operator:PRIVATE_DATABASE_SECRET@database.example/fixture?sslmode=verify-full',
+    DATABASE_MIGRATION_URL: 'postgresql://user:password@database.example/fixture?sslmode=verify-full',
     DATABASE_MIGRATION_ROLE: 'fixture_migrator', DATABASE_RUNTIME_ROLE: 'fixture_runtime' };
   return { target, budget, admissions, scope, env };
 }
@@ -92,7 +92,7 @@ describe('document opérateur et simulation hermétique', () => {
     const output = await customerAccountOperator(request(action, f), { env }, { createPool });
     expect(output).toMatchObject({ action, mode: 'dry-run', outcome: 'planned', code: 'validated_only' });
     expect(customerOperatorExitCode(output)).toBe(0); expect(createPool).not.toHaveBeenCalled();
-    expect(JSON.stringify(output)).not.toMatch(/https:|postgres:|PRIVATE_|verifyAccountSid|verifyServiceSid|railwayProjectId/);
+    expect(JSON.stringify(output)).not.toMatch(/https:|postgres(?:ql)?:|user:password|PRIVATE_|verifyAccountSid|verifyServiceSid|railwayProjectId/);
   });
   it('préserve les unités, le plafond, les références et les bornes temporelles de l’autorisation', async () => {
     const f = fixture(); const output = await customerAccountOperator(request('authorize-budget', f));
@@ -175,17 +175,17 @@ describe('application réservée à la connexion migrateur de la cible native ex
     }
   });
   it.each([
-    { DATABASE_MIGRATION_URL: undefined, DATABASE_URL: 'postgres://runtime:PRIVATE_SECRET@db/app' },
-    { DATABASE_MIGRATION_URL: 'postgres://migration:PRIVATE_SECRET@db/app' },
-    { DATABASE_MIGRATION_URL: 'postgres://migration:PRIVATE_SECRET@db/app?sslmode=no-verify' },
-    { DATABASE_MIGRATION_URL: 'postgres://migration:PRIVATE_SECRET@db/app?sslmode=verify-full&options=-csession_authorization=other' },
+    { DATABASE_MIGRATION_URL: undefined, DATABASE_URL: 'postgres://user:password@database.example/app' },
+    { DATABASE_MIGRATION_URL: 'postgres://user:password@database.example/app' },
+    { DATABASE_MIGRATION_URL: 'postgres://user:password@database.example/app?sslmode=no-verify' },
+    { DATABASE_MIGRATION_URL: 'postgres://user:password@database.example/app?sslmode=verify-full&options=-csession_authorization=other' },
     { DATABASE_MIGRATION_ROLE: undefined }, { DATABASE_MIGRATION_ROLE: 'postgres;DROP DATABASE fixture' },
     { DATABASE_RUNTIME_ROLE: undefined }, { DATABASE_RUNTIME_ROLE: 'fixture_migrator' },
   ])('refuse une configuration migrateur unsafe ou implicite : %#', async changes => {
     const f = fixture(); const db = database(); Object.assign(f.env, changes);
     const output = await customerAccountOperator(request('authorize-budget', f), { apply: true, env: f.env }, db);
     expect(output.code).toBe('migration_configuration_invalid'); expect(db.createPool).not.toHaveBeenCalled();
-    expect(JSON.stringify(output)).not.toMatch(/PRIVATE_SECRET|postgres:|DROP DATABASE/);
+    expect(JSON.stringify(output)).not.toMatch(/PRIVATE_SECRET|postgres(?:ql)?:|user:password|DROP DATABASE/);
   });
   it.each(['migration_rolsuper', 'migration_rolbypassrls', 'migration_rolcreaterole', 'migration_rolcreatedb', 'migration_rolreplication',
     'migration_has_role_membership', 'migration_has_role_members', 'rolsuper', 'rolbypassrls', 'rolcreaterole', 'rolcreatedb',
