@@ -124,15 +124,15 @@ Libellé	Valeur
 11h	4
 12h	9
 13h	6
-14h	
-15h	
-16h	
-17h	
+14h
+15h
+16h
+17h
 18h	6
 19h	19
 20h	20
-21h	
-22h	
+21h
+22h
 Top ventes de la semaine
 1
 Compose ton Tacos

@@ -1,0 +1,17 @@
+{
+  "3001": [
+    {
+      "pid": 90414,
+      "command": "node e2e/local/refonte-customer-fixture.mjs",
+      "cwd": "p90414\nfcwd\nn/Users/limameghassene/development/SnackManager-refonte-ui"
+    }
+  ],
+  "3092": [
+    {
+      "pid": 8614,
+      "command": "next-server (v16.3.1)",
+      "cwd": "p8614\nfcwd\nn/Users/limameghassene/development/SnackManager-refonte-ui/apps/web"
+    }
+  ],
+  "3093": []
+}

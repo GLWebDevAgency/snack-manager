@@ -66,4 +66,3 @@ stdout | src/backfill-founder.test.ts
       Tests  556 passed | 10 skipped (566)
    Start at  21:42:00
    Duration  13.98s (transform 642ms, setup 0ms, collect 13.39s, tests 7.70s, environment 3ms, prepare 1.47s)
-

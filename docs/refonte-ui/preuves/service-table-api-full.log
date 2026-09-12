@@ -374,4 +374,3 @@ Error: Fournisseur injoignable
       Tests  3663 passed | 824 skipped (4487)
    Start at  21:24:54
    Duration  61.59s (transform 3.32s, setup 0ms, collect 75.25s, tests 13.86s, environment 23ms, prepare 7.89s)
-

@@ -1,5 +1,36 @@
 # Reprise de la refonte UI Snack Manager
 
+## État courant — seconde passe et compatibilité PR 178
+
+Worktree actif : `/Users/limameghassene/development/SnackManager-refonte-ui`, branche **`refactor/ui-handoff-fidelity`**. La PR 178 est fusionnée dans `develop` en **`80f2eac593863dfcfc1f9e5962c09db38fe6db24`** ; les commits locaux V2 ont été rebasés dessus sans conflit. Le travail concurrent du checkout principal reste préservé. Aucun nouveau push, fusion distante ou déploiement de ce lot.
+
+La bibliothèque de **41 illustrations** est proposée dès la création d'un produit, ainsi que dans les médiathèques. Les **78 icônes** du kit sont disponibles dans les applications, avec correspondances explicites des anciens noms. Les styles, densités, thèmes et préférences sont affinés dans les sept applications existantes. Le service à table relie les réglages restaurant, le POS, la cuisine, les commandes, les paiements existants et les tickets imprimés.
+
+Les nouvelles destinations de PR 178 — Carte, Rechercher, Commandes, Fidélité, Compte — sont conservées. Leur adaptation visuelle et leur validation finale sont terminées en local ; les preuves ci-dessous portent sur la base combinée. Les sections de première livraison ci-après sont historiques.
+
+| Preuve sur la base combinée | Résultat exécuté |
+| --- | --- |
+| Kit | 44 tests ; 57 vues, 41 illustrations, 78 icônes compilées |
+| POS | Typecheck, 332 tests + 5 Node, export web, 7 parcours de présentation et 7 parcours Salle |
+| KDS | Typecheck, 86 tests, export web, 10 parcours navigateur |
+| Natif | Exports Hermes iOS et Android POS/KDS réussis ; aucun essai sur appareil |
+| API | 3 695 réussis, 803 ignorés lors de la suite complète ; build et typecheck réussis |
+| Complément financier Mongo | 172 réussis dont 152 intégrations supplémentaires ; 20 gardes déjà comptées dans l'API. 651 cas API préexistants restent non exécutés |
+| DB / contrats / client-core | 556 (10 ignorés) / 688 / 133 réussis ; builds réussis, typecheck core réussi |
+| Web final | 2 994 tests / 195 fichiers, aucun ignoré ; typecheck et lint réussis ; build Next `bPzLIBZiO8taFULNJdNVv` ; 18 parcours clients (144 captures) + 26 parcours des surfaces existantes |
+
+Les contrôles utilisent des bases temporaires locales possédées et des fournisseurs simulés. Les recettes navigateur utilisent les vraies applications compilées avec réponses HTTP de recette ; elles ne prouvent pas un paiement physique, une imprimante ou un appareil terrain. Aucun compte, base ni paiement de production. Les contrôles non exécutés et leurs causes restent explicites dans `VALIDATION-COMPATIBILITE-PR178-METIER.md`.
+
+Références détaillées : `LOT-ASSETS-V2.md`, `LOT-ICONES-V2.md`, `LOT-POS-V2.md`, `LOT-KDS-V2.md`, `LOT-SALLE-BO.md`, `LOT-SERVICE-TABLE.md`, `LOT-BACKOFFICES-V2.md`, `LOT-SURFACES-CLIENT-V2.md`, `COMPATIBILITE-PR178-AUDIT.md` et `LOT-COMPATIBILITE-PR178-WEB.md`. Le manifeste complet de cette seconde passe est `FICHIERS-V2.txt`. Les empreintes des sources terrain validées sont dans `preuves/pr178-terrain-source-freeze.json`.
+
+Décisions de compatibilité : garder les cinq onglets lisibles à 320 px, les règles d'accessibilité V2, les routes/history/panier de PR 178 et ses garde-fous compte/fidélité. La réconciliation du journal traite aussi une entrée déjà persistée devenue remboursée sur un autre poste, sans faux dû ni régression sur une réponse ancienne. Aucun framework, handler de paiement ou schéma métier préexistant n'est remplacé ; les extensions Salle sont additives.
+
+Prochaine tranche précise, après accord pour le push, la fusion et son déploiement staging automatique : ouvrir la PR de `refactor/ui-handoff-fidelity` vers `develop`, vérifier la CI et les intégrations configurées, puis livrer le lot. Vérifier ensuite la révision servie et recetter avec les comptes de staging : choix d’illustration lors de création produit, ouverture de table → plusieurs envois cuisine → service avant paiement → encaissement → transfert/clôture, et navigation client avec panier/compte/fidélité. Les essais réels imprimante, tiroir, TPE, appareil et interruptions réseau restent à réaliser. Aucun blocage de code connu sur le périmètre exécuté ; ces essais et les intégrations préexistantes non exécutées ne sont pas déclarés verts.
+
+Les captures finales sont dans `captures/{pos-fidelite-v2-final,pos-salle-v2,kds-fidelite-v2-final,customer-pr178-build-final,web-pr178-build-final}` ; les chemins exacts clients figurent dans `LOT-COMPATIBILITE-PR178-WEB.md`. Les contrôles pré-PR 178 conservés plus bas sont historiques. Les espaces de fin de ligne et lignes vides terminales des journaux ont été normalisés pour le versionnement, sans modifier les résultats. Les seuls ajustements finaux depuis le checkpoint métier concernent le journal/catalogue POS et la présentation des pages clientes ; les empreintes de source des deux lanes permettent de vérifier l’arbre effectivement testé.
+
+---
+
 ## Poste et autorisation — 12 septembre 2026
 
 - Worktree : `/Users/limameghassene/development/SnackManager-refonte-ui`.
@@ -113,7 +144,7 @@ Prochaine tranche : recette utilisateur sur staging, en priorité POS A/B/C (con
 
 Accès : [web](https://web-staging-6f5f.up.railway.app), [POS](https://pos-staging-7f92.up.railway.app), [KDS](https://kds-staging-90da.up.railway.app).
 
-## Deuxième passe demandée — travail en cours, 12 septembre 2026
+## Point initial de la deuxième passe — historique, 12 septembre 2026
 
 Branche dédiée `refactor/ui-handoff-fidelity`, issue de `origin/develop` `a01f857`, suivi de livraison repris par le commit `d90e7f8`. Checkout principal et autres branches préservés. Aucun nouveau push, merge ou déploiement autorisé pour cette passe.
 
@@ -130,6 +161,6 @@ Prochaine tranche précise : finir l'envoi table → cuisine → règlement → 
 
 Le service à table et les sept surfaces sont implémentés ; les preuves détaillées figurent dans `LOT-POS-V2.md`, `LOT-KDS-V2.md`, `LOT-ASSETS-V2.md`, `LOT-ICONES-V2.md`, `LOT-SALLE-BO.md`, `LOT-SERVICE-TABLE.md`, `LOT-BACKOFFICES-V2.md` et `LOT-SURFACES-CLIENT-V2.md`. Le journal distingue un remboursement connu à la reprise tout en conservant sa sémantique historique.
 
-Validations de cet arbre avant PR 178 : POS331 +5Node et6parcours salle ; KDS86 ; web2915 ; API3686 (803ignorés), DB556 (10ignorés), contrats678, client-core131. Typechecks, builds API/Next/exports Expo web et Hermes iOS/Android exécutés. Détails, environnements et causes des contrôles ignorés : `VALIDATION-METIER-V2.md`, `VALIDATION-WEB-V2.md` et les lots POS/KDS. La recette web compilée a réussi26parcours/76captures. Ces preuves ne valent pas encore validation du nouvel arbre combiné.
+Validations de cet arbre avant PR 178 : POS 331 + 5 Node et 6 parcours salle ; KDS 86 ; web 2 915 ; API 3 686 (803 ignorés), DB 556 (10 ignorés), contrats 678, client-core 131. Typechecks, builds API/Next/exports Expo web et Hermes iOS/Android exécutés. Détails, environnements et causes des contrôles ignorés : `VALIDATION-METIER-V2.md`, `VALIDATION-WEB-V2.md` et les lots POS/KDS. La recette web compilée a réussi 26 parcours / 76 captures. Ces preuves ne valent pas encore validation du nouvel arbre combiné.
 
-Nouvelle demande de compatibilité : PR[#178](https://github.com/GLWebDevAgency/snack-manager/pull/178) fusionnée dans `develop` en `80f2eac593863dfcfc1f9e5962c09db38fe6db24`. Elle ajoute Carte/Rechercher/Commandes/Fidélité/Compte et leur continuité de navigation. Sauvegarde locale du lot V2, puis rebase local de la branche dédiée sur ce commit ; aucune fusion distante, aucun push ni déploiement. Prochaine tranche précise : habiller et tester ces nouvelles destinations, conserver les comportements PR178, puis relancer les validations sur la base combinée.
+Nouvelle demande de compatibilité : PR [#178](https://github.com/GLWebDevAgency/snack-manager/pull/178) fusionnée dans `develop` en `80f2eac593863dfcfc1f9e5962c09db38fe6db24`. Elle ajoute Carte/Rechercher/Commandes/Fidélité/Compte et leur continuité de navigation. Sauvegarde locale du lot V2, puis rebase local de la branche dédiée sur ce commit ; aucune fusion distante, aucun push ni déploiement. Prochaine tranche précise : habiller et tester ces nouvelles destinations, conserver les comportements PR178, puis relancer les validations sur la base combinée.

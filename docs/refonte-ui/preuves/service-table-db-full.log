@@ -66,4 +66,3 @@ stdout | src/backfill-brand.test.ts
       Tests  556 passed | 10 skipped (566)
    Start at  21:24:54
    Duration  12.00s (transform 416ms, setup 0ms, collect 8.14s, tests 10.23s, environment 18ms, prepare 1.30s)
-
