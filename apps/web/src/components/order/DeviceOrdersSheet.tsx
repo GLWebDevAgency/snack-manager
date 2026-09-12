@@ -42,7 +42,7 @@ export function deviceOrderSummary(raw: unknown, orderId: string): DeviceOrderSu
 
 type Row = { saved: ReceivedCheckoutAttempt; summary: DeviceOrderSummary | null; checking: boolean };
 type Props = { open: boolean; slug: string; tenantName: string; embed?: boolean; onClose: () => void;
-  presentation?: "sheet" | "page"; onNavigationLockedChange?: (locked: boolean) => void; onReordered?: () => void;
+  presentation?: "sheet" | "page" | "embedded"; onNavigationLockedChange?: (locked: boolean) => void; onReordered?: () => void;
   onCatalogVerified?: (categories: MenuCategory[]) => void };
 const canRead = () => document.visibilityState === "visible" && navigator.onLine !== false;
 const dateLabel = (at: number | string) => new Date(at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
@@ -157,7 +157,7 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose, p
     { key: "finished", label: "Terminées", matches: (row: Row) => row.summary?.section === "finished" },
   ];
   const close = () => { if (navigationLocked) return; setConfirmId(null); setActionError(null); setMessage(null); setReordering(null); onClose(); };
-  const compact = presentation === "page";
+  const compact = presentation !== "sheet";
   const content = open && <div className={compact ? "space-y-3 py-4" : "space-y-5 px-4 py-5"}>
       {reordering ? <ReorderDeviceFlow slug={slug} receipt={reordering} onBusyChange={setReorderBusy}
         onCatalogVerified={onCatalogVerified} onBack={() => setReordering(null)} onReordered={() => { setReordering(null); onReordered?.(); }} /> : <>
@@ -188,6 +188,8 @@ function DeviceOrdersSession({ open, slug, tenantName, embed = false, onClose, p
         : <p className="text-xs leading-5 text-mut">Une demande interrompue se reprend depuis le panier. Effacer les données de ce navigateur supprime ses raccourcis, pas vos commandes auprès du restaurant.</p>}
       </>}
     </div>;
+  if (presentation === "embedded") return open ? <section aria-label="Commandes invitées sur cet appareil">
+    <h3 className="text-base font-bold">Sur cet appareil</h3>{content}</section> : null;
   if (presentation === "page") return open ? <section aria-label="Mes commandes" className="mx-auto w-full max-w-3xl">
     <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3 pt-6"><h2 className="text-[17px] font-extrabold uppercase tracking-[-.025em] text-accentink">Mes commandes</h2><p className="text-xs text-mut">Sur cet appareil</p></header>{content}</section> : null;
   return <Sheet open={open} onClose={close} navigationLocked={navigationLocked} title="Mes commandes" maxHeight="92%" headerExtra={<p className="mt-1 truncate text-xs text-mut">Sur cet appareil · {tenantName}</p>}>{content}</Sheet>;

@@ -8,6 +8,7 @@ import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type Page, type CDPSession, type Request as BrowserRequest } from 'playwright';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { CustomerAccountBrowserRequests } from '@sm/contracts';
 import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
 // Real Entry, hook, private transport, IndexedDB selector and Web Locks.
@@ -15,7 +16,8 @@ import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
 let faults: string[], calls: Record<string, unknown>[], expiry: number, registered: boolean, name: string | null;
 let outcome: 'normal' | 'terms' | 'collision' | 'unavailable' | 'refused' | 'lost' | 'held', release: (() => void) | null;
-let version: number, captures: string;
+let version: number, revision: number, captures: string;
+let profileWrites: Record<string, unknown>[], holdProfile: boolean, releaseProfile: (() => void) | null;
 let failures: { request: BrowserRequest; error: string | undefined; closing: boolean }[], discardedErrors: Set<BrowserRequest>;
 let inflight: Set<BrowserRequest>, closing: boolean, sequence: number, session: CDPSession;
 type ReadMark = { id: string; event: string; bytes?: number };
@@ -26,7 +28,7 @@ type IdentityRefusal = { before: Selection; after: Selection; current: Selection
   profileRequest: BrowserRequest; privateSections: number; balances: number; qrImages: number };
 type DisposedResponse = { heldRequest: BrowserRequest; phases: string[]; sectionRemovedBeforeRelease: boolean;
   sectionStillRemovedAfterEof: boolean; profileAfterEof: boolean; privateSections: number; balances: number; qrImages: number };
-const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte/session', loyalty: '/r/recette/compte/fidelite' };
+const paths = { caps: '/r/recette/compte/capacites', session: '/r/recette/compte/session', profile: '/r/recette/compte/profil', loyalty: '/r/recette/compte/fidelite' };
 let marks: ReadMark[], wires: Map<BrowserRequest, Wire>, rendered: Set<string>;
 let expectedFailures: Set<BrowserRequest>, transportFault: 'none' | 'truncated' | 'invalid-json' | 'invalid-contract';
 let identityRefusals: Map<BrowserRequest, IdentityRefusal>;
@@ -39,6 +41,7 @@ function completeResponseRead(failure: Failure, wire: Wire | undefined, observed
     || !Number.isSafeInteger(wire.bytes) || wire.bytes <= 0 || wire.bytes > 49_152) return false;
   const path = new URL(failure.request.url()).pathname, method = failure.request.method();
   if (new URL(failure.request.url()).origin !== origin || !((path === paths.loyalty && method === 'POST')
+    || (path === paths.profile && method === 'PATCH')
     || ([paths.caps, paths.session].includes(path) && method === 'GET'))) return false;
   const own = observed.filter(mark => mark.id === wire.id), eof = own.filter(mark => mark.event === 'eof');
   return eof.length === 1 && eof[0]!.bytes === wire.bytes && own.some(mark => mark.event === 'json-valid')
@@ -81,12 +84,12 @@ declare global { interface Window { loyaltyFixtureRead: (metadata: string) => vo
   prepareLoyaltyCamera: (value: string, held: boolean) => Promise<void>; releaseLoyaltyCamera: () => void;
   loyaltyCameraRequested: boolean; loyaltyCameraTracks: () => string[] } }
 const program = () => ({ id: '50000000-0000-4000-8000-000000000005', version, name: 'Les habitués du Comptoir', mechanism: 'points',
-  termsSummary: 'Cumulez vos points au comptoir. Récompenses selon les conditions du restaurant.', unitLabelSingular: 'point', unitLabelPlural: 'points' });
+  termsSummary: `Cumulez vos points au comptoir. Récompenses selon les conditions du restaurant. Version ${version}.`, unitLabelSingular: 'point', unitLabelPlural: 'points' });
 const member = { id: '60000000-0000-4000-8000-000000000006', joinedAt: '2026-09-09T12:00:00.000Z', qrGeneration: 1, balanceUnits: 25, unitLabelSingular: 'point', unitLabelPlural: 'points' };
 beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url)), cssPath = fileURLToPath(new URL('../../app/globals.css', import.meta.url));
   const bundle = await build({ stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';import{CustomerAccountEntry}from'./CustomerAccountEntry';import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
-    import{CustomerLoyaltyResponseSchema,CustomerLoyaltyRequestSchema,CustomerAccountResponses,CustomerAccountViewSchema}from'@sm/contracts';import QRCode from'qrcode';
+    import{CustomerLoyaltyResponseSchema,CustomerLoyaltyRequestSchema,CustomerAccountBrowserRequests,CustomerAccountResponses,CustomerAccountViewSchema}from'@sm/contracts';import QRCode from'qrcode';
     let cameraStream;window.loyaltyCameraRequested=false;window.loyaltyCameraTracks=()=>cameraStream?.getTracks().map(track=>track.readyState)??[];
     window.prepareLoyaltyCamera=async(value,held)=>{const canvas=document.createElement('canvas');await QRCode.toCanvas(canvas,value,{width:400,margin:4});
       navigator.mediaDevices.getUserMedia=()=>new Promise(resolve=>{window.loyaltyCameraRequested=true;
@@ -95,22 +98,40 @@ beforeAll(async () => {
         if(held)window.releaseLoyaltyCamera=start;else start();});};
     window.validateLoyaltyFixture=(value,path,body)=>{if(path==='/r/recette/compte/capacites')return CustomerAccountResponses.status.safeParse(value).success;
       if(path==='/r/recette/compte/session')return CustomerAccountViewSchema.safeParse(value).success;
+      if(path==='/r/recette/compte/profil')return CustomerAccountBrowserRequests.name.safeParse(body).success&&CustomerAccountResponses.name.safeParse(value).success;
       if(path!=='/r/recette/compte/fidelite')return false;
       const input=CustomerLoyaltyRequestSchema.safeParse(body),output=CustomerLoyaltyResponseSchema.safeParse(value);
       return input.success&&output.success&&(output.data.state!=='card'||input.data.step==='card');};
-    createRoot(document.getElementById('root')).render(<React.StrictMode><main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Le Comptoir</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir"/><button>Commander en invité</button></main></React.StrictMode>);`,
-    resolveDir: root, sourcefile: 'customer-loyalty-ui.tsx', loader: 'tsx' }, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022', outdir: '/virtual-loyalty', define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"' } });
+    const query=new URLSearchParams(location.search);
+    createRoot(document.getElementById('root')).render(<React.StrictMode><main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Le Comptoir</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" loyaltyHref={query.get('eligible')==='0'?undefined:'/r/recette/fidelite'} initialSection={query.get('section')==='loyalty'?'loyalty':'profile'}/><button>Commander en invité</button></main></React.StrictMode>);`,
+    resolveDir: root, sourcefile: 'customer-loyalty-ui.tsx', loader: 'tsx' }, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022', outdir: '/virtual-loyalty',
+    alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"' } });
   const css = await postcss([tailwind({ base: fileURLToPath(new URL('../../..', import.meta.url)) })]).process(await readFile(cssPath, 'utf8'), { from: cssPath });
   server = createServer((req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; form-action 'none'; base-uri 'none'");
     const json = (value: unknown, status = 200) => { const body = JSON.stringify(value); res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'x-sm-fixture-request-id': String(++sequence) }); res.end(body); };
     if (req.url === '/app.js' && req.method === 'GET') { res.setHeader('content-type', 'text/javascript'); res.end(bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
-    if (req.url === '/style.css' && req.method === 'GET') { res.setHeader('content-type', 'text/css'); res.end(css.css); return; }
+    if (req.url === '/style.css' && req.method === 'GET') { res.setHeader('content-type', 'text/css'); res.end(css.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '')); return; }
     if (req.url === '/favicon.ico') { res.writeHead(204).end(); return; }
-    if (req.url === '/' && req.method === 'GET') { res.setHeader('content-type', 'text/html'); res.end('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account loyalty fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/app.js"></script></html>'); return; }
+    if (new URL(req.url ?? '/', 'http://fixture.local').pathname === '/' && req.method === 'GET') { res.setHeader('content-type', 'text/html'); res.end('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account loyalty fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/app.js"></script></html>'); return; }
     if (req.url === '/r/recette/compte/capacites' && req.method === 'GET') { json({ available: false }); return; }
-    if (req.url === '/r/recette/compte/session' && req.method === 'GET') { json({ expiresAt: expiry, profile: { name, phoneE164: '+33600000000', phoneVerifiedAt: 1_700_000_000_000, revision: 0 } }); return; }
+    const accountView = () => ({ expiresAt: expiry, profile: { name, phoneE164: '+33600000000', phoneVerifiedAt: 1_700_000_000_000, revision } });
+    if (req.url === paths.session && req.method === 'GET') { json(accountView()); return; }
+    if (req.url === paths.profile && req.method === 'PATCH') {
+      let body = ''; req.on('data', chunk => { body += String(chunk); if (body.length > 4096) req.destroy(); });
+      req.on('end', () => {
+        const input = CustomerAccountBrowserRequests.name.safeParse(JSON.parse(body));
+        if (!input.success || input.data.expectedRevision !== revision
+          || !req.headers['x-sm-customer-operation-id'] || !req.headers['x-sm-customer-check-id'] || !req.headers['x-sm-customer-browser-ref']) {
+          faults.push('Invalid profile fixture write or missing protected selection'); json({}, 400); return;
+        }
+        profileWrites.push(input.data);
+        const finish = () => { name = input.data.name; revision++; json(accountView()); };
+        if (holdProfile) releaseProfile = finish; else finish();
+      }); return;
+    }
     if (req.url !== '/r/recette/compte/fidelite' || req.method !== 'POST') { faults.push(`Unexpected fixture request ${req.method} ${req.url}`); res.writeHead(404).end(); return; }
     let body = ''; req.on('data', chunk => { body += String(chunk); if (body.length > 4096) req.destroy(); });
     req.on('end', () => {
@@ -143,6 +164,7 @@ beforeAll(async () => {
 }, 30_000);
 beforeEach(async () => {
   faults = []; calls = []; expiry = Date.now() + 60_000; registered = false; name = 'Camille Recette'; outcome = 'normal'; release = null; version = 1;
+  revision = 0; profileWrites = []; holdProfile = false; releaseProfile = null;
   failures = []; discardedErrors = new Set();
   expectedFailures = new Set(); transportFault = 'none';
   identityRefusals = new Map();
@@ -217,7 +239,7 @@ beforeEach(async () => {
   await page.goto(origin); await seedCustomerBrowserFixture(page, 'recette');
 });
 afterEach(async () => {
-  release?.();
+  release?.(); releaseProfile?.();
   try {
     await expect.poll(() => inflight.size, { timeout: 1000 }).toBe(0);
     await session.send('Runtime.evaluate', { expression: 'void 0' });
@@ -244,10 +266,10 @@ async function openLoyalty() {
   await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
   await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).waitFor();
   expect(await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).inputValue()).toBe(name ?? '');
-  expect(await page.getByRole('button', { name: 'Fidélité de mon compte', exact: true }).count()).toBe(1);
+  expect(await page.getByRole('button', { name: /^Ma carte fidélité(?:\s|$)/ }).count()).toBe(1);
   expect(await page.getByRole('button', { name: 'Créer mon compte', exact: true }).count()).toBe(0);
   await markUI(paths.caps); await markUI(paths.session);
-  await page.getByRole('button', { name: 'Fidélité de mon compte', exact: true }).click();
+  await page.getByRole('button', { name: /^Ma carte fidélité(?:\s|$)/ }).click();
   await page.getByRole('heading', { name: 'Ma fidélité', exact: true }).waitFor();
   if (outcome !== 'held') await verifyLoyalty(outcome === 'collision' ? 'existing_card' : outcome === 'unavailable' ? 'unavailable' : registered ? 'member' : 'available');
 }
@@ -267,7 +289,7 @@ async function markUI(path: string, state?: string) {
 async function verifyLoyalty(state: 'available' | 'terms_changed' | 'member' | 'card' | 'existing_card' | 'attachment_refused' | 'unavailable') {
   if (state === 'available' || state === 'terms_changed') {
     await page.getByText('Les habitués du Comptoir', { exact: true }).waitFor();
-    if (name) await page.getByRole('checkbox').waitFor(); else await page.getByRole('button', { name: 'Compléter mon profil', exact: true }).waitFor();
+    if (name) await page.getByRole('checkbox').waitFor(); else await page.getByRole('button', { name: 'Continuer vers ma carte', exact: true }).waitFor();
     if (state === 'terms_changed') await page.getByText(/conditions ont changé/).waitFor();
   } else if (state === 'member' || state === 'card') {
     await page.getByText('25 points', { exact: true }).waitFor();
@@ -429,7 +451,7 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     await page.getByLabel('Code de votre carte', { exact: true }).fill('A'.repeat(43));
     await page.getByRole('checkbox').check(); await page.evaluate(() => document.fonts.ready);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const dialog = page.getByRole('dialog', { name: 'Mon compte', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Mon compte et ma fidélité', exact: true });
     const controls = [...await dialog.getByRole('button').all(), page.getByLabel('Code de votre carte', { exact: true }), page.getByRole('checkbox').locator('..')];
     for (const control of controls) {
       await control.scrollIntoViewIfNeeded(); const bounds = await control.boundingBox(); expect(bounds?.height).toBeGreaterThanOrEqual(44);
@@ -510,11 +532,78 @@ describe('account loyalty — native UI with isolated HTTP', () => {
     await accept(); await verifyLoyalty('member'); expect(calls[2]?.rulesVersion).toBe(2);
     expect(calls[2]?.operationId).not.toBe(calls[1]?.operationId);
   });
-  it('uses the existing profile editor when a name is required', async () => {
-    name = null; await openLoyalty(); await page.getByRole('button', { name: 'Compléter mon profil', exact: true }).click();
+  it('completes the name inline, hides private data until ACK, then rereads terms before an explicit join without a phone', async () => {
+    name = null; await openLoyalty();
+    const dialog = await page.getByRole('dialog', { name: 'Mon compte et ma fidélité', exact: true }).elementHandle();
+    const profile = page.getByRole('region', { name: 'Votre profil', exact: true });
+    const input = profile.getByRole('textbox', { name: 'Votre prénom ou nom' });
+    const continueButton = profile.getByRole('button', { name: 'Continuer vers ma carte', exact: true });
+    expect(await page.getByRole('region', { name: 'Fidélité de votre compte' }).count()).toBe(1);
+    expect(await input.inputValue()).toBe(''); expect(await continueButton.isDisabled()).toBe(true);
+    expect(await page.getByRole('checkbox').count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).count()).toBe(0);
+    expect(calls).toEqual([{ step: 'view' }]);
+    await input.fill('Camille Fidélité');
+    const viewedSelection = await journalSelection();
+    // The rules change while the customer edits. The old displayed offer must
+    // never authorize a join after the protected profile mutation remounts it.
+    version = 2; holdProfile = true;
+    await continueButton.click(); await expect.poll(() => releaseProfile !== null).toBe(true);
+    expect(profileWrites).toEqual([{ name: 'Camille Fidélité', expectedRevision: 0 }]);
+    expect(await page.getByRole('region', { name: 'Votre profil', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('region', { name: 'Fidélité de votre compte' }).count()).toBe(0);
+    expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer mon compte', exact: true }).count()).toBe(0);
+    expect(calls).toEqual([{ step: 'view' }]); expect(await dialog!.evaluate(node => node.isConnected)).toBe(true);
+    releaseProfile?.(); releaseProfile = null;
+    await verifyLoyalty('available'); await markUI(paths.profile); await markUI(paths.session);
+    expect(await dialog!.evaluate(node => node.isConnected)).toBe(true);
+    expect(page.url()).toBe(`${origin}/`);
+    expect(await page.getByText('Camille Fidélité', { exact: true }).count()).toBe(1);
+    expect(await page.getByRole('region', { name: 'Conditions du programme', exact: true }).textContent()).toContain('Version 2.');
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
+    expect(await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).isDisabled()).toBe(true);
+    expect(calls).toEqual([{ step: 'view' }, { step: 'view' }]);
+    const preflights = [...wires.keys()].filter(request => request.url() === `${origin}${paths.session}`);
+    expect(preflights).toHaveLength(2);
+    expect(requestSelection(preflights[1]!)).toEqual(viewedSelection);
+    const saved = [...wires.keys()].find(request => request.url() === `${origin}${paths.profile}`)!;
+    expect(requestSelection(saved)).toEqual(viewedSelection); expect(await journalSelection()).toEqual(viewedSelection);
+    await accept(); await verifyLoyalty('member');
+    expect(calls.map(call => call.step)).toEqual(['view', 'view', 'join']);
+    expect(calls[2]).toMatchObject({ step: 'join', rulesVersion: 2, termsAccepted: true });
+    expect(Object.keys(calls[2]!).sort()).toEqual(['operationId', 'programId', 'rulesVersion', 'step', 'termsAccepted', 'termsNoticeVersion'].sort());
+    expect(JSON.stringify(calls)).not.toContain('+33600000000');
+    expect(await page.getByRole('img', { name: 'QR de votre carte fidélité' }).count()).toBe(0);
+    expect(await privateQrPersisted()).toBe(false);
+  });
+  it.each(['profile', 'loyalty'])('hides loyalty without public eligibility, including a requested %s destination', async section => {
+    await page.goto(`${origin}/?eligible=0&section=${section}`);
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
     await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).waitFor();
-    await expect.poll(() => page.getByRole('textbox', { name: 'Votre prénom ou nom' }).evaluate(node => node === document.activeElement)).toBe(true);
-    expect(calls.map(call => call.step)).toEqual(['view']);
+    expect(await page.getByRole('textbox', { name: 'Votre prénom ou nom' }).inputValue()).toBe(name);
+    await markUI(paths.caps); await markUI(paths.session);
+    expect(await page.getByRole('button', { name: /^Ma carte fidélité(?:\s|$)/ }).count()).toBe(0);
+    expect(await page.getByRole('link', { name: 'Fidélité du restaurant', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('region', { name: 'Fidélité de votre compte' }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: /^Mes commandes\b/ }).count()).toBe(1);
+    expect(calls).toEqual([]); expect(profileWrites).toEqual([]);
+  });
+  it('opens an eligible direct loyalty destination only after reading the protected session, without automatic enrollment', async () => {
+    await page.goto(`${origin}/?section=loyalty`);
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await verifyLoyalty('available'); await markUI(paths.caps); await markUI(paths.session);
+    expect(await page.getByRole('dialog', { name: 'Mon compte et ma fidélité', exact: true }).count()).toBe(1);
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
+    expect(await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).isDisabled()).toBe(true);
+    expect(calls).toEqual([{ step: 'view' }]); expect(profileWrites).toEqual([]);
+    expect(await page.getByRole('img').count()).toBe(0);
+    await page.getByRole('button', { name: 'Revenir au menu', exact: true }).click();
+    expect(await page.getByRole('region', { name: 'Fidélité de votre compte' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await verifyLoyalty('available'); await markUI(paths.caps); await markUI(paths.session);
+    expect(calls).toEqual([{ step: 'view' }, { step: 'view' }]);
+    expect(await page.getByRole('checkbox').isChecked()).toBe(false);
   });
   it('does not disclose any other member after a phone collision', async () => {
     outcome = 'collision'; await openLoyalty(); await page.getByText(/présentez votre carte existante/i).waitFor();
@@ -635,8 +724,10 @@ describe('account loyalty — native UI with isolated HTTP', () => {
   it.each([320, 390, 1440])('keeps visible, reachable controls at %ipx including short height', async width => {
     await page.setViewportSize({ width, height: width === 320 ? 568 : 900 }); await openLoyalty(); await page.getByRole('checkbox').waitFor();
     await page.evaluate(() => document.fonts.ready); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const dialog = page.getByRole('dialog', { name: 'Mon compte', exact: true });
-    for (const control of await dialog.getByRole('button').all()) {
+    const dialog = page.getByRole('dialog', { name: 'Mon compte et ma fidélité', exact: true });
+    await dialog.waitFor();
+    const controls = await dialog.getByRole('button').all(); expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) {
       await control.scrollIntoViewIfNeeded(); const bounds = await control.boundingBox(); expect(bounds?.height).toBeGreaterThanOrEqual(44);
       expect(await control.evaluate(node => { const box = node.getBoundingClientRect(); const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); return hit !== null && node.contains(hit); })).toBe(true);
     }

@@ -3,11 +3,18 @@ import { DIRECTIONS } from "@sm/contracts";
 import { publicRestaurantMetadata } from "./restaurant-metadata";
 
 const mocks = vi.hoisted(() => ({ site: vi.fn(), ticket: vi.fn(), loyalty: vi.fn() }));
-vi.mock("@/components/order/api", () => ({ loadSite: mocks.site }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/components/order/api", async importOriginal => {
+  const { PublicApiError } = await importOriginal<typeof import("@/components/order/api")>();
+  return { loadSite: mocks.site, PublicApiError };
+});
 vi.mock("@/components/order/Storefront", () => ({ Storefront: () => null }));
 vi.mock("@/components/order/Tracking", () => ({ Tracking: () => null }));
 vi.mock("@/components/loyalty/LoyaltyCardApp", () => ({ LoyaltyCardApp: () => null }));
-vi.mock("@/components/loyalty/public-api", () => ({ loadPublicLoyalty: mocks.loyalty }));
+vi.mock("@/components/loyalty/public-api", async importOriginal => {
+  const { LoyaltyPublicApiError } = await importOriginal<typeof import("@/components/loyalty/public-api")>();
+  return { loadPublicLoyalty: mocks.loyalty, LoyaltyPublicApiError };
+});
 vi.mock("@/components/masque/polices", () => ({ classesPolices: "fonts" }));
 vi.mock("@/app/t/[id]/tracking-api", () => ({
   loadTicket: mocks.ticket,
@@ -18,6 +25,8 @@ import { generateMetadata as restaurant } from "@/app/r/[slug]/page";
 import { generateMetadata as embed } from "@/app/embed/[slug]/page";
 import { generateMetadata as tracking } from "@/app/t/[id]/page";
 import { generateMetadata as loyalty } from "@/app/r/[slug]/fidelite/page";
+import { PublicApiError } from "@/components/order/api";
+import { LoyaltyPublicApiError } from "@/components/loyalty/public-api";
 
 const params = { params: Promise.resolve({ slug: "classfood" }), searchParams: Promise.resolve({}) };
 const trackingParams = (token?: string) => ({
@@ -49,11 +58,39 @@ describe("générateurs de métadonnées publics", () => {
   });
 
   it.each([restaurant, embed])("laisse le layout neutre protéger les erreurs de catalogue", async (generate) => {
-    mocks.site.mockRejectedValue(new Error("404 or upstream outage"));
+    mocks.site.mockRejectedValue(new PublicApiError(503, "Upstream outage"));
     const metadata = await generate(params);
     expect(metadata.manifest ?? null).toBeNull();
     expect(metadata.icons ?? publicRestaurantMetadata.icons).toEqual(publicRestaurantMetadata.icons);
     expect(JSON.stringify(metadata)).not.toContain("/r/classfood/icon.svg");
+    if (generate === restaurant) {
+      expect(metadata.title).toBe("Classfood — Compte et fidélité");
+      expect(metadata.robots).toEqual({ index: false });
+      expect(JSON.stringify(metadata)).not.toContain("introuvable");
+    }
+  });
+
+  it("une panne fidélité conserve les métadonnées et ressources du site sain", async () => {
+    const healthy = await restaurant(params);
+    mocks.loyalty.mockRejectedValue(new LoyaltyPublicApiError(503, "Upstream outage"));
+    expect(await restaurant(params)).toEqual(healthy);
+  });
+
+  it.each([404, 503])("deux réponses %i distinguent absence et indisponibilité sans icône ni installation inventée", async status => {
+    mocks.site.mockRejectedValue(new PublicApiError(status, "Site unavailable"));
+    mocks.loyalty.mockRejectedValue(new LoyaltyPublicApiError(status, "Loyalty unavailable"));
+    const metadata = await restaurant(params);
+    expect(metadata.title).toBe(status === 404 ? "Restaurant introuvable" : "Restaurant temporairement indisponible");
+    expect(metadata.robots).toEqual({ index: false });
+    expect(metadata.manifest ?? null).toBeNull();
+    expect(metadata.icons ?? publicRestaurantMetadata.icons).toEqual(publicRestaurantMetadata.icons);
+    expect(JSON.stringify(metadata)).not.toMatch(/private-token|private-order-id|\/r\/classfood\//);
+  });
+
+  it("une absence de site accompagnée d’une panne fidélité ne devient pas une fausse 404", async () => {
+    mocks.site.mockRejectedValue(new PublicApiError(404, "Absent"));
+    mocks.loyalty.mockRejectedValue(new LoyaltyPublicApiError(503, "Unavailable"));
+    expect((await restaurant(params)).title).toBe("Restaurant temporairement indisponible");
   });
 
   it("ne place que le slug public du ticket dans l'icône du suivi", async () => {
@@ -97,7 +134,7 @@ describe("générateurs de métadonnées publics", () => {
   });
 
   it("une fidélité inactive n'hérite d'aucune installation plateforme", async () => {
-    mocks.loyalty.mockRejectedValue(new Error("404"));
+    mocks.loyalty.mockRejectedValue(new LoyaltyPublicApiError(404, "Absent"));
     expect(await loyalty(params)).toEqual({ title: "Programme fidélité indisponible", robots: { index: false } });
   });
 

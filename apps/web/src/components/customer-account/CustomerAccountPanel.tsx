@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { BrandMode, CustomerAccountView } from '@sm/contracts';
 import { Icon } from '../ui/icons';
 import { Field, Input } from '../ui/fields';
@@ -20,7 +20,7 @@ const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2
 
 /** Kept separate so dropping the authoritative view unmounts every personal
  * draft. No profile data, token, OTP or mutation is persisted by this UI. */
-function Profile({ account, view }: { account: Account; view: CustomerAccountView }) {
+function Profile({ account, view, forLoyalty = false }: { account: Account; view: CustomerAccountView; forLoyalty?: boolean }) {
   const inputId = useId();
   const [draft, setDraft] = useState<{ name: string; revision: number } | null>(null);
   const [logoutChoice, setLogoutChoice] = useState<boolean | null>(null);
@@ -32,7 +32,7 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
   const locked = state.busy || state.status !== 'authenticated';
 
   async function save() {
-    if (locked || stale || invalid || !changed) return;
+    if (locked || stale || invalid || !changed || (forLoyalty && !name.trim())) return;
     if (await saveName(name.trim() || null)) setDraft(null);
   }
   async function confirmLogout() {
@@ -44,7 +44,7 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
       <div className="mb-5 flex items-start gap-3">
         <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
         <div className="min-w-0"><h3 className="font-display text-lg font-extrabold tracking-tight">Votre profil</h3>
-          <p className="mt-1 text-xs leading-5 text-mut">Vos coordonnées personnelles, pour ce restaurant.</p></div>
+          <p className="mt-1 text-xs leading-5 text-mut">{forLoyalty ? 'Le même profil pour votre compte et votre carte fidélité.' : 'Vos coordonnées personnelles, pour ce restaurant.'}</p></div>
       </div>
       <div className="mb-5 rounded-card border border-ink/10 bg-surface p-3">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-mut"><Icon name="check" size={14} />Téléphone vérifié</p>
@@ -52,7 +52,7 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
         <p className="mt-1 text-xs leading-5 text-mut">Le changement de numéro n’est pas encore disponible.</p>
       </div>
       <form onSubmit={event => { event.preventDefault(); void save(); }} className="space-y-3">
-        <Field label="Votre prénom ou nom" htmlFor={inputId} hint="Facultatif. Ce nom ne modifie pas vos commandes déjà passées.">
+        <Field label="Votre prénom ou nom" htmlFor={inputId} hint={forLoyalty ? 'Un nom pour votre carte. Votre téléphone est déjà vérifié.' : 'Facultatif. Ce nom ne modifie pas vos commandes déjà passées.'}>
           <Input id={inputId} value={name} autoComplete="name" maxLength={120} disabled={locked}
             onChange={event => setDraft({ name: event.target.value, revision: draft?.revision ?? view.profile.revision })} />
         </Field>
@@ -61,12 +61,12 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
           <p>Le profil a été actualisé depuis votre saisie. Votre brouillon n’a pas été envoyé.</p>
           <Tap className="mt-2 min-h-11 text-left font-bold underline underline-offset-4" disabled={locked} onClick={() => setDraft(null)}>Utiliser le profil actualisé</Tap>
         </div>}
-        <Tap type="submit" className={primary} disabled={locked || stale || invalid || !changed}>
-          <Icon name="check" size={16} />Enregistrer mon profil
+        <Tap type="submit" className={primary} disabled={locked || stale || invalid || !changed || (forLoyalty && !name.trim())}>
+          <Icon name="check" size={16} />{forLoyalty ? 'Continuer vers ma carte' : 'Enregistrer mon profil'}
         </Tap>
       </form>
     </section>
-    <section aria-label="Votre session" className="space-y-3 border-t border-ink/10 pt-4">
+    {!forLoyalty && <section aria-label="Votre session" className="space-y-3 border-t border-ink/10 pt-4">
       <h3 className="text-sm font-bold">Votre session</h3>
       {logoutChoice === null ? <div className="grid gap-2 sm:grid-cols-2">
         <Tap className={secondary} disabled={locked} onClick={() => setLogoutChoice(false)}>Déconnecter cet appareil</Tap>
@@ -79,20 +79,41 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
           <Tap className={secondary} disabled={locked} onClick={() => void confirmLogout()}><Icon name="logout" size={16} />Confirmer la déconnexion</Tap>
         </div>
       </div>}
-    </section>
+    </section>}
   </div>;
 }
 
-export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, onDevicePreferences, onCatalogVerified, account, slug, mode = 'light', returnLabel = 'Revenir au menu' }: {
+function AccountSurface({ presentation, title, restaurantName, open, onClose, locked, footer, children, compact }: {
+  presentation: 'sheet' | 'page'; title: string; restaurantName: string; open: boolean;
+  onClose: () => void; locked: boolean; footer: ReactNode; children: ReactNode;
+  compact?: boolean;
+}) {
+  const heading = useId();
+  if (presentation === 'page') return <section className={`sm-account-page${compact ? ' sm-account-page-compact' : ''}`} aria-labelledby={heading}>
+    <header className="sm-account-page-heading"><p>{restaurantName}</p><h2 id={heading}>{title}</h2></header>
+    {children}
+  </section>;
+  return <Sheet open={open} onClose={onClose} title={title} navigationLocked={locked}
+    headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>} footer={footer}>{children}</Sheet>;
+}
+
+export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, onDevicePreferences, onCatalogVerified, account, slug, mode = 'light', returnLabel = 'Revenir au menu', initialSection = 'profile', presentation = 'sheet', onOrders, onLoyalty, onNavigationLockedChange }: {
   open: boolean; onClose: () => void; restaurantName: string; loyaltyHref?: string | undefined;
   onDeviceOrders?: (() => void) | undefined; onDevicePreferences?: (() => void) | undefined; account: Account;
   slug?: string; mode?: BrandMode; onCatalogVerified?: (categories: MenuCategory[]) => void;
   returnLabel?: 'Revenir au menu' | 'Revenir à la fidélité' | undefined;
+  initialSection?: 'profile' | 'loyalty';
+  presentation?: 'sheet' | 'page';
+  onOrders?: () => void; onLoyalty?: () => void; onNavigationLockedChange?: (locked: boolean) => void;
 }) {
-  const { state, refresh } = account;
+  const { state, refresh, currentAccess } = account;
   const [enrollmentActive, setEnrollmentActive] = useState(false);
+  const [enrollmentBusy, setEnrollmentBusy] = useState(false);
+  const [loyaltyBusy, setLoyaltyBusy] = useState(false);
+  const [ordersBusy, setOrdersBusy] = useState(false);
   const [ordersAccess, setOrdersAccess] = useState<CustomerAccountAccess | null>(null);
   const [loyaltyAccess, setLoyaltyAccess] = useState<CustomerAccountAccess | null>(null);
+  const [loyaltyRequested, setLoyaltyRequested] = useState(initialSection === 'loyalty');
   const ordersTrigger = useRef<HTMLButtonElement>(null);
   const loyaltyTrigger = useRef<HTMLButtonElement>(null);
   const profileRegion = useRef<HTMLDivElement>(null);
@@ -101,11 +122,33 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   const needsRetry = ['idle', 'error', 'offline', 'unavailable'].includes(state.status);
   const view = open ? state.view : null;
   const readingOrders = !!view && !!slug && sameOrderAccess(ordersAccess, account.currentAccess?.() ?? null);
-  const readingLoyalty = !!view && !!slug && sameOrderAccess(loyaltyAccess, account.currentAccess?.() ?? null);
+  // Public visibility is only a navigation hint. Every private read and write
+  // still rechecks the current subscription, programme and protected session.
+  const loyaltyEnabled = Boolean(slug && loyaltyHref);
+  const readingLoyalty = !!view && loyaltyEnabled && sameOrderAccess(loyaltyAccess, account.currentAccess?.() ?? null);
+  useEffect(() => {
+    if (!open || !view || !loyaltyEnabled || !loyaltyRequested || state.busy) return;
+    const access = currentAccess?.();
+    if (access) {
+      // Capture once when the external protected-session store publishes its
+      // verified selection; never follow a later identity change implicitly.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoyaltyAccess(access); setLoyaltyRequested(false);
+    }
+  }, [open, view, loyaltyEnabled, loyaltyRequested, state.busy, currentAccess]);
+  const authenticated = useCallback((source?: 'enrollment' | 'access') => {
+    if (source === 'enrollment' && loyaltyHref) {
+      if (onLoyalty) onLoyalty(); else setLoyaltyRequested(true);
+    }
+    void refresh();
+  }, [refresh, loyaltyHref, onLoyalty]);
+  const navigationBusy = state.busy || enrollmentBusy || loyaltyBusy || ordersBusy;
+  useEffect(() => { onNavigationLockedChange?.(navigationBusy); return () => onNavigationLockedChange?.(false); }, [navigationBusy, onNavigationLockedChange]);
   const leaveOrders = () => { setOrdersAccess(null); requestAnimationFrame(() => ordersTrigger.current?.focus()); };
-  const leaveLoyalty = () => { setLoyaltyAccess(null); requestAnimationFrame(() => loyaltyTrigger.current?.focus()); };
+  const leaveLoyalty = () => { if (presentation === 'page' && initialSection === 'loyalty') { onClose(); return; }
+    setLoyaltyAccess(null); requestAnimationFrame(() => loyaltyTrigger.current?.focus()); };
   const completeProfile = () => { setLoyaltyAccess(null); requestAnimationFrame(() => profileRegion.current?.querySelector('input')?.focus()); };
-  const closePanel = () => { setOrdersAccess(null); setLoyaltyAccess(null); onClose(); };
+  const closePanel = () => { if (navigationBusy) return; setOrdersAccess(null); setLoyaltyAccess(null); setLoyaltyRequested(false); onClose(); };
   const title = state.status === 'offline' ? 'Vous êtes hors connexion'
     : state.status === 'unavailable' ? 'Compte indisponible pour le moment'
       : state.status === 'error' ? 'Vérification interrompue'
@@ -116,18 +159,19 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
     ? state.accessAvailable ? 'Vous pouvez retrouver votre compte ou continuer votre commande en invité.' : state.registrationAvailable ? 'Vous pouvez créer un compte protégé ou continuer votre commande en invité.' : 'La création et la connexion au compte ne sont pas encore ouvertes.'
     : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
       : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
-  return <Sheet open={open} onClose={closePanel} title="Mon compte" navigationLocked={state.busy}
-    headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>}
-    footer={<Tap className={view || state.registrationAvailable || state.accessAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={state.busy} onClick={closePanel}>
+  return <AccountSurface presentation={presentation} compact={initialSection === 'loyalty'} open={open} onClose={closePanel}
+    title={presentation === 'page' ? initialSection === 'loyalty' ? 'Ma fidélité' : 'Mon compte' : readingLoyalty || loyaltyRequested ? 'Mon compte et ma fidélité' : 'Mon compte'} restaurantName={restaurantName} locked={navigationBusy}
+    footer={<Tap className={view || state.registrationAvailable || state.accessAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={navigationBusy} onClick={closePanel}>
       {returnLabel}
     </Tap>}>
-    <div className="space-y-4 p-4 pb-5 sm:p-5">
+    <div className={presentation === 'page' ? 'sm-account-page-content space-y-5' : 'space-y-4 p-4 pb-5 sm:p-5'}>
       {readingLoyalty && loyaltyAccess && slug && view ? <CustomerLoyalty slug={slug} access={loyaltyAccess} currentAccess={account.currentAccess}
-        restaurantName={restaurantName} profileName={view.profile.name} onBack={leaveLoyalty} onProfile={completeProfile} />
-        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} onCatalogVerified={onCatalogVerified} /> : <>
+        restaurantName={restaurantName} profileName={view.profile.name} onBack={leaveLoyalty} onProfile={completeProfile} showHeading={presentation !== 'page'} showBack={presentation !== 'page'} onBusyChange={setLoyaltyBusy}
+        profileEditor={<Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} forLoyalty />} />
+        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} onCatalogVerified={onCatalogVerified} onNavigationLockedChange={setOrdersBusy} /> : <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
-      {view ? <>{slug && <Tap ref={ordersTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><Icon name="ticket" size={18} /><span className="flex-1 text-left">Commandes de mon compte</span><Icon name="arrow" size={14} /></Tap>}
-        {slug && <Tap ref={loyaltyTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setLoyaltyAccess(access); }}><Icon name="gift" size={18} /><span className="flex-1 text-left">Fidélité de mon compte</span><Icon name="arrow" size={14} /></Tap>}
+      {view ? <><nav aria-label="Votre espace personnel" className="sm-account-destinations">{slug && <Tap ref={ordersTrigger} className="sm-account-destination" disabled={navigationBusy} onClick={() => { if (onOrders) { onOrders(); return; } const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><span className="sm-account-destination-icon"><Icon name="ticket" size={21} /></span><span className="min-w-0 flex-1 text-left"><b>Mes commandes</b><small>Historique et suivi</small></span><Icon name="arrow" size={16} /></Tap>}
+        {loyaltyEnabled && <Tap ref={loyaltyTrigger} className="sm-account-destination" disabled={navigationBusy} onClick={() => { if (onLoyalty) { onLoyalty(); return; } const access = account.currentAccess?.(); if (access) setLoyaltyAccess(access); }}><span className="sm-account-destination-icon"><Icon name="gift" size={21} /></span><span className="min-w-0 flex-1 text-left"><b>Ma carte fidélité</b><small>Carte, solde et avantages</small></span><Icon name="arrow" size={16} /></Tap>}</nav>
         <div ref={profileRegion}><Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} /></div></>
         : enrollmentActive ? null : loading ? <div role="status" className="min-h-40 rounded-panel border border-ink/10 bg-surface2 p-5">
           <p className="text-sm font-semibold">Vérification de votre session…</p>
@@ -142,24 +186,24 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           </div>
           <p className="mt-3 text-sm leading-6 text-mut">{message}</p>
         </section>}
-      {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)) && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
+      {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)) && <Tap className={secondary + ' w-full'} disabled={navigationBusy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
       {/* A mutation clears the private view before releasing its Web Lock and
           notifying other forms. Do not mount a new credential flow in that gap. */}
       {open && !view && !state.busy && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
-        smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={refresh} onActivity={activity} />}
-      {!view && !loading && <p className="text-xs leading-5 text-mut">La carte fidélité ne donne pas accès à ce compte.</p>}
-      {(onDeviceOrders || loyaltyHref || onDevicePreferences) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
+        smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={authenticated} onActivity={activity} onBusyChange={setEnrollmentBusy} />}
+      {!view && !loading && loyaltyEnabled && <p className="text-xs leading-5 text-mut">Un seul compte pour vos commandes et votre fidélité. Une carte déjà remise par le restaurant peut être rattachée après connexion.</p>}
+      {(onDeviceOrders || (loyaltyHref && !view && presentation === 'sheet') || onDevicePreferences) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
         <h3 className="mb-3 text-sm font-bold">Autres accès</h3>
-        {onDeviceOrders && <Tap disabled={state.busy} onClick={() => { onClose(); onDeviceOrders(); }}
+        {onDeviceOrders && <Tap disabled={navigationBusy} onClick={() => { onClose(); onDeviceOrders(); }}
           aria-label="Mes commandes sur cet appareil" className={secondary + ' w-full justify-start text-left'}>
           <Icon name="ticket" size={18} /><span className="min-w-0 flex-1"><span className="block font-bold">Mes commandes</span><span className="block text-xs font-normal text-mut">Sur cet appareil uniquement</span></span><Icon name="arrow" size={15} />
         </Tap>}
-        {onDevicePreferences && <Tap disabled={state.busy} onClick={() => { closePanel(); onDevicePreferences(); }}
+        {onDevicePreferences && <Tap disabled={navigationBusy} onClick={() => { closePanel(); onDevicePreferences(); }}
           className={secondary + ' w-full justify-start text-left'}><Icon name="gear" size={18} /><span className="flex-1">Préférences de cet appareil</span><Icon name="arrow" size={15} /></Tap>}
-        {loyaltyHref && (state.busy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Fidélité du restaurant</span>
+        {loyaltyHref && !view && presentation === 'sheet' && (navigationBusy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Fidélité du restaurant</span>
           : <Link href={loyaltyHref} prefetch={false} onClick={onClose} className={secondary + ' w-full justify-start'}><Icon name="gift" size={18} /><span className="flex-1">Fidélité du restaurant</span><Icon name="arrow" size={15} /></Link>)}
       </nav>}
       </>}
     </div>
-  </Sheet>;
+  </AccountSurface>;
 }

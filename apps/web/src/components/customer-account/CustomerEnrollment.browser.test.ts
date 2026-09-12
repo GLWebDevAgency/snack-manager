@@ -21,7 +21,10 @@ let faults: string[], steps: string[], operationId: string, checkId: string, act
   challengeId: string, expiresAt: number, browserExpires: number, stage: string, recoveryVersion: number, recoveryCode: string,
   challenge: string, userId: string, credential: Credential | null, sms: number, activated: number, loseActivation: boolean, registrationAvailable: boolean;
 let smsAvailable: boolean, heldCode: Promise<void> | null, releaseCode: (() => void) | null;
-const profile = () => ({ expiresAt: browserExpires, profile: { name: null, phoneE164: '+33600000000', phoneVerifiedAt: Date.now() - 1_000, revision: 0 } });
+let profileName: string | null, profileRevision: number, verifiedAt: number, loyaltyJoined: boolean, loseJoin: boolean;
+let loyaltyRequests: Record<string, unknown>[];
+declare global { interface Window { enrollmentCompletionFixture: { sources: Array<string | undefined>; rerender(): void } } }
+const profile = () => ({ expiresAt: browserExpires, profile: { name: profileName, phoneE164: '+33600000000', phoneVerifiedAt: verifiedAt, revision: profileRevision } });
 const enrollment = () => ({ operationId, checkId, expiresAt, stage, recoveryVersion });
 beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url));
@@ -29,8 +32,12 @@ beforeAll(async () => {
   const [bundle, styles] = await Promise.all([build({ stdin: { resolveDir: root, loader: 'tsx', contents: `
     import React from'react';import{createRoot}from'react-dom/client';import{CustomerAccountEntry}from'./CustomerAccountEntry';
     import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
-    createRoot(document.getElementById('root')).render(<main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir"/><button>Commander en invité</button></main>);` },
+    import{useState}from'react';import{CustomerEnrollment}from'./CustomerEnrollment';
+    const completion=window.enrollmentCompletionFixture={sources:[],rerender:()=>{}};const activity=()=>{};
+    function UnstableCallback(){const[tick,setTick]=useState(0);completion.rerender=()=>setTick(value=>value+1);return <div data-render={tick}><CustomerEnrollment slug="recette" mode="light" registrationAvailable smsAvailable onActivity={activity} onAuthenticated={source=>{completion.sources.push(source);if(completion.sources.length<5)setTick(value=>value+1)}}/></div>}
+    createRoot(document.getElementById('root')).render(<main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1>{new URLSearchParams(location.search).has('unstable')?<UnstableCallback/>:<CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" loyaltyHref={new URLSearchParams(location.search).has('loyalty')?'/r/recette/fidelite':undefined}/>}<button>Commander en invité</button></main>);` },
     bundle: true, write: false, outdir: '/virtual-customer-enrollment', format: 'iife', platform: 'browser', jsx: 'automatic', target: 'es2022',
+    alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
     define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': '"fixture-only"' },
     plugins: [{ name: 'isolated-human-widget', setup(builder) {
       builder.onResolve({ filter: /^next\/script$/ }, () => ({ path: 'script', namespace: 'fixture' }));
@@ -49,6 +56,7 @@ beforeEach(async () => {
   recoveryCode = `SM1-${randomBytes(16).toString('hex').toUpperCase().match(/.{4}/g)!.join('-')}`;
   challenge = opaque(); userId = opaque(); credential = null; sms = 0; activated = 0; loseActivation = false; registrationAvailable = true;
   smsAvailable = true; heldCode = null; releaseCode = null;
+  profileName = null; profileRevision = 0; verifiedAt = Date.now() - 1000; loyaltyJoined = false; loseJoin = false; loyaltyRequests = [];
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
@@ -64,6 +72,25 @@ beforeEach(async () => {
     if (action === 'session') return activationId && req.headers()['x-sm-customer-check-id'] === activationId
       ? reply(profile()) : route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
     steps.push(`${action}:${body.step ?? ''}`);
+    if (action === 'profil') {
+      expect(req.method()).toBe('PATCH'); expect(body.expectedRevision).toBe(profileRevision);
+      profileName = body.name; profileRevision++; return reply(profile());
+    }
+    if (action === 'fidelite') {
+      expect(activated).toBe(1); expect(req.headers()['x-sm-customer-check-id']).toBe(activationId);
+      expect(body).not.toHaveProperty('phone'); expect(body).not.toHaveProperty('phoneE164');
+      loyaltyRequests.push(body);
+      if (body.step === 'join') {
+        expect(profileName).toBe('Camille'); expect(body.termsAccepted).toBe(true); loyaltyJoined = true;
+        if (loseJoin) { loseJoin = false; return route.fulfill({ status: 503 }); }
+      }
+      return reply(loyaltyJoined ? { state: 'member', expiresAt: browserExpires,
+        member: { id: '60000000-0000-4000-8000-000000000006', joinedAt: '2026-09-12T12:00:00.000Z', qrGeneration: 1,
+          balanceUnits: 0, unitLabelSingular: 'point', unitLabelPlural: 'points' } }
+        : { state: 'available', expiresAt: browserExpires, profileReady: Boolean(profileName),
+          program: { id: '50000000-0000-4000-8000-000000000005', version: 1, name: 'Les habitués', mechanism: 'points',
+            termsSummary: 'Récompenses selon les conditions du restaurant.', unitLabelSingular: 'point', unitLabelPlural: 'points' } });
+    }
     if (action === 'navigateur') {
       if (body.step === 'restore') return route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
       browserRef ||= body.browserRef;
@@ -97,7 +124,7 @@ beforeEach(async () => {
     }
     faults.push('Unexpected account action'); return route.abort();
   });
-  page = await context.newPage(); page.setDefaultTimeout(7_000); page.on('pageerror', error => faults.push(error.name));
+  page = await context.newPage(); page.setDefaultTimeout(7_000); page.on('pageerror', error => faults.push(`${error.name}: ${error.message}`));
   const cdp = await context.newCDPSession(page); await cdp.send('WebAuthn.enable');
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
     hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
@@ -119,6 +146,49 @@ async function toRecovery() {
   await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).waitFor();
 }
 describe('protected customer enrollment — rendered native browser', () => {
+  it('notifie une seule fois la publication confirmée avec un callback parent instable', async () => {
+    await page.goto(`${origin}/?unstable=1`);
+    await toRecovery();
+    await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).click();
+    await page.getByRole('button', { name: 'Je l’ai conservé, masquer le code', exact: true }).click();
+    await page.getByLabel('Ressaisissez votre code de secours', { exact: true }).fill(recoveryCode);
+    await page.getByRole('button', { name: 'Activer mon compte protégé', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.enrollmentCompletionFixture.sources.length)).toBeGreaterThan(0);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await page.evaluate(() => window.enrollmentCompletionFixture.sources)).toEqual(['enrollment']);
+    await page.evaluate(() => window.enrollmentCompletionFixture.rerender());
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await page.evaluate(() => window.enrollmentCompletionFixture.sources)).toEqual(['enrollment']);
+    expect(activated).toBe(1); expect(sms).toBe(1);
+    expect(await page.getByRole('button', { name: 'Commander en invité', exact: true }).isVisible()).toBe(true);
+  }, 25_000);
+
+  it.each([false, true])('continues the new account into its card with one phone verification and a recoverable join (lost reply: %s)', async lost => {
+    await page.keyboard.press('Escape'); await page.goto(`${origin}/?loyalty=1`);
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await toRecovery();
+    await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).click();
+    await page.getByRole('button', { name: 'Je l’ai conservé, masquer le code', exact: true }).click();
+    await page.getByLabel('Ressaisissez votre code de secours', { exact: true }).fill(recoveryCode);
+    await page.getByRole('button', { name: 'Activer mon compte protégé', exact: true }).click();
+    await page.getByRole('heading', { name: 'Ma fidélité', exact: true }).waitFor();
+    expect(activated).toBe(1); expect(sms).toBe(1); expect(loyaltyRequests.some(request => request.step === 'join')).toBe(false);
+    expect(await page.getByLabel('Numéro de mobile', { exact: true }).count()).toBe(0);
+    await page.getByLabel('Votre prénom ou nom', { exact: true }).fill('Camille');
+    await page.getByRole('button', { name: 'Continuer vers ma carte', exact: true }).click();
+    await page.getByRole('checkbox').waitFor(); expect(profileName).toBe('Camille');
+    await page.getByRole('checkbox').check(); loseJoin = lost;
+    await page.getByRole('button', { name: 'Créer ma carte gratuite', exact: true }).click();
+    if (lost) {
+      await page.getByRole('button', { name: 'Reprendre ma demande', exact: true }).click();
+    }
+    await page.getByRole('heading', { name: 'Votre carte est liée à ce compte', exact: true }).waitFor();
+    expect(sms).toBe(1); expect(activated).toBe(1); expect(profileRevision).toBe(1);
+    const joins = loyaltyRequests.filter(request => request.step === 'join');
+    expect(joins).toHaveLength(lost ? 2 : 1);
+    if (lost) expect(joins[1]).toEqual(joins[0]);
+    if (capture) await page.screenshot({ path: join(capture, `account-card-unified-${lost ? 'recovered' : 'created'}.png`) });
+  }, 25_000);
   it('uses actual native keys and activates only after the recovery code is re-entered', async () => {
     expect(sms).toBe(0); await toRecovery(); expect(sms).toBe(1); expect(activated).toBe(0);
     await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).click();

@@ -7,7 +7,7 @@ import { build } from 'esbuild';
 import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page, type Request as BrowserRequest } from 'playwright';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest';
 import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
 // Real Entry/Sheet/account hook, identity journal, private reader and brand CSS.
@@ -264,9 +264,9 @@ async function verifyList(number = 120, responseId?: string) {
 }
 async function openOrders() {
   await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
-  await page.getByRole('button', { name: 'Commandes de mon compte', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Mes commandes Historique et suivi', exact: true }).waitFor();
   await markUI(paths.caps); await markUI(paths.session);
-  await page.getByRole('button', { name: 'Commandes de mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Mes commandes Historique et suivi', exact: true }).click();
   await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
   if (!hold) await verifyList();
 }
@@ -316,7 +316,7 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
   it('does not treat the authenticated fallback UI as proof of a valid capabilities contract', async () => {
     invalidCapabilities = true;
     await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
-    await page.getByRole('button', { name: 'Commandes de mon compte', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Mes commandes Historique et suivi', exact: true }).waitFor();
     await markUI(paths.session);
     const caps = [...wires.values()].find(wire => wire.path === paths.caps)!;
     expect(marks.some(mark => mark.id === caps.id && mark.event === 'json-valid')).toBe(true);
@@ -396,7 +396,7 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
     expect(await page.getByRole('button', { name: /^Voir la commande n°/ }).count()).toBe(1);
     await markUI(paths.list, calls.at(-1)?.responseId);
     await page.getByRole('button', { name: 'Revenir à mon compte' }).click();
-    await page.waitForFunction(() => document.activeElement?.textContent?.includes('Commandes de mon compte'));
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes('Mes commandes'));
     await page.getByRole('button', { name: 'Mes commandes sur cet appareil' }).click();
     await page.getByText('Sur cet appareil : aucun suivi enregistré').waitFor(); expect(calls).toHaveLength(3);
   });
@@ -456,22 +456,29 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
     expect(identityRefusals.size).toBe(0);
   });
   it.each([false, true])('drops a held A response when the public journal selects B with an identical session projection (invalid fixture contract: %s)', async invalidContract => {
-    hold = true; await openOrders(); await page.getByText('Lecture de vos commandes…', { exact: true }).waitFor();
+    let phase = 'open-orders'; const started = Date.now();
+    const checkpoint = (next: string) => { phase = next; if (process.env.QA_CUSTOMER_ORDERS_DIAGNOSTIC === '1') console.info('Held identity recipe', { invalidContract, phase, elapsedMs: Date.now() - started }); };
+    onTestFailed(() => { console.error('Held identity recipe failure', { invalidContract, phase, elapsedMs: Date.now() - started,
+      calls: calls.length, responses: wires.size, inflight: [...inflight].map(request => ({ method: request.method(), path: new URL(request.url()).pathname })) }); });
+    checkpoint('open-orders'); hold = true; await openOrders(); checkpoint('waiting-held-list'); await page.getByText('Lecture de vos commandes…', { exact: true }).waitFor();
     await expect.poll(() => calls.length).toBe(1);
-    const before = await journalSelection(); expect(calls[0]!.selection).toEqual(before);
+    checkpoint('read-selection-a'); const before = await journalSelection(); expect(calls[0]!.selection).toEqual(before);
+    checkpoint('select-publication-b');
     await page.evaluate(async () => {
       const db = await new Promise<IDBDatabase>(resolve => { const open = indexedDB.open('sm-customer-preparation-v1', 1); open.onsuccess = () => resolve(open.result); });
       await new Promise<void>((resolve, reject) => { const tx = db.transaction('preparations', 'readwrite'); const store = tx.objectStore('preparations'), read = store.get('recette');
         read.onsuccess = () => { const journal = read.result; journal.verification.operationId = crypto.randomUUID(); journal.verification.checkId = crypto.randomUUID(); store.put(journal, 'recette'); };
         tx.oncomplete = () => resolve(); tx.onabort = () => reject(new Error('Fixture CAS failed')); }); db.close();
     });
-    const after = await journalSelection();
+    checkpoint('read-selection-b'); const after = await journalSelection();
     expect(after.browserRef).toBe(before.browserRef); expect(after.operationId).not.toBe(before.operationId); expect(after.checkId).not.toBe(before.checkId);
-    invalidHeldList = invalidContract; hold = false; release?.();
+    checkpoint('release-held-a'); invalidHeldList = invalidContract; hold = false; release?.();
     const alert = page.getByRole('alert'); await alert.getByText(identityAlert, { exact: true }).waitFor();
+    checkpoint('identity-refusal-visible');
     const visibleOrders = await page.getByRole('button', { name: /^Voir la commande n°/ }).count(); expect(visibleOrders).toBe(0);
     await expect.poll(() => inflight.size, { timeout: 1_000 }).toBe(0);
     await session.send('Runtime.evaluate', { expression: 'void 0' });
+    checkpoint('response-observation-flushed');
     const id = calls[0]!.responseId; expect(id).toBeDefined();
     const matches = [...wires.values()].filter(wire => wire.id === id && wire.path === paths.list && wire.method === 'POST');
     expect(matches).toHaveLength(1); const wire = matches[0]!;
@@ -488,6 +495,7 @@ describe('private orders — actual UI/client, read-only local HTTP fixture', ()
     else for (const failure of failed.filter(item => item.id === wire.id)) {
       expect(notificationOutcome(failure, wire, marks, uiVerified, new Map([[wire.id, proof]]))).toBeNull(); expectedFailures.add(failure);
     }
+    checkpoint('complete');
   });
   it('clears rendered data immediately offline and does not restore it from a local order cache', async () => {
     await openOrders(); await page.getByRole('button', { name: 'Voir la commande n° 120' }).waitFor();

@@ -8,6 +8,7 @@ import { Tap } from '../order/primitives';
 import { TurnstileCheck } from '../order/TurnstileCheck';
 import { useCustomerEnrollment } from './useCustomerEnrollment';
 import { CustomerAccess } from './CustomerAccess';
+import { customerPublicationOf } from './browser-journal';
 
 const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-extrabold text-onaccent disabled:cursor-not-allowed disabled:opacity-40';
 const secondary = 'cf-press min-h-11 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40';
@@ -18,13 +19,15 @@ function mobilePhone(raw: string) {
   return /^\+33[67]\d{8}$/.test(phone) ? phone : null;
 }
 
-export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvailable, accessAvailable = false, onAuthenticated, onActivity }: {
-  slug: string; mode: BrandMode; registrationAvailable: boolean; smsAvailable: boolean; onAuthenticated: () => void;
+export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvailable, accessAvailable = false, onAuthenticated, onActivity, onBusyChange }: {
+  slug: string; mode: BrandMode; registrationAvailable: boolean; smsAvailable: boolean; onAuthenticated: (source?: 'enrollment' | 'access') => void;
   onActivity: (active: boolean) => void;
   accessAvailable?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { state, flow } = useCustomerEnrollment(slug);
   const inputId = useId(), heading = useRef<HTMLHeadingElement>(null);
+  const notifiedCompletion = useRef<string | null>(null);
   const [phone, setPhone] = useState(''), [otp, setOtp] = useState(''), [human, setHuman] = useState<string | null>(null);
   const [answer, setAnswer] = useState(''), [saved, setSaved] = useState(false), [closeChoice, setCloseChoice] = useState(false);
   const [humanReset, setHumanReset] = useState(0), [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   const accessActive = access && !['completed', 'closed', 'expired'].includes(access.phase);
   useEffect(() => { onActivity(Boolean(access ? accessActive : started) || state.busy); }, [onActivity, access, accessActive, started, state.busy]);
   useEffect(() => () => onActivity(false), [onActivity]);
+  useEffect(() => { onBusyChange?.(state.busy); return () => onBusyChange?.(false); }, [state.busy, onBusyChange]);
   const title = phase === 'prepared' ? 'Votre numéro de téléphone' : phase === 'code' || phase === 'incorrect' ? 'Le code reçu par SMS'
     : phase === 'protecting' ? stage === 'registration_required' ? 'Créer votre clé d’accès'
       : stage === 'assertion_required' ? 'Vérifier votre clé d’accès' : 'Votre code de secours'
@@ -46,7 +50,19 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
     // typed while a response was still waiting. Never reconstruct it on focus.
     queueMicrotask(() => { setPhone(''); setOtp(''); setHuman(null); setAnswer(''); setSaved(false); setCopyMessage(null); });
   }, [state.clearInputs]);
-  useEffect(() => { if (state.outcome === 'authenticated' || state.outcome === 'approved') onAuthenticated(); }, [state.outcome, onAuthenticated]);
+  useEffect(() => {
+    if (state.outcome === 'authenticated' || state.outcome === 'approved') {
+      const publication = customerPublicationOf(state.record);
+      if (!publication) return;
+      const key = JSON.stringify([slug, state.record!.browserRef, publication.expectedOperationId, publication.expectedCheckId]);
+      if (notifiedCompletion.current === key) return;
+      // A parent navigation/refresh may replace its callback while this exact
+      // completion is still displayed. Notify once, before that parent rerenders.
+      // This volatile key neither grants a session nor survives a remount.
+      notifiedCompletion.current = key;
+      onAuthenticated(phase === 'completed' && !access ? 'enrollment' : 'access');
+    }
+  }, [slug, state.outcome, state.record, phase, access, onAuthenticated]);
   useEffect(() => { if (state.outcome) heading.current?.focus({ preventScroll: true }); }, [phase, stage, state.outcome]);
   // A completed selector is not itself a signed-in session. Let the existing
   // account client own its offline/expired/logout state, without duplicating it.

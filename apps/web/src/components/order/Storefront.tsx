@@ -9,15 +9,16 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useSMTabTransition } from "@/components/ui/SMTabBar";
 import { OrderHeader, OrderHero } from "./OrderHeader";
 import { OrderTabBar } from "./OrderTabBar";
+import { customerAppDestinations, customerAppViewFromPath, type CustomerAppView } from "@sm/client-core";
 import { Recommendations } from "./Recommendations";
 import { applyDevicePreferences } from "./device-preferences";
 import { useDevicePreferences } from "./device-preferences-store";
 import { DevicePreferencesSheet } from "../customer-account/DevicePreferencesSheet";
 import { usePathname } from "next/navigation";
 import { OrderInstall } from "./OrderInstall";
-import { navigateOrderView, useEmbeddedOrderView, useOrderInstallationRequest } from "./order-navigation";
+import { navigateOrderView, useEmbeddedOrderView, useOrderInstallationRequest, useOrderNavigationLock } from "./order-navigation";
 import "./order-v2.css";
-import { logoPour, TYPE_PAIRS, WebsiteUrlSchema } from "@sm/contracts";
+import { logoPour, TYPE_PAIRS, WebsiteUrlSchema, type LoyaltyPublicProgram } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars, Verrou, verrouPour } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
@@ -43,7 +44,10 @@ import {
 } from "./helpers";
 import { Checkout } from "./Checkout";
 import { DeviceOrdersSheet } from "./DeviceOrdersSheet";
-import { CustomerAccountEntry } from "../customer-account/CustomerAccountEntry";
+import { CustomerAccountPage } from "../customer-account/CustomerAccountPage";
+import { CustomerOrdersPage } from "../customer-account/CustomerOrdersPage";
+import { CustomerServiceNotice, type CustomerUnavailableService } from "../customer-account/CustomerServiceNotice";
+import { LoyaltyCardApp } from "../loyalty/LoyaltyCardApp";
 import { useCheckoutRecovery } from "./useCheckoutRecovery";
 import { FideliteVitrine } from "./FideliteVitrine";
 import type { VitrineFidelite } from "./fidelite";
@@ -89,6 +93,8 @@ export function Storefront({
   api = networkApi,
   demo = false,
   loyalty = null,
+  loyaltyCatalog,
+  unavailableService,
 }: {
   site: Site;
   mode?: "site" | "embed";
@@ -119,6 +125,8 @@ export function Storefront({
    * le tunnel.
    */
   loyalty?: VitrineFidelite | null;
+  loyaltyCatalog?: LoyaltyPublicProgram;
+  unavailableService?: CustomerUnavailableService;
 }) {
   const embed = mode === "embed";
   /*
@@ -195,24 +203,28 @@ export function Storefront({
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);
-  const [deviceOrdersOpen, setDeviceOrdersOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const [navigationLocked, setNavigationLocked] = useState(false);
+  const [ordersLocked, setNavigationLocked] = useState(false);
+  const [privateOrdersLocked, setPrivateOrdersLocked] = useState(false);
+  const [accountLocked, setAccountLocked] = useState(false);
+  const [legacyLocked, setLegacyLocked] = useState(false);
+  const navigationLocked = ordersLocked || privateOrdersLocked || accountLocked || legacyLocked;
+  useOrderNavigationLock(navigationLocked);
   const devicePreferences = useDevicePreferences(site.tenant.slug, !demo);
   const pathname = usePathname();
   const panelId = useId();
   const embeddedView = useEmbeddedOrderView();
   const installRequested = useOrderInstallationRequest();
-  const activeTab = embed || demo ? embeddedView
-    : pathname?.endsWith("/recherche") ? "search" : pathname?.endsWith("/commandes") ? "orders" : "menu";
+  const destinations = customerAppDestinations({ ordering: true, loyalty: !embed && !!loyaltyCatalog, account: !embed && !demo });
+  const requestedTab = embed || demo ? embeddedView : customerAppViewFromPath(pathname ?? "");
+  const activeTab = destinations.some(item => item.key === requestedTab) ? requestedTab : "menu";
   function setActiveTab(key: string) {
-    navigateOrderView(site.tenant.slug, key === "search" || key === "orders" ? key : "menu", embed || demo);
+    if (navigationLocked || !destinations.some(item => item.key === key)) return;
+    navigateOrderView(site.tenant.slug, key as CustomerAppView, embed || demo);
   }
   const [headerHeight, setHeaderHeight] = useState(72);
   const transition = useSMTabTransition({ activeKey: activeTab, onSelect: setActiveTab });
   const rootRef = useRef<HTMLDivElement>(null);
-  const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
-  const bindRoot = useCallback((node: HTMLDivElement | null) => { rootRef.current = node; setDialogContainer(node); }, []);
 
   // ── L'entonnoir : la visite au montage, le panier au premier article. ──
   // (Les deux jalons suivants partent du tunnel lui-même — voir Checkout.)
@@ -305,10 +317,29 @@ export function Storefront({
   const hero = brand.hero ?? highlights.find(product => product.photoUrl)?.photoUrl ?? null;
   const heroCadrage = useMemo(() => cadrageDuHero(hero, site.medias), [hero, site.medias]);
   const heroAlt = useMemo(() => altDuHero(hero, site.medias), [hero, site.medias]);
+  const deviceOrders = <DeviceOrdersSheet open presentation={embed ? "page" : "embedded"} slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed}
+    onClose={() => transition.selectTab("menu")} onCatalogVerified={updateCatalogue} onNavigationLockedChange={setNavigationLocked}
+    onReordered={() => setTunnel(true)} />;
 
   return (
     <div
-      ref={bindRoot}
+      ref={rootRef}
+      onClickCapture={event => {
+        // Existing public links enter the same shell without discarding a cart
+        // or recovery controller. Modified clicks still open their real route.
+        if (embed || demo || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const link = (event.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
+        if (!link || link.target || link.hasAttribute("download")) return;
+        const url = new URL(link.href, window.location.href);
+        const base = `/r/${encodeURIComponent(site.tenant.slug)}`;
+        if (url.origin !== window.location.origin || url.hash || url.search ||
+          !(url.pathname === base || destinations.some(item => url.pathname === `${base}/${item.suffix}`))) return;
+        event.preventDefault();
+        if (!navigationLocked) {
+          setTunnel(false);
+          transition.selectTab(customerAppViewFromPath(url.pathname));
+        }
+      }}
       style={masque}
       className={cx(
         classesPolices,
@@ -335,30 +366,38 @@ export function Storefront({
         />
       ) : (
         <OrderHeader onHeightChange={setHeaderHeight} site={site} logoUrl={logoMarque} lockupUrl={verrouMarque}
-          account={!demo && <CustomerAccountEntry dialogContainer={dialogContainer} compact slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
-            onCatalogVerified={updateCatalogue} loyaltyHref={loyalty?.chemin} onDeviceOrders={() => setDeviceOrdersOpen(true)} onDevicePreferences={() => setPreferencesOpen(true)} />} />
+          account={!demo && <Tap className="sm-order-icon" aria-label="Mon compte" disabled={navigationLocked}
+            onClick={() => transition.selectTab("account")}><Icon name="user" size={18} /></Tap>} />
       )}
 
       {/* Une seule borne, jamais un point de rupture : la colonne suit la
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
+        {unavailableService && <CustomerServiceNotice service={unavailableService} disabled={navigationLocked} />}
         <OrderInstall key={site.tenant.slug} slug={site.tenant.slug} name={site.tenant.name} disabled={demo || embed}
           eligible={!tunnel && (installRequested || recovery.active?.state === "received" || !!recovery.last)} />
         <div {...transition.contentProps} id={panelId} role="tabpanel" tabIndex={0}
-          aria-label={activeTab === "search" ? "Rechercher" : activeTab === "orders" ? "Commandes" : "Carte"}>
+          aria-label={destinations.find(item => item.key === activeTab)?.label ?? "Carte"}>
+        {(activeTab === "account" || activeTab === "loyalty") && !embed && !demo && <CustomerAccountPage
+          slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode} loyaltyHref={loyaltyCatalog ? loyalty?.chemin : undefined}
+          section={activeTab === "loyalty" ? "loyalty" : "profile"} onCatalogVerified={updateCatalogue}
+          onBack={() => transition.selectTab(activeTab === "loyalty" ? "account" : "menu")}
+          onLoyalty={loyaltyCatalog ? () => transition.selectTab("loyalty") : undefined}
+          onOrders={() => transition.selectTab("orders")} onDevicePreferences={() => setPreferencesOpen(true)} onNavigationLockedChange={setAccountLocked} />}
+        {activeTab === "loyalty" && loyaltyCatalog && <LoyaltyCardApp catalog={loyaltyCatalog} embedded legacyOnly
+          onNavigationLockedChange={setLegacyLocked} />}
         {!embed && activeTab === "menu" && <OrderHero site={site} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
-        {!demo && <DeviceOrdersSheet open={activeTab === "orders" || deviceOrdersOpen} presentation={activeTab === "orders" ? "page" : "sheet"}
-          slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed} onClose={() => setDeviceOrdersOpen(false)}
-          onCatalogVerified={updateCatalogue} onNavigationLockedChange={setNavigationLocked} onReordered={() => { setDeviceOrdersOpen(false); setTunnel(true); }} />}
+        {activeTab === "orders" && !demo && (embed ? deviceOrders : <CustomerOrdersPage slug={site.tenant.slug}
+          restaurantName={site.tenant.name} mode={brand.mode} deviceOrders={deviceOrders} navigationLocked={ordersLocked}
+          onNavigationLockedChange={setPrivateOrdersLocked} onCatalogVerified={updateCatalogue} onReordered={() => setTunnel(true)}
+          onAccount={() => transition.selectTab("account")} onBack={() => transition.selectTab("menu")} />)}
         {activeTab === "orders" && <div className="sm-order-orders-access">
           {demo ? <div className="sm-order-tab-page"><h2>Mes commandes</h2><p>La démonstration conserve le suivi dans le panier pendant cette visite.</p></div>
-            : <>{!embed && <CustomerAccountEntry dialogContainer={dialogContainer} slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
-              onCatalogVerified={updateCatalogue} loyaltyHref={loyalty?.chemin} onDevicePreferences={() => setPreferencesOpen(true)} />}
-              <Tap className="sm-order-entry" onClick={() => setPreferencesOpen(true)} disabled={navigationLocked}>
+            : <><Tap className="sm-order-entry" onClick={() => setPreferencesOpen(true)} disabled={navigationLocked}>
                 <Icon name="gear" size={22} /><span><b>Préférences de cet appareil</b><small>Coordonnées mémorisées et choix habituels</small></span><Icon name="arrow" size={18} />
               </Tap></>}
         </div>}
-        <div hidden={activeTab === "orders"}>
+        <div hidden={activeTab !== "menu" && activeTab !== "search"}>
         {cart.persistenceError && <div className="pt-4">
           <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
         </div>}
@@ -459,11 +498,12 @@ export function Storefront({
       </main>
 
       {/* ── Barre de panier flottante ── */}
-      {(cart.count > 0 || recovery.active || recovery.last) && !tunnel && (
+      {(cart.count > 0 || recovery.active || recovery.last) && !tunnel && activeTab !== "account" && activeTab !== "loyalty" && (
         <div className="sm-order-cart">
           <div className="mx-auto max-w-[560px]">
             <Tap
-              onClick={() => setTunnel(true)}
+              disabled={navigationLocked}
+              onClick={() => { if (!navigationLocked) setTunnel(true); }}
               className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-3.5 py-3 text-onaccent shadow-deep"
             >
               {/*
@@ -492,8 +532,8 @@ export function Storefront({
       )}
 
       <div><OrderTabBar slug={site.tenant.slug} activeKey={activeTab} panelId={panelId} theme={brand.mode} hidden={tunnel}
-        minimizable={!draft && !deviceOrdersOpen && !preferencesOpen} disabled={navigationLocked} loyaltyHref={!embed ? loyalty?.chemin : null}
-        demo={demo} onSelect={key => transition.selectTab(key === "search" || key === "orders" ? key : "menu")} /></div>
+        minimizable={!draft && !preferencesOpen} disabled={navigationLocked} loyaltyHref={!embed && (loyaltyCatalog || demo) ? loyalty?.chemin : null}
+        accountEnabled={!embed && !demo} demo={demo} onSelect={key => transition.selectTab(key as CustomerAppView)} /></div>
 
       <ProductSheet
         draft={draft}

@@ -395,12 +395,19 @@ export function publicOrderingState(
  * brouillon. Deux messages distincts feraient de cette route un oracle sur la
  * situation commerciale de n'importe quel restaurant, interrogeable par
  * quiconque connaît un slug.
+ *
+ * Un compte résilié (`churned`) ne sert plus non plus la fidélité publique,
+ * même si ses anciens droits sont encore enregistrés. Cette règle ne change
+ * ni la facturation ni l'accès général au logiciel. Les essais et comptes
+ * actifs restent servis ; un statut historique absent conserve le repli
+ * explicite vers l'essai.
  */
 export function publicLoyaltyAvailable(
   account: { status?: TenantAccountStatus | null } | null | undefined,
   souscrite: boolean,
 ): boolean {
-  return souscrite && !isAccessBlocked(account?.status);
+  const status = account?.status ?? DEFAULT_TENANT_ACCOUNT_STATUS;
+  return souscrite && (status === 'trial' || status === 'active');
 }
 
 // ─── Formules ───

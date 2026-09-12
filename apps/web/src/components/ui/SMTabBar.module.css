@@ -28,6 +28,8 @@
   display: flex; justify-content: center; pointer-events: none; z-index: 1;
 }
 .capsule {
+  container-type: inline-size;
+  container-name: sm-tabs;
   --sm-visual: calc(50px - 15px * var(--sm-p));
   --sm-pressable: max(44px, var(--sm-visual));
   --sm-height: calc(var(--sm-pressable) + 10px);
@@ -72,6 +74,11 @@
   padding-top: calc(3px * (1 - var(--sm-p))); white-space: nowrap; max-width: 100%; text-overflow: ellipsis;
   opacity: calc(1 - min(1, var(--sm-p) / .4));
   color: color-mix(in srgb, var(--sm-accent) calc(var(--sm-intensity, 0) * 100%), var(--sm-ink));
+}
+/* Five full labels remain readable on a 320 px phone. Two-to-four tab bars
+   and wider capsules retain their existing typography and touch geometry. */
+@container sm-tabs (max-width: 310px) {
+  .row:has(.tab:nth-child(5)) .label { font-size: 10px; font-weight: 600; letter-spacing: -.65px; }
 }
 .badge {
   box-sizing: border-box; position: absolute; top: calc(50% - 20px + 7.5px * var(--sm-p)); left: calc(50% + 6px);

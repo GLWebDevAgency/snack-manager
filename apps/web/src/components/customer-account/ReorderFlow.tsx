@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { Icon } from '../ui/icons';
 import { Surface, Tap } from '../order/primitives';
 import { euros } from '../order/helpers';
@@ -13,7 +13,8 @@ import { createReorderClient, type ReorderState } from './reorder-client';
 
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:opacity-40';
 type Props = { slug: string; orderId: string; access: CustomerAccountAccess;
-  currentAccess: () => CustomerAccountAccess | null; onBack: () => void; onClose: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void };
+  currentAccess: () => CustomerAccountAccess | null; onBack: () => void; onClose: () => void; onCatalogVerified?: (categories: MenuCategory[]) => void;
+  onNavigationLockedChange?: (locked: boolean) => void; presentation?: 'section' | 'page' };
 
 function runtime(props: Pick<Props, 'slug' | 'orderId' | 'access' | 'currentAccess' | 'onCatalogVerified'>) {
   let alive = false;
@@ -35,10 +36,13 @@ function runtime(props: Pick<Props, 'slug' | 'orderId' | 'access' | 'currentAcce
   return { client, start: () => { alive = true; }, stop: () => { alive = false; client.invalidate(); } };
 }
 
-export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onClose, onCatalogVerified }: Props) {
+export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onClose, onCatalogVerified, onNavigationLockedChange, presentation = 'section' }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
   const run = useMemo(() => runtime({ slug, orderId, access, currentAccess, onCatalogVerified }), [slug, orderId, access, currentAccess, onCatalogVerified]);
   const state = useSyncExternalStore(run.client.subscribe, run.client.getSnapshot, run.client.getServerSnapshot);
+  const adding = state.status === 'adding';
+  useLayoutEffect(() => { onNavigationLockedChange?.(adding); }, [adding, onNavigationLockedChange]);
+  useLayoutEffect(() => () => { onNavigationLockedChange?.(false); }, [onNavigationLockedChange]);
   useEffect(() => {
     run.start(); void run.client.load(); heading.current?.focus();
     const pause = () => run.client.invalidate();
@@ -53,7 +57,7 @@ export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onCl
     return () => clearTimeout(timer);
   }, [run, state.snapshot]);
   return <section aria-label="Préparer à nouveau ce panier" className="space-y-4">
-    <Tap className={secondary + ' w-full justify-start'} onClick={onBack}><Icon name="arrow" size={14} className="rotate-180" />Revenir à ma commande</Tap>
+    <Tap disabled={adding} className={secondary + ' w-full justify-start'} onClick={onBack}><Icon name="arrow" size={14} className="rotate-180" />Revenir à ma commande</Tap>
     <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">Vos favoris, à nouveau</p>
       <h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-2xl font-extrabold tracking-tight outline-none">On vous refait ça ?</h3>
       <p className="mt-2 text-sm leading-6 text-mut">Les mêmes choix, s’ils sont toujours proposés. Les prix sont ceux de la carte actuelle.</p></div>
@@ -61,7 +65,9 @@ export function ReorderFlow({ slug, orderId, access, currentAccess, onBack, onCl
     {state.status === 'loading' && <p role="status" className="rounded-card bg-surface2 p-5 text-sm text-mut">Vérification de vos articles et de la carte actuelle…</p>}
     {state.snapshot && <Review slug={slug} state={state} client={run.client} />}
     {(state.status === 'idle' || state.status === 'error') && <Tap className={secondary + ' w-full'} onClick={() => void run.client.load()}>Réessayer la vérification</Tap>}
-    {state.status === 'done' && <Link prefetch={false} onClick={onClose} href={`/r/${encodeURIComponent(slug)}`} className="cf-press flex min-h-12 items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-bold text-onaccent">Retrouver mon panier<Icon name="arrow" size={16} /></Link>}
+    {state.status === 'done' && (presentation === 'page'
+      ? <Tap onClick={onClose} className="cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-bold text-onaccent">Retrouver mon panier<Icon name="arrow" size={16} /></Tap>
+      : <Link prefetch={false} onClick={onClose} href={`/r/${encodeURIComponent(slug)}`} className="cf-press flex min-h-12 items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-bold text-onaccent">Retrouver mon panier<Icon name="arrow" size={16} /></Link>)}
   </section>;
 }
 
