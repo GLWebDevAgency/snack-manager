@@ -55,7 +55,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+            "operationId": "10edf3df-012f-46c1-adc1-407586c3bbb3",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -72,7 +72,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -92,17 +92,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/orders",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3/orders",
           "body": {
-            "operationId": "9dea30e4-5d4f-47ee-bc14-cd2847f179a8",
+            "operationId": "30549f8b-50b6-4f29-9a0c-c11f168772c4",
             "expectedRevision": 0,
             "order": {
-              "clientId": "9dea30e4-5d4f-47ee-bc14-cd2847f179a8",
+              "clientId": "30549f8b-50b6-4f29-9a0c-c11f168772c4",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -127,7 +127,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -137,7 +137,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -147,7 +147,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -162,7 +162,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -187,14 +187,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/orders/000000000000000000000041/serve",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3/orders/000000000000000000000041/serve",
           "body": {
-            "operationId": "12610c59-f8cb-4be4-8819-155f909ee853"
+            "operationId": "6eb1af9d-f0ce-4a3b-a258-826d13a999e6"
           }
         },
         {
@@ -204,7 +204,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -214,7 +214,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -224,14 +224,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/transfer",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3/transfer",
           "body": {
-            "operationId": "a4fbb159-ab07-48e2-bc7f-c29a2ed67d82",
+            "operationId": "40255875-d316-47a5-a91e-d8bbb4640d8e",
             "expectedRevision": 1,
             "tableId": "b0173871-811a-43ee-ae1c-504163424662"
           }
@@ -243,7 +243,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -253,7 +253,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -263,7 +263,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -280,7 +280,7 @@
           "method": "POST",
           "path": "/orders/000000000000000000000041/collect",
           "body": {
-            "operationId": "461570a5-80b1-49d9-9094-14a4fb8f3977",
+            "operationId": "e1b1774b-33cc-4bd9-8b9f-65511685078c",
             "expectedTotalCents": 1250,
             "tender": "card"
           }
@@ -292,14 +292,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78/close",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3/close",
           "body": {
-            "operationId": "e9a048c5-5487-46fb-9f99-d0ea68a6724a",
+            "operationId": "e69567d4-06c7-46d4-a68a-12eccb4f518b",
             "expectedRevision": 2
           }
         },
@@ -310,7 +310,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -320,7 +320,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/0a7a55eb-22f8-4251-8fc9-ed2c17987e78",
+          "path": "/dining/sessions/10edf3df-012f-46c1-adc1-407586c3bbb3",
           "body": null
         },
         {
@@ -390,7 +390,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "da734ef7-ba46-46f2-99f2-d9a15615bb76",
+            "operationId": "400c445b-251d-4e67-9a39-5eaabab83fd5",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -407,7 +407,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -417,7 +417,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -427,17 +427,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/orders",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5/orders",
           "body": {
-            "operationId": "0bb07fca-e568-4520-8b62-4d4fbb00c7a4",
+            "operationId": "01a294d8-5b1b-4a66-a979-f86fc278783c",
             "expectedRevision": 0,
             "order": {
-              "clientId": "0bb07fca-e568-4520-8b62-4d4fbb00c7a4",
+              "clientId": "01a294d8-5b1b-4a66-a979-f86fc278783c",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -462,7 +462,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -472,7 +472,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -482,7 +482,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -497,7 +497,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -522,14 +522,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/orders/000000000000000000000041/serve",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5/orders/000000000000000000000041/serve",
           "body": {
-            "operationId": "34067052-bcc2-4b83-8578-aaf5dd43706a"
+            "operationId": "1c933659-c1c5-4f14-ae43-b953a8eb8a09"
           }
         },
         {
@@ -539,7 +539,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -549,7 +549,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -559,14 +559,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/transfer",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5/transfer",
           "body": {
-            "operationId": "070e14eb-6072-43b6-82d9-71d0b29539f1",
+            "operationId": "d1e8ff73-23ab-4d55-af5a-dfda550be7a4",
             "expectedRevision": 1,
             "tableId": "b0173871-811a-43ee-ae1c-504163424662"
           }
@@ -578,7 +578,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -588,7 +588,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -598,7 +598,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -615,7 +615,7 @@
           "method": "POST",
           "path": "/orders/000000000000000000000041/collect",
           "body": {
-            "operationId": "54c7f9b9-2e56-4821-9fcb-d3a24953e40d",
+            "operationId": "4dc38d66-3765-4f88-bcfc-0ca58480c201",
             "expectedTotalCents": 1250,
             "tender": "card"
           }
@@ -627,14 +627,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76/close",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5/close",
           "body": {
-            "operationId": "55c9f5e7-122b-42d8-86a8-cbd1be275729",
+            "operationId": "0b427014-151c-42e3-89ce-eb1993e62c01",
             "expectedRevision": 2
           }
         },
@@ -645,7 +645,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -655,7 +655,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/da734ef7-ba46-46f2-99f2-d9a15615bb76",
+          "path": "/dining/sessions/400c445b-251d-4e67-9a39-5eaabab83fd5",
           "body": null
         },
         {
@@ -727,7 +727,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "2f0f3681-6c3f-4ed6-ad28-d72101339321",
+            "operationId": "7915ae81-5552-49a2-aa36-3911635d9bb5",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -744,7 +744,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -754,7 +754,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -764,17 +764,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5/orders",
           "body": {
-            "operationId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+            "operationId": "14f024d4-77bc-4206-8716-d8e17212367a",
             "expectedRevision": 0,
             "order": {
-              "clientId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+              "clientId": "14f024d4-77bc-4206-8716-d8e17212367a",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -799,7 +799,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -809,7 +809,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -833,7 +833,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -877,7 +877,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -902,12 +902,12 @@
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5/orders",
           "body": {
-            "operationId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+            "operationId": "14f024d4-77bc-4206-8716-d8e17212367a",
             "expectedRevision": 0,
             "order": {
-              "clientId": "7049b969-9028-4ff3-93b4-a7fa121a0093",
+              "clientId": "14f024d4-77bc-4206-8716-d8e17212367a",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -932,7 +932,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -942,7 +942,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -952,7 +952,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -967,7 +967,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -992,14 +992,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/orders/000000000000000000000041/serve",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5/orders/000000000000000000000041/serve",
           "body": {
-            "operationId": "1993b279-cf37-4cfe-a60a-3285821638c0"
+            "operationId": "a7360ef1-36ae-41e9-b1c1-fceab41737c1"
           }
         },
         {
@@ -1009,7 +1009,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1019,7 +1019,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1029,14 +1029,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/transfer",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5/transfer",
           "body": {
-            "operationId": "669e991d-e402-4cb6-822a-01d08e9ed5fc",
+            "operationId": "270c086a-366f-4981-bbcc-75a859bfaf7e",
             "expectedRevision": 1,
             "tableId": "b0173871-811a-43ee-ae1c-504163424662"
           }
@@ -1048,7 +1048,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1058,7 +1058,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1068,7 +1068,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1085,7 +1085,7 @@
           "method": "POST",
           "path": "/orders/000000000000000000000041/collect",
           "body": {
-            "operationId": "686c408e-bc5d-4992-9676-daf1693602f9",
+            "operationId": "7969b060-946a-4aa9-9328-2048eb25e3dc",
             "expectedTotalCents": 1250,
             "tender": "card"
           }
@@ -1097,14 +1097,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321/close",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5/close",
           "body": {
-            "operationId": "d6a84e3f-f790-48f4-9ec4-c842e21585d8",
+            "operationId": "7575b75c-896e-42e4-9b1e-8c1ffca1cff8",
             "expectedRevision": 2
           }
         },
@@ -1115,7 +1115,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1125,7 +1125,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/2f0f3681-6c3f-4ed6-ad28-d72101339321",
+          "path": "/dining/sessions/7915ae81-5552-49a2-aa36-3911635d9bb5",
           "body": null
         },
         {
@@ -1196,7 +1196,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+            "operationId": "7c2437a6-1b79-4281-9e41-5c394e5c1b18",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -1213,7 +1213,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1223,7 +1223,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1233,17 +1233,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18/orders",
           "body": {
-            "operationId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+            "operationId": "18243170-a989-43d4-b715-cf4217d42997",
             "expectedRevision": 0,
             "order": {
-              "clientId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+              "clientId": "18243170-a989-43d4-b715-cf4217d42997",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -1268,7 +1268,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1278,7 +1278,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1302,7 +1302,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1327,12 +1327,12 @@
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18/orders",
           "body": {
-            "operationId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+            "operationId": "18243170-a989-43d4-b715-cf4217d42997",
             "expectedRevision": 0,
             "order": {
-              "clientId": "a6e450b7-3e12-4fd6-a325-04a1455de3e7",
+              "clientId": "18243170-a989-43d4-b715-cf4217d42997",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -1357,7 +1357,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1367,7 +1367,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1377,7 +1377,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1392,7 +1392,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1417,14 +1417,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/orders/000000000000000000000041/serve",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18/orders/000000000000000000000041/serve",
           "body": {
-            "operationId": "bb28f629-f85f-42ee-9db8-0ea525992fce"
+            "operationId": "560c54da-ad8f-422a-ad2d-51087ceefe4b"
           }
         },
         {
@@ -1434,7 +1434,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1444,7 +1444,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1454,14 +1454,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/transfer",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18/transfer",
           "body": {
-            "operationId": "0b978e82-dc30-43eb-87cb-1d3852e455db",
+            "operationId": "701e9534-f5e0-4cd7-afb7-35011147c541",
             "expectedRevision": 1,
             "tableId": "b0173871-811a-43ee-ae1c-504163424662"
           }
@@ -1473,7 +1473,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1483,7 +1483,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1493,7 +1493,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1510,7 +1510,7 @@
           "method": "POST",
           "path": "/orders/000000000000000000000041/collect",
           "body": {
-            "operationId": "43b3d4da-2a1a-4d9f-bd8b-dcca9e0a591c",
+            "operationId": "f14a8f65-1d4b-44b6-9095-6ac460372609",
             "expectedTotalCents": 1250,
             "tender": "card"
           }
@@ -1522,14 +1522,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf/close",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18/close",
           "body": {
-            "operationId": "00ce2c61-0e56-44b4-bc9b-58c39dfed813",
+            "operationId": "a6ab5bb4-18b5-4c4d-a744-20a505a1297e",
             "expectedRevision": 2
           }
         },
@@ -1540,7 +1540,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1550,7 +1550,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/97d6b2a5-dc05-43e9-81ee-bc183ad36dbf",
+          "path": "/dining/sessions/7c2437a6-1b79-4281-9e41-5c394e5c1b18",
           "body": null
         },
         {
@@ -1655,7 +1655,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "6081c8a5-ad1f-444c-a45d-066c487eb47c",
+            "operationId": "ce9e4eee-403a-475a-89d1-29a01e6f50ac",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -1672,7 +1672,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1682,7 +1682,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1697,17 +1697,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/orders",
           "body": {
-            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "operationId": "30e4dd51-18aa-4c85-8330-268111e1005c",
             "expectedRevision": 0,
             "order": {
-              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "clientId": "30e4dd51-18aa-4c85-8330-268111e1005c",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -1732,7 +1732,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1747,17 +1747,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/orders",
           "body": {
-            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "operationId": "30e4dd51-18aa-4c85-8330-268111e1005c",
             "expectedRevision": 0,
             "order": {
-              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "clientId": "30e4dd51-18aa-4c85-8330-268111e1005c",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -1787,7 +1787,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1797,7 +1797,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1807,7 +1807,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1822,7 +1822,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1847,17 +1847,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/orders",
           "body": {
-            "operationId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+            "operationId": "30e4dd51-18aa-4c85-8330-268111e1005c",
             "expectedRevision": 0,
             "order": {
-              "clientId": "8a87659e-cd16-4e49-b6a4-1a06ba5383f9",
+              "clientId": "30e4dd51-18aa-4c85-8330-268111e1005c",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -1882,7 +1882,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1892,7 +1892,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1902,7 +1902,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1912,7 +1912,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1927,22 +1927,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
-          "body": null
-        },
-        {
-          "method": "GET",
-          "path": "/dining/room",
-          "body": null
-        },
-        {
-          "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
-          "body": null
-        },
-        {
-          "method": "GET",
-          "path": "/orders",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1962,14 +1947,29 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/orders/000000000000000000000041/serve",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/orders/000000000000000000000041/serve",
           "body": {
-            "operationId": "643a2717-e214-4e56-9294-344801df42bf"
+            "operationId": "65fca3a5-152a-49b6-b4d9-b4eead9f8979"
           }
         },
         {
@@ -1979,7 +1979,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1989,7 +1989,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -1999,7 +1999,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2009,7 +2009,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2019,14 +2019,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/transfer",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/transfer",
           "body": {
-            "operationId": "58b9b4ed-e9e0-4623-b121-aed328b1e78a",
+            "operationId": "55d93789-49fe-4dfb-a669-70d0cfecf2d4",
             "expectedRevision": 1,
             "tableId": "b0173871-811a-43ee-ae1c-504163424662"
           }
@@ -2038,7 +2038,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2048,7 +2048,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2058,7 +2058,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2068,7 +2068,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2078,7 +2078,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2095,7 +2095,7 @@
           "method": "POST",
           "path": "/orders/000000000000000000000041/collect",
           "body": {
-            "operationId": "ffe377c1-9013-475e-b4b1-fad0b858c900",
+            "operationId": "1b7e24fe-2817-4cab-b8d7-13836f6cbdf7",
             "expectedTotalCents": 1250,
             "tender": "card"
           }
@@ -2107,14 +2107,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c/close",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac/close",
           "body": {
-            "operationId": "5e6150e1-97cc-44fc-b4f2-a7bfc436330c",
+            "operationId": "6664fbda-9fe2-440e-9754-348650ad0b04",
             "expectedRevision": 2
           }
         },
@@ -2125,7 +2125,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2135,7 +2135,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2150,7 +2150,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2160,7 +2160,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/6081c8a5-ad1f-444c-a45d-066c487eb47c",
+          "path": "/dining/sessions/ce9e4eee-403a-475a-89d1-29a01e6f50ac",
           "body": null
         },
         {
@@ -2222,7 +2222,7 @@
           "method": "POST",
           "path": "/dining/sessions",
           "body": {
-            "operationId": "e500a8f5-5054-4b70-948e-224b82d7b015",
+            "operationId": "866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
             "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
             "guestCount": 3
           }
@@ -2239,7 +2239,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2249,7 +2249,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2259,17 +2259,17 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/orders",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd/orders",
           "body": {
-            "operationId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+            "operationId": "64e294ed-436e-4919-8406-592866614ec9",
             "expectedRevision": 0,
             "order": {
-              "clientId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+              "clientId": "64e294ed-436e-4919-8406-592866614ec9",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -2294,7 +2294,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2304,7 +2304,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2328,7 +2328,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2353,12 +2353,12 @@
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/orders",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd/orders",
           "body": {
-            "operationId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+            "operationId": "64e294ed-436e-4919-8406-592866614ec9",
             "expectedRevision": 0,
             "order": {
-              "clientId": "6722add0-9900-402e-bef1-cf7f54eeaf0c",
+              "clientId": "64e294ed-436e-4919-8406-592866614ec9",
               "channel": "pos",
               "type": "surplace",
               "lines": [
@@ -2383,7 +2383,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2393,7 +2393,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2403,7 +2403,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2428,14 +2428,14 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
           "method": "POST",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015/close",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd/close",
           "body": {
-            "operationId": "54d237bb-bf61-4fcb-a53f-e346ddc24d38",
+            "operationId": "068114d0-21ba-450d-98c9-7cc79415d6df",
             "expectedRevision": 1
           }
         },
@@ -2446,7 +2446,7 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
           "body": null
         },
         {
@@ -2456,7 +2456,303 @@
         },
         {
           "method": "GET",
-          "path": "/dining/sessions/e500a8f5-5054-4b70-948e-224b82d7b015",
+          "path": "/dining/sessions/866b67cb-d2b4-4211-989a-4b2a5a14f5dd",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rembourse-journal-existant",
+      "pass": true,
+      "shots": [
+        "rembourse-journal-existant-table-ouverte.png",
+        "rembourse-journal-existant-remboursement-avant-reprise.png"
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions",
+          "body": {
+            "operationId": "f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+            "tableId": "849aaf0b-d1d4-4656-b733-1aa1bd489173",
+            "guestCount": 3
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8/orders",
+          "body": {
+            "operationId": "64aa1fdb-d2bf-46a0-81e3-df61e1508257",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "64aa1fdb-d2bf-46a0-81e3-df61e1508257",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": {
+            "appVersion": "1.0.0",
+            "queueDepth": 0,
+            "lastError": ""
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/menu",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8/orders",
+          "body": {
+            "operationId": "64aa1fdb-d2bf-46a0-81e3-df61e1508257",
+            "expectedRevision": 0,
+            "order": {
+              "clientId": "64aa1fdb-d2bf-46a0-81e3-df61e1508257",
+              "channel": "pos",
+              "type": "surplace",
+              "lines": [
+                {
+                  "productId": "p25",
+                  "options": [],
+                  "removed": [],
+                  "qty": 1
+                }
+              ],
+              "payment": {
+                "method": "counter",
+                "tender": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8/close",
+          "body": {
+            "operationId": "5ee6d069-22de-4668-9df2-5dceed1cdef0",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/dining/sessions/f5fdc37f-599b-4363-a8c7-8ef7a16aa3e8",
           "body": null
         },
         {

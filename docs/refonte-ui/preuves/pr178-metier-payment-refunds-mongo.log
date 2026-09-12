@@ -1,0 +1,11 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/api
+
+ ✓ src/modules/ordering/order-payment-lifecycle.integration.test.ts (121 tests) 3033ms
+ ✓ src/modules/ordering/order-refunds.integration.test.ts (51 tests) 2005ms
+
+ Test Files  2 passed (2)
+      Tests  172 passed (172)
+   Start at  21:46:55
+   Duration  6.88s (transform 226ms, setup 0ms, collect 1.47s, tests 5.04s, environment 0ms, prepare 78ms)
+

@@ -1,6 +1,6 @@
 # POS — fidélité visuelle et service à table
 
-Branche `refactor/ui-handoff-fidelity`, base `develop` `a01f857`. Applications Expo/React Native existantes, sans changement de versions. Comparaison avec `references/RestoPilot-POS.png` et les captures `pos-sale`, `pos-config`, `pos-settings` du kit. Le service comptoir historique reste accessible séparément de la salle.
+Branche `refactor/ui-handoff-fidelity`, reprise sur `develop` `80f2eac` (PR 178), après le premier gel sur `a01f857`. Applications Expo/React Native existantes, sans changement de versions. Comparaison avec `references/RestoPilot-POS.png` et les captures `pos-sale`, `pos-config`, `pos-settings` du kit. Le service comptoir historique reste accessible séparément de la salle.
 
 ## Présentation et préférences
 
@@ -40,3 +40,17 @@ Le journal respecte la convention existante « montant avant remise + remise sé
 Captures réellement inspectées : catalogue clair et paramètres sombres, salle desktop claire avant/après service, salle mobile sombre, création d'illustration et thèmes BO. Les captures salle reposent sur le vrai export Expo et des réponses HTTP locales interceptées ; les contrôles serveur sur Mongo temporaire et HTTP Nest sont distincts. Aucun compte, base, règlement, TPE ni déploiement réel. Les exports natifs ne valent pas une recette sur appareil, imprimante ou tiroir-caisse.
 
 La clôture porte sur les tickets entiers de la tablée. Aucun fractionnement par couvert, paiement partiel ou pilotage de TPE n'est ajouté à ce lot. Ces comportements ne sont pas simulés par l'interface. La référence table imprimée au moment de l'envoi reste un historique ; l'occupation actuelle se lit dans la tablée après transfert.
+
+## Validation finale sur PR 178
+
+Les packages contrats/client-core ont été reconstruits après le rebase local. Les sources terrain validées sont identifiées par `preuves/pr178-terrain-source-freeze.json` ; le HEAD seul précédait les derniers correctifs POS.
+
+- Typecheck : **PASS** ; **332 tests Vitest + 5 tests Node PASS**, aucun ignoré.
+- Export web : **PASS**, `preuves/pr178-pos-build.log`.
+- Présentation : **7/7 parcours PASS**, 29 captures dans `captures/pos-fidelite-v2-final`. Une assertion de géométrie vérifie les trois colonnes à 1 512 px, y compris avec le rail A, avec des cartes d'au moins 276 px. Catalogue, configurateur, ticket, notes, clavier, réglages et rotation restent testés.
+- Salle : **7/7 parcours PASS**, `captures/pos-salle-v2/resultats.json`. Le dernier cas reprend une entrée déjà persistée impayée, puis encaissée et remboursée par un autre poste : une seule entrée, même intention, aucun nouvel encaissement et libération possible. Les états remboursés restent terminaux face à une ancienne réponse payée.
+- Exports natifs **iOS et Android PASS** après ce correctif, `preuves/pr178-pos-native.log`. Ce sont des bundles Hermes, sans signature ni distribution.
+
+La réconciliation commune accepte désormais la preuve serveur remboursée pour réparer un faux dû local, sans créer une vente absente ni déduire un remboursement du journal historique. L'acquittement de l'envoi Salle attend cette écriture durable. Ce correctif a été relu indépendamment (`COMPATIBILITE-PR178-AUDIT.md`).
+
+Les logs `preuves/pr178-pos-{typecheck,tests,build,visuel,salle,native}.log` remplacent les résultats antérieurs pour le lot final. Les captures de diagnostic `*-failure.*` conservées dans le dossier Salle proviennent d'un ancien sélecteur de recette (« Commandes » est une case de sélection, pas un bouton) ; elles ne figurent pas dans les résultats finaux réussis.

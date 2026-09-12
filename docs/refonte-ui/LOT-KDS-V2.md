@@ -42,3 +42,8 @@ Le contrat salle ajoute `dining.servedAt`. Le filtre existant `isKitchenEligible
 Fichiers supplémentaires : `src/delivery-policy.ts` et son test. Deux tests de parité ajoutés. La dernière recette, **10/10 PASS et 42 captures** dans `captures/kds-fidelite-v2-final`, vérifie aussi une table déjà servie au chargement et une table nouvellement servie à la relecture suivante, toujours `ready` et `payment.pending`. Preuve : `preuves/kds-v2-visuel-final.log`. Aucun appel de paiement/service réel n’est émis par le harnais.
 
 Typecheck KDS final après `servedAt` : **PASS**, `preuves/kds-v2-typecheck-final.log`.
+
+
+## Revalidation après PR 178
+
+Sur la base combinée `80f2eac` + V2 : typecheck **PASS**, **86/86 tests PASS**, export web **PASS**, **10/10 parcours navigateur PASS**, puis exports Hermes **iOS et Android PASS**. Aucune source KDS supplémentaire n'a changé pendant le rebase. Les preuves finales sont `preuves/pr178-kds-{typecheck,tests,build,visuel,native}.log`, les captures `captures/kds-fidelite-v2-final` et les empreintes de source `preuves/pr178-terrain-source-freeze.json`. Aucun appareil physique ou imprimante testé.

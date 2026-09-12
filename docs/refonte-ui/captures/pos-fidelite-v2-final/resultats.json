@@ -14,6 +14,7 @@
       "layout": "B",
       "pass": true,
       "checks": [
+        "three comfortable desktop columns with and without the category rail",
         "keyboard product focus visibly outlined",
         "category selection",
         "real product configuration",
@@ -58,21 +59,6 @@
         ],
         [
           "GET",
-          "fixture",
-          "/orders"
-        ],
-        [
-          "GET",
-          "fixture",
-          "/orders"
-        ],
-        [
-          "GET",
-          "fixture",
-          "/orders"
-        ],
-        [
-          "GET",
           "local-photo",
           "/photos/doner-kebab.webp"
         ],
@@ -80,6 +66,21 @@
           "GET",
           "local-photo",
           "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
         ],
         [
           "GET",
@@ -248,6 +249,7 @@
       "layout": "B",
       "pass": true,
       "checks": [
+        "three comfortable desktop columns with and without the category rail",
         "keyboard product focus visibly outlined",
         "category selection",
         "real product configuration",
@@ -482,6 +484,7 @@
       "layout": "A",
       "pass": true,
       "checks": [
+        "three comfortable desktop columns with and without the category rail",
         "category selection",
         "real product configuration",
         "add configured line",
@@ -517,6 +520,21 @@
         ],
         [
           "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
           "local-photo",
           "/photos/doner-kebab.webp"
         ],
@@ -524,21 +542,6 @@
           "GET",
           "local-photo",
           "/photos/wrap-tenders.webp"
-        ],
-        [
-          "GET",
-          "fixture",
-          "/orders"
-        ],
-        [
-          "GET",
-          "fixture",
-          "/orders"
-        ],
-        [
-          "GET",
-          "fixture",
-          "/orders"
         ],
         [
           "GET",

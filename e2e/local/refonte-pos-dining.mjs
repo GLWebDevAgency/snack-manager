@@ -101,7 +101,7 @@ async function scenario(name, viewport, theme, failure = null) {
         session = { ...session, state: 'closed', closedAt: new Date().toISOString(), revision: session.revision + 1 }; result = session;
       } else return json({ message: `Unknown dining ${path}` }, 404);
       receipts.set(body.operationId, structuredClone(result));
-      if (!lost && ['lost-order', 'two-tabs', 'refunded'].includes(failure) && path.endsWith('/orders')) { lost = true; return route.abort('failed'); }
+      if (!lost && ['lost-order', 'two-tabs', 'refunded', 'refunded-existing'].includes(failure) && path.endsWith('/orders')) { lost = true; return route.abort('failed'); }
       if (!lost && failure === 'journal' && path.endsWith('/orders')) { lost = true; await page.evaluate(() => { window.localDiningJournalRefused = true; }); }
       return json(result);
     }
@@ -156,9 +156,16 @@ async function scenario(name, viewport, theme, failure = null) {
       assert.equal(sent.length, 3); assert.deepEqual(sent.map(r => r.body), [sent[0].body, sent[0].body, sent[0].body]);
       assert.equal(orders.size, 1);
     }
-    if (failure === 'refunded') {
+    if (failure === 'refunded' || failure === 'refunded-existing') {
       await page.getByRole('button', { name: 'Vérifier l’opération de salle', exact: true }).waitFor();
       const row = [...orders.values()][0];
+      if (failure === 'refunded-existing') await page.evaluate(row => {
+        const key = 'sm.pos.daylog.v1';
+        const file = JSON.parse(localStorage.getItem(key) ?? 'null') ?? { version: 2, generation: 0, revision: 0, day: new Date().toLocaleDateString('sv-SE') };
+        file.revision += 1;
+        file.entries = [{ clientId: row.clientId, localNumber: row.number, serverId: row._id, serverNumber: row.number, trackingToken: row.trackingToken, mode: 'surplace', method: 'retrait', paid: false, total: row.totals.total, items: 1, at: Date.parse(row.createdAt) }];
+        localStorage.setItem(key, JSON.stringify(file));
+      }, row);
       row.status = 'delivered'; row.payment = { method: 'counter', status: 'refunded', tender: 'card' };
       await page.reload();
       await page.getByRole('button', { name: 'Vérifier l’opération de salle', exact: true }).click();
@@ -249,5 +256,6 @@ try {
   await scenario('journal-refuse-reload', { width: 1280, height: 800 }, 'dark', 'journal');
   await scenario('deux-onglets', { width: 1280, height: 800 }, 'light', 'two-tabs');
   await scenario('rembourse-avant-reprise', { width: 1280, height: 800 }, 'light', 'refunded');
-  console.log('POS salle : 6/6 parcours navigateur réussis.');
+  await scenario('rembourse-journal-existant', { width: 1280, height: 800 }, 'dark', 'refunded-existing');
+  console.log('POS salle : 7/7 parcours navigateur réussis.');
 } finally { await browser.close(); }

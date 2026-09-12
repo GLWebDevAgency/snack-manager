@@ -283,7 +283,9 @@ export function columnsFor(gridWidth: number, layout: Layout): number {
 export function catalogColumnsFor(gridWidth: number, layout: Layout, density: 'comfortable' | 'compact'): number {
   if (density === 'compact') return columnsFor(gridWidth, layout);
   if (gridWidth <= 0) return 2;
-  const ideal = (layout.compact ? 210 : 276) * layout.scale;
+  // La hauteur du grand écran agrandit déjà les textes et espacements. Ne pas
+  // lui faire supprimer une colonne qui tient, notamment avec le rail A.
+  const ideal = layout.compact ? 210 * layout.scale : 276;
   return clamp(2, Math.floor((gridWidth + layout.gridGap) / (ideal + layout.gridGap)), 5);
 }
 

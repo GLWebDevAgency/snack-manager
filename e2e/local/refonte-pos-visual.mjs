@@ -89,6 +89,12 @@ async function scenario(name, viewport, theme, layout = 'B', interactions = fals
     await page.getByRole('tab', { name: 'Gourmets Burgers', exact: true }).click();
     await page.getByRole('button', { name: /^Le Classic,/ }).waitFor();
     await page.evaluate(() => document.fonts.ready);
+    if (viewport.width === 1512) {
+      const cards = await Promise.all(['Le Classic', 'Le Crousty', 'Le Chèvre Miel'].map(name => page.getByRole('button', { name: new RegExp(`^${name},`) }).boundingBox()));
+      assert.ok(cards.every(card => card && card.width >= 276));
+      assert.ok(Math.abs(cards[0].y - cards[2].y) < 2, 'three readable cards share the desktop row, including layout A');
+      checks.push('three comfortable desktop columns with and without the category rail');
+    }
     await shot('catalogue');
     if (interactions) {
       await page.keyboard.press('Tab');

@@ -57,4 +57,14 @@ describe('journal des commandes de table', () => {
       expect(() => diningJournalEntry(operation, { ...row, totals: { total: 1450, discount: { amount } } } as ServerOrderRow)).toThrow();
     }
   });
+  it('répare une dette locale existante remboursée ailleurs avant la reprise, sans ressusciter un paiement périmé', () => {
+    const pending = diningJournalEntry(operation, row);
+    const serverRefund = { ...row, status: 'delivered', totals: { total: 1250, discount: { amount: 200 } }, payment: { method: 'counter', status: 'refunded', tender: 'card' } } as ServerOrderRow;
+    const reconciled = reconcileCollectedJournal(appendDiningEntry([pending], diningJournalEntry(operation, serverRefund)), serverRefund);
+    expect(reconciled).toHaveLength(1);
+    expect(reconciled[0]).toMatchObject({ paid: true, refunded: true, method: 'cb', total: 1450, discount: 200 });
+    expect(zFromJournal(reconciled)).toMatchObject({ orders: 1, ca: 1250, card: 1250, due: 0, discounts: 200 });
+    expect(reconcileCollectedJournal(reconciled, { ...row, payment: { method: 'counter', status: 'paid', tender: 'cash' } })).toEqual(reconciled);
+    expect(reconcileCollectedJournal([], serverRefund)).toEqual([]);
+  });
 });

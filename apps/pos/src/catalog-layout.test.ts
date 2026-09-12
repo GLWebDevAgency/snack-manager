@@ -4,9 +4,11 @@ import { cardWidth, catalogColumnsFor, columnsFor, computeLayout } from './layou
 describe('Densité du catalogue', () => {
   it('offre trois grandes cartes sur le comptoir de référence du handoff', () => {
     const layout = computeLayout(1512, 982);
-    const available = layout.width - layout.ticketW - layout.gridPad * 2;
-    expect(catalogColumnsFor(available, layout, 'comfortable')).toBe(3);
-    expect(cardWidth(available, 3, layout.gridGap)).toBeGreaterThan(280);
+    for (const rail of [0, layout.railW]) {
+      const available = layout.width - layout.ticketW - layout.gridPad * 2 - rail;
+      expect(catalogColumnsFor(available, layout, 'comfortable')).toBe(3);
+      expect(cardWidth(available, 3, layout.gridGap)).toBeGreaterThan(276);
+    }
   });
 
   it('garde la densité historique disponible sur toutes les dispositions', () => {

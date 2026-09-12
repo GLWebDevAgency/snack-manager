@@ -574,14 +574,14 @@ export function PosScreen({
       ...current,
       service: { ...current.service, rows: current.service.rows.map((entry) => entry._id === row._id ? row : entry) },
     } : current);
-    if (row.payment?.status !== 'paid' || !dayLogRef.current.some((entry) => entry.serverId === row._id || entry.clientId === row.clientId)) return;
+    if (!['paid', 'refunded'].includes(row.payment?.status ?? '') || !dayLogRef.current.some((entry) => entry.serverId === row._id || entry.clientId === row.clientId)) return;
     try {
       const persisted = await dayLogWriter.commit(() => dayLogRef.current, (entries) => reconcileCollectedJournal(entries, row), applyDayLog);
       if (!persisted) throw new Error('Le journal local a changé pendant la confirmation.');
     } catch {
       applyDayLog(reconcileCollectedJournal(dayLogRef.current, row));
       setJournalDegraded(true);
-      push('Paiement confirmé sur le serveur. Journal local à resynchroniser ; ne réencaissez pas.', 'warn');
+      push('État du paiement confirmé sur le serveur. Journal local à resynchroniser ; ne réencaissez pas.', 'warn');
     }
   }, [applyDayLog, dayLogWriter, push, setJournalDegraded]);
 
@@ -1181,11 +1181,12 @@ export function PosScreen({
         }) };
       }
       const result = await dining.execute(operation);
-      if (!result.order) throw new Error('L’envoi reste à vérifier avec la même référence.');
-      const entry = diningJournalEntry(operation, result.order);
+      const confirmedOrder = result.order;
+      if (!confirmedOrder) throw new Error('L’envoi reste à vérifier avec la même référence.');
+      const entry = diningJournalEntry(operation, confirmedOrder);
       try {
         const persisted = await dayLogWriter.commit(() => dayLogRef.current,
-          (current) => appendDiningEntry(current, entry), applyDayLog, dayLogWriter.revision());
+          (current) => reconcileCollectedJournal(appendDiningEntry(current, entry), confirmedOrder), applyDayLog, dayLogWriter.revision());
         if (!persisted) throw new Error('Journal modifié pendant la confirmation.');
         setJournalDegraded(false);
       } catch {
