@@ -1,0 +1,20 @@
+▶ Vérification de bonne santé — staging
+
+  · L'API répond → https://api-staging-a5e8.up.railway.app/health
+  ✓ L'API répond — 297 ms · révision a01f857 · déploiement 1de24e25
+  · L'API sert la révision attendue → https://api-staging-a5e8.up.railway.app/health
+  ✓ L'API sert la révision attendue — a01f857 — c'est bien la révision poussée
+  · La carte publique se sert → https://api-staging-a5e8.up.railway.app/public/tenants/classfood/menu
+  ✓ La carte publique se sert — 22 catégories · 109 produits · 170 ms
+  · Le catalogue fidélité public se sert → https://api-staging-a5e8.up.railway.app/public/tenants/classfood/loyalty
+  ✓ Le catalogue fidélité public se sert — points · 1 récompense(s) · 57 ms
+  · La PWA fidélité publique se sert → https://web-staging-6f5f.up.railway.app/r/classfood/fidelite
+  ✓ La PWA fidélité publique se sert — 196 ms · empreinte 38c873a8790d
+  · Commande en ligne + back-office (web) → https://web-staging-6f5f.up.railway.app/
+  ✓ Commande en ligne + back-office (web) — 109 ms · empreinte 1e31913938b4
+  · Caisse (pos) → https://pos-staging-7f92.up.railway.app/
+  ✓ Caisse (pos) — 130 ms · empreinte 55a02aee46dd
+  · Écran cuisine (kds) → https://kds-staging-90da.up.railway.app/
+  ✓ Écran cuisine (kds) — 126 ms · empreinte cd9dac8d558a
+
+✓ staging en bonne santé — 8 contrôle(s) verts.

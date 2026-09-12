@@ -6,6 +6,8 @@ import { FONT, R, useTheme, withAlpha, type Brand } from './theme';
 import { Icon } from './Icon';
 import { Press, useReducedMotion } from './ui';
 import { useLayout } from './useLayout';
+import { categoryIcon } from './category-icons';
+export { categoryIcon } from './category-icons';
 
 /** Étiquette courte du rail, sans troncature imposée aux onglets. */
 export function railLabel(name: string): string {
@@ -15,15 +17,6 @@ export function railLabel(name: string): string {
     .replace(/^Les\s+/i, '')
     .replace(/\s+à Partager$/i, '')
     .trim();
-}
-
-/** Repère illustratif uniquement : les catégories restent celles du serveur. */
-export function categoryIcon(name: string) {
-  const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (/boisson|drink|milkshake/.test(normalized)) return 'drink' as const;
-  if (/burger|gourmet|signature|hummer/.test(normalized)) return 'burger' as const;
-  if (/tacos|tex.mex|crousty|grill/.test(normalized)) return 'flame' as const;
-  return 'list' as const;
 }
 
 export function CategoryTabs({ categories, activeId, onSelect, brand }: {

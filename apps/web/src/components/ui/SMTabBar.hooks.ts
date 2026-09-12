@@ -76,12 +76,15 @@ export function useSMAnimatedValue(target: number, duration: number, immediate: 
 }
 
 /** À étaler sur le contenu seul, jamais sur un parent de la barre positionnée. */
-export function useSMTabTransition<Key extends string>({ activeKey, onSelect, scrollRef }: {
+export function useSMTabTransition<Key extends string>({ activeKey, onSelect, scrollRef, reduceMotion = false }: {
   activeKey: Key;
   onSelect: (key: Key) => void;
   scrollRef?: SMTabScrollRef;
+  /** A local preference can strengthen the system setting, never override it. */
+  reduceMotion?: boolean;
 }) {
-  const reducedMotion = useSMReducedMotion();
+  const systemReducedMotion = useSMReducedMotion();
+  const reducedMotion = reduceMotion || systemReducedMotion;
   const [leaving, setLeaving] = useState(false);
   const latest = useRef({ activeKey, onSelect, scrollRef, reducedMotion });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,5 +123,5 @@ export function useSMTabTransition<Key extends string>({ activeKey, onSelect, sc
       setLeaving(false);
     }, SM_TAB_BAR.fadeOutMs);
   }, []);
-  return { selectTab, contentProps: { className: styles.screen, 'data-sm-tab-leaving': leaving ? 'true' : 'false' } };
+  return { selectTab, contentProps: { className: styles.screen, 'data-sm-tab-leaving': leaving ? 'true' : 'false', 'data-sm-reduce-motion': reducedMotion || undefined } };
 }

@@ -1,0 +1,58 @@
+
+> @sm/pos@1.0.0 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+> EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} vitest run && node --test ../../scripts/verifier-build-terrain.node-test.mjs
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+
+ ✓ server.test.mjs (13 tests) 72ms
+ ✓ src/api-origin.test.ts (16 tests) 12ms
+ ✓ src/demo-loyalty.test.ts (7 tests) 10ms
+ ✓ src/dining-operation.test.ts (9 tests) 7ms
+ ✓ src/service-payment.test.ts (13 tests) 9ms
+ ✓ src/phone-order-flow.test.ts (7 tests) 14ms
+ ✓ src/layout.test.ts (45 tests) 29ms
+ ✓ src/pos-state.test.ts (29 tests) 11ms
+ ✓ src/journal-payment-reconciliation.test.ts (5 tests) 5ms
+ ✓ src/QuickConfig.test.ts (3 tests) 16ms
+stderr | src/phone-order-attempt.test.ts > journal durable de la prise de commande téléphone > utilise la vraie frontière tenantStore : un ancien onglet ne peut réécrire après réappairage
+[sm] Aucun stockage persistant configuré : la file offline ne survivra pas à un redémarrage. Appelez setStore().
+
+ ✓ src/phone-order-attempt.test.ts (51 tests) 27ms
+ ✓ src/service-reconciliation.test.ts (14 tests) 6ms
+ ✓ src/service-state.test.ts (21 tests) 4ms
+ ✓ src/loyalty-state.test.ts (8 tests) 12ms
+ ✓ src/demo-payment.test.ts (3 tests) 10ms
+ ✓ src/service-handover.test.ts (6 tests) 6ms
+ ✓ src/dining-journal.test.ts (8 tests) 7ms
+ ✓ src/demo-retour.test.ts (11 tests) 3ms
+ ✓ src/pos-safety.test.ts (10 tests) 4ms
+ ✓ src/prefs.test.ts (12 tests) 3ms
+ ✓ src/visual-palette.test.ts (4 tests) 3ms
+ ✓ src/category-icons.test.ts (18 tests) 2ms
+ ✓ src/dining-state.test.ts (3 tests) 2ms
+ ✓ src/device-boundary.test.ts (2 tests) 2ms
+ ✓ src/catalog-layout.test.ts (3 tests) 2ms
+ ✓ src/quick-config-options.test.ts (3 tests) 2ms
+ ✓ src/photo.test.ts (8 tests) 4ms
+
+ Test Files  27 passed (27)
+      Tests  332 passed (332)
+   Start at  21:46:53
+   Duration  1.57s (transform 1.08s, setup 0ms, collect 6.86s, tests 283ms, environment 3ms, prepare 1.32s)
+
+▶ configuration des builds terrain
+  ✔ accepte uniquement les trois paires completes (0.413167ms)
+  ✔ refuse une configuration absente ou partielle (0.688041ms)
+  ✔ refuse tout mélange staging et production (0.112458ms)
+  ✔ refuse localhost sans le drapeau local et le drapeau local à distance (0.083875ms)
+  ✔ refuse les variantes et origines non prévues (0.110292ms)
+✔ configuration des builds terrain (2.023584ms)
+ℹ tests 5
+ℹ suites 1
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51.788625

@@ -1,0 +1,40 @@
+[
+  {
+    "case": "verified_hash_allowed",
+    "passed": true,
+    "exitCode": 0,
+    "rules": []
+  },
+  {
+    "case": "new_value_detected",
+    "passed": true,
+    "exitCode": 1,
+    "rules": [
+      "generic-api-key"
+    ]
+  },
+  {
+    "case": "same_hash_outside_detected",
+    "passed": true,
+    "exitCode": 1,
+    "rules": [
+      "generic-api-key"
+    ]
+  },
+  {
+    "case": "connection_uri_still_detected",
+    "passed": true,
+    "exitCode": 1,
+    "rules": [
+      "uri-connexion-avec-identifiants"
+    ]
+  },
+  {
+    "case": "specific_key_still_detected",
+    "passed": true,
+    "exitCode": 1,
+    "rules": [
+      "github-pat"
+    ]
+  }
+]

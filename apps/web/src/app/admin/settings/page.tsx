@@ -41,6 +41,7 @@ import { nomAffichable, poserMonNom, useIdentite } from "@/lib/identite";
 import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
 import { EditeurDeMarque, EditeurDeMarqueEnAttente } from "./EditeurDeMarque";
 import { phraseDuGeste, signatureDeLAuteur } from "./journal";
+import { Salle } from "./Salle";
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -173,6 +174,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-[26px]">
+      <Salle identite={identite} capacites={me === null ? null : me.capacites ?? []} />
       <Panel
         title="L'identité de l'enseigne"
         sub="Le nom s'applique partout : caisse, cuisine, tickets, page de commande."

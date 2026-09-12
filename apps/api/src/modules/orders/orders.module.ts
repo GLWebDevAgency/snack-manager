@@ -16,11 +16,14 @@ import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { PublicOrderRecoveryController } from './public-order-recovery.controller';
 import { OnlineOrderCheckoutService } from './online-order-checkout.service';
 import { CustomerOrderHistoryService } from './customer-order-history.service';
+import { DiningController } from './dining.controller';
+import { DiningService } from './dining.service';
+import { DiningSchemaBootstrap } from './dining-schema-bootstrap';
 
 @Module({
   imports: [TenantsModule, OrderingModule, EncaissementModule],
-  controllers: [OrdersController, OrderFinanceController, OrderCounterController, PublicOrderRecoveryController],
-  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService, OnlineOrderCheckoutService, CustomerOrderHistoryService],
+  controllers: [OrdersController, OrderFinanceController, OrderCounterController, PublicOrderRecoveryController, DiningController],
+  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService, OnlineOrderCheckoutService, CustomerOrderHistoryService, DiningService, DiningSchemaBootstrap],
   exports: [OnlineOrderCheckoutService],
 })
 export class OrdersModule {}

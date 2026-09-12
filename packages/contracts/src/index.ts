@@ -7,6 +7,8 @@ import { OrderLineInputSchema, PaymentMethodSchema, CreatePublicOrderSchema } fr
 export * from './order-input';
 import { PublicOrderRecoveryProofSchema } from './order-recovery';
 import { StaffPhoneOrderAttemptRequestSchema } from './staff-order-attempt';
+import { DiningSessionOperationSchema } from './dining';
+export * from './dining';
 
 export * from './comptes';
 export * from './supply';
@@ -448,6 +450,17 @@ export const CreateStaffOrderSchema = z.discriminatedUnion('channel', [
   StaffPhoneOrderAttemptRequestSchema,
   CreateOrderSchema.safeExtend({ channel: z.enum(['pos', 'online']) }),
 ]);
+
+/** Authenticated table admission. Prices, table labels and kitchen state belong to the server. */
+export const DiningAddOrderSchema = DiningSessionOperationSchema.extend({ order: CreateOrderSchema }).strict()
+  .superRefine((body, ctx) => {
+    if (body.operationId !== body.order.clientId || body.order.channel !== 'pos' || body.order.type !== 'surplace'
+      || body.order.payment.method !== 'counter' || body.order.payment.tender != null || body.order.pickup || body.order.delivery
+      || body.order.payment.cashReceived !== undefined || body.order.payment.changeGiven !== undefined || body.order.lines.length > 100) {
+      ctx.addIssue({ code: 'custom', path: ['order'], message: 'Une table reçoit une commande sur place à encaisser, avec la même opération.' });
+    }
+  });
+export type DiningAddOrder = z.infer<typeof DiningAddOrderSchema>;
 
 /**
  * État public, sans identifiant membre ni détail technique, du gain porté

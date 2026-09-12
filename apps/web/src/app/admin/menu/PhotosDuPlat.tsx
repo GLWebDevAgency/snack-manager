@@ -61,14 +61,21 @@ type Props = {
   onChange: (ids: string[]) => void;
   /** La médiathèque du restaurant, chargée (et mise en cache) par la page. */
   chargerMediatheque: (forcer?: boolean) => Promise<Mediatheque>;
+  disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 };
 
-export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque }: Props) {
+export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque, disabled = false, onBusyChange }: Props) {
   const [bib, setBib] = useState<Mediatheque | null>(null);
   const [etat, setEtat] = useState<"chargement" | "prete" | "erreur">("chargement");
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false);
   const [cadrage, setCadrage] = useState<MediaVue | null>(null);
   const [envoi, setEnvoi] = useState(false);
+  const [preparation, setPreparation] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(envoi || preparation);
+    return () => onBusyChange?.(false);
+  }, [envoi, onBusyChange, preparation]);
   /** Ce que le dépôt vient de faire — « réduite : 3,2 Mo → 380 Ko ». */
   const [note, setNote] = useState<string | null>(null);
   const [refus, setRefus] = useState<string | null>(null);
@@ -123,6 +130,7 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
    * soupçonner qu'on la lui a abîmée en douce.
    */
   async function deposer(fichier: File) {
+    if (disabled || envoi) return;
     setEnvoi(true);
     setRefus(null);
     setNote(null);
@@ -171,9 +179,9 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
   }
 
   return (
-    <div className="mt-5 border-t border-line2 pt-4">
+    <div className="mb-4 mt-5 border-t border-line2 pt-4">
       <div className="flex items-baseline justify-between gap-3">
-        <div className="text-sm font-bold text-ink">Photos</div>
+        <div className="text-sm font-bold text-ink">Photos et illustrations</div>
         <span className="cf-fig text-[12px] text-mut">
           {photos.length} / {MEDIAS_PAR_PRODUIT_MAX}
         </span>
@@ -200,7 +208,7 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
           <div className="mt-3 flex flex-col gap-2">
             {photos.length === 0 && (
               <p className="rounded-card border border-dashed border-line px-3.5 py-3 text-[13px] text-mut">
-                Aucune photo pour l&apos;instant — ce plat s&apos;affiche avec son nom seul.
+                Pas encore de photo ? Choisissez une illustration de la bibliothèque, puis remplacez-la par votre photo quand elle est prête.
               </p>
             )}
 
@@ -304,7 +312,10 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
           </div>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <Btn variant="ghost" size="sm" icon="grid" onClick={() => setBibliothequeOuverte(true)}>
+            <Btn size="sm" icon="grid" disabled={disabled || envoi} onClick={() => setBibliothequeOuverte(true)}>
+              Choisir une illustration
+            </Btn>
+            <Btn variant="ghost" size="sm" icon="grid" disabled={disabled || envoi} onClick={() => setBibliothequeOuverte(true)}>
               Médiathèque{choix.length > 0 ? ` (${choix.length})` : ""}
             </Btn>
             <BoutonDepot
@@ -312,7 +323,7 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
               // Le dépôt attache aussitôt : sur un plat déjà complet, il n'y a
               // rien à attacher. La médiathèque, elle, reste ouverte au dépôt —
               // c'est la bibliothèque de l'établissement, pas celle du plat.
-              disabled={complet}
+              disabled={complet || disabled || preparation}
               titre={
                 complet
                   ? `Un plat porte au plus ${MEDIAS_PAR_PRODUIT_MAX} photos — détachez-en une, ou déposez depuis la médiathèque.`
@@ -346,7 +357,8 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
           medias={choix}
           quota={bib.quota}
           photos={photos}
-          envoi={envoi}
+          envoi={envoi || disabled || preparation}
+          onPreparationChange={setPreparation}
           onFichier={deposer}
           noteDepot={note}
           refusDepot={refus}
@@ -385,6 +397,7 @@ function ModaleMediatheque({
   photos,
   envoi,
   onFichier,
+  onPreparationChange,
   noteDepot,
   refusDepot,
   onBasculer,
@@ -397,6 +410,7 @@ function ModaleMediatheque({
   photos: string[];
   envoi: boolean;
   onFichier: (fichier: File) => Promise<void>;
+  onPreparationChange: (busy: boolean) => void;
   noteDepot: string | null;
   refusDepot: string | null;
   onBasculer: (media: MediaVue) => void;
@@ -458,7 +472,7 @@ function ModaleMediatheque({
         }
       >
         <div className="flex flex-col gap-3">
-          <BibliothequeIllustrations envoi={envoi || busy} onFichier={onFichier} />
+          <BibliothequeIllustrations envoi={envoi || busy} onFichier={onFichier} onBusyChange={onPreparationChange} />
           {noteDepot && <p role="status" className="text-xs text-mut">{noteDepot}</p>}
           {refusDepot && <p role="alert" className="text-xs text-alertt">{refusDepot}</p>}
           <p className="text-[13px] text-mut">

@@ -1,7 +1,7 @@
 /** Tokens du KDS : présentation thémable, couleurs de statut fixes. */
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { palette, radius as legacyRadius, TOUCH_MIN } from '@sm/client-core';
-import { radius as designRadius, space } from '@sm/design-tokens';
+import { radius as designRadius, space, light as lightTokens, dark as darkTokens } from '@sm/design-tokens';
 import { ratioContraste } from '@sm/contracts';
 import type { KdsTheme } from './prefs';
 import { BRAND_FONT } from '@sm/ui-native/brand';
@@ -33,6 +33,12 @@ const elevate = (css: string, native: { color: string; opacity: number; radius: 
 function buildUi(theme: KdsTheme) {
   const light = theme === 'light';
   const palette = visualPalette(theme);
+  const tokens = light ? lightTokens : darkTokens;
+  const statusColors = {
+    new: { ink: tokens.danger, wash: tokens.dangerSoft },
+    preparing: { ink: tokens.warning, wash: tokens.warningSoft },
+    ready: { ink: tokens.success, wash: tokens.successSoft },
+  };
   const surface = {
     bg: palette.bg, card: palette.surface, el: palette.surface2,
     el2: palette.surface2, column: palette.bg,
@@ -67,7 +73,7 @@ function buildUi(theme: KdsTheme) {
     micro: { ...base, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: ink.dim },
     action: { ...base, fontSize: 15, fontWeight: '800', letterSpacing: 0.4 },
   });
-  return { theme, palette, surface, hair, hair2, ink, shadow, type, FONT, tabular, radius, space, TOUCH_MIN, scrim: palette.scrim };
+  return { theme, palette, statusColors, surface, hair, hair2, ink, shadow, type, FONT, tabular, radius, space, TOUCH_MIN, scrim: palette.scrim };
 }
 
 export type Ui = ReturnType<typeof buildUi>;

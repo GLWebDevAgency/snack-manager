@@ -1,7 +1,9 @@
 import { mostAdvancedStatus, type Order, type OrderStatus } from '@sm/client-core';
 
-/** Aucun lancement cuisine avant paiement, même depuis une ancienne photo locale. */
-export function isKitchenEligible(order: Pick<Order, 'type' | 'payment'>): boolean {
+/** La livraison exige le paiement ; une table déjà servie sort du passe,
+ * même si son encaissement doit encore être confirmé par la caisse. */
+export function isKitchenEligible(order: Pick<Order, 'type' | 'payment' | 'status' | 'dining'>): boolean {
+  if (order.type === 'surplace' && order.status === 'ready' && order.dining?.servedAt) return false;
   return order.type !== 'delivery' || order.payment?.status === 'paid';
 }
 

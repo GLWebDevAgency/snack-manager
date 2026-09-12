@@ -1,7 +1,7 @@
 /* Staff-only treatment. Customer masks remain inline on their own roots. */
 .sm-backoffice {
   color: var(--cf-text);
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 .sm-backoffice .sm-button,
@@ -15,8 +15,9 @@
 }
 
 .sm-backoffice nav a[aria-current="page"] {
-  background: color-mix(in srgb, var(--cf-accent) 14%, var(--cf-surface));
-  color: var(--cf-accent);
+  background: var(--cf-text);
+  color: var(--cf-surface);
+  font-weight: 600;
   box-shadow: none;
 }
 
@@ -34,3 +35,74 @@
     transform: none;
   }
 }
+
+.sm-backoffice[data-sm-theme="dark"] { color-scheme: dark; }
+.sm-backoffice nav a[aria-current="page"] .text-onaccent { color: var(--cf-surface); }
+
+/* Compatibility for neutral utilities authored when staff screens were dark.
+   A mask declares --cf-font-body on its own root: those product previews stay
+   outside this adapter, including their children, fills and photo captions. */
+.sm-backoffice .bg-white\/10:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 10%, transparent); }
+.sm-backoffice .bg-white\/12:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 12%, transparent); }
+.sm-backoffice .bg-white\/15:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 15%, transparent); }
+.sm-backoffice .bg-white\/18:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 18%, transparent); }
+.sm-backoffice .bg-white\/20:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 20%, transparent); }
+.sm-backoffice .bg-white\/25:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 25%, transparent); }
+.sm-backoffice .bg-white\/3:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 3%, transparent); }
+.sm-backoffice .bg-white\/4:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 4%, transparent); }
+.sm-backoffice .bg-white\/40:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 40%, transparent); }
+.sm-backoffice .bg-white\/5:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 5%, transparent); }
+.sm-backoffice .bg-white\/6:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 6%, transparent); }
+.sm-backoffice .bg-white\/60:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 60%, transparent); }
+.sm-backoffice .bg-white\/8:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 8%, transparent); }
+.sm-backoffice .bg-white\/\[0\.025\]:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { background-color: color-mix(in srgb, var(--cf-text) 2.5%, transparent); }
+.sm-backoffice .border-white\/10:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 10%, transparent); }
+.sm-backoffice .border-white\/12:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 12%, transparent); }
+.sm-backoffice .border-white\/14:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 14%, transparent); }
+.sm-backoffice .border-white\/15:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 15%, transparent); }
+.sm-backoffice .border-white\/18:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 18%, transparent); }
+.sm-backoffice .border-white\/20:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: var(--cf-line-firm); }
+.sm-backoffice .border-white\/28:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: var(--cf-line-firm); }
+.sm-backoffice .border-white\/30:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: var(--cf-line-firm); }
+.sm-backoffice .border-white\/35:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: var(--cf-line-firm); }
+.sm-backoffice .border-white\/6:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 6%, transparent); }
+.sm-backoffice .border-white\/8:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { border-color: color-mix(in srgb, var(--cf-text) 8%, transparent); }
+.sm-backoffice .focus\:bg-white\/8:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):focus { background-color: color-mix(in srgb, var(--cf-text) 8%, transparent); }
+.sm-backoffice .group:hover .group-hover\:text-white:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-text); }
+.sm-backoffice .hover\:bg-white\/10:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 10%, transparent); }
+.sm-backoffice .hover\:bg-white\/12:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 12%, transparent); }
+.sm-backoffice .hover\:bg-white\/3:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 3%, transparent); }
+.sm-backoffice .hover\:bg-white\/4:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 4%, transparent); }
+.sm-backoffice .hover\:bg-white\/5:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 5%, transparent); }
+.sm-backoffice .hover\:bg-white\/6:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 6%, transparent); }
+.sm-backoffice .hover\:bg-white\/8:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 8%, transparent); }
+.sm-backoffice .hover\:bg-white\/\[0\.025\]:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { background-color: color-mix(in srgb, var(--cf-text) 2.5%, transparent); }
+.sm-backoffice .hover\:border-white\/16:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { border-color: color-mix(in srgb, var(--cf-text) 16%, transparent); }
+.sm-backoffice .hover\:border-white\/20:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { border-color: var(--cf-line-firm); }
+.sm-backoffice .hover\:border-white\/25:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { border-color: var(--cf-line-firm); }
+.sm-backoffice .hover\:border-white\/30:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { border-color: var(--cf-line-firm); }
+.sm-backoffice .hover\:border-white\/40:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { border-color: var(--cf-line-firm); }
+.sm-backoffice .hover\:text-white:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)):hover { color: var(--cf-text); }
+@media (max-width: 767px) { .sm-backoffice .max-md\:text-white:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-text); } }
+.sm-backoffice .text-white:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-text); }
+.sm-backoffice .text-white\/25:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-mut); }
+.sm-backoffice .text-white\/60:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-mut); }
+.sm-backoffice .text-white\/70:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-mut); }
+.sm-backoffice .text-white\/80:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-mut); }
+
+/* Filled verdicts and brand controls retain their own contrast pair. */
+.sm-backoffice .bg-ok.text-white { color: var(--cf-on-green); }
+.sm-backoffice .bg-alert.text-white { color: var(--cf-on-red); }
+.sm-backoffice .bg-prep.text-white { color: var(--cf-on-amber); }
+.sm-backoffice .bg-accent.text-white { color: var(--cf-on-accent); }
+.sm-backoffice .bg-gold.text-white { color: var(--cf-on-gold); }
+.sm-backoffice [data-dialog-footer] { background: var(--cf-surface); }
+.sm-backoffice .hover\:bg-\[\#333\]:hover { background: var(--cf-surface-2); }
+.sm-backoffice .text-accent:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-accent-ink); }
+.sm-backoffice .text-accent\/70:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-accent-ink); }
+.sm-backoffice .text-ok:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-green-t); }
+.sm-backoffice .text-alert:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-red-t); }
+.sm-backoffice .text-prep:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-amber-t); }
+
+.sm-backoffice .text-accent\/80:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-accent-ink); }
+.sm-backoffice .text-gold:not(:where([style*="--cf-font-body"], [style*="--cf-font-body"] *)) { color: var(--cf-gold-ink); }

@@ -20,10 +20,11 @@ import { EmptyState, Press, useReducedMotion } from './ui';
 import { CategoryTabs, categoryIcon, railLabel } from './CategoryTabs';
 import { Icon } from './Icon';
 import { PoweredBy } from './PoweredBy';
+import { usePrefs } from './usePrefs';
 import {
   cadrageVignette,
   cardWidth,
-  columnsFor,
+  catalogColumnsFor,
   useLayout,
   type Layout,
 } from './useLayout';
@@ -185,6 +186,7 @@ export function ProductArea({
   const L = useLayout();
   const { palette, type, sheet, semanticText } = useTheme();
   const reducedMotion = useReducedMotion();
+  const { prefs } = usePrefs();
   const [gridWidth, setGridWidth] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filter, setFilter] = useState<CatalogFilter>(null);
@@ -204,7 +206,7 @@ export function ProductArea({
     return (activeCat?.products ?? []).map((product) => ({ product, categoryName: activeCat?.name ?? '' }));
   }, [activeCat, allProducts, filter, q]);
   const title = q ? 'Résultats' : filter === 'popular' ? 'Populaires' : filter === 'new' ? 'Nouveautés' : activeCat?.name ?? 'Catalogue';
-  const cols = list ? L.listColumnsFor(gridWidth) : columnsFor(gridWidth, L);
+  const cols = list ? L.listColumnsFor(gridWidth) : catalogColumnsFor(gridWidth, L, prefs.catalogDensity);
   const cardW = cardWidth(gridWidth, cols, L.gridGap);
   const selectCategory = (id: string) => {
     setFilter(null);
@@ -225,6 +227,10 @@ export function ProductArea({
   return (
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
       <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: L.sp(12) }}>
+        {!L.compact ? <View style={{ paddingTop: L.sp(14), paddingBottom: L.sp(8), gap: L.sp(6) }}>
+          <Text accessibilityRole="header" style={[type.h1, { fontSize: L.fs(28) }]}>Caisse</Text>
+          <Text style={[type.mut, { fontSize: L.fs(13) }]}>La carte à portée de main. Composez votre commande.</Text>
+        </View> : null}
         {L.catalogWideSearch ? <SearchField query={query} onQuery={onQuery} brand={brand} /> : null}
         {tabs ? (
           <View style={{ flexDirection: 'row', gap: L.sp(8), alignItems: 'center' }}>
@@ -427,7 +433,7 @@ function ProductCard({ product, catalogue, width, layout: L, brand, onPress }: {
   const photo = photoDuPoste(product.photoUrl);
   // La photo garde son cadre carré et son point d'intérêt métier. Sa place
   // grandit au-dessus du texte ; le prix ne partage plus sa rangée avec elle.
-  const photoSize = Math.max(1, Math.min(width - L.sp(8) * 2 - 2, L.sp(144)));
+  const photoSize = Math.max(1, Math.min(width - L.sp(8) * 2 - 2, L.sp(176)));
   const showDescription = L.catalogDescriptions && !!product.description;
   return (
     <Press onPress={out ? undefined : onPress} disabled={out}
@@ -439,7 +445,7 @@ function ProductCard({ product, catalogue, width, layout: L, brand, onPress }: {
         {product.isNew && !out ? <View style={{ position: 'absolute', left: L.sp(8), top: L.sp(8) }}><ProductBadge kind="new" /></View> : null}
       </View>
       <View style={{ paddingHorizontal: L.sp(4), paddingBottom: L.sp(4), gap: L.sp(10) }}>
-        <View style={{ minHeight: L.fs(L.catalogDescriptions ? 76 : 38), gap: L.sp(4) }}>
+        <View style={{ minHeight: L.fs(L.catalogDescriptions ? 60 : 38), gap: L.sp(4) }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: L.sp(6) }}>
             <Text numberOfLines={2} style={{ flex: 1, fontFamily: FONT, color: palette.text, fontSize: L.fs(14.5), fontWeight: '700', lineHeight: L.fs(19), letterSpacing: -0.2 }}>{product.name}</Text>
             {required && !out ? <View style={{ width: L.sp(6), height: L.sp(6), borderRadius: R.pill, marginTop: L.sp(6), backgroundColor: brand.accent }} /> : null}
@@ -495,7 +501,7 @@ function ProductPrice({ product, layout: L, dense = false }: { product: Product;
   return (
     <View style={{ flexDirection: 'row', flexWrap: dense ? 'nowrap' : 'wrap', alignItems: 'baseline', gap: L.sp(4), flexShrink: dense ? 0 : 1, maxWidth: '100%' }}>
       {product.variants?.length ? <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(11.5), fontWeight: '700' }}>dès</Text> : null}
-      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(dense ? 17 : 19), fontWeight: '800', letterSpacing: dense ? -0.5 : -0.7, fontVariant: ['tabular-nums'] }}>{euros(basePrice(product, product.variants?.[0]?.key ?? null))}</Text>
+      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(dense ? 17 : 18), fontWeight: '700', letterSpacing: -0.3, fontVariant: ['tabular-nums'] }}>{euros(basePrice(product, product.variants?.[0]?.key ?? null))}</Text>
     </View>
   );
 }

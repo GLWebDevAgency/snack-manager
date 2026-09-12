@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveIconName } from "@sm/design-icons";
 import {
   CAPACITES,
   CAPACITES_PAR_FORMULE,
@@ -50,6 +51,14 @@ const verrous = (groupes: readonly { items: readonly { href: string; verrouille:
  * réellement produites sur cette barre.
  */
 describe("navigation du back-office restaurateur", () => {
+  it("utilise les pictogrammes du kit, sauf le symbole euro absent du registre", () => {
+    for (const item of NAV) {
+      if (item.icon === 'euro') continue;
+      expect(resolveIconName(item.icon), item.href).not.toBeNull();
+    }
+    expect(NAV.find(item => item.href === '/admin/menu')?.icon).toBe('menu');
+    expect(NAV.find(item => item.href === '/admin/planning')?.icon).toBe('calendar');
+  });
   it("accueille sur une fonction souscrite et autorisée", () => {
     expect(accueilAdmin(OWNER)).toBe('/admin/dashboard');
     expect(accueilAdmin({ ...OWNER, capacites: ['loyalty'] })).toBe('/admin/fidelite');

@@ -1,63 +1,20 @@
-/** Tracés du kits POS et KDS, partagés entre react-native-web et le futur client natif. */
+/** Icônes du kit POS/KDS ; compléments conservés uniquement sans équivalent. */
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import { Platform, type StyleProp, type ViewStyle } from 'react-native';
-import { renderIcon, shapes, type IconName } from '@sm/design-icons';
+import { renderIcon, resolveIconName } from '@sm/design-icons';
 
 const PATHS: Record<string, string> = {
-  'kds-list': 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
-  'kds-bell': 'M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 003.4 0',
   'bellOff': 'M13.7 21a1.9 1.9 0 01-3.4 0M18.6 13A17 17 0 0118 8a6 6 0 00-9.3-5M6.3 6.3A6 6 0 006 8c0 7-3 9-3 9h14M3 3l18 18',
-  'kds-flame': 'M12 22c4.4 0 7-3 7-7 0-3-2-5-3-7-.5 2-1.5 3-2.5 3.5C13 9 12 6 8.5 3c0 4-3.5 6-3.5 12 0 4 2.6 7 7 7z',
-
-  "burger": "M4 11h16M4 11a8 8 0 0116 0M5 15h14a2 2 0 010 4H5a2 2 0 010-4zM7.5 8.2h.01M11 7.4h.01M14.5 8h.01",
-  "tacos": "M3 17c0-5 4-9 9-9s9 4 9 9M3 17a2 2 0 002 2h14a2 2 0 002-2M8 14l1.5-2M12 13v-2M16 14l-1.5-2",
   "sandwich": "M3 8l9-4 9 4-9 4-9-4zM3 8v3l9 4 9-4V8M6 12.5V15l6 2.6L18 15v-2.5",
   "dog": "M4 12h16a2 2 0 010 4H4a2 2 0 010-4zM6 12a6 6 0 0112 0M9 10l1 2M13 10l1 2",
-  "box": "M3 7l9-4 9 4v10l-9 4-9-4V7zM3 7l9 4 9-4M12 11v10",
   "chicken": "M13 4a5 5 0 00-5 5c0 2-1 3-2.5 4S4 16 5 18s4 1 5-0.5 2-2.5 4-2.5a5 5 0 000-9zM6 18l-2 2",
-  "salad": "M4 11h16a8 8 0 01-16 0zM8 11a3 3 0 013-3M13 8a3 3 0 013 3M12 5v3",
-  "drink": "M7 4h10l-1 3H8L7 4zM8 7l1 12a1.5 1.5 0 001.5 1.5h3A1.5 1.5 0 0015 19l1-12M9 11h6",
-  "dessert": "M5 21h14M6 21l1-6h10l1 6M12 15V9M9 9a3 3 0 016 0M12 4v2",
-  "fries": "M6 9l1-4 2 1 1-3 2 3 2-1 1 4M5 9h14l-1.5 10.5a1 1 0 01-1 .5H7.5a1 1 0 01-1-.5L5 9z",
-  "star": "M12 3l2.7 5.8 6.3.8-4.6 4.4 1.2 6.3L12 17.3 6.4 20.3l1.2-6.3L3 9.6l6.3-.8z",
-  "clock": "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
-  "bag": "M6 8h12l1 13H5zM9 8a3 3 0 016 0",
-  "check": "M5 12.5l4.5 4.5L19 7",
-  "plus": "M12 5v14M5 12h14",
-  "minus": "M5 12h14",
-  "fire": "M12 3c1 3-1 5-2 6s-2 3-2 5a4 4 0 008 0c0-2-1-3-1-4 2 1 3 3 3 5a6 6 0 01-12 0c0-4 3-6 4-8s2-4 2-4z",
   "heart": "M12 20s-7-4.5-9-9a4.5 4.5 0 018-3 4.5 4.5 0 018 3c-2 4.5-9 9-9 9z",
-  "print": "M7 8V4h10v4M5 8h14a1 1 0 011 1v7h-3v3H7v-3H4V9a1 1 0 011-1z",
-  "bell": "M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6zM10 21a2 2 0 004 0",
-  "user": "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
-  "pin": "M12 21s-7-6-7-11a7 7 0 1114 0c0 5-7 11-7 11zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z",
-  "phone": "M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z",
   "cart": "M4 5h2l2.5 11h9L20 8H7M9 20a1 1 0 100 2 1 1 0 000-2zM17 20a1 1 0 100 2 1 1 0 000-2z",
-  "edit": "M4 20h4L18 10l-4-4L4 16v4zM14 6l4 4",
   "trash": "M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13",
-  "chart": "M4 20V10M10 20V4M16 20v-7M22 20H2",
-  "gear": "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z",
-  "tag": "M4 4h7l9 9-7 7-9-9V4zM8 8h.01",
   "home": "M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z",
-  "grid": "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
-  "ticket": "M4 7a2 2 0 012-2h12a2 2 0 012 2 2 2 0 000 4 2 2 0 010 4 2 2 0 01-2 2H6a2 2 0 01-2-2 2 2 0 000-4 2 2 0 010-4zM12 6v12",
-  "arrow": "M5 12h14M13 6l6 6-6 6",
-  "back": "M15 6l-6 6 6 6",
-  "close": "M6 6l12 12M18 6L6 18",
-  "search": "M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4",
   "euro": "M15 7a5 5 0 100 10M6 10h7M6 14h7",
-  "lock": "M6 11h12v10H6zM9 11V8a3 3 0 016 0v3",
-  "chev": "M9 6l6 6-6 6",
-  "receipt": "M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21zM9 8h6M9 12h6",
-  "card": "M3 7h18v11H3zM3 11h18M7 15h3",
-  "cash": "M3 7h18v10H3zM12 15a3 3 0 100-6 3 3 0 000 6zM6 10h.01M18 14h.01",
   "pause": "M8 5v14M16 5v14",
   "bolt": "M13 3L5 14h6l-1 7 8-11h-6z",
-  "wifi": "M2 9a15 15 0 0120 0M5.5 12.5a10 10 0 0113 0M9 16a5 5 0 016 0M12 19.5h.01",
-  "settings": "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z",
-  "chevron-right": "M9 6l6 6-6 6",
-  "flame": "M12 3c1 3-1 5-2 6s-2 3-2 5a4 4 0 008 0c0-2-1-3-1-4 2 1 3 3 3 5a6 6 0 01-12 0c0-4 3-6 4-8s2-4 2-4z",
-  "list": "M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21zM9 8h6M9 12h6"
 };
 
 export function Icon({ name, size = 18, color, strokeWidth = 1.75, style }: {
@@ -67,15 +24,19 @@ export function Icon({ name, size = 18, color, strokeWidth = 1.75, style }: {
   strokeWidth?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  if (Object.hasOwn(shapes, name)) {
-    return <SvgXml xml={renderIcon(name as IconName)} width={size} height={size}
+  const canonical = resolveIconName(name);
+  if (canonical) {
+    return <SvgXml xml={renderIcon(canonical)} width={size} height={size}
       color={color ?? '#ffffff'} strokeWidth={strokeWidth}
       {...(Platform.OS === 'web' ? { 'aria-hidden': true as const } : { accessible: false })} style={style} />;
   }
-  // Les clés historiques sans équivalent conservent leur dessin (ex. bellOff).
+  // Absences réelles du kit uniquement : silence, panier, corbeille, devise…
+  // Une clé inconnue ne doit jamais devenir une étoile sans rapport.
+  const path = Object.hasOwn(PATHS, name) ? PATHS[name] : null;
+  if (!path) return null;
   return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? '#ffffff'}
     strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
     {...(Platform.OS === 'web' ? { 'aria-hidden': true as const } : { accessible: false })} style={style}>
-    <Path d={PATHS[name] ?? PATHS.star} />
+    <Path d={path} />
   </Svg>;
 }

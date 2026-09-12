@@ -86,6 +86,7 @@ export function Tracking({
   const status: OrderStatus = state.status;
   const finished = status === "delivered" || status === "cancelled";
   const delivery = state.fulfillment === "delivery" || ticket?.type === "delivery";
+  const atTable = !delivery && !!ticket?.dining;
   const dispatched = Boolean(state.delivery?.dispatchedAt);
   const payment = state.payment;
   const paymentBusy = resuming || switchingCounter || confirmingCard;
@@ -104,6 +105,7 @@ export function Tracking({
       hint: finished ? "Préparation terminée" : dispatched ? "Votre commande est en route" : "En attente du départ du livreur",
     };
     if (finished) return { ...step, hint: step.status === "new" ? "Commande reçue par le restaurant" : "Préparation terminée" };
+    if (atTable && step.status === "ready") return { ...step, hint: "Service à table" };
     return step;
   });
   const timeline: TimelineStep[] = [
@@ -261,7 +263,7 @@ export function Tracking({
         {/* ── Numéro de retrait : l’information à voir de loin ── */}
         <Surface className="sm-order-tracking-number relative px-5 py-6 text-center">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-            {delivery ? "Numéro de commande" : "Numéro de retrait"}
+            {delivery || atTable ? "Numéro de commande" : "Numéro de retrait"}
           </p>
           <p className="font-display mt-1 text-[72px] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {pickupNumber}
@@ -393,6 +395,7 @@ export function Tracking({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             Votre commande
           </p>
+          {ticket.dining ? <p className="mt-2 text-sm font-semibold text-ink">Table · {ticket.dining.tableLabel}</p> : null}
           <ul className="mt-3 flex flex-col gap-3">
             {ticket.lines.map((line, i) => (
               <li key={`${line.name}-${i}`} className="flex items-start gap-3">
@@ -459,7 +462,7 @@ export function Tracking({
         {ticket && (
         <Surface className="p-4">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-            {delivery ? "Adresse de livraison" : "Où récupérer"}
+            {delivery ? "Adresse de livraison" : atTable ? "Au restaurant" : "Où récupérer"}
           </p>
           <p className="mt-2 text-[15px] font-semibold text-ink">
             {delivery && ticket.delivery ? ticket.delivery.address.line1 : ticket.header.tenantName}

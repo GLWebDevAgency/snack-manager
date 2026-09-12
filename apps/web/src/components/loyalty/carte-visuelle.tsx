@@ -341,9 +341,9 @@ export function TuileRecompense({
             <Icon name="gift" size={19} />
           </span>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-            <p className="text-sm font-extrabold text-ink">{nom}</p>
+        <div className={styles.rewardBody}>
+          <div className={styles.rewardHeading}>
+            <p className={styles.rewardName}>{nom}</p>
             {acquise && (
               <span className="shrink-0 rounded-pill border-[1.5px] border-accent/30 bg-accentwash px-[9px] py-[3px] text-[11px] font-semibold text-accentink">
                 Acquise
@@ -354,9 +354,9 @@ export function TuileRecompense({
               `text-mut` — déjà AU plancher AA — à 2,6:1, et le coût du palier
               est justement l'information principale. Le cadeau, la bordure
               neutre et le coût suffisent à dire « pas encore ». */}
-          <p className="mt-2 text-xs leading-5 text-mut">{detail}</p>
-          <p className="cf-fig mt-3 text-sm font-black text-accentink">
-            {chiffre(cout)} {unitePour(cout, uniteSingulier, unitePluriel)}
+          <p className={styles.rewardDetail}>{detail}</p>
+          <p className={cx("cf-fig text-accentink", styles.rewardCost)}>
+            <b>{chiffre(cout)}</b><span>{unitePour(cout, uniteSingulier, unitePluriel)}</span>
           </p>
         </div>
       </div>

@@ -676,8 +676,8 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
           section={activeView === "account" ? "profile" : "loyalty"} loyaltyHref={loyaltyHref}
           onBack={() => selectTab(activeView === "loyalty" ? "account" : "loyalty")}
           onLoyalty={() => selectTab("loyalty")} onNavigationLockedChange={setAccountLocked} />}
-        <details className="mx-auto my-6 w-full max-w-[736px] rounded-panel border border-line2 bg-surface p-4" open={slug === "demo" ? true : undefined} hidden={activeView === "account"}>
-          <summary className="cf-press min-h-11 cursor-pointer py-3 font-bold text-ink">Carte remise par le restaurant</summary>
+        <details className="sm-account-legacy mx-auto my-6 w-full max-w-[736px] rounded-panel border border-line2 bg-surface p-4" open={slug === "demo" ? true : undefined} hidden={activeView === "account"}>
+          <summary className="cf-press"><Icon name="qr" size={21} /><span>Carte remise par le restaurant</span><Icon name="down" size={18} className="sm-account-legacy-chevron" /></summary>
           <p className="mb-5 text-sm leading-6 text-mut">Votre ancienne carte et son solde hors ligne restent accessibles avec son QR. Ils ne sont pas rattachés automatiquement à un compte.</p>
         {erreur && (
           <div className="mb-6 rounded-card border border-alert/35 bg-alert/10 p-4">

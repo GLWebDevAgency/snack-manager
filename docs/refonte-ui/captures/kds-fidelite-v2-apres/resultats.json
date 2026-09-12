@@ -1,0 +1,624 @@
+{
+  "phase": "fidelite-v2-apres",
+  "base": "http://127.0.0.1:8093",
+  "fixture": "packages/client-core/src/demo/snapshot.ts",
+  "browser": "Playwright Chromium; Browser plugin not available",
+  "results": [
+    {
+      "name": "1440-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "ready state stays informational",
+        "channel filter empty state then restore",
+        "settings Escape and focus return",
+        "reduce motion and transparency settings persist through reload; backdrop becomes opaque",
+        "density preference persisted",
+        "new to preparing to ready through existing handlers"
+      ],
+      "shots": [
+        "1440-light-tableau.png",
+        "1440-light-filtre-vide.png",
+        "1440-light-parametres.png",
+        "1440-light-accessibilite.png",
+        "1440-light-dense.png",
+        "1440-light-avancement-pret.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        },
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "PATCH",
+          "path": "/orders/demo-order-5/status",
+          "body": {
+            "status": "preparing"
+          }
+        },
+        {
+          "method": "PATCH",
+          "path": "/orders/demo-order-5/status",
+          "body": {
+            "status": "ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1024-light",
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "theme": "light",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "ready state stays informational",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "1024-light-tableau.png",
+        "1024-light-filtre-vide.png",
+        "1024-light-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "768-light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "theme": "light",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "compact ready state stays informational",
+        "compact all-day production list",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "768-light-tableau.png",
+        "768-light-pretes.png",
+        "768-light-a-lancer.png",
+        "768-light-filtre-vide.png",
+        "768-light-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "390-light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "compact ready state stays informational",
+        "compact all-day production list",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "390-light-tableau.png",
+        "390-light-pretes.png",
+        "390-light-a-lancer.png",
+        "390-light-filtre-vide.png",
+        "390-light-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "donnees-anciennes-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "stale": true,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "stale cached tickets preserved with error banner; distinct from empty"
+      ],
+      "shots": [
+        "donnees-anciennes-light-donnees-anciennes-erreur.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "1440-dark",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "ready state stays informational",
+        "channel filter empty state then restore",
+        "settings Escape and focus return",
+        "reduce motion and transparency settings persist through reload; backdrop becomes opaque",
+        "density preference persisted",
+        "new to preparing to ready through existing handlers"
+      ],
+      "shots": [
+        "1440-dark-tableau.png",
+        "1440-dark-filtre-vide.png",
+        "1440-dark-parametres.png",
+        "1440-dark-accessibilite.png",
+        "1440-dark-dense.png",
+        "1440-dark-avancement-pret.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        },
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "PATCH",
+          "path": "/orders/demo-order-5/status",
+          "body": {
+            "status": "preparing"
+          }
+        },
+        {
+          "method": "PATCH",
+          "path": "/orders/demo-order-5/status",
+          "body": {
+            "status": "ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1024-dark",
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "theme": "dark",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "ready state stays informational",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "1024-dark-tableau.png",
+        "1024-dark-filtre-vide.png",
+        "1024-dark-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "768-dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "theme": "dark",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "compact ready state stays informational",
+        "compact all-day production list",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "768-dark-tableau.png",
+        "768-dark-pretes.png",
+        "768-dark-a-lancer.png",
+        "768-dark-filtre-vide.png",
+        "768-dark-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "390-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "stale": false,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "compact ready state stays informational",
+        "compact all-day production list",
+        "channel filter empty state then restore",
+        "settings Escape and focus return"
+      ],
+      "shots": [
+        "390-dark-tableau.png",
+        "390-dark-pretes.png",
+        "390-dark-a-lancer.png",
+        "390-dark-filtre-vide.png",
+        "390-dark-parametres.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "donnees-anciennes-dark",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "stale": true,
+      "pass": true,
+      "checks": [
+        "table label from Order.dining is visible only on its linked ticket",
+        "stale cached tickets preserved with error banner; distinct from empty"
+      ],
+      "shots": [
+        "donnees-anciennes-dark-donnees-anciennes-erreur.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/public/devices/heartbeat",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/orders",
+          "body": null
+        }
+      ]
+    }
+  ]
+}

@@ -10,3 +10,14 @@
   background: var(--cf-surface);
   box-shadow: none;
 }
+.rewardBody { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 6px; }
+.rewardHeading { min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; }
+.rewardName { color: var(--cf-text); font-size: 15px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.rewardDetail { grid-column: 1; color: var(--cf-mut); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.rewardCost { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; line-height: 1.3; text-align: right; max-width: 90px; overflow-wrap: anywhere; }
+.rewardCost b { font-size: 20px; font-weight: 650; letter-spacing: -.03em; }
+@media (max-width: 359px) {
+  .rewardBody { column-gap: 8px; }
+  .rewardDetail { grid-column: 1 / -1; }
+  .rewardCost { grid-row: 1; }
+}

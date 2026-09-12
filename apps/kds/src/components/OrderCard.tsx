@@ -1,3 +1,4 @@
+import { Icon } from '@sm/ui-native';
 import { memo, useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { timerColor, TIMER_THRESHOLDS, type Order, type OrderLine } from '@sm/client-core';
@@ -13,7 +14,7 @@ import {
   TYPE_LABEL,
   type BoardStatus,
 } from '../ui';
-import { useAccentText, useUi } from '../theme';
+import { useUi } from '../theme';
 import { clockHM, elapsedLabel, elapsedSeconds, optionsText } from '../format';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Chevron, Pill, Tap } from './primitives';
@@ -36,7 +37,7 @@ import { kitchenNextStatus } from '../delivery-policy';
  *    à mesure que l'écran grandit.
  */
 
-const RAIL = 4;
+const RAIL = 3;
 
 export interface OrderCardProps {
   order: Order;
@@ -64,13 +65,12 @@ function ItemRow({
   layout: Layout;
   density: 'comfort' | 'dense';
 }) {
-  const { theme } = useUi();
-  const accentText = useAccentText(accent);
+  const { theme, palette } = useUi();
   const styles = cardStyles(layout, theme, density);
   const options = optionsText(line);
   return (
     <View style={[styles.itemRow, !last && styles.itemDivider]}>
-      <Text style={[styles.qty, { color: accentText }]}>{line.qty}×</Text>
+      <Text style={[styles.qty, { color: palette.text }]}>{line.qty}×</Text>
 
       <View style={styles.itemBody}>
         <View style={styles.itemHead}>
@@ -115,7 +115,7 @@ function OrderCardBase({
   layout,
   density = 'comfort',
 }: OrderCardProps) {
-  const { theme, palette, surface, ink, hair, shadow } = useUi();
+  const { theme, palette, surface, ink, hair, shadow, statusColors } = useUi();
   const styles = cardStyles(layout, theme, density);
   const status = order.status as BoardStatus;
   const tone = STATUS_TONE[status] ?? STATUS_TONE.new;
@@ -151,8 +151,8 @@ function OrderCardBase({
     : ADVANCE_LABEL[status];
   const channelLabel = CHANNEL_LABEL[order.channel] ?? order.channel;
 
-  const actionBg = status === 'ready' ? palette.green : accent;
-  const actionFg = contrastOn(actionBg);
+  const actionBg = status === 'preparing' ? statusColors.preparing.wash : surface.el;
+  const actionFg = status === 'preparing' ? statusColors.preparing.ink : palette.text;
 
   // Une entrée ponctuelle ; le statut et l'alerte de retard restent statiques
   // afin de ne pas détourner la lecture pendant la préparation.
@@ -190,24 +190,22 @@ function OrderCardBase({
 
       {/* ─── En-tête ─── */}
       <View style={styles.header}>
-        <View style={styles.noBox}>
-          <Text style={styles.noLabel}>N°</Text>
-          <Text style={styles.noValue}>{order.number}</Text>
-        </View>
-
-        <View style={styles.headRight}>
-          <View style={styles.headTop}>
-            <Text style={styles.title}>
-              {title}
-            </Text>
-            <Text
-              style={[styles.timer, { color: timer }]}
-              accessibilityLabel={`Depuis ${Math.floor(minutes)} minutes`}
-            >
+        <View style={styles.headTop}>
+          <Text style={styles.noValue}>#{order.number}</Text>
+          <View style={styles.timerGroup}>
+            <Icon name="clock" size={layout.fs(14)} color={timer} />
+            <Text style={[styles.timer, { color: timer }]} accessibilityLabel={`Depuis ${Math.floor(minutes)} minutes`}>
               {elapsedLabel(seconds)}
             </Text>
           </View>
-
+        </View>
+        <View style={styles.identityRow}>
+          <Text style={styles.title}>{title}</Text>
+          {order.dining ? <View style={styles.table} accessibilityLabel={`Table : ${order.dining.tableLabel}`}>
+            <Icon name="table" size={layout.fs(15)} color={palette.text} />
+            <Text style={styles.tableText}>Table : {order.dining.tableLabel}</Text>
+          </View> : null}
+        </View>
           <View style={styles.pills}>
             {delivery ? <Pill text={order.delivery?.dispatchedAt ? 'En livraison' : 'Livraison'} color={ink.dim} background={surface.el2} border={hair} layout={layout} /> : null}
             {/* Canal en neutre : l'accent est réservé à ce qui appelle un geste
@@ -221,13 +219,13 @@ function OrderCardBase({
             />
             <Pill
               text={paid ? 'Payé' : 'À encaisser'}
-              color={paid ? contrastOn(palette.green) : ink.dim}
-              background={paid ? palette.green : undefined}
+              color={paid ? statusColors.ready.ink : ink.dim}
+              background={paid ? statusColors.ready.wash : undefined}
               border={paid ? undefined : hair}
               layout={layout}
             />
             {late ? (
-              <Pill text="En retard" color={STATUS_TONE.new.fg} background={palette.red} layout={layout} />
+              <Pill text="En retard" color={statusColors.new.ink} background={statusColors.new.wash} layout={layout} />
             ) : null}
             {pending ? (
               <Pill
@@ -253,7 +251,6 @@ function OrderCardBase({
               <Text style={styles.meta}>Reçue {clockHM(order.createdAt)}</Text>
             )}
           </View>
-        </View>
       </View>
 
       {delivery && order.delivery ? (
@@ -300,8 +297,8 @@ function OrderCardBase({
         disabled={!next || (delivery && pending)}
         reducedMotion={reducedMotion}
         label={`${actionLabel} — commande numéro ${order.number}`}
-        style={[styles.action, { backgroundColor: actionBg }]}
-        pressedStyle={{ opacity: 0.82 }}
+        style={[styles.action, { backgroundColor: actionBg, borderWidth: 1, borderColor: status === 'preparing' ? actionBg : hair }]}
+        pressedStyle={{ opacity: 1, borderColor: actionFg }}
         flat
       >
         <View style={styles.actionInner}>
@@ -340,8 +337,8 @@ export const OrderCard = memo(OrderCardBase, (a, b) => {
 const cardStyles = scaledStyles((l: Layout, theme, density) => {
   const { palette, surface, ink, hair, hair2, type } = makeUi(theme);
   const dense = density === 'dense';
-  const pad = Math.round(10 * l.scale);
-  const gap = Math.round(12 * l.scale);
+  const pad = Math.round((dense ? 12 : 16) * l.scale);
+  const gap = pad;
   return StyleSheet.create({
     card: {
       backgroundColor: surface.card,
@@ -351,65 +348,44 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       overflow: 'hidden',
       flexShrink: 0, // hauteur dictée par le contenu, jamais par la colonne
     },
-    rail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: RAIL },
+    rail: { position: 'absolute', left: 0, right: 0, top: 0, height: RAIL },
 
     header: {
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap,
-      paddingLeft: RAIL + pad,
-      paddingRight: gap,
-      paddingVertical: dense ? Math.round(7 * l.scale) : pad,
+      gap: l.fs(10),
+      paddingHorizontal: pad,
+      paddingTop: pad + RAIL,
+      paddingBottom: dense ? l.fs(10) : l.fs(14),
       borderBottomWidth: 1,
       borderBottomColor: hair2,
     },
-    noBox: {
-      minWidth: l.far(68),
-      flexShrink: 0,
-      borderRadius: radius.sm,
-      backgroundColor: surface.el,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 6,
-      paddingHorizontal: l.fs(6),
-    },
-    noLabel: {
-      fontFamily: type.micro.fontFamily,
-      fontSize: l.fs(9),
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      color: ink.dimmer,
-    },
-    // Le chiffre que la cuisine crie au comptoir : c'est lui qui grossit le plus.
     noValue: {
       fontFamily: type.hero.fontFamily,
       fontSize: l.far(32),
-      fontWeight: '900',
+      fontWeight: '700',
       letterSpacing: -1.1,
-      lineHeight: l.far(34),
+      lineHeight: l.far(36),
       color: palette.text,
       ...tabular,
     },
-
-    headRight: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 6 },
-    headTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 },
+    headTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: l.fs(8) },
+    timerGroup: { flexDirection: 'row', alignItems: 'center', gap: l.fs(6) },
+    identityRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: l.fs(8) },
     title: {
-      flexGrow: 1,
       flexShrink: 1,
-      flexBasis: l.fs(70),
       minWidth: 0,
-      fontFamily: type.title.fontFamily,
-      fontSize: l.fs(16.5),
-      fontWeight: '700',
-      letterSpacing: -0.3,
-      color: palette.text,
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(14),
+      fontWeight: '500',
+      color: ink.dim,
     },
+    table: { flexDirection: 'row', alignItems: 'center', gap: l.fs(5), flexShrink: 1 },
+    tableText: { fontFamily: type.title.fontFamily, fontSize: l.fs(14), fontWeight: '600', color: palette.text, flexShrink: 1 },
     timer: {
       flexShrink: 0,
       fontFamily: type.clock.fontFamily,
       fontSize: l.far(22),
-      fontWeight: '800',
-      letterSpacing: -0.6,
+      fontWeight: '600',
+      letterSpacing: -0.5,
       ...tabular,
     },
     pills: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
@@ -424,7 +400,7 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
     orderNote: {
       marginHorizontal: gap,
       marginTop: 10,
-      marginLeft: RAIL + pad,
+      marginLeft: pad,
       paddingVertical: 8,
       paddingHorizontal: 11,
       borderRadius: radius.xs,
@@ -449,9 +425,9 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       lineHeight: l.far(19),
     },
 
-    items: { paddingLeft: RAIL + pad, paddingRight: gap, paddingVertical: 4 },
+    items: { paddingLeft: pad, paddingRight: gap, paddingVertical: 4 },
     itemRow: { flexDirection: 'row', gap: 10, paddingVertical: Math.round((dense ? 5 : 8) * l.scale) },
-    itemDivider: { borderBottomWidth: 1, borderBottomColor: hair2 },
+    itemDivider: { borderBottomWidth: 0 },
     qty: {
       flexShrink: 0,
       fontFamily: type.qty.fontFamily,
@@ -469,7 +445,7 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       maxWidth: '100%',
       fontFamily: type.item.fontFamily,
       fontSize: l.far(16),
-      fontWeight: '700',
+      fontWeight: '600',
       letterSpacing: -0.2,
       lineHeight: l.far(20),
       color: palette.text,
@@ -538,7 +514,7 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       minHeight: dense ? Math.max(56, l.actionH - 6) : l.actionH,
       paddingVertical: 6,
       justifyContent: 'center',
-      marginLeft: RAIL + pad,
+      marginLeft: pad,
       marginRight: gap,
       marginBottom: pad,
       marginTop: 4,

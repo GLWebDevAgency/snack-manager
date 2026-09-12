@@ -5,6 +5,8 @@ export * from './order-capacity.schema';
 export * from './delivery-operator.schema';
 export * from './delivery-handoff.schema';
 export * from './media-empreinte';
+export * from './dining.schema';
+export * from './dining-pricing.schema';
 
 import mongoose from 'mongoose';
 

@@ -4,6 +4,30 @@
 .sm-account-page-heading>p{color:var(--cf-mut);font-size:12px;font-weight:650;margin-bottom:6px}
 .sm-account-page-heading>h2{font-family:var(--cf-font-display);font-size:clamp(28px,5vw,36px);font-weight:800;letter-spacing:-.035em;line-height:1.15;overflow-wrap:anywhere}
 .sm-account-page-content{min-width:0}
+.sm-account-card{min-width:0;padding:16px;border:1px solid color-mix(in srgb,var(--cf-text) 12%,transparent);border-radius:var(--cf-r-lg);background:var(--cf-surface)}
+.sm-account-card-heading{margin:-16px -16px 20px;padding:16px;border-bottom:1px solid color-mix(in srgb,var(--cf-text) 10%,transparent)}
+.sm-account-intro h3,.sm-account-card-heading h3{font-size:18px;line-height:1.35;font-weight:700;letter-spacing:-.02em}
+/* The existing ground/text pair stays contrasted in every restaurant mask.
+   No fabricated progress, reward threshold or private data is introduced. */
+.sm-account-balance{min-width:0;padding:24px;border-radius:var(--cf-r-lg);background:var(--cf-text);color:var(--cf-bg)}
+.sm-account-balance-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.sm-account-balance-heading h4{max-width:28ch;font-size:13px;line-height:1.5;font-weight:600}
+.sm-account-balance-heading>svg{flex-shrink:0}
+.sm-account-balance-value{margin:28px 0 24px;line-height:1.1;overflow-wrap:anywhere}
+.sm-account-balance-value strong{font-size:clamp(44px,8vw,60px);font-weight:750;letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.sm-account-balance-value span{margin-inline-start:6px;font-size:20px;font-weight:600}
+.sm-account-balance-note{padding-top:16px;border-top:1px solid color-mix(in srgb,currentColor 25%,transparent);font-size:12px;line-height:1.6}
+.sm-account-sources{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border:1px solid color-mix(in srgb,var(--cf-text) 10%,transparent);border-radius:var(--cf-r-sm);background:var(--cf-surface-2)}
+.sm-account-source{min-width:0;min-height:44px;padding:8px;border-radius:var(--cf-r-sm);color:var(--cf-mut);font-size:14px;font-weight:600}
+.sm-account-source[aria-selected=true]{background:var(--cf-surface);color:var(--cf-text);box-shadow:0 1px 3px color-mix(in srgb,var(--cf-text) 10%,transparent)}
+.sm-account-source:disabled{opacity:.5;cursor:wait}
+.sm-account-source:focus-visible,.sm-account-legacy>summary:focus-visible{outline:2px solid var(--cf-accent);outline-offset:3px}
+.sm-account-legacy>summary{display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 0;cursor:pointer;list-style:none;font-size:14px;font-weight:650;line-height:1.5;color:var(--cf-text)}
+.sm-account-legacy>summary::-webkit-details-marker{display:none}
+.sm-account-legacy>summary>span{flex:1;min-width:0}
+.sm-account-legacy>summary>svg{flex-shrink:0}
+.sm-account-legacy[open]>summary>.sm-account-legacy-chevron{transform:rotate(180deg)}
+.sm-account-legacy[open]>summary{margin-bottom:12px;border-bottom:1px solid color-mix(in srgb,var(--cf-text) 10%,transparent);padding-bottom:16px}
 .sm-account-destinations{display:grid;overflow:hidden;border:1px solid color-mix(in srgb,var(--cf-text) 12%,transparent);border-radius:var(--cf-r-lg);background:var(--cf-surface)}
 .sm-account-destination{display:flex;align-items:center;gap:14px;min-height:76px;padding:14px 16px;text-align:left;transition:background-color 160ms ease}
 .sm-account-destination+.sm-account-destination{border-top:1px solid color-mix(in srgb,var(--cf-text) 9%,transparent)}
@@ -13,5 +37,6 @@
 .sm-account-destination b{display:block;font-size:15px;line-height:1.4;font-weight:750}
 .sm-account-destination small{display:block;margin-top:3px;font-size:12px;line-height:1.4;color:var(--cf-mut)}
 .sm-account-destination-icon{display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:var(--cf-r-sm);color:var(--cf-accent-ink);background:var(--cf-accent-wash)}
-@media(min-width:820px){.sm-account-page{padding-top:36px}.sm-account-destination{padding:16px 20px;min-height:82px}}
+@media(min-width:820px){.sm-account-page{padding-top:36px}.sm-account-destination{padding:16px 20px;min-height:82px}.sm-account-card{padding:20px}.sm-account-card-heading{margin:-20px -20px 20px;padding:20px}.sm-account-balance{padding:28px}}
 @media(prefers-reduced-motion:reduce){.sm-account-destination{transition:none}}
+@media(forced-colors:active){.sm-account-card,.sm-account-balance,.sm-account-source[aria-selected=true]{border:1px solid CanvasText;background:Canvas;color:CanvasText}.sm-account-source[aria-selected=true]{outline:2px solid Highlight;outline-offset:-3px}}

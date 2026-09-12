@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveIconName } from "@sm/design-icons";
 import {
   MOBILE_MORE_GROUPES,
   MOBILE_NAV,
@@ -15,6 +16,14 @@ import {
  * l'en-tête — tout cela se lit correctement en revue et se paie à l'usage.
  */
 describe("navigation du CRM interne", () => {
+  it("utilise les pictogrammes du kit selon le rôle de chaque destination", () => {
+    for (const item of NAV) {
+      if (item.icon === 'euro') continue;
+      expect(resolveIconName(item.icon), item.href).not.toBeNull();
+    }
+    expect(NAV.find(item => item.href === '/sm/clients')?.icon).toBe('store');
+    expect(NAV.find(item => item.href === '/sm/reseaux')?.icon).toBe('globe');
+  });
   it("range les huit écrans en cinq groupes, le tableau de bord en tête", () => {
     expect(NAV_ACCUEIL.href).toBe("/sm");
     expect(NAV_GROUPES.map((g) => g.titre)).toEqual([

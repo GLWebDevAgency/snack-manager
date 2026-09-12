@@ -1,5 +1,38 @@
 # Reprise de la refonte UI Snack Manager
 
+## État courant — seconde passe et compatibilité PR 178
+
+Livraison en cours via [PR 179](https://github.com/GLWebDevAgency/snack-manager/pull/179). Le premier scan de secrets a signalé 11 empreintes SHA-256 de sources (10 valeurs distinctes, toutes recalculées au commit de preuve) et deux URI loopback inventées pour vérifier le refus des identifiants avant I/O. La règle générique reçoit une liste fermée de ces seules empreintes dans les trois manifestes exacts ; les deux fixtures utilisent désormais la construction URL et seules leurs occurrences historiques précises sont documentées dans `.gitleaksignore`. Aucune règle générale ni aucun test n'est retiré. Cinq contrôles synthétiques de la portée de l'exception réussissent ; les deux suites Salle/pricing repassent sur Mongo local : **59/59**. Les empreintes de source antérieures restent les preuves de leurs exécutions ; seuls ces deux fichiers de test diffèrent depuis, sans changement applicatif. Voir `preuves/v2-gitleaks-canaries.json`.
+
+Worktree actif : `/Users/limameghassene/development/SnackManager-refonte-ui`, branche **`refactor/ui-handoff-fidelity`**. La PR 178 est fusionnée dans `develop` en **`80f2eac593863dfcfc1f9e5962c09db38fe6db24`** ; les commits locaux V2 ont été rebasés dessus sans conflit. Le travail concurrent du checkout principal reste préservé. L'utilisateur a autorisé la publication, la fusion vers `develop` et le déploiement staging automatique (« ok assure toi de merge afin que je teste sur staging, fais cela proprement go »). Cette autorisation ne concerne pas `main` ni la production.
+
+La bibliothèque de **41 illustrations** est proposée dès la création d'un produit, ainsi que dans les médiathèques. Les **78 icônes** du kit sont disponibles dans les applications, avec correspondances explicites des anciens noms. Les styles, densités, thèmes et préférences sont affinés dans les sept applications existantes. Le service à table relie les réglages restaurant, le POS, la cuisine, les commandes, les paiements existants et les tickets imprimés.
+
+Les nouvelles destinations de PR 178 — Carte, Rechercher, Commandes, Fidélité, Compte — sont conservées. Leur adaptation visuelle et leur validation finale sont terminées en local ; les preuves ci-dessous portent sur la base combinée. Les sections de première livraison ci-après sont historiques.
+
+| Preuve sur la base combinée | Résultat exécuté |
+| --- | --- |
+| Kit | 44 tests ; 57 vues, 41 illustrations, 78 icônes compilées |
+| POS | Typecheck, 332 tests + 5 Node, export web, 7 parcours de présentation et 7 parcours Salle |
+| KDS | Typecheck, 86 tests, export web, 10 parcours navigateur |
+| Natif | Exports Hermes iOS et Android POS/KDS réussis ; aucun essai sur appareil |
+| API | 3 695 réussis, 803 ignorés lors de la suite complète ; build et typecheck réussis |
+| Complément financier Mongo | 172 réussis dont 152 intégrations supplémentaires ; 20 gardes déjà comptées dans l'API. 651 cas API préexistants restent non exécutés |
+| DB / contrats / client-core | 556 (10 ignorés) / 688 / 133 réussis ; builds réussis, typecheck core réussi |
+| Web final | 2 994 tests / 195 fichiers, aucun ignoré ; typecheck et lint réussis ; build Next `bPzLIBZiO8taFULNJdNVv` ; 18 parcours clients (144 captures) + 26 parcours des surfaces existantes |
+
+Les contrôles utilisent des bases temporaires locales possédées et des fournisseurs simulés. Les recettes navigateur utilisent les vraies applications compilées avec réponses HTTP de recette ; elles ne prouvent pas un paiement physique, une imprimante ou un appareil terrain. Aucun compte, base ni paiement de production. Les contrôles non exécutés et leurs causes restent explicites dans `VALIDATION-COMPATIBILITE-PR178-METIER.md`.
+
+Références détaillées : `LOT-ASSETS-V2.md`, `LOT-ICONES-V2.md`, `LOT-POS-V2.md`, `LOT-KDS-V2.md`, `LOT-SALLE-BO.md`, `LOT-SERVICE-TABLE.md`, `LOT-BACKOFFICES-V2.md`, `LOT-SURFACES-CLIENT-V2.md`, `COMPATIBILITE-PR178-AUDIT.md` et `LOT-COMPATIBILITE-PR178-WEB.md`. Le manifeste complet de cette seconde passe est `FICHIERS-V2.txt`. Les empreintes des sources terrain validées sont dans `preuves/pr178-terrain-source-freeze.json`.
+
+Décisions de compatibilité : garder les cinq onglets lisibles à 320 px, les règles d'accessibilité V2, les routes/history/panier de PR 178 et ses garde-fous compte/fidélité. La réconciliation du journal traite aussi une entrée déjà persistée devenue remboursée sur un autre poste, sans faux dû ni régression sur une réponse ancienne. Aucun framework, handler de paiement ou schéma métier préexistant n'est remplacé ; les extensions Salle sont additives.
+
+Prochaine tranche précise autorisée : ouvrir la PR de `refactor/ui-handoff-fidelity` vers `develop`, attendre la CI et les intégrations configurées, puis fusionner le lot. Vérifier ensuite le workflow staging, la révision effectivement servie et les nouveaux bundles des interfaces. L'utilisateur pourra alors recetter avec les comptes de staging : choix d’illustration lors de création produit, ouverture de table → plusieurs envois cuisine → service avant paiement → encaissement → transfert/clôture, et navigation client avec panier/compte/fidélité. Les essais réels imprimante, tiroir, TPE, appareil et interruptions réseau restent à réaliser. Aucun blocage de code connu sur le périmètre exécuté ; ces essais et les intégrations préexistantes non exécutées ne sont pas déclarés verts.
+
+Les captures finales sont dans `captures/{pos-fidelite-v2-final,pos-salle-v2,kds-fidelite-v2-final,customer-pr178-build-final,web-pr178-build-final}` ; les chemins exacts clients figurent dans `LOT-COMPATIBILITE-PR178-WEB.md`. Les contrôles pré-PR 178 conservés plus bas sont historiques. Les espaces de fin de ligne et lignes vides terminales des journaux ont été normalisés pour le versionnement, sans modifier les résultats. Les seuls ajustements finaux depuis le checkpoint métier concernent le journal/catalogue POS et la présentation des pages clientes ; les empreintes de source des deux lanes permettent de vérifier l’arbre effectivement testé.
+
+---
+
 ## Poste et autorisation — 12 septembre 2026
 
 - Worktree : `/Users/limameghassene/development/SnackManager-refonte-ui`.
@@ -96,3 +129,40 @@ Suite à la demande « ok testons un minimum puis je testerais sur staging apres
 Recette rejouée sur les applications compilées locales, sans changement du code : **33/33 parcours réussis**, soit POS **7/7**, KDS **10/10**, web **16/16**. Commandes `REFONTE_PHASE=pre-merge node e2e/local/refonte-{pos,kds,web}-visual.mjs` exécutées séparément. Résumé conservé dans `preuves/pre-merge-smoke.log` ; captures de cette répétition conservées localement sous `_handoff/pre-merge/`, en complément des captures finales déjà versionnées. Les limites fixtures et appareils de la section précédente restent applicables.
 
 `origin/develop` rafraîchi reste `aefdf974f3c24dfb7d2d7ab484eb297a0502aa1c`. Audit indépendant : packages tokens/assets/icons suivis et résolus par pnpm, sources présentes dans le checkout CI et l'envoi Railway ; aucun changement API, migration ou workflow. Prochaine étape : PR vers `develop`, contrôles CI, fusion du lot puis vérification de la révision servie en staging.
+
+## Fusion et livraison staging — 12 septembre 2026, 19 h 25 Paris
+
+- PR [#177](https://github.com/GLWebDevAgency/snack-manager/pull/177) fusionnée par squash dans `develop` à 17:03:43 UTC, après CI et balayage des secrets réussis. Commit fusionné : **`a01f857c4c0649e85b3b8059fc644ced95602095`**. L'arbre fusionné est identique à celui de la branche livrée `3a63b4b` ; aucun travail concurrent n'a été ajouté à la fusion.
+- [CI de la PR](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34706522211) entièrement réussie : typage, analyse statique, tests, intégrations avec services temporaires, compilation et chargements des modules compilés.
+- [Pipeline staging](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34707092040) entièrement réussi sur le SHA fusionné : nouvelle vérification complète, contrôle des secrets, préflight Railway, préparation des schémas, mise en service des quatre services et santé publique.
+- IDs Railway confirmés en service par ce run : API `1de24e25-fa46-4afb-8725-810352989d80`, web `dd82d8e0-b264-47fb-9420-203c748745d1`, POS `1df80112-2ab2-43d0-b8b8-4531c57849a0`, KDS `4a40e626-9f65-4e28-a522-10ea3330a876`.
+- Contrôle public relancé depuis ce poste : `SM_REVISION_ATTENDUE=a01f857c4c0649e85b3b8059fc644ced95602095 node scripts/smoke.mjs staging` : **8/8**, aucun contrôle ignoré. SHA API exact, carte Class'Food (22 catégories, 109 produits), catalogue fidélité, PWA fidélité et trois interfaces valides.
+- Empreintes et URLs des fichiers publics relevées avant/après : web, POS et KDS exposent chacun au moins un nouveau fichier JavaScript ou CSS, téléchargé avec HTTP 200 et type MIME attendu. Les fronts ne publient pas de SHA Git : leur liaison au commit provient du workflow réussi et de ses IDs de déploiement, complétés par ces fichiers renouvelés. Aucun SHA de front n'est inventé.
+- Preuves : `preuves/{ci-pr-177,pr-177-merge,staging-workflow,staging-fronts-avant,staging-fronts-apres}.json`, `preuves/staging-{smoke,deploiements}.log`. Ces constats postérieurs au déploiement sont ajoutés au suivi local ; ils ne déclenchent pas une seconde livraison.
+
+Le lot de code UI et d'assets est intégralement fusionné et disponible sur staging. Le checkout principal et ses changements initiaux restent préservés. Aucun push vers `main`, aucune fusion en production ni déploiement production.
+
+Prochaine tranche : recette utilisateur sur staging, en priorité POS A/B/C (configurateur, ticket, reprises), KDS (filtres et transitions), commande/fidélité/livreur, deux back-offices et choix d'illustration dans les deux médiathèques. Les formulaires secondaires complets et les essais appareils restent à couvrir ; les 33 parcours visuels locaux utilisent des fixtures et les 8 contrôles staging sont des lectures publiques, pas une recette métier authentifiée.
+
+Accès : [web](https://web-staging-6f5f.up.railway.app), [POS](https://pos-staging-7f92.up.railway.app), [KDS](https://kds-staging-90da.up.railway.app).
+
+## Point initial de la deuxième passe — historique, 12 septembre 2026
+
+Branche dédiée `refactor/ui-handoff-fidelity`, issue de `origin/develop` `a01f857`, suivi de livraison repris par le commit `d90e7f8`. Checkout principal et autres branches préservés. Aucun nouveau push, merge ou déploiement autorisé pour cette passe.
+
+La demande de reprise corrige deux lacunes concrètes : les photos n'étaient proposées qu'après création du produit et trop d'icônes historiques évitaient encore le kit. La bibliothèque est déplacée en tête du formulaire, création comprise. Le premier POST produit est suivi de l'association via le contrat médias existant ; tout échec de cette seconde étape conserve le produit créé et reprend son identité. Les icônes sémantiques sont raccordées aux 78 dessins du kit. Les détails et preuves ciblées sont dans `LOT-ASSETS-V2.md` et `LOT-ICONES-V2.md`.
+
+POS : densité confortable/compacte, carte produit plus ample, hiérarchie typographique, segments, réglages clair/sombre et préférences de réduction des mouvements/transparence. Premier export de cette présentation : typecheck/build réussis et recette 7/7, captures `captures/pos-fidelite-v2`. Ces résultats précèdent l'ajout du service à table et ne valident pas ce dernier.
+
+Service à table : fonctionnalité explicitement autorisée par la nouvelle demande, développée dans les applications existantes. Configuration en BO, occupation exclusive des tables, tablées et plusieurs tickets, transfert, règlements et remise via les contrôleurs existants, libération conditionnée aux commandes terminées. Les admissions conservent les prix/calculs/stock/capacité du serveur. Les intentions directes sont durables avant réseau et se reprennent avec le même UUID ; une réponse incertaine bloque le remplacement de l'intention et le désappairage. Les premières intégrations Mongo locales passent ; l'interface POS, la recette bout en bout et la revue des courses restent en cours. Aucune preuve de production n'est revendiquée.
+
+Prochaine tranche précise : finir l'envoi table → cuisine → règlement → remise → libération avec journal local durable et reprise après rechargement ; vérifier les courses et droits sur base temporaire locale, puis recette navigateur et passe des thèmes BO. Les validations finales et la liste des fichiers seront complétées ici.
+
+
+### Gel local V2 avant reprise de la PR 178
+
+Le service à table et les sept surfaces sont implémentés ; les preuves détaillées figurent dans `LOT-POS-V2.md`, `LOT-KDS-V2.md`, `LOT-ASSETS-V2.md`, `LOT-ICONES-V2.md`, `LOT-SALLE-BO.md`, `LOT-SERVICE-TABLE.md`, `LOT-BACKOFFICES-V2.md` et `LOT-SURFACES-CLIENT-V2.md`. Le journal distingue un remboursement connu à la reprise tout en conservant sa sémantique historique.
+
+Validations de cet arbre avant PR 178 : POS 331 + 5 Node et 6 parcours salle ; KDS 86 ; web 2 915 ; API 3 686 (803 ignorés), DB 556 (10 ignorés), contrats 678, client-core 131. Typechecks, builds API/Next/exports Expo web et Hermes iOS/Android exécutés. Détails, environnements et causes des contrôles ignorés : `VALIDATION-METIER-V2.md`, `VALIDATION-WEB-V2.md` et les lots POS/KDS. La recette web compilée a réussi 26 parcours / 76 captures. Ces preuves ne valent pas encore validation du nouvel arbre combiné.
+
+Nouvelle demande de compatibilité : PR [#178](https://github.com/GLWebDevAgency/snack-manager/pull/178) fusionnée dans `develop` en `80f2eac593863dfcfc1f9e5962c09db38fe6db24`. Elle ajoute Carte/Rechercher/Commandes/Fidélité/Compte et leur continuité de navigation. Sauvegarde locale du lot V2, puis rebase local de la branche dédiée sur ce commit ; aucune fusion distante, aucun push ni déploiement. Prochaine tranche précise : habiller et tester ces nouvelles destinations, conserver les comportements PR178, puis relancer les validations sur la base combinée.

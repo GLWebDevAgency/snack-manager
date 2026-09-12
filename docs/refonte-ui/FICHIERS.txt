@@ -477,6 +477,7 @@ docs/refonte-ui/captures/web-build-final/snackmanager-390-default-formulaire.png
 docs/refonte-ui/captures/web-build-final/snackmanager-390-default-navigation.png
 docs/refonte-ui/preuves/README.md
 docs/refonte-ui/preuves/backoffice-tests-cibles.log
+docs/refonte-ui/preuves/ci-pr-177.json
 docs/refonte-ui/preuves/commande-fidelite-tests-apres.log
 docs/refonte-ui/preuves/db-types-build.log
 docs/refonte-ui/preuves/kds-build-apres.log
@@ -501,6 +502,13 @@ docs/refonte-ui/preuves/pos-typecheck-avant.log
 docs/refonte-ui/preuves/pos-typecheck-final.log
 docs/refonte-ui/preuves/pos-visuel-apres.log
 docs/refonte-ui/preuves/pos-visuel-final.log
+docs/refonte-ui/preuves/pr-177-merge.json
+docs/refonte-ui/preuves/pre-merge-smoke.log
+docs/refonte-ui/preuves/staging-deploiements.log
+docs/refonte-ui/preuves/staging-fronts-apres.json
+docs/refonte-ui/preuves/staging-fronts-avant.json
+docs/refonte-ui/preuves/staging-smoke.log
+docs/refonte-ui/preuves/staging-workflow.json
 docs/refonte-ui/preuves/ui-native-typecheck-final.log
 docs/refonte-ui/preuves/web-build-final.log
 docs/refonte-ui/preuves/web-eslint-fichiers-modifies.log
@@ -530,4 +538,3 @@ packages/ui-native/package.json
 packages/ui-native/src/Icon.tsx
 pnpm-lock.yaml
 pnpm-workspace.yaml
-docs/refonte-ui/preuves/pre-merge-smoke.log

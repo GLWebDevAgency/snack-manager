@@ -141,15 +141,15 @@ export const makeType = (palette: Palette) => StyleSheet.create({
   display: {
     fontFamily: FONT,
     color: palette.text,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: -0.6,
     ...tab,
   },
-  h1: { fontFamily: FONT, color: palette.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  h1: { fontFamily: FONT, color: palette.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.7 },
   h2: { fontFamily: FONT, color: palette.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
-  body: { fontFamily: FONT, color: palette.text, fontSize: 15, fontWeight: '500' },
+  body: { fontFamily: FONT, color: palette.text, fontSize: 15, fontWeight: '400' },
   strong: { fontFamily: FONT, color: palette.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
-  mut: { fontFamily: FONT, color: palette.mut, fontSize: 13, fontWeight: '500' },
+  mut: { fontFamily: FONT, color: palette.mut, fontSize: 13, fontWeight: '400' },
   /** Intitulés de section : capitales espacées, discrètes. */
   eyebrow: {
     fontFamily: FONT,

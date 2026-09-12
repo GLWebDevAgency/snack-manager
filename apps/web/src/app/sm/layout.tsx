@@ -32,8 +32,9 @@ import { Icon, IconBtn, ToastProvider } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
 import { crm, euroRound, HQ_ROLE, HqContext, isHqSession } from "./crm";
 import { BottomSheet } from "./mobile";
-import { backofficeVisualStyle } from "@/components/backoffice/visual-style";
+import { backofficeStyle } from "@/components/backoffice/visual-style";
 import "@/components/backoffice/backoffice.css";
+import { AppearanceButton, useBackofficeTheme } from "@/components/backoffice/appearance";
 import {
   libelleCourt,
   MOBILE_MORE,
@@ -64,6 +65,7 @@ export default function SmLayout({ children }: Readonly<{ children: ReactNode }>
 const emptySubscribe = () => () => {};
 
 function HqShell({ children }: { children: ReactNode }) {
+  const { theme, toggleTheme } = useBackofficeTheme();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -175,7 +177,7 @@ function HqShell({ children }: { children: ReactNode }) {
         classe sur chacun des dizaines de champs — un champ ajouté demain est
         couvert d'office.
       */}
-      <div className="sm-backoffice flex h-dvh overflow-hidden bg-bg max-md:[&_input]:text-[16px] max-md:[&_select]:text-[16px] max-md:[&_textarea]:text-[16px]" style={backofficeVisualStyle}>
+      <div className="sm-backoffice flex h-dvh overflow-hidden bg-bg max-md:[&_input]:text-[16px] max-md:[&_select]:text-[16px] max-md:[&_textarea]:text-[16px]" data-sm-theme={theme} style={backofficeStyle(theme, HQ_ACCENT)}>
         {/* ── Colonne de navigation (232px) — bureau seulement : sous `md`,
             la barre basse prend le relais ── */}
         <aside className="flex w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-[18px] max-md:hidden">
@@ -304,6 +306,7 @@ function HqShell({ children }: { children: ReactNode }) {
               </p>
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-3 max-md:gap-2">
+              <AppearanceButton theme={theme} onToggle={toggleTheme} />
               <span
                 className="hidden items-center gap-2 rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-[13px] font-bold text-ink lg:inline-flex"
                 title="Restaurants clients actifs sur les 30 derniers jours"

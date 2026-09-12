@@ -27,6 +27,8 @@ export const KEYS = {
   collectionRecovery: 'sm.pos.collection-recovery.v1',
   /** Tentative téléphone directe : protégée avant purge et effacée avec l'identité. */
   phoneOrderAttempt: 'sm.pos.phone-order-attempt.v1',
+  /** Intention de salle non acquittée ; bloque la purge jusqu'à résolution. */
+  diningOperation: 'sm.pos.dining-operation.v1',
 } as const;
 
 /**
@@ -90,6 +92,8 @@ export interface DayEntry {
   mode: Mode;
   method: PayMethod;
   paid: boolean;
+  /** État serveur connu à la reprise ; paid garde la trace de l'encaissement historique. */
+  refunded?: true;
   /** Centimes — calcul local, le serveur fait autorité une fois synchronisé. */
   total: number;
   items: number;
@@ -113,6 +117,7 @@ export interface ParkedTicket {
   slot: string | null;
   note: string;
   at: number;
+  diningSessionId?: string;
 }
 
 /**
@@ -157,9 +162,11 @@ export function minimizeDayEntry(entry: DayEntry): DayEntry {
 export function minimizeParkedTicket(
   ticket: ParkedTicket & { loyaltyMemberId?: unknown },
 ): ParkedTicket {
-  const { loyaltyMemberId: _discarded, ...publicTicket } = ticket;
+  const { loyaltyMemberId: _discarded, diningSessionId, ...publicTicket } = ticket;
   return {
     ...publicTicket,
+    ...(ticket.mode === 'surplace' && typeof diningSessionId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(diningSessionId) ? { diningSessionId } : {}),
     ...customerFieldsForMode(
       ticket.mode,
       ticket.customerName,
@@ -656,7 +663,7 @@ const EMPTY_LOCAL_SUMMARY: LocalJournalSummary = {
 };
 
 export const LOCAL_JOURNAL_SCOPE_NOTICE =
-  'Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel.';
+  'Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel. Les remboursements ne sont pas déduits de ce journal historique.';
 
 /** Calcule exclusivement ce qui est déjà présent dans le journal du poste. */
 export function zFromJournal(entries: DayEntry[]): LocalJournalSummary {

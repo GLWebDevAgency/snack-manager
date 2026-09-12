@@ -6,10 +6,12 @@
 .heading p { color: var(--cf-mut); margin-top: 4px; font-size: 13px; line-height: 1.4; }
 .status { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: 2px; color: var(--cf-mut); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .status[data-complete] { color: var(--cf-accent-ink); }
-.list { overflow: hidden; padding-inline: 12px; background: var(--cf-surface-2); border: 1px solid var(--cf-line); border-radius: var(--cf-r-md); }
-.list button { scroll-margin-block: 64px 16px; }
+.list { display: grid; gap: 8px; min-width: 0; }
+.list > [role] { display: grid; gap: 8px; }
+.list button { min-width: 0; min-height: 56px; scroll-margin-block: 64px 16px; padding: 12px; background: var(--cf-surface-2); border: 1px solid var(--cf-line); border-radius: var(--cf-r-sm); }
+.list button:last-child { border-bottom: 1px solid var(--cf-line); }
 .list button:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: -3px; }
-.list button[aria-checked=true] { background: var(--cf-accent-wash); }
+.list button[aria-checked=true] { background: var(--cf-accent-wash); border-color: var(--cf-accent-ink); }
 .list button > span:nth-child(2) { padding-block: 1px; }
 .choiceList { min-width: 0; }
 .categories { display: grid; gap: 20px; }
@@ -24,4 +26,4 @@
 .note { width: 100%; resize: vertical; min-height: 88px; border: 1px solid var(--cf-line); border-radius: var(--cf-r-md); background: var(--cf-surface-2); padding: 12px 14px; color: var(--cf-text); font: inherit; font-size: 16px; line-height: 1.5; }
 .note::placeholder { color: var(--cf-mut); }
 .note:focus { outline: 2px solid var(--cf-focus); outline-offset: 2px; }
-@media (prefers-contrast: more) { .list, .note { border-color: var(--cf-line-firm); } }
+@media (prefers-contrast: more) { .list button, .note { border-color: var(--cf-line-firm); } }

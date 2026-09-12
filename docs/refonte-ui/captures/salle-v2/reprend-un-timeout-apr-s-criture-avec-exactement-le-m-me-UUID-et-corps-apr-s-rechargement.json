@@ -1,0 +1,117 @@
+{
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenants/me",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/dining/room",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/dining/tables",
+      "body": {
+        "operationId": "7c4f6447-8f56-43f6-98e1-755e68ebfdb9",
+        "label": "Salle 2",
+        "seats": 6
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dining/room",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenants/me",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/dining/room",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/dining/tables",
+      "body": {
+        "operationId": "7c4f6447-8f56-43f6-98e1-755e68ebfdb9",
+        "label": "Salle 2",
+        "seats": 6
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dining/room",
+      "body": null
+    }
+  ],
+  "errors": [],
+  "room": {
+    "tables": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "label": "Terrasse 1",
+        "seats": 4,
+        "active": true,
+        "revision": 7
+      },
+      {
+        "id": "7c4f6447-8f56-43f6-98e1-755e68ebfdb9",
+        "label": "Salle 2",
+        "seats": 6,
+        "active": true,
+        "revision": 0
+      }
+    ],
+    "sessions": [
+      {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "tableId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "tableLabel": "Terrasse 1",
+        "guestCount": 3,
+        "revision": 2,
+        "state": "open",
+        "openedAt": "2026-09-12T10:00:00.000Z",
+        "closedAt": null,
+        "orderIds": [
+          "111111111111111111111111"
+        ],
+        "pendingOperationCount": 1
+      }
+    ]
+  }
+}

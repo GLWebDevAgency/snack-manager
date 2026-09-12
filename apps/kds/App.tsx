@@ -48,7 +48,7 @@ export default function App() {
   // Une cuisine ne doit jamais voir l'écran s'éteindre en plein coup de feu.
   useStayAwake();
 
-  const reducedMotion = useReducedMotion();
+  const systemReducedMotion = useReducedMotion();
   const now = useNow(1000);
 
   const { session, restoring, restoreError, retryRestore, login, logout, device } =
@@ -57,6 +57,7 @@ export default function App() {
   useAutoSync(client, 15000);
   const activeDeviceScope = sync.scopeValid ? (device?.queueScope ?? null) : null;
   const { prefs, ready: prefsReady, patchPrefs } = usePrefs(activeDeviceScope);
+  const reducedMotion = systemReducedMotion || prefs.reduceMotion;
   const startupKnown = prefsReady || (!restoring && !activeDeviceScope);
   const startupVisible = !splashDone && (!startupKnown || prefs.splash);
   const { palette } = makeUi(prefs.theme);
@@ -168,7 +169,7 @@ export default function App() {
   const accent = session ? session.tenant.brandColor || palette.gold : palette.gold;
 
   return (
-    <ThemeProvider theme={prefs.theme}>
+    <ThemeProvider theme={prefs.theme} reducedTransparency={prefs.reduceTransparency}>
     <View style={styles.root}>
       <StatusBar style={prefs.theme === 'light' ? 'dark' : 'light'} />
       <StartupContent blocked={startupVisible} style={{ flex: 1 }}>
@@ -267,6 +268,8 @@ export default function App() {
         accent={accent} tenantName={session.tenant.name} deviceName={device?.device.name ?? 'Cuisine'} pending={sync.pending}
         soundSupported={soundSupported} onTheme={(theme) => patchPrefs({ theme })} onDensity={(density) => patchPrefs({ density })}
         onToggleSound={toggleSound} onToggleAllDay={toggleAllDay} onToggleSplash={() => patchPrefs((p) => ({ splash: !p.splash }))}
+        onToggleReduceMotion={() => patchPrefs((p) => ({ reduceMotion: !p.reduceMotion }))}
+        onToggleReduceTransparency={() => patchPrefs((p) => ({ reduceTransparency: !p.reduceTransparency }))}
         onClose={() => setSettingsOpen(false)} onLogout={() => { setSettingsOpen(false); void logout(); }} /> : null}
       </StartupContent>
       {startupVisible ? startupKnown

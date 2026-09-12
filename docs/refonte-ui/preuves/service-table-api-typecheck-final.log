@@ -1,0 +1,3 @@
+
+> @sm/api@0.0.1 typecheck /Users/limameghassene/development/SnackManager-refonte-ui/apps/api
+> tsc --noEmit

@@ -1,0 +1,126 @@
+
+> @sm/web@0.1.0 build /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+> next build
+
+▲ Next.js 16.3.1 (Turbopack)
+✓ Running next.config.ts took 62ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.2s
+  Running TypeScript ...
+  Finished TypeScript in 11.7s ...
+  Collecting page data using 9 workers ...
+  Generating static pages using 9 workers (0/62) ...
+  Generating static pages using 9 workers (15/62)
+  Generating static pages using 9 workers (30/62)
+  Generating static pages using 9 workers (46/62)
+✓ Generating static pages using 9 workers (62/62) in 588ms
+  Finalizing page optimization ...
+
+Route (app)                                                   Revalidate  Expire
+┌ ○ /                                                                 1m      1y
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/abonnement
+├ ○ /admin/dashboard
+├ ○ /admin/devices
+├ ○ /admin/encaissement
+├ ○ /admin/fidelite
+├ ƒ /admin/fidelite/clients
+├ ○ /admin/fidelite/programme
+├ ○ /admin/fidelite/recompenses
+├ ○ /admin/hours
+├ ○ /admin/ingredients
+├ ○ /admin/livraison
+├ ○ /admin/login
+├ ○ /admin/menu
+├ ○ /admin/orders
+├ ○ /admin/planning
+├ ○ /admin/promos
+├ ○ /admin/reviews
+├ ○ /admin/screens
+├ ○ /admin/settings
+├ ○ /admin/site
+├ ○ /admin/stats
+├ ○ /admin/team
+├ ƒ /api/contact
+├ ○ /atelier                                                          1m      1y
+├ ○ /blog                                                             1m      1y
+├   /blog/[slug]
+│ ├ ● /blog/lien-de-commande-sur-votre-fiche-google                   1m      1y
+│ ├ ● /blog/pourquoi-les-prix-sont-plus-chers-sur-les-applis          1m      1y
+│ └ ● /blog/ouvrir-le-click-and-collect-sans-se-tromper               1m      1y
+├ ○ /board
+├ ○ /board/display
+├ ƒ /board/sw.js
+├ ○ /caisse                                                           1m      1y
+├ ○ /commande-en-ligne                                                1m      1y
+├ ○ /cuisine                                                          1m      1y
+├ ƒ /embed/[slug]
+├ ○ /livreur
+├ ƒ /livreur/acces
+├ ƒ /livreur/history
+├ ƒ /livreur/manifest.webmanifest
+├ ƒ /livreur/missions
+├ ƒ /livreur/missions/[id]
+├ ƒ /livreur/missions/[id]/depart
+├ ƒ /livreur/missions/[id]/handoff
+├ ƒ /livreur/missions/[id]/handoff/[action]
+├ ƒ /livreur/sw.js
+├ ○ /manifest.webmanifest
+├ ○ /offres                                                           1m      1y
+├ ○ /opengraph-image-pwu6ef
+├ ƒ /r/[slug]
+├ ƒ /r/[slug]/carte
+├ ƒ /r/[slug]/commandes
+├ ƒ /r/[slug]/compte/capacites
+├ ƒ /r/[slug]/compte/cle-acces
+├ ƒ /r/[slug]/compte/commandes
+├ ƒ /r/[slug]/compte/commandes/detail
+├ ƒ /r/[slug]/compte/commandes/recherche
+├ ƒ /r/[slug]/compte/commandes/recommander
+├ ƒ /r/[slug]/compte/confirmation
+├ ƒ /r/[slug]/compte/fidelite
+├ ƒ /r/[slug]/compte/intention
+├ ƒ /r/[slug]/compte/navigateur
+├ ƒ /r/[slug]/compte/profil
+├ ƒ /r/[slug]/compte/protection
+├ ƒ /r/[slug]/compte/resultat
+├ ƒ /r/[slug]/compte/secours
+├ ƒ /r/[slug]/compte/session
+├ ƒ /r/[slug]/compte/verification
+├ ƒ /r/[slug]/fidelite
+├ ƒ /r/[slug]/fidelite/card-qr
+├ ƒ /r/[slug]/fidelite/card-session
+├   /r/-/fidelite/icon.svg                                            1m      1y
+│ └ ● /r/-/fidelite/icon.svg                                          1m      1y
+├ ƒ /r/[slug]/fidelite/manifest.webmanifest
+├ ƒ /r/[slug]/fidelite/sw.js
+├ ƒ /r/-/icon.png
+├   /r/-/icon.svg
+│ └ ● /r/-/icon.svg
+├ ƒ /r/[slug]/manifest.webmanifest
+├ ƒ /r/[slug]/recherche
+├ ƒ /r/[slug]/sw.js
+├ ƒ /r/demo
+├ ƒ /r/demo/fidelite
+├ ƒ /robots.txt
+├ ○ /sitemap.xml
+├ ○ /sm
+├ ○ /sm/clients
+├ ƒ /sm/clients/[id]
+├ ○ /sm/erreurs
+├ ○ /sm/facturation
+├ ○ /sm/login
+├ ○ /sm/pipeline
+├ ○ /sm/production
+├ ○ /sm/reseaux
+├ ○ /sm/signals
+└ ƒ /t/[id]
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand

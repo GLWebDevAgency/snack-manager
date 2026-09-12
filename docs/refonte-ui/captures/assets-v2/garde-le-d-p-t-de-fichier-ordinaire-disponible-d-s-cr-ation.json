@@ -1,0 +1,101 @@
+{
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/medias",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/medias",
+      "body": {
+        "name": "photo.png",
+        "type": "image/png",
+        "octets": 70,
+        "dimensions": {
+          "largeur": 1,
+          "hauteur": 1
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/products",
+      "body": {
+        "categoryId": "category-local",
+        "name": "Photo réelle",
+        "description": "",
+        "tags": [],
+        "isNew": false,
+        "photoKind": "cutout",
+        "popularOverride": null
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/product-2/medias",
+      "body": {
+        "medias": [
+          "media-original"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/menu",
+      "body": null
+    }
+  ],
+  "errors": [],
+  "products": [
+    {
+      "_id": "product-original",
+      "categoryId": "category-local",
+      "name": "Plat existant",
+      "description": "Recette conservée",
+      "price": 1234,
+      "medias": [
+        "media-original"
+      ],
+      "photoKind": "cover",
+      "tags": [
+        "midi"
+      ],
+      "isNew": true
+    },
+    {
+      "categoryId": "category-local",
+      "name": "Photo réelle",
+      "description": "",
+      "price": 0,
+      "variants": [],
+      "optionGroups": [],
+      "removables": [],
+      "tags": [],
+      "isNew": false,
+      "photoKind": "cutout",
+      "popularOverride": null,
+      "order": 0,
+      "active": true,
+      "_id": "product-2",
+      "medias": [
+        "media-original"
+      ],
+      "photoUrl": null
+    }
+  ],
+  "media": [
+    {
+      "id": "media-original",
+      "alt": "Photo existante",
+      "octets": 70,
+      "largeur": 1,
+      "hauteur": 1
+    }
+  ]
+}

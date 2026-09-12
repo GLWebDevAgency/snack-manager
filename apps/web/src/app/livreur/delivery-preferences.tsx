@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DeliveryAddress } from "@sm/contracts";
 
-export type DeliveryPreferences = { theme: "dark" | "light" | "auto"; navigation: "google" | "apple" | "waze"; alerts: boolean; wake: boolean };
-const DEFAULTS: DeliveryPreferences = { theme: "dark", navigation: "google", alerts: false, wake: false };
+export type DeliveryPreferences = { theme: "dark" | "light" | "auto"; navigation: "google" | "apple" | "waze"; alerts: boolean; wake: boolean; reduceMotion: boolean; reduceTransparency: boolean };
+const DEFAULTS: DeliveryPreferences = { theme: "dark", navigation: "google", alerts: false, wake: false, reduceMotion: false, reduceTransparency: false };
 const KEY = "sm.delivery.preferences.v2";
 
 export function useDeliveryPreferences() {
@@ -21,6 +21,7 @@ export function useDeliveryPreferences() {
         theme: ["dark", "light", "auto"].includes(raw.theme ?? "") ? raw.theme! : DEFAULTS.theme,
         navigation: ["google", "apple", "waze"].includes(raw.navigation ?? "") ? raw.navigation! : DEFAULTS.navigation,
         alerts: raw.alerts === true, wake: raw.wake === true,
+        reduceMotion: raw.reduceMotion === true, reduceTransparency: raw.reduceTransparency === true,
       });
     } catch { /* Private browsing / malformed appearance preferences do not block access. */ }
     const media = window.matchMedia("(prefers-color-scheme: dark)");

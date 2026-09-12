@@ -46,7 +46,7 @@ export function StatusColumn({
   layout: Layout;
   density?: 'comfort' | 'dense';
 }) {
-  const { theme } = useUi();
+  const { theme, statusColors } = useUi();
   const styles = columnStyles(layout, theme);
   const tone = STATUS_TONE[status];
   const empty = EMPTY_COPY[status];
@@ -58,8 +58,8 @@ export function StatusColumn({
         <Text accessibilityRole="header" style={styles.headerLabel} numberOfLines={1}>
           {tone.label}
         </Text>
-        <View style={[styles.badge, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.badgeText, { color: tone.fg }]}>{orders.length}</Text>
+        <View style={[styles.badge, { backgroundColor: statusColors[status].wash }]}>
+          <Text style={[styles.badgeText, { color: statusColors[status].ink }]}>{orders.length}</Text>
         </View>
       </View>
 
@@ -110,21 +110,21 @@ const columnStyles = scaledStyles((l: Layout, theme) => {
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: space.sm,
-      paddingHorizontal: l.gap,
+      paddingHorizontal: l.fs(2),
       paddingVertical: Math.round(12 * l.scale),
     },
     statusDot: { width: l.far(8), height: l.far(8), borderRadius: radius.pill },
     headerLabel: {
       fontFamily: type.title.fontFamily,
-      fontSize: l.far(17),
+      fontSize: l.far(15),
       fontWeight: '700',
       letterSpacing: -0.3,
       flex: 1,
       color: palette.text,
     },
     badge: {
-      minWidth: l.far(30),
-      height: l.far(26),
+      minWidth: l.far(25),
+      height: l.far(24),
       borderRadius: radius.xs,
       paddingHorizontal: 9,
       alignItems: 'center',
@@ -132,11 +132,11 @@ const columnStyles = scaledStyles((l: Layout, theme) => {
     },
     badgeText: {
       fontFamily: type.title.fontFamily,
-      fontSize: l.far(15),
-      fontWeight: '900',
+      fontSize: l.far(13),
+      fontWeight: '600',
       ...tabular,
     },
     body: { flex: 1, minHeight: 0 },
-    bodyContent: { padding: l.gap, gap: l.gap, paddingBottom: l.gap + 6 },
+    bodyContent: { paddingHorizontal: 1, gap: l.gap, paddingBottom: l.gap + 6 },
   });
 });
