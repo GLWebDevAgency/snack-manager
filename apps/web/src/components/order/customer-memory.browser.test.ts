@@ -45,7 +45,8 @@ beforeAll(async () => {
           <button onClick={()=>setOpen(!open)}>{open?'Fermer le formulaire':'Rouvrir le formulaire'}</button></main>;}
       async function start(){let node=<App/>;
         if(location.pathname==='/embed-storefront'){
-          const raw=demoSite(new Date(),()=>0);raw.tenant.slug='classfood';raw.tenant.brand=marqueDeRepli(null,null);
+          // Fixed HTTP fixture: Monday noon in Europe/Paris, with bookable pickup slots regardless of runner time.
+          const raw=demoSite(new Date('2030-09-09T10:00:00.000Z'),()=>0);raw.tenant.slug='classfood';raw.tenant.brand=marqueDeRepli(null,null);
           raw.menu={categories:[{_id:'${"c".repeat(24)}',name:'Boissons',products:[{_id:'${"d".repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
           const api=orderingApi({send:async request=>({status:200,body:request.path.includes('/slots')?raw.slots:raw})});
           const site=await api.loadSite('classfood');node=<Storefront site={site} api={api} mode="embed" demo={false}/>;
