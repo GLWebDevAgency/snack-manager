@@ -238,7 +238,8 @@ export function Prix({
 }
 
 /**
- * Intitulé de section : capitales espacées, gris — l’ossature de la page.
+ * Intitulé de section : casse de phrase et taille lisible, avec une aide
+ * secondaire qui se replie lorsque la largeur manque.
  *
  * `id` est posé sur le `<h3>` et non sur l'enveloppe : c'est le TITRE qui
  * nomme le champ ou le groupe qui suit (`aria-labelledby`). Sans lui, les
@@ -258,8 +259,8 @@ export function SectionLabel({
   id?: string;
 }) {
   return (
-    <div className={cx("flex items-baseline justify-between gap-3", className)}>
-      <h3 id={id} className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
+    <div className={cx("flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1", className)}>
+      <h3 id={id} className="min-w-0 break-words text-[15px] font-semibold leading-snug text-ink">
         {children}
       </h3>
       {hint && <span className="shrink-0 text-[13px] text-mut">{hint}</span>}
@@ -513,24 +514,27 @@ export function Stepper({
  *   produit à options → curseurs (une feuille de composition va s’ouvrir) ;
  *   produit simple → « + » (un appui, c’est ajouté).
  *
- * Un gabarit unique de 40 px garde le rythme vertical de la liste : vingt
- * cartes se parcourent sans que l’œil ait à re-mesurer chaque ligne. Rendu en
+ * Le signe est compact en grille pour laisser le prix lisible à 320 px.
+ * La carte entière reste la cible tactile. Rendu en
  * `<span aria-hidden>` — c’est la carte entière qui est le bouton, une cible
  * tactile bien plus large que la pastille.
  */
 export function AddButton({
   qty = 0,
   compose = false,
+  compact = false,
 }: {
   /** Quantité déjà au panier : le bouton devient un compteur. */
   qty?: number;
   /** Produit configurable : on annonce « composer », pas « ajouter ». */
   compose?: boolean;
+  /** The whole product card remains the touch target. */
+  compact?: boolean;
 }) {
   return (
     <span
       aria-hidden
-      className="grid size-11 shrink-0 place-items-center rounded-pill bg-accent text-onaccent shadow-[0_6px_16px_-6px_var(--cf-accent)]"
+      className={cx("grid shrink-0 place-items-center rounded-pill bg-accent text-onaccent shadow-[0_6px_16px_-6px_var(--cf-accent)]", compact ? "size-8" : "size-11")}
     >
       {qty > 0 ? (
         <span className="text-[16px] font-extrabold tabular-nums">{qty}</span>
@@ -546,54 +550,6 @@ export function AddButton({
 // ─────────────────────────────────────────────────────────────
 // Sélecteurs
 // ─────────────────────────────────────────────────────────────
-
-/** Chip d’option : sélectionnée = aplat accent discret + filet accent. */
-export function OptionChip({
-  on,
-  disabled,
-  children,
-  onClick,
-  price,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  children: ReactNode;
-  onClick: () => void;
-  /** Écart de prix affiché en suffixe (centimes) ; 0 ⇒ masqué. */
-  price?: number;
-}) {
-  return (
-    <Tap
-      onClick={onClick}
-      disabled={disabled}
-      aria-pressed={on}
-      className={cx(
-        "inline-flex min-h-11 items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[14px] font-semibold",
-        // Le lavis d'accent est celui du contrat (`--cf-accent-wash`, 12 %) et
-        // pas une opacité improvisée : c'est sur CETTE valeur que le résolveur
-        // prouve l'AA de `mut` et d'`accentink`. À 20 %, la chip sélectionnée
-        // était plus dense que tout ce que le résolveur avait jugé.
-        on
-          ? "border-accent bg-accentwash text-ink"
-          : "border-ink/10 bg-surface2 text-ink/85 hover:border-ink/25",
-        disabled && "cursor-not-allowed opacity-35 active:scale-100",
-      )}
-    >
-      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accentink" />}
-      {children}
-      {price !== undefined && price !== 0 && (
-        <span
-          className={cx(
-            "text-[12px] font-bold tabular-nums",
-            on ? "text-ink" : "text-mut",
-          )}
-        >
-          +{eurosBare(price)} €
-        </span>
-      )}
-    </Tap>
-  );
-}
 
 /**
  * Le pas d'une flèche dans un groupe de boutons radio (APG radiogroup).
@@ -621,11 +577,13 @@ function pasDeFleche(key: string): number | null {
 export function RadioGroup({
   label,
   labelledBy,
+  describedBy,
   className,
   children,
 }: {
   label?: string;
   labelledBy?: string;
+  describedBy?: string;
   className?: string;
   children: ReactNode;
 }) {
@@ -634,6 +592,7 @@ export function RadioGroup({
       role="radiogroup"
       aria-label={label}
       aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
       className={className}
       onKeyDown={(e) => {
         const pas = pasDeFleche(e.key);
@@ -772,6 +731,8 @@ export function OptionRow({
   title,
   sub,
   price,
+  included = false,
+  mono = false,
   onClick,
   tabIndex,
 }: {
@@ -783,6 +744,9 @@ export function OptionRow({
   sub?: ReactNode;
   /** Centimes ; `undefined` ⇒ aucun prix affiché. */
   price?: number;
+  /** Rend explicite un choix compris dans le prix de la composition. */
+  included?: boolean;
+  mono?: boolean;
   onClick: () => void;
   /**
    * Tabindex tournant d'un `RadioGroup` (APG) : `0` sur la ligne cochée, `-1`
@@ -808,7 +772,7 @@ export function OptionRow({
         aria-hidden
         className={cx(
           "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-fast ease-sm",
-          radio ? "rounded-full" : "rounded-[7px]",
+          radio ? "rounded-full" : "rounded-xs",
           // `border-linefirm` et non `border-ink/25` : c'est cet anneau,
           // et lui seul, qui dit « non coché ». À 25 % d'encre il mesurait
           // 1,52 à 2,16:1 selon la direction — la case cochée se voyait
@@ -819,16 +783,17 @@ export function OptionRow({
         {on && <Icon name="check" size={13} stroke={3} />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold text-ink">
+        <span className="block break-words text-[15px] font-semibold leading-snug text-ink">
           {title}
         </span>
-        {sub && <span className="block truncate text-[13px] text-mut">{sub}</span>}
+        {sub && <span className="block break-words text-[13px] text-mut">{sub}</span>}
       </span>
       {price !== undefined && price !== 0 && (
-        <span className="shrink-0 text-[14px] font-bold tabular-nums text-accentink">
+        <span className={cx("shrink-0 whitespace-nowrap text-[14px] font-bold tabular-nums text-accentink", mono && "font-mono")}>
           +{eurosBare(price)} €
         </span>
       )}
+      {included && price === 0 && <span className="shrink-0 text-[12px] font-medium text-mut">Inclus</span>}
     </button>
   );
 }
@@ -1135,7 +1100,6 @@ export function Sheet({
                     {title}
                   </h2>
                 )}
-                {headerExtra}
               </div>
               <Tap
                 onClick={requestClose}
@@ -1146,6 +1110,7 @@ export function Sheet({
                 <Icon name="close" size={16} />
               </Tap>
             </div>
+            {headerExtra && <div className="mt-3 w-full min-w-0">{headerExtra}</div>}
           </div>
         ) : (
           <div
@@ -1306,22 +1271,22 @@ export function PrimaryAction({
       aria-busy={loading || undefined}
       className={cx(
         TAP,
-        "flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-pill bg-accent px-5 text-[15px] font-extrabold tracking-[-0.01em] text-onaccent",
+        "flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-pill bg-accent px-4 py-3 text-[15px] font-extrabold tracking-[-0.01em] text-onaccent",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100",
       )}
     >
       {loading ? (
         <Spinner />
       ) : (
-        icon && <Icon name={icon} size={17} stroke={2.4} />
+        icon && <Icon name={icon} size={17} stroke={2.4} className="shrink-0" />
       )}
-      <span className="min-w-0 truncate">{children}</span>
+      <span className="min-w-0 break-words text-center leading-snug">{children}</span>
       {amount !== undefined && (
         <>
           <span aria-hidden className="opacity-45">
             ·
           </span>
-          <Money cents={amount} mono={mono} />
+          <Money cents={amount} mono={mono} className="shrink-0" />
         </>
       )}
     </button>

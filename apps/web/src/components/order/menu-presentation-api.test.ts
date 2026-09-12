@@ -19,3 +19,27 @@ describe('lecture publique de la présentation', () => {
     expect(site?.categories[0]?.featuredProductIds).toEqual(['p2']);
   });
 });
+
+it('préserve les catégories de suppléments et garde les anciens menus dans Autres', async () => {
+  const supplements = [
+    { key: 'cheddar', label: 'Cheddar', priceCents: 100, category: 'fromage' },
+    { key: 'moutarde', label: 'Moutarde', priceCents: 0, category: 'sauce' },
+    { key: 'legacy', label: 'Viande', priceCents: 200 },
+    { key: 'future', label: 'Fromage', priceCents: 150, category: 'nouvelle-famille' },
+  ];
+  const send = vi.fn().mockResolvedValue({ status: 200, body: {
+    tenant: { slug: 'restaurant', name: 'Restaurant', brand: DIRECTIONS.nuit },
+    menu: { categories: [{ _id: 'cat', name: 'Plats', products: [{ _id: 'p', name: 'Sandwich', price: 875, supplements }] }] },
+  } });
+  const site = await orderingApi({ send }).loadSite('restaurant');
+  const product = site!.categories[0]!.products[0]!;
+  expect(product.supplements).toEqual([
+    { key: 'cheddar', label: 'Cheddar', priceCents: 100, category: 'fromage' },
+    { key: 'moutarde', label: 'Moutarde', priceCents: 0, category: 'sauce' },
+    { key: 'legacy', label: 'Viande', priceCents: 200, category: 'autre' },
+    { key: 'future', label: 'Fromage', priceCents: 150, category: 'autre' },
+  ]);
+  expect(product.price).toBe(875);
+  expect(product.configurable).toBe(true);
+  expect(send).toHaveBeenCalledTimes(1);
+});

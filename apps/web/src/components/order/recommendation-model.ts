@@ -14,15 +14,3 @@ export function orderRecommendations(categories: readonly MenuCategory[], lines:
       && (!simpleOnly || !product.configurable) && (Boolean(product.photoUrl) || group === "boissons"))));
   return [...new Map(candidates.map(product => [product.id, product])).values()].slice(0, simpleOnly ? 4 : 6);
 }
-
-export function expressRemovals(removables: MenuProduct["removables"]): { label: string; keys: string[] }[] {
-  const find = (labels: string[]) => removables.find(item => labels.includes(fold(item.label.trim())));
-  const onions = find(["oignon", "oignons"]);
-  const tomatoes = find(["tomate", "tomates"]);
-  const salad = find(["salade"]);
-  return [
-    ...(onions ? [{ label: "Sans oignons", keys: [onions.key] }] : []),
-    ...(tomatoes ? [{ label: "Sans tomates", keys: [tomatoes.key] }] : []),
-    ...(onions && tomatoes && salad ? [{ label: "Sans crudités", keys: [onions.key, tomatoes.key, salad.key] }] : []),
-  ];
-}

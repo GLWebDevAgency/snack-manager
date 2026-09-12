@@ -54,8 +54,9 @@ import type {
   RecoverPublicOrder,
   PublicOrderRecoveryResult,
   AbandonPublicOrder,
+  IngredientCategory,
 } from "@sm/contracts";
-import { featuredProductIdsOf, marqueEffective, WebsiteUrlSchema, PublicOrderRecoveryResultSchema, type Brand } from "@sm/contracts";
+import { featuredProductIdsOf, IngredientCategorySchema, marqueEffective, WebsiteUrlSchema, PublicOrderRecoveryResultSchema, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -170,7 +171,7 @@ export type MenuProduct = {
    */
   removables: { key: string; label: string }[];
   /** Ingrédients ajoutables, prix résolu côté serveur à la commande. */
-  supplements: { key: string; label: string; priceCents: number }[];
+  supplements: { key: string; label: string; priceCents: number; category?: IngredientCategory }[];
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
@@ -304,11 +305,15 @@ function toProduct(raw: unknown): MenuProduct | null {
   const supplements = Array.isArray(p.supplements)
     ? p.supplements
         .map((s) => {
-          const o = s as { key?: unknown; label?: unknown; priceCents?: unknown };
+          const o = s as { key?: unknown; label?: unknown; priceCents?: unknown; category?: unknown };
+          const category = IngredientCategorySchema.safeParse(o.category);
           return {
             key: String(o.key ?? ""),
             label: String(o.label ?? ""),
             priceCents: Number(o.priceCents ?? 0),
+            // Les anciennes cartes n'avaient pas de catégorie ; leur libellé
+            // ne suffit jamais à inventer une famille d'ingrédients.
+            category: category.success ? category.data : "autre",
           };
         })
         .filter((s) => s.key !== "")

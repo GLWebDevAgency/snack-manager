@@ -1800,7 +1800,7 @@ function SlotStep({
         </span>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold text-ink">{tenantName}</p>
-          <p className="truncate text-[13px] text-mut">
+          <p className="break-words text-[13px] leading-snug text-mut">
             {tenantAddress || "Retrait au comptoir"}
           </p>
         </div>

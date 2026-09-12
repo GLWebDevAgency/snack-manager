@@ -15,7 +15,13 @@ export function Recommendations({ categories, lines, onPick, prixMono, excludePr
   return <section className="sm-order-recommendations"><SectionLabel>{excludeProductId ? "Souvent pris avec" : "Pour accompagner"}</SectionLabel>
     <Rail label="Suggestions pour votre commande">{products.map(product => <Tap key={product.id} onClick={() => onPick(product)} disabled={disabled} className="sm-order-recommendation">
       {product.photoUrl && <Plate photoUrl={product.photoUrl} cover={product.photoCover} name={product.name} radius="rounded-none" className="h-[78px] w-full border-0" />}
-      <span className="sm-order-recommendation-body"><b>{product.name}</b><span><Prix cents={product.fromPrice} mono={prixMono} /><Icon name={product.configurable ? "edit" : "plus"} size={18} /></span></span>
+      <span className="sm-order-recommendation-body"><b>{product.name}</b><span>
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+          {product.variants.length > 0 && <span className="text-[11px] font-medium text-mut">Dès</span>}
+          <Prix cents={product.fromPrice} mono={prixMono} />
+        </span>
+        <Icon name={product.configurable ? "edit" : "plus"} size={18} />
+      </span></span>
       <span className="sr-only">{product.configurable ? ", composer" : ", ajouter au panier"}</span>
     </Tap>)}</Rail>
   </section>;

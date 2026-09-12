@@ -28,7 +28,7 @@ const CATALOGUE = [
 /** Compteur de lectures Postgres — la mutualisation se vérifie ici. */
 const lectures = { count: 0 };
 
-function supplyDb(options: { fail?: boolean } = {}) {
+function supplyDb(options: { fail?: boolean; catalogue?: typeof CATALOGUE } = {}) {
   let call = 0;
   const chain = (rows: unknown[]) => {
     const self = {
@@ -44,12 +44,12 @@ function supplyDb(options: { fail?: boolean } = {}) {
   return {
     select: () => {
       lectures.count += 1;
-      return chain(++call === 1 ? RECETTE : CATALOGUE);
+      return chain(++call % 2 === 1 ? RECETTE : options.catalogue ?? CATALOGUE);
     },
   };
 }
 
-function menu(options: { fail?: boolean; produits?: number } = {}) {
+function menu(options: { fail?: boolean; produits?: number; catalogue?: typeof CATALOGUE } = {}) {
   lectures.count = 0;
   const produit = (i: number) => ({
     _id: i === 0 ? PRODUIT : `${PRODUIT.slice(0, -1)}${i}`,
@@ -121,6 +121,19 @@ describe('menu public enrichi par la recette', () => {
 
     expect(groupes).toEqual(['pain']);
     expect(groupes).not.toContain(SUPPLEMENT_GROUP_KEY);
+  });
+
+  it('relit la catégorie d’ingrédient courante sans modifier le prix ni la clé du supplément', async () => {
+    // La source PostgreSQL change comme après le PATCH catégorie du BO.
+    // Les vrais SupplyService et MenuService doivent relire cette source.
+    const catalogue = CATALOGUE.map(item => ({ ...item }));
+    const service = menu({ catalogue });
+    const before = premierProduit((await service.publicMenu(TENANT)).categories).supplements;
+    catalogue[0]!.category = 'sauce';
+    const after = premierProduit((await service.publicMenu(TENANT)).categories).supplements;
+    expect(before).toEqual([{ key: 'cheddar', label: 'Cheddar', priceCents: 100, category: 'fromage' }]);
+    expect(after).toEqual([{ key: 'cheddar', label: 'Cheddar', priceCents: 100, category: 'sauce' }]);
+    expect(lectures.count).toBe(4); // Deux lectures mutualisées par carte.
   });
 
   it('lit Postgres une seule fois pour toute la carte, jamais une fois par produit', async () => {

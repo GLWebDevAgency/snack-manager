@@ -5,8 +5,8 @@ import type { BrandMode } from "@sm/contracts";
 import { Icon } from "@/components/ui";
 import { SMTabBar } from "@/components/ui/SMTabBar";
 
-export function OrderTabBar({ slug, activeKey, theme, loyaltyHref, onSelect, hidden = false, minimizable = true, demo = false, disabled = false }: {
-  slug: string; activeKey: string; theme: BrandMode; loyaltyHref?: string | null;
+export function OrderTabBar({ slug, activeKey, panelId, theme, loyaltyHref, onSelect, hidden = false, minimizable = true, demo = false, disabled = false }: {
+  slug: string; activeKey: string; panelId: string; theme: BrandMode; loyaltyHref?: string | null;
   onSelect?: (key: string) => void; hidden?: boolean; minimizable?: boolean; demo?: boolean; disabled?: boolean;
 }) {
   const router = useRouter();
@@ -20,9 +20,9 @@ export function OrderTabBar({ slug, activeKey, theme, loyaltyHref, onSelect, hid
   }
   return <SMTabBar activeKey={activeKey} theme={theme} hidden={hidden} disabled={disabled} minimizable={minimizable} onSelect={select}
     items={[
-      { key: "menu", label: "Carte", icon: color => <Icon name="grid" size={24} style={{ color }} /> },
-      { key: "search", label: "Rechercher", icon: color => <Icon name="search" size={24} style={{ color }} /> },
-      { key: "orders", label: "Commandes", icon: color => <Icon name="ticket" size={24} style={{ color }} /> },
-      ...(loyaltyHref ? [{ key: "loyalty", label: "Fidélité", icon: (color: string) => <Icon name="gift" size={24} style={{ color }} /> }] : []),
+      { key: "menu", label: "Carte", panelId, icon: color => <Icon name="grid" size={24} style={{ color }} /> },
+      { key: "search", label: "Rechercher", panelId, icon: color => <Icon name="search" size={24} style={{ color }} /> },
+      { key: "orders", label: "Commandes", panelId, icon: color => <Icon name="ticket" size={24} style={{ color }} /> },
+      ...(loyaltyHref ? [{ key: "loyalty", label: "Fidélité", panelId, icon: (color: string) => <Icon name="gift" size={24} style={{ color }} /> }] : []),
     ]} />;
 }

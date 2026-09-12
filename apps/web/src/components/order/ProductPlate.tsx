@@ -90,7 +90,7 @@ export function Plate({
           ref={(node) => {
             if (node?.complete && node.naturalWidth === 0) fail();
           }}
-          className={cx("size-full", cover ? "object-cover" : "sm-cut object-contain", !cover && pad)}
+          className={cx("absolute inset-0 size-full min-h-0 min-w-0", cover ? "object-cover" : "sm-cut object-contain", !cover && pad)}
         />
       ) : (
         <span

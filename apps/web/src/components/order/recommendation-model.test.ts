@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MenuCategory, MenuProduct } from "./api";
 import type { CartLine } from "./cart";
-import { expressRemovals, orderRecommendations } from "./recommendation-model";
+import { orderRecommendations } from "./recommendation-model";
 const product = (id: string, changes: Partial<MenuProduct> = {}): MenuProduct => ({ id, name: id, description: "", price: 200, fromPrice: 200, photoUrl: null,
   outOfStock: false, configurable: false, variants: [], groups: [], removables: [], supplements: [], tags: [], isNew: false, ...changes });
 const category = (name: string, products: MenuProduct[]): MenuCategory => ({ id: name, name, products });
@@ -17,14 +17,5 @@ describe("suggestions de la commande depuis la carte réelle", () => {
   });
   it("n’invente ni photo, ni catégorie similaire, ni disponibilité", () => {
     expect(orderRecommendations([category("Desserts", [product("invisible")]), category("Boissons premium", [product("produit")])], [])).toEqual([]);
-  });
-});
-describe("retraits express", () => {
-  it("propose Sans crudités uniquement si les trois ingrédients sont explicitement retirables", () => {
-    expect(expressRemovals([{ key: "o", label: "Oignons" }, { key: "t", label: "Tomate" }]).map(option => option.label)).toEqual(["Sans oignons", "Sans tomates"]);
-    expect(expressRemovals([{ key: "o", label: "Oignons" }, { key: "t", label: "Tomate" }, { key: "s", label: "Salade" }]).at(-1)).toEqual({ label: "Sans crudités", keys: ["o", "t", "s"] });
-  });
-  it("ne traite jamais une sauce tomate ou des oignons frits comme un retrait de crudités", () => {
-    expect(expressRemovals([{ key: "a", label: "Sauce tomate" }, { key: "b", label: "Oignons frits" }])).toEqual([]);
   });
 });

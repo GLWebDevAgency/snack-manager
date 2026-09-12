@@ -33,11 +33,19 @@ function render(p = product, removed: string[] = []) {
   }));
 }
 
+function controls(html: string) {
+  return (html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? []).map(markup => ({
+    markup, label: markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+  }));
+}
+
 describe("fiche web : choix inclus et retraits du menu commun", () => {
   it("annonce les cinq fromages inclus sans en choisir un à la place du client", () => {
     const html = render();
-    expect(html).toMatch(/aria-pressed="false"[^>]*>Cheddar<span[^>]*>Inclus/);
-    expect(html.match(/>Inclus</g)).toHaveLength(6);
+    const cheddar = controls(html).find(control => control.label === "Cheddar Inclus");
+    expect(cheddar?.markup).toContain('role="radio"');
+    expect(cheddar?.markup).toContain('aria-checked="false"');
+    expect(controls(html).filter(control => control.label.endsWith(" Inclus"))).toHaveLength(6);
     expect(html).toMatch(/disabled=""[^>]*>[\s\S]*?Choisissez : Fromage/);
     expect(html).toContain("+0,50");
     expect(html).toContain("+1,00");
@@ -53,10 +61,28 @@ describe("fiche web : choix inclus et retraits du menu commun", () => {
 
   it("présente Complet et tous les retraits réellement fournis, y compris sans crudités", () => {
     const html = render();
-    expect(html).toMatch(/aria-pressed="true"[^>]*>[\s\S]*?Complet<\/button>/);
-    for (const item of ["salade", "tomate", "oignons", "crudités"]) expect(html).toContain(`sans ${item}`);
+    expect(controls(html).find(control => control.label.startsWith("Complet"))?.markup).toContain('aria-pressed="true"');
+    for (const item of ["salade", "tomate", "oignons", "crudités"]) {
+      expect(controls(html).filter(control => new RegExp(`^sans ${item}s?$`, "i").test(control.label))).toHaveLength(1);
+    }
     expect(render({ ...product, removables: [] })).not.toContain("sans crudités");
-    expect(render(product, ["crudites"])).toMatch(/aria-pressed="true"[^>]*>[\s\S]*?sans crudités<\/button>/);
+    expect(controls(render(product, ["crudites"])).find(control => control.label === "sans crudités")?.markup).toContain('aria-checked="true"');
+  });
+
+  it("ne déduit pas un retrait de crudités absent de la carte à partir de trois ingrédients", () => {
+    const html = render({ ...product, removables: product.removables.filter(item => item.key !== "crudites") });
+    expect(html.toLowerCase()).not.toContain("sans crudités");
+    for (const item of ["salade", "tomate", "oignons"]) expect(html).toContain(`sans ${item}`);
+  });
+
+  it("conserve des choix de même libellé quand le restaurant leur donne des identités distinctes", () => {
+    const html = render({ ...product, removables: [
+      { key: "garniture-oignons", label: "Oignons" }, { key: "accompagnement-oignons", label: "Oignons" },
+    ], groups: product.groups.map(group => ({ ...group, choices: [{ key: `${group.key}-nature`, name: "Nature", priceDelta: 0 }] })) });
+    expect(controls(html).filter(control => control.label === "sans oignons")).toHaveLength(2);
+    const defaults = controls(html).filter(control => control.label === "Nature Inclus");
+    expect(defaults).toHaveLength(2);
+    for (const control of defaults) expect(control.markup).toContain('aria-checked="true"');
   });
 
   it("ne présente pas deux fois un supplément dédié dans un ancien menu dupliqué", () => {

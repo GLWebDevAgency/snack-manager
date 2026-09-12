@@ -15,6 +15,7 @@ let server: Server, browser: Browser, context: BrowserContext, page: Page, origi
 let requests: { response: ServerResponse; url: URL }[], faults: string[];
 let evidence: string | undefined;
 const day = "2030-09-08", tomorrow = "2030-09-09";
+const pickupAddress = "63 rue du Général de Gaulle — 27910 Perriers-sur-Andelle";
 function slots(date = day, times = ["18:00", "18:10"], full = false): SlotsResponse {
   return { date, timezone: "Europe/Paris", intervalMin: 10, capacity: 4, leadTimeMin: 30,
     slots: times.map((label, index) => ({ iso: `${date}T${label}:00+02:00`, label, service: "dinner",
@@ -43,7 +44,7 @@ beforeAll(async () => {
     function App(){const[open,setOpen]=React.useState(true);const recovery=useCheckoutRecovery('recette',false,false);
       return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg text-ink">
         <h1>Créneaux de recette</h1><button onClick={()=>setOpen(true)}>Rouvrir le panier</button>
-        <Checkout open={open} onClose={()=>setOpen(false)} onBrowse={()=>{}} onEditLine={()=>{}} slug="recette" tenantName="Restaurant de recette" tenantAddress="Adresse de recette"
+        <Checkout open={open} onClose={()=>setOpen(false)} onBrowse={()=>{}} onEditLine={()=>{}} slug="recette" tenantName="Restaurant de recette" tenantAddress=${JSON.stringify(pickupAddress)}
           recovery={recovery} cart={cart} paused={false} pauseMessage={null} initialSlots={${JSON.stringify(slots())}}
           delivery={{available:true,zones:[],leadTimeMin:45,paymentRequired:'online'}} stripeApparence={{}} mode="dark" prixMono={false} api={api} customerAccountEnabled={false}/>
       </main>}
@@ -121,6 +122,47 @@ async function selectedReentry() {
 }
 
 describe("actualisation des créneaux — vrai Checkout et HTTP local retenu", () => {
+  it("affiche l’adresse entière, les étapes et le motif du paiement bloqué à 320 px, y compris après rotation", async () => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await enterSlots(); await reply(0);
+    const address = page.getByText(pickupAddress, { exact: true });
+    const geometry = await address.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { width: element.clientWidth, scrollWidth: element.scrollWidth,
+        height: element.getBoundingClientRect().height, lineHeight: Number.parseFloat(style.lineHeight) };
+    });
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width + 1);
+    expect(geometry.height).toBeGreaterThan(geometry.lineHeight * 1.5);
+    const progress = page.getByRole("dialog").locator("ol").first();
+    const progressLabels = await progress.locator("button > span:nth-child(2)").evaluateAll(elements =>
+      elements.map(element => ({ text: element.textContent, width: element.clientWidth, scrollWidth: element.scrollWidth })));
+    expect(progressLabels.map(label => label.text)).toEqual(["Panier", "Retrait", "Paiement"]);
+    for (const label of progressLabels) expect(label.scrollWidth, label.text ?? "step").toBeLessThanOrEqual(label.width + 1);
+    await activate(next());
+    const action = page.getByRole("button", { name: /Nom et téléphone requis/ });
+    expect(await action.isDisabled()).toBe(true);
+    for (const width of [320, 1280, 320]) {
+      await page.setViewportSize({ width, height: width === 320 ? 568 : 800 }); await frames();
+      const layout = await action.evaluate(element => {
+        const outer = element.getBoundingClientRect(), text = element.querySelector("span")!;
+        const range = document.createRange(); range.selectNodeContents(text);
+        return { left: outer.left, right: outer.right, top: outer.top, bottom: outer.bottom,
+          textRects: Array.from(range.getClientRects()).map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })),
+          scrollWidth: text.scrollWidth, width: text.clientWidth };
+      });
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+      expect(layout.bottom).toBeLessThanOrEqual(width === 320 ? 568 : 800);
+      for (const rectangle of layout.textRects) {
+        expect(rectangle.left).toBeGreaterThanOrEqual(layout.left);
+        expect(rectangle.right).toBeLessThanOrEqual(layout.right);
+        expect(rectangle.top).toBeGreaterThanOrEqual(layout.top);
+        expect(rectangle.bottom).toBeLessThanOrEqual(layout.bottom);
+      }
+    }
+    expect(await page.getByRole("dialog", { name: "Paiement", exact: true }).count()).toBe(1);
+    expect(await page.getByRole("textbox", { name: "Prénom et nom", exact: true }).inputValue()).toBe("");
+    if (evidence) await page.screenshot({ path: join(evidence, "payment-label-320.png") });
+  });
   it("Au plus tôt utilise le premier créneau libre du serveur et garde les coordonnées au paiement", async () => {
     await enterSlots(); expect(await next().isDisabled()).toBe(true);
     await reply(0, slots(day, undefined, true));
