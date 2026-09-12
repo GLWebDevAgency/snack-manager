@@ -124,6 +124,17 @@ function expectContained(inner: Awaited<ReturnType<typeof bounds>>, outer: Await
 }
 
 describe("MenuBoard — géométrie responsive du catalogue réel", () => {
+  it("annonce un minimum de section pour les formats et réserve le prix unique aux produits sans variante", async () => {
+    await configure({ layout: "rows", formats: 4 }, 320);
+    const category = page.locator("#cat-menu");
+    expect(await category.getByText(/^À partir de 119,90\s*€$/).count()).toBe(1);
+    expect(await category.getByText(/^Tous à /).count()).toBe(0);
+    expect(await firstProduct().getByRole("group").getByRole("button").last().innerText()).toMatch(/122,90/);
+    await configure({ formats: 0 }, 320);
+    expect(await category.getByText(/^Tous à 119,90\s*€$/).count()).toBe(1);
+    expect(await category.getByText(/^À partir de /).count()).toBe(0);
+  });
+
   it.each([2, 3, 4])("contient les %i formats de chaque ligne sans recouvrir le produit suivant", async formats => {
     await configure({ layout: "rows", formats });
     const rows = page.locator(".sm-order-product-row");

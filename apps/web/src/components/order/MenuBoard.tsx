@@ -305,11 +305,12 @@ export function MenuBoard({
  * plutôt qu’une phrase inventée.
  */
 function categoryNote(category: MenuCategory): string | null {
-  const prices = category.products
-    .filter((p) => !p.outOfStock && p.fromPrice > 0)
-    .map((p) => p.fromPrice);
+  const products = category.products.filter((p) => !p.outOfStock && p.fromPrice > 0);
+  const prices = products.map((p) => p.fromPrice);
   if (prices.length === 0) return null;
   const low = Math.min(...prices);
+  // fromPrice is a minimum: a larger format can exceed every base price.
+  if (products.some((p) => p.variants.length > 0)) return `À partir de ${euros(low)}`;
   const high = Math.max(...prices);
   return low === high ? `Tous à ${euros(low)}` : `De ${euros(low)} à ${euros(high)}`;
 }

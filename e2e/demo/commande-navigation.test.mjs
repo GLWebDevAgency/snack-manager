@@ -15,7 +15,7 @@ for (const width of [320, 820, 1440]) {
     const fiche = page.getByRole('dialog', { name: 'Kebab', exact: true });
     await cliquerJusqua(menu.getByRole('article', { name: 'Kebab', exact: true }).getByRole('button', { name: /composer$/ }), fiche);
     await fiche.getByRole('radio', { name: /^Galette/ }).click();
-    await fiche.getByRole('button', { name: 'Samouraï' }).click();
+    await fiche.getByRole('group', { name: 'Sauces', exact: true }).getByRole('checkbox', { name: 'Samouraï Inclus', exact: true }).click();
     await fiche.getByRole('button', { name: /^Ajouter.*8,00\s*€/ }).click();
     await fiche.waitFor({ state: 'hidden' });
     const panier = page.getByRole('button', { name: /Voir mon panier/ });

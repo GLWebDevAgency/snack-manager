@@ -43,7 +43,7 @@ const { web } = cibles();
 
 const PRODUIT = 'Kebab';
 const PAIN = /^Galette/; // +0,50 €
-const SAUCE = 'Samouraï';
+const SAUCE = 'Samouraï Inclus';
 const SUPPLEMENT = /^Cheddar/; // +1,00 €
 const TOTAL = /9,00\s*€/;
 
@@ -72,7 +72,7 @@ scenario(
     );
 
     await fiche.getByRole('radio', { name: PAIN }).click();
-    await fiche.getByRole('button', { name: SAUCE }).click();
+    await fiche.getByRole('group', { name: 'Sauces', exact: true }).getByRole('checkbox', { name: SAUCE, exact: true }).click();
     await fiche.getByRole('checkbox', { name: SUPPLEMENT }).click();
 
     // ── Total nº 1 : la fiche produit ──
