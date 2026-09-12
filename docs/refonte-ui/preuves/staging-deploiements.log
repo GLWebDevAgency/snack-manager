@@ -1,0 +1,5 @@
+Mise en ligne des quatre services	Publier la révision déployée sur le service api	2026-09-12T17:16:28.3941655Z SM_REVISION posée sur « api » → a01f857c4c0649e85b3b8059fc644ced95602095
+Mise en ligne des quatre services	Déployer api — schémas PostgreSQL vérifiés	2026-09-12T17:19:58.1673678Z ✓ api — déploiement 1de24e25-fa46-4afb-8725-810352989d80 en service
+Mise en ligne des quatre services	Déployer web, pos et kds	2026-09-12T17:24:14.5328767Z ✓ web — déploiement dd82d8e0-b264-47fb-9420-203c748745d1 en service
+Mise en ligne des quatre services	Déployer web, pos et kds	2026-09-12T17:24:14.5455288Z ✓ pos — déploiement 1df80112-2ab2-43d0-b8b8-4531c57849a0 en service
+Mise en ligne des quatre services	Déployer web, pos et kds	2026-09-12T17:24:14.5591113Z ✓ kds — déploiement 4a40e626-9f65-4e28-a522-10ea3330a876 en service

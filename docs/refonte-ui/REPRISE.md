@@ -96,3 +96,19 @@ Suite à la demande « ok testons un minimum puis je testerais sur staging apres
 Recette rejouée sur les applications compilées locales, sans changement du code : **33/33 parcours réussis**, soit POS **7/7**, KDS **10/10**, web **16/16**. Commandes `REFONTE_PHASE=pre-merge node e2e/local/refonte-{pos,kds,web}-visual.mjs` exécutées séparément. Résumé conservé dans `preuves/pre-merge-smoke.log` ; captures de cette répétition conservées localement sous `_handoff/pre-merge/`, en complément des captures finales déjà versionnées. Les limites fixtures et appareils de la section précédente restent applicables.
 
 `origin/develop` rafraîchi reste `aefdf974f3c24dfb7d2d7ab484eb297a0502aa1c`. Audit indépendant : packages tokens/assets/icons suivis et résolus par pnpm, sources présentes dans le checkout CI et l'envoi Railway ; aucun changement API, migration ou workflow. Prochaine étape : PR vers `develop`, contrôles CI, fusion du lot puis vérification de la révision servie en staging.
+
+## Fusion et livraison staging — 12 septembre 2026, 19 h 25 Paris
+
+- PR [#177](https://github.com/GLWebDevAgency/snack-manager/pull/177) fusionnée par squash dans `develop` à 17:03:43 UTC, après CI et balayage des secrets réussis. Commit fusionné : **`a01f857c4c0649e85b3b8059fc644ced95602095`**. L'arbre fusionné est identique à celui de la branche livrée `3a63b4b` ; aucun travail concurrent n'a été ajouté à la fusion.
+- [CI de la PR](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34706522211) entièrement réussie : typage, analyse statique, tests, intégrations avec services temporaires, compilation et chargements des modules compilés.
+- [Pipeline staging](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34707092040) entièrement réussi sur le SHA fusionné : nouvelle vérification complète, contrôle des secrets, préflight Railway, préparation des schémas, mise en service des quatre services et santé publique.
+- IDs Railway confirmés en service par ce run : API `1de24e25-fa46-4afb-8725-810352989d80`, web `dd82d8e0-b264-47fb-9420-203c748745d1`, POS `1df80112-2ab2-43d0-b8b8-4531c57849a0`, KDS `4a40e626-9f65-4e28-a522-10ea3330a876`.
+- Contrôle public relancé depuis ce poste : `SM_REVISION_ATTENDUE=a01f857c4c0649e85b3b8059fc644ced95602095 node scripts/smoke.mjs staging` : **8/8**, aucun contrôle ignoré. SHA API exact, carte Class'Food (22 catégories, 109 produits), catalogue fidélité, PWA fidélité et trois interfaces valides.
+- Empreintes et URLs des fichiers publics relevées avant/après : web, POS et KDS exposent chacun au moins un nouveau fichier JavaScript ou CSS, téléchargé avec HTTP 200 et type MIME attendu. Les fronts ne publient pas de SHA Git : leur liaison au commit provient du workflow réussi et de ses IDs de déploiement, complétés par ces fichiers renouvelés. Aucun SHA de front n'est inventé.
+- Preuves : `preuves/{ci-pr-177,pr-177-merge,staging-workflow,staging-fronts-avant,staging-fronts-apres}.json`, `preuves/staging-{smoke,deploiements}.log`. Ces constats postérieurs au déploiement sont ajoutés au suivi local ; ils ne déclenchent pas une seconde livraison.
+
+Le lot de code UI et d'assets est intégralement fusionné et disponible sur staging. Le checkout principal et ses changements initiaux restent préservés. Aucun push vers `main`, aucune fusion en production ni déploiement production.
+
+Prochaine tranche : recette utilisateur sur staging, en priorité POS A/B/C (configurateur, ticket, reprises), KDS (filtres et transitions), commande/fidélité/livreur, deux back-offices et choix d'illustration dans les deux médiathèques. Les formulaires secondaires complets et les essais appareils restent à couvrir ; les 33 parcours visuels locaux utilisent des fixtures et les 8 contrôles staging sont des lectures publiques, pas une recette métier authentifiée.
+
+Accès : [web](https://web-staging-6f5f.up.railway.app), [POS](https://pos-staging-7f92.up.railway.app), [KDS](https://kds-staging-90da.up.railway.app).
