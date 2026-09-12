@@ -1,0 +1,23 @@
+{
+  "name": "@sm/design-ui-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./index.tsx",
+    "./styles.css": "./styles.css"
+  },
+  "peerDependencies": {
+    "react": ">=19 <20",
+    "react-dom": ">=19 <20"
+  },
+  "dependencies": {
+    "@sm/design-tokens": "workspace:*",
+    "@sm/design-icons": "workspace:*",
+    "@sm/design-assets": "workspace:*",
+    "@sm/design-presentation": "workspace:*"
+  }
+}

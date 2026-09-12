@@ -5,7 +5,7 @@
  * tiroir latéral de la surface, fiche lead, création de lead.
  */
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { COMMERCE_PRICES } from "@sm/contracts/commerce";
 import {
   CLIENT_HEALTH_LABELS,
@@ -44,6 +44,7 @@ import {
 } from "@sm/contracts";
 import { csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
+import { useDialogLayer } from "@/components/ui/useDialogLayer";
 import { fmtEuro, timeAgo } from "@/lib/format";
 import {
   Btn,
@@ -195,7 +196,10 @@ export function HqDrawer({
   garde?: boolean;
   width?: number;
 }) {
-  const panneau = useRef<HTMLDivElement>(null);
+  const closeFromEscape = useCallback(() => {
+    if (!garde) onClose();
+  }, [garde, onClose]);
+  const dialogRef = useDialogLayer({ open, onClose: closeFromEscape });
   // Lus par les effets sans les réabonner : l'effet d'historique resouscrit à
   // chaque rendu pousserait une entrée par frappe dans le brouillon.
   const gardeRef = useRef(garde);
@@ -205,46 +209,9 @@ export function HqDrawer({
     closeRef.current = onClose;
   });
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !gardeRef.current) closeRef.current();
-      // `aria-modal` promet que Tab reste dans le dialogue : on boucle
-      // premier ↔ dernier et on rapatrie un focus égaré derrière le voile.
-      if (e.key === "Tab" && panneau.current) {
-        const focusables = panneau.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        const premier = focusables[0];
-        const dernier = focusables[focusables.length - 1];
-        if (!premier || !dernier) return;
-        const actif = document.activeElement;
-        if (!panneau.current.contains(actif)) {
-          e.preventDefault();
-          premier.focus();
-        } else if (e.shiftKey && (actif === premier || actif === panneau.current)) {
-          e.preventDefault();
-          dernier.focus();
-        } else if (!e.shiftKey && actif === dernier) {
-          e.preventDefault();
-          premier.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  // Le focus ENTRE dans le dialogue à l'ouverture et REVIENT au déclencheur à
-  // la fermeture — sans quoi Tab continuait de parcourir la page recouverte
-  // et le clavier perdait sa position au retour.
-  useEffect(() => {
-    if (!open) return;
-    const declencheur =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panneau.current?.focus();
-    return () => declencheur?.focus();
-  }, [open]);
+  // La couche commune capture le déclencheur avant autoFocus, isole le fond
+  // et restaure le focus après fermeture. La garde et l'historique ci-dessous
+  // gardent leurs propres règles ; ils ne sont pas déplacés dans la couche.
 
   // Sur téléphone, la feuille plein écran SE LIT comme une page : le geste de
   // retour doit la fermer, pas quitter l'écran entier. Une entrée d'historique
@@ -276,7 +243,10 @@ export function HqDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50"
+      ref={dialogRef}
+      inert
+      tabIndex={-1}
+      className="fixed inset-0 z-50 outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={typeof title === "string" ? title : "Fiche"}
@@ -297,8 +267,6 @@ export function HqDrawer({
         parce qu'un style en ligne l'imposerait aussi au téléphone.
       */}
       <div
-        ref={panneau}
-        tabIndex={-1}
         className="absolute flex flex-col bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] outline-none max-md:inset-x-0 max-md:top-0 max-md:h-dvh max-md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:inset-y-0 md:right-0 md:w-[min(var(--sm-tiroir-l),100vw)] md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:rounded-l-panel"
         style={{ "--sm-tiroir-l": `${width}px` } as CSSProperties}
       >
@@ -318,6 +286,7 @@ export function HqDrawer({
           />
         </div>
         <div
+          data-dialog-content
           className={cx(
             "cf-scroll min-h-0 flex-1 overflow-y-auto px-[18px] py-4",
             // Sans pied, c'est le corps qui prend la marge des encoches.
@@ -327,7 +296,7 @@ export function HqDrawer({
           {children}
         </div>
         {footer && (
-          <div className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5 max-md:pb-[calc(14px+env(safe-area-inset-bottom))]">
+          <div data-dialog-footer className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5 max-md:pb-[calc(14px+env(safe-area-inset-bottom))]">
             {footer}
           </div>
         )}
@@ -871,6 +840,7 @@ export function NewLeadDrawer({
             id="new-name"
             required
             autoFocus
+            data-dialog-autofocus
             placeholder="Chick & Go"
             value={name}
             onChange={(e) => setName(e.target.value)}

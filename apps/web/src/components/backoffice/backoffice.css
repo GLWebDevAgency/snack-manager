@@ -1,0 +1,36 @@
+/* Staff-only treatment. Customer masks remain inline on their own roots. */
+.sm-backoffice {
+  color: var(--cf-text);
+  color-scheme: dark;
+}
+
+.sm-backoffice .sm-button,
+.sm-backoffice .cf-press.rounded-pill {
+  border-radius: var(--cf-r-sm);
+}
+
+.sm-backoffice .sm-button {
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.sm-backoffice nav a[aria-current="page"] {
+  background: color-mix(in srgb, var(--cf-accent) 14%, var(--cf-surface));
+  color: var(--cf-accent);
+  box-shadow: none;
+}
+
+.sm-backoffice header h1 {
+  font-weight: 650;
+  letter-spacing: -.035em;
+}
+
+.sm-backoffice .cf-press:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-backoffice .cf-press:active {
+    transform: none;
+  }
+}

@@ -1,0 +1,40 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/order/menu-layout.browser.test.tsx (16 tests) 5772ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 320 px  670ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 390 px  386ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 820 px  398ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 320 px  317ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 330 px  309ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contraint la photo intrinsèque 800×600 au plateau contain à 820 px  310ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde Classique entier et les prix contenus dans la carte étroite, puis rétablit deux colonnes de formats  424ms
+ ✓ src/components/order/order-header-joint.browser.test.tsx (4 tests) 2069ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 330 px et le recalcule quand l’identité change de hauteur  502ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 820 px et le recalcule quand l’identité change de hauteur  410ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 1280 px et le recalcule quand l’identité change de hauteur  396ms
+   ✓ OrderHeader — raccord sticky avec les catégories > conserve le raccord pendant les redimensionnements du viewport mobile vers tablette et bureau  401ms
+ ✓ src/components/order/ProductSheet.browser.test.tsx (8 tests) 3804ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 320px  734ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 390px  607ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > préserve les identités distinctes de même libellé et les sélections récupérées sans les fusionner  318ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > ne retire pas le supplément facultatif unique quand le client utilise une flèche  366ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > garde les choix restaurés visibles dans un groupe long et préserve la sélection après repli  343ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > maintient les bornes et prix par variante sans perdre retraits ni supplément dédié  510ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > classe les suppléments par catégorie native sans fusionner deux libellés identiques  348ms
+ ✓ src/components/order/ProductSheet.test.ts (6 tests) 40ms
+ ✓ src/components/loyalty/logo-incorpore.test.ts (23 tests) 35ms
+ ✓ src/components/loyalty/scan-feedback.test.ts (8 tests) 14ms
+ ✓ src/components/loyalty/paliers.test.ts (13 tests) 14ms
+ ✓ src/components/loyalty/icone-carte.test.ts (54 tests) 7ms
+ ✓ src/components/masque/styleDuMasque.test.ts (4 tests) 5ms
+ ✓ src/components/loyalty/mouvement.test.ts (12 tests) 6ms
+ ✓ src/components/loyalty/carte-locale.test.ts (9 tests) 5ms
+ ✓ src/components/loyalty/relay-proof.test.ts (3 tests) 3ms
+ ✓ src/components/loyalty/installation.test.ts (13 tests) 2ms
+ ✓ src/components/loyalty/session-guards.test.ts (3 tests) 2ms
+
+ Test Files  14 passed (14)
+      Tests  176 passed (176)
+   Start at  18:24:29
+   Duration  15.49s (transform 329ms, setup 0ms, collect 1.85s, tests 11.78s, environment 1ms, prepare 441ms)

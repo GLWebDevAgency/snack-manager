@@ -46,6 +46,7 @@ import { Btn, EmptyState, Icon, IconBtn, Modal, Pill, Skeleton } from "@/compone
 import { CadragePhoto } from "./CadragePhoto";
 import { etatDuQuota, poids, reduirePourEnvoi } from "@/components/mediatheque/photos";
 import { BoutonDepot } from "@/components/mediatheque/BoutonDepot";
+import { BibliothequeIllustrations } from "@/components/mediatheque/BibliothequeIllustrations";
 import { deplacer } from "./photos";
 import type { Mediatheque } from "./types";
 
@@ -346,7 +347,9 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
           quota={bib.quota}
           photos={photos}
           envoi={envoi}
-          onFichier={(f) => void deposer(f)}
+          onFichier={deposer}
+          noteDepot={note}
+          refusDepot={refus}
           onBasculer={basculer}
           onCadrer={setCadrage}
           onRetire={(id) => {
@@ -382,6 +385,8 @@ function ModaleMediatheque({
   photos,
   envoi,
   onFichier,
+  noteDepot,
+  refusDepot,
   onBasculer,
   onCadrer,
   onRetire,
@@ -391,7 +396,9 @@ function ModaleMediatheque({
   quota: QuotaMedias;
   photos: string[];
   envoi: boolean;
-  onFichier: (fichier: File) => void;
+  onFichier: (fichier: File) => Promise<void>;
+  noteDepot: string | null;
+  refusDepot: string | null;
   onBasculer: (media: MediaVue) => void;
   onCadrer: (media: MediaVue) => void;
   /** Un média a quitté la médiathèque : à détacher, et à recharger (quota compris). */
@@ -451,6 +458,9 @@ function ModaleMediatheque({
         }
       >
         <div className="flex flex-col gap-3">
+          <BibliothequeIllustrations envoi={envoi || busy} onFichier={onFichier} />
+          {noteDepot && <p role="status" className="text-xs text-mut">{noteDepot}</p>}
+          {refusDepot && <p role="alert" className="text-xs text-alertt">{refusDepot}</p>}
           <p className="text-[13px] text-mut">
             Vos photos appartiennent à votre établissement : la même sert à plusieurs plats et
             survit au produit qu&apos;on renomme.

@@ -1,0 +1,539 @@
+{
+  "phase": "build-final",
+  "base": "http://127.0.0.1:3092",
+  "note": "After surface changes; actual Next routes, repository demos and local-only delivery/HQ fixtures. Light tenant cases use the existing Brasserie demo mask.",
+  "results": [
+    {
+      "name": "commande-1440-default",
+      "surface": "commande",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-1440-default-carte.png",
+        "commande-1440-default-catalogue.png",
+        "commande-1440-default-configuration.png",
+        "commande-1440-default-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "commande-1440-light",
+      "surface": "commande",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1&masque=brasserie",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-1440-light-carte.png",
+        "commande-1440-light-catalogue.png",
+        "commande-1440-light-configuration.png",
+        "commande-1440-light-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "commande-390-default",
+      "surface": "commande",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-390-default-carte.png",
+        "commande-390-default-catalogue.png",
+        "commande-390-default-configuration.png",
+        "commande-390-default-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "commande-390-light",
+      "surface": "commande",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo?demo=1&masque=brasserie",
+      "title": "Commande en ligne — démonstration Snack Manager",
+      "checks": [
+        "actual demo Storefront",
+        "configured paid bread option",
+        "8 euro cart"
+      ],
+      "shots": [
+        "commande-390-light-carte.png",
+        "commande-390-light-catalogue.png",
+        "commande-390-light-configuration.png",
+        "commande-390-light-panier.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-1440-default",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-1440-default-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-1440-light",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1&masque=brasserie",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-1440-light-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-390-default",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-390-default-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "fidelite-390-light",
+      "surface": "fidelite",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/r/demo/fidelite?demo=1&masque=brasserie",
+      "title": "Carte fidélité — démonstration Snack Manager",
+      "checks": [
+        "shared loyalty visual components in demo",
+        "demo ordering link retained; no real card or QR session"
+      ],
+      "shots": [
+        "fidelite-390-light-carte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "livreur-1440-default",
+      "surface": "livreur",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-1440-default-missions.png",
+        "livreur-1440-default-mission.png",
+        "livreur-1440-default-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-1440-light",
+      "surface": "livreur",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-1440-light-missions.png",
+        "livreur-1440-light-mission.png",
+        "livreur-1440-light-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-390-default",
+      "surface": "livreur",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-390-default-missions.png",
+        "livreur-390-default-mission.png",
+        "livreur-390-default-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "livreur-390-light",
+      "surface": "livreur",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/livreur",
+      "title": "SM Livreur",
+      "checks": [
+        "fixture access associated",
+        "mission detail and Escape",
+        "account preferences visible; no dispatch/handoff"
+      ],
+      "shots": [
+        "livreur-390-light-missions.png",
+        "livreur-390-light-mission.png",
+        "livreur-390-light-compte.png"
+      ],
+      "errors": [],
+      "consoleMessages": [
+        {
+          "type": "warning",
+          "text": "Service Worker registration blocked by Playwright"
+        }
+      ],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/livreur/acces"
+        ],
+        [
+          "GET",
+          "/livreur/missions"
+        ],
+        [
+          "GET",
+          "/livreur/missions/dddddddddddddddddddddddd"
+        ]
+      ]
+    },
+    {
+      "name": "restaurant-1440-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-1440-default-dashboard.png",
+        "restaurant-1440-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "restaurant-390-default",
+      "surface": "restaurant",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/team?demo=1",
+      "title": "Snack Manager",
+      "checks": [
+        "real admin dashboard and team navigation with repository demo transport",
+        "member form fields and keyboard focus, Escape returns focus; no save"
+      ],
+      "shots": [
+        "restaurant-390-default-dashboard.png",
+        "restaurant-390-default-navigation.png",
+        "restaurant-390-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": []
+    },
+    {
+      "name": "snackmanager-1440-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-1440-default-dashboard-vide.png",
+        "snackmanager-1440-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    },
+    {
+      "name": "snackmanager-390-default",
+      "surface": "snackmanager",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "default",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/sm/pipeline",
+      "title": "Snack Manager",
+      "checks": [
+        "real HQ shell with local fake sm_admin and explicit empty dataset",
+        "pipeline navigation and new lead drawer fields/focus; unsaved entry survives Escape/browser Back and desktop backdrop; 16 Tabs remain inside; explicit Cancel returns focus; no save"
+      ],
+      "shots": [
+        "snackmanager-390-default-dashboard-vide.png",
+        "snackmanager-390-default-navigation.png",
+        "snackmanager-390-default-formulaire.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [],
+      "requests": [
+        [
+          "GET",
+          "/crm/ops/funnel"
+        ],
+        [
+          "GET",
+          "/crm/tenants"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ],
+        [
+          "GET",
+          "/crm/signals"
+        ],
+        [
+          "GET",
+          "/crm/overview"
+        ],
+        [
+          "GET",
+          "/auth/me"
+        ],
+        [
+          "GET",
+          "/crm/leads"
+        ]
+      ]
+    }
+  ]
+}

@@ -4,7 +4,6 @@ import type { Order } from '@sm/client-core';
 import { makeUi, radius, tabular } from '../ui';
 import { useAccentText, useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
-import { Sheen } from './primitives';
 
 /**
  * Panneau « À lancer » (All Day) — le cumul de production, toutes commandes
@@ -70,10 +69,8 @@ export function AllDayPanel({
 
   return (
     <View style={[styles.panel, style]}>
-      <Sheen height={layout.fs(80)} radius={radius.lg} />
-
       <View style={styles.header}>
-        <Text style={styles.title}>À lancer</Text>
+        <Text accessibilityRole="header" style={styles.title}>À lancer</Text>
         <View style={[styles.total, { borderColor: accent }]}>
           <Text style={[styles.totalText, { color: accentText }]}>{total}</Text>
         </View>
@@ -136,10 +133,9 @@ const panelStyles = scaledStyles((l: Layout, theme) => {
     },
     title: {
       fontFamily: type.title.fontFamily,
-      fontSize: l.fs(13),
-      fontWeight: '800',
-      letterSpacing: 1.2,
-      textTransform: 'uppercase',
+      fontSize: l.fs(17),
+      fontWeight: '700',
+      letterSpacing: -0.3,
       color: palette.text,
     },
     total: {
@@ -159,7 +155,7 @@ const panelStyles = scaledStyles((l: Layout, theme) => {
     },
     body: { flex: 1, minHeight: 0 },
     bodyContent: { paddingHorizontal: l.gap, paddingVertical: 10, gap: Math.round(10 * l.scale) },
-    row: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
+    row: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, paddingBottom: l.fs(10), borderBottomWidth: 1, borderBottomColor: hair2 },
     // Le cumul se lit en enfilade depuis le poste : quantité en échelle « loin ».
     qty: {
       fontFamily: type.qty.fontFamily,

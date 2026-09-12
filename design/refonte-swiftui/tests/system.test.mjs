@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,readdir} from 'node:fs/promises';
+import {brand,light,dark,space,radius,density,motionFor,contrast,onColor,theme,cssVariables,legacyPalette,functional} from '../packages/tokens/index.mjs';
+import {assets,renderArtwork} from '../packages/assets/index.mjs';
+import {iconNames,renderIcon} from '../packages/icons/index.mjs';
+import {actionPresentation,safeArtworkSource,boundedIndex,phases} from '../packages/presentation/index.mjs';
+import {screens} from '../studio/screens.mjs';
+test('light and dark expose identical semantic roles',()=>assert.deepEqual(Object.keys(light),Object.keys(dark)));
+for(const [mode,p] of [['light',light],['dark',dark]]) {
+ for(const [ink,bg] of [['ink','surface'],['muted','surface'],['ink','canvas'],['muted','canvas'],['success','successSoft'],['warning','warningSoft'],['danger','dangerSoft'],['info','infoSoft']])test(`${mode}: ${ink}/${bg} contrast >= 4.5`,()=>assert.ok(contrast(p[ink],p[bg])>=4.5,`${contrast(p[ink],p[bg])}`));
+}
+test('brand on-colors meet normal text contrast',()=>{for(const c of [brand.preview,brand.snackManager,'#fff000','#ffffff','#000000','#f01012','#008080'])assert.ok(contrast(c,onColor(c))>=4.5);});
+test('unsupported themes and injected colors rejected',()=>{for(const c of ['red','#fff',';color:red','url(a)'])assert.throws(()=>theme('light',c));assert.throws(()=>theme('automatic'));});
+test('functional colors preserve existing meanings',()=>assert.deepEqual(functional,{ready:'#3fae4a',urgent:'#c94b3f',preparing:'#e0973f'}));
+test('legacy palette retains unknown keys',()=>{const p=legacyPalette({unknown:9,green:'red'},'light',brand.preview);assert.equal(p.unknown,9);assert.equal(p.green,functional.ready);});
+test('CSS exports deterministic kebab semantic names',()=>{assert.equal(cssVariables(),cssVariables());assert.match(cssVariables(),/--sm-on-accent:/);assert.match(cssVariables(),/--sm-warning-soft:/);});
+test('motion reduced to zero with curve retained',()=>{for(const [k,v] of Object.entries(motionFor(true)))if(k!=='curve')assert.equal(v,0);assert.equal(typeof motionFor(true).curve,'string');});
+test('tokens are immutable and tactile minimum 44',()=>{assert.ok(Object.isFrozen(space));assert.equal(radius.card,20);for(const d of Object.values(density))assert.ok(d.target>=44);assert.equal(density.kitchen.target,56);});
+test('uncertain state never exposes an enabled business action',()=>{assert.equal(actionPresentation('uncertain').disabled,true);assert.equal(actionPresentation('uncertain').busy,false);});
+test('pending and denied actions disabled; error is not success',()=>{for(const p of ['loading','pending','denied'])assert.equal(actionPresentation(p).disabled,true);assert.ok(actionPresentation('error').announcement);assert.equal(actionPresentation('error').busy,false);});
+test('all explicit presentation phases handled',()=>{for(const p of phases)assert.equal(typeof actionPresentation(p).disabled,'boolean');assert.throws(()=>actionPresentation('paid'));});
+test('existing photo always takes precedence over illustration',()=>assert.deepEqual(safeArtworkSource({photoUrl:'https://example.test/photo',illustration:'burger'}),{kind:'photo',value:'https://example.test/photo'}));
+test('no inferred recipe for missing media',()=>assert.deepEqual(safeArtworkSource({}),{kind:'empty',value:null}));
+test('roving index wraps in both directions',()=>{assert.equal(boundedIndex(0,3,-1),2);assert.equal(boundedIndex(2,3,1),0);assert.throws(()=>boundedIndex(0,0,1));});
+test('asset IDs unique and all art deterministic',()=>{assert.equal(new Set(assets.map(a=>a.id)).size,assets.length);for(const a of assets){assert.equal(renderArtwork(a.id,'sample'),renderArtwork(a.id,'sample'));assert.match(renderArtwork(a.id,'sample'),/viewBox="0 0 240 165"/);}});
+test('all SVG fragment references resolve',()=>{for(const a of assets){const xml=renderArtwork(a.id,'sample');const ids=[...xml.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);for(const [,id] of xml.matchAll(/url\(#([^)]+)\)/g))assert.ok(ids.includes(id),`${a.id}: ${id}`);}});
+test('art IDs isolate repeated instances',()=>{const a=renderArtwork('burger','first'),b=renderArtwork('burger','second');assert.ok(!b.includes('first-'));assert.ok(!a.includes('second-'));});
+test('assets and icons contain no active or remote content',()=>{for(const xml of [...assets.map(a=>renderArtwork(a.id,'safe')),...iconNames.map(renderIcon)])assert.doesNotMatch(xml,/<script|foreignObject|\son[a-z]+=|https?:\/\/(?!www\.w3\.org)/i);});
+test('art and icon allowlists reject injection',()=>{assert.throws(()=>renderArtwork('__proto__','valid'));assert.throws(()=>renderArtwork('burger','x" onclick="bad'));assert.throws(()=>renderIcon('__proto__'));});
+test('icons share viewport stroke and nonsemantic SVG role',()=>{for(const name of iconNames){assert.match(renderIcon(name),/viewBox="0 0 24 24"/);assert.match(renderIcon(name),/stroke-width="1.75"/);assert.match(renderIcon(name),/aria-hidden="true"/);}});
+test('screen manifest and JS registry identical',async()=>assert.deepEqual(screens,JSON.parse(await readFile(new URL('../studio/screen-manifest.json',import.meta.url),'utf8'))));
+test('all seven application families represented',()=>{for(const f of ['POS','KDS','Commande','Fidélité','Livreur','Restaurant','Plateforme'])assert.ok(screens.some(s=>s.family===f));});
+test('all screens have unique IDs and a source path',()=>{assert.equal(new Set(screens.map(s=>s.id)).size,screens.length);for(const s of screens){assert.match(s.id,/^[a-z0-9-]+$/);assert.match(s.source,/^(apps\/|design\/)/);}});
+test('studio isolated from app APIs and real storage',async()=>{const s=await readFile(new URL('../studio/app.mjs',import.meta.url),'utf8');assert.doesNotMatch(s,/\bfetch\(|XMLHttpRequest|WebSocket\(|localStorage|sessionStorage/);});
+test('KDS terminal label cannot trigger handoff action in the studio',async()=>{const s=await readFile(new URL('../studio/app.mjs',import.meta.url),'utf8');assert.match(s,/status==='ready'\?.*En attente de prise en charge/);assert.doesNotMatch(s,/data-action="serve"/);});
+test('web CSS scopes typography and honors reduced motion',async()=>{const s=await readFile(new URL('../packages/ui-web/styles.css',import.meta.url),'utf8');assert.match(s,/\.sm-ui/);assert.match(s,/prefers-reduced-motion/);assert.match(s,/forced-colors/);assert.match(s,/focus-visible/);});
+test('six package manifests have no production dependency upgrade',async()=>{const list=await readdir(new URL('../packages/',import.meta.url));assert.equal(list.length,6);for(const dir of list){const p=JSON.parse(await readFile(new URL(`../packages/${dir}/package.json`,import.meta.url),'utf8'));assert.equal(p.private,true);for(const [name,v] of Object.entries(p.dependencies??{})){assert.match(name,/^@sm\/design-/);assert.equal(v,'workspace:*');}}});
+
+test('mobile content preserves intrinsic card heights',async()=>{const s=await readFile(new URL('../studio/styles.css',import.meta.url),'utf8');assert.match(s,/\.mobile-content\{grid-auto-rows:max-content\}/);});

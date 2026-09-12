@@ -1,0 +1,21 @@
+{
+  "name": "@sm/design-ui-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./index.tsx"
+  },
+  "peerDependencies": {
+    "react": ">=19 <20",
+    "react-native": ">=0.86 <0.87",
+    "react-native-svg": "15.15.4"
+  },
+  "dependencies": {
+    "@sm/design-tokens": "workspace:*",
+    "@sm/design-icons": "workspace:*",
+    "@sm/design-assets": "workspace:*",
+    "@sm/design-presentation": "workspace:*"
+  }
+}

@@ -16,7 +16,7 @@ import {
 import { useAccentText, useUi } from '../theme';
 import { clockHM, elapsedLabel, elapsedSeconds, optionsText } from '../format';
 import { scaledStyles, type Layout } from '../useLayout';
-import { Check, Chevron, Pill, PulseRing, Sheen, Tap } from './primitives';
+import { Check, Chevron, Pill, Tap } from './primitives';
 import { kitchenNextStatus } from '../delivery-policy';
 
 /**
@@ -154,9 +154,8 @@ function OrderCardBase({
   const actionBg = status === 'ready' ? palette.green : accent;
   const actionFg = contrastOn(actionBg);
 
-  // Liseré vivant : rouge quand c'est en retard (priorité absolue), accent
-  // quand le ticket vient d'arriver, rien ensuite.
-  const ringColor = late ? palette.red : isNew ? accent : null;
+  // Une entrée ponctuelle ; le statut et l'alerte de retard restent statiques
+  // afin de ne pas détourner la lecture pendant la préparation.
   const entrance = useRef(new Animated.Value(isNew && !reducedMotion ? 0 : 1)).current;
   useEffect(() => {
     if (reducedMotion) {
@@ -187,7 +186,6 @@ function OrderCardBase({
         },
       ]}
     >
-      <Sheen height={layout.fs(96)} radius={radius.md} />
       <View style={[styles.rail, { backgroundColor: tone.bg }]} />
 
       {/* ─── En-tête ─── */}
@@ -313,13 +311,6 @@ function OrderCardBase({
       </Tap>
       )}
 
-      <PulseRing
-        color={ringColor ?? accent}
-        radius={radius.md}
-        active={ringColor !== null}
-        periodMs={late ? 1600 : 2400}
-        reducedMotion={reducedMotion}
-      />
     </Animated.View>
   );
 }
@@ -354,7 +345,7 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
   return StyleSheet.create({
     card: {
       backgroundColor: surface.card,
-      borderRadius: radius.md,
+      borderRadius: radius.card,
       borderWidth: 1,
       borderColor: hair2,
       overflow: 'hidden',
@@ -377,8 +368,6 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       flexShrink: 0,
       borderRadius: radius.sm,
       backgroundColor: surface.el,
-      borderWidth: 1,
-      borderColor: hair2,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 6,
@@ -388,7 +377,7 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       fontFamily: type.micro.fontFamily,
       fontSize: l.fs(9),
       fontWeight: '800',
-      letterSpacing: 1.4,
+      letterSpacing: 0.4,
       color: ink.dimmer,
     },
     // Le chiffre que la cuisine crie au comptoir : c'est lui qui grossit le plus.
@@ -549,8 +538,11 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       minHeight: dense ? Math.max(56, l.actionH - 6) : l.actionH,
       paddingVertical: 6,
       justifyContent: 'center',
-      borderBottomLeftRadius: radius.md,
-      borderBottomRightRadius: radius.md,
+      marginLeft: RAIL + pad,
+      marginRight: gap,
+      marginBottom: pad,
+      marginTop: 4,
+      borderRadius: radius.sm,
     },
     actionInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 12 },
     actionText: {
@@ -558,9 +550,8 @@ const cardStyles = scaledStyles((l: Layout, theme, density) => {
       textAlign: 'center',
       fontFamily: type.action.fontFamily,
       fontSize: l.far(15),
-      fontWeight: '800',
-      letterSpacing: 0.5,
-      textTransform: 'uppercase',
+      fontWeight: '700',
+      letterSpacing: -0.1,
     },
   });
 });

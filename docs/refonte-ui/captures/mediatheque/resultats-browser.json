@@ -1,0 +1,896 @@
+{
+  "kit": [
+    {
+      "mode": "light",
+      "color": "rgb(0, 0, 0)",
+      "background": "rgb(237, 97, 46)",
+      "onAccent": "#000000",
+      "ratio": 6.350234021852035
+    },
+    {
+      "mode": "dark",
+      "color": "rgb(0, 0, 0)",
+      "background": "rgb(237, 97, 46)",
+      "onAccent": "#000000",
+      "ratio": 6.350234021852035
+    }
+  ],
+  "checks": [
+    "41 actual PNG 1600x1100, accepted by planifierDepot and unchanged by reduirePourEnvoi",
+    "product upload calls existing deposer, preserves first reference, deduplicates identical PNG, max 3 attachments retained",
+    "quota refusal visible; closing during native canvas toBlob preparation prevents upload callback",
+    "brand upload invokes existing onChoisir and selected state; canAct=false prevents upload"
+  ],
+  "shots": [
+    "kit-primaire-light.png",
+    "kit-primaire-dark.png",
+    "bibliotheque-1440.png",
+    "bibliotheque-390.png",
+    "samoussa-import-attache.png",
+    "quota-refuse.png",
+    "choix-marque.png"
+  ],
+  "evidence": {
+    "attempts": [
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-samosa.png",
+        "type": "image/png",
+        "bytes": 225703,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "35ddedd9222a3bff3025394dfcee78692f99f298647739f9506b129514938901",
+        "result": "created"
+      },
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-samosa.png",
+        "type": "image/png",
+        "bytes": 225703,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "35ddedd9222a3bff3025394dfcee78692f99f298647739f9506b129514938901",
+        "result": "deduplicated"
+      },
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-brownie.png",
+        "type": "image/png",
+        "bytes": 81546,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "da731ddd96f7a9d51bfbbc2075bc24c7e8c5de0f730983de2b6629f923ec8718",
+        "result": "created"
+      },
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-cookie.png",
+        "type": "image/png",
+        "bytes": 321652,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "983f5634f7b256069cc8d11f9693ba3804af3ecb34544468edf0e561c6928396",
+        "result": "created"
+      },
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-cola.png",
+        "type": "image/png",
+        "bytes": 398314,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "0cabaf749550300eed970c352904f0f84a56333d20219d5121aaa3fdb521ab94",
+        "result": "quota-refused"
+      },
+      {
+        "method": "POST",
+        "path": "/medias",
+        "name": "illustration-pizza-vegetarian.png",
+        "type": "image/png",
+        "bytes": 278018,
+        "kind": "image/png",
+        "dimensions": {
+          "largeur": 1600,
+          "hauteur": 1100
+        },
+        "empreinte": "dc7921a619d8647baef576679c6a7f861ca3fc6dcd400e6dad2fd957069e13a3",
+        "result": "created"
+      }
+    ],
+    "updates": [
+      {
+        "kind": "product",
+        "ids": [
+          "existing-original",
+          "local-media-1"
+        ]
+      },
+      {
+        "kind": "product",
+        "ids": [
+          "existing-original",
+          "local-media-1",
+          "local-media-2"
+        ]
+      },
+      {
+        "kind": "brand",
+        "id": "local-media-4"
+      }
+    ],
+    "quotaRefused": false,
+    "canAct": false,
+    "delay": false,
+    "pending": 0,
+    "renders": [
+      {
+        "id": "burger",
+        "bytes": 295996,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "double",
+        "bytes": 296625,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "black",
+        "bytes": 291159,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "chicken",
+        "bytes": 296061,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "smash-burger",
+        "bytes": 348254,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "wrap",
+        "bytes": 269609,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tacos",
+        "bytes": 620388,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "kebab",
+        "bytes": 387855,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "shawarma-plate",
+        "bytes": 135088,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "panini",
+        "bytes": 391274,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "bowl",
+        "bytes": 298969,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "pizza-margherita",
+        "bytes": 278006,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "pizza-chicken",
+        "bytes": 277777,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "pizza-vegetarian",
+        "bytes": 278018,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "pizza-slice",
+        "bytes": 207041,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "calzone",
+        "bytes": 574017,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "fries",
+        "bytes": 493311,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "loaded-fries",
+        "bytes": 473321,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tenders",
+        "bytes": 462976,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "nuggets",
+        "bytes": 384784,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "croustille",
+        "bytes": 304848,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "nuggets-croustille",
+        "bytes": 436933,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "wings",
+        "bytes": 372109,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "samosa",
+        "bytes": 225703,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "pad-thai",
+        "bytes": 305106,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "thai-noodles",
+        "bytes": 122170,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "thai-rice",
+        "bytes": 291571,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "thai-curry",
+        "bytes": 298591,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "spring-rolls",
+        "bytes": 203298,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "lemonade",
+        "bytes": 281080,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "cola",
+        "bytes": 398314,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "orange-can",
+        "bytes": 390376,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "iced-tea",
+        "bytes": 399214,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "water",
+        "bytes": 245787,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "coffee",
+        "bytes": 376307,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tiramisu",
+        "bytes": 350481,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tiramisu-pistachio",
+        "bytes": 348062,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tiramisu-caramel",
+        "bytes": 350191,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "tiramisu-berry",
+        "bytes": 351431,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "cookie",
+        "bytes": 321652,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      },
+      {
+        "id": "brownie",
+        "bytes": 81546,
+        "type": "image/png",
+        "plan": {
+          "ok": true,
+          "type": "image/png",
+          "source": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "cible": {
+            "largeur": 1600,
+            "hauteur": 1100
+          },
+          "reduire": false
+        }
+      }
+    ],
+    "errors": [],
+    "photos": [
+      "existing-original",
+      "local-media-1",
+      "local-media-2"
+    ],
+    "chosen": "blob:http://127.0.0.1:4178/8e106258-c074-4c1a-9961-0b94ff9a63b7"
+  },
+  "pass": true,
+  "errors": [],
+  "blocked": []
+}

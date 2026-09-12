@@ -2,8 +2,8 @@
  * Panneau ticket (zone D) — colonne ou tiroir, du côté choisi sur le poste.
  *
  * C'est la colonne que le caissier regarde en permanence : hiérarchie franche
- * (nom en gras, options en second niveau gris), total en très grande graisse
- * accent, boutons d'encaissement pleine largeur en pied fixe.
+ * (nom en gras, options en second niveau gris), total en encre forte,
+ * boutons d'encaissement pleine largeur en pied fixe.
  *
  * Sa largeur n'est plus figée à 384 px : elle suit l'écran entre 340 et 460
  * (`useLayout`). Sous 900 px de large (mode compact), le panneau quitte la
@@ -99,8 +99,8 @@ export function TicketPanel({
       {/* En-tête */}
       <View style={[sheet.between, { paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>Ticket</Text>
-          <Text style={[type.h2, { marginTop: 2, fontSize: L.fs(17) }]}>{MODE_LABEL[mode]}</Text>
+          <Text accessibilityRole="header" style={[type.h2, { fontSize: L.fs(22), letterSpacing: -0.6 }]}>Ticket</Text>
+          <Text style={[type.mut, { marginTop: 4, fontSize: L.fs(13) }]}>{MODE_LABEL[mode]}</Text>
         </View>
         {lines.length > 0 ? (
           <View style={[sheet.row, { gap: 6 }]}>
@@ -192,7 +192,7 @@ export function TicketPanel({
           borderRadius: R.ctrl,
           borderWidth: 1,
           borderColor: loyalty ? withAlpha(brand.accent, 0.5) : palette.line2,
-          backgroundColor: loyalty ? brand.tint : palette.deep,
+          backgroundColor: loyalty ? brand.tint : palette.surface,
           flexDirection: 'row',
           alignItems: 'center',
           gap: S.sm,
@@ -263,7 +263,7 @@ export function TicketPanel({
         style={{
           borderTopWidth: 1,
           borderTopColor: palette.line,
-          backgroundColor: palette.footBg,
+          backgroundColor: palette.surface,
           paddingHorizontal: S.lg,
           paddingTop: S.md,
           paddingBottom: S.lg,
@@ -280,7 +280,7 @@ export function TicketPanel({
         </View>
 
         <View style={[sheet.between, { alignItems: 'flex-end' }]}>
-          <Text style={[type.eyebrow, { fontSize: L.fs(13), marginBottom: 6 }]}>Total</Text>
+          <Text style={[type.strong, { fontSize: L.fs(15), marginBottom: 6 }]}>Total</Text>
           <Text
             style={[
               type.display,
@@ -288,8 +288,8 @@ export function TicketPanel({
                 // Le total est l'information la plus lue du poste : c'est elle
                 // qui doit profiter le plus d'un grand écran.
                 fontSize: L.fs(38),
-                fontWeight: '900',
-                color: lines.length ? brand.accent : palette.zero,
+                fontWeight: '800',
+                color: lines.length ? palette.text : palette.zero,
                 lineHeight: L.fs(38),
                 letterSpacing: -1.4,
               },
@@ -366,7 +366,7 @@ function TicketLine({
         <Press
           onPress={onEdit}
           accessibilityLabel={`Modifier ${line.name}`}
-          style={{ flex: 1, paddingRight: 4 }}
+          style={{ flex: 1, minHeight: L.touch(), paddingRight: 4 }}
           activeStyle={{ opacity: 0.7 }}
           scale={0.99}
         >
@@ -480,9 +480,9 @@ function TextAction({
         minHeight: L.touch(),
         paddingHorizontal: 12,
         justifyContent: 'center',
-        borderRadius: R.pill,
+        borderRadius: R.ctrl,
         borderWidth: 1,
-        borderColor: withAlpha(tone, filled ? 0.9 : 0.32),
+        borderColor: withAlpha(tone, filled ? 0.9 : 0.2),
         backgroundColor: filled ? withAlpha(tone, 0.18) : 'transparent',
       }}
       activeStyle={{ backgroundColor: withAlpha(tone, 0.16) }}

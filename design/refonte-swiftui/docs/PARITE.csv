@@ -1,0 +1,8 @@
+surface,source,actions_avant,actions_apres,etats_reseau,roles_capacites,tests_existants,preuve_capture,statut
+POS,apps/pos/src/PosScreen.tsx,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+KDS,apps/kds/src/Board.tsx,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+Commande,apps/web/src/components/order/Checkout.tsx,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+Fidelite,apps/web/src/components/loyalty/LoyaltyCardApp.tsx,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+Livreur,apps/web/src/app/livreur/delivery-missions.tsx,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+Restaurant,apps/web/src/app/admin/navigation.ts,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee
+Plateforme,apps/web/src/app/sm/navigation.ts,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,A_COMPLETER,integration_non_commencee

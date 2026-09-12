@@ -336,18 +336,18 @@ function TabButton({
       reducedMotion={reducedMotion}
       style={[
         styles.tab,
-        active ? { backgroundColor: tone, borderColor: tone } : { borderColor: hair2 },
+        active ? { backgroundColor: alpha(tone, 0.12), borderColor: tone } : { borderColor: hair2 },
       ]}
-      pressedStyle={{ backgroundColor: active ? tone : surface.el }}
+      pressedStyle={{ backgroundColor: active ? alpha(tone, 0.2) : surface.el }}
     >
       <Text
-        style={[styles.tabText, { color: active ? contrastOn(tone) : ink.dim }]}
+        style={[styles.tabText, { color: active ? palette.text : ink.dim }]}
         numberOfLines={1}
       >
         {label}
       </Text>
       {count === undefined ? null : (
-        <Text style={[styles.tabCount, { color: active ? contrastOn(tone) : palette.text }]}>
+        <Text style={[styles.tabCount, { color: contrastOn(tone), backgroundColor: tone }]}>
           {count}
         </Text>
       )}
@@ -400,8 +400,8 @@ const boardStyles = scaledStyles((l: Layout, theme) => {
     tabText: {
       fontFamily: type.micro.fontFamily,
       fontSize: l.fs(12),
-      fontWeight: '800',
-      letterSpacing: 0.3,
+      fontWeight: '700',
+      letterSpacing: -0.2,
       textAlign: 'center',
     },
     tabCount: {
@@ -409,6 +409,10 @@ const boardStyles = scaledStyles((l: Layout, theme) => {
       fontSize: l.far(18),
       fontWeight: '900',
       lineHeight: l.far(21),
+      minWidth: l.far(28),
+      paddingHorizontal: l.fs(6),
+      borderRadius: radius.xs,
+      textAlign: 'center',
       ...tabular,
     },
 

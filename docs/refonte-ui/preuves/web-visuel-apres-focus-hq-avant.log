@@ -1,0 +1,16 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: prospect drawer returns focus
+    at scenario (file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/refonte-web-visual.mjs:158:14)
+    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/refonte-web-visual.mjs:179:7 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.20.0

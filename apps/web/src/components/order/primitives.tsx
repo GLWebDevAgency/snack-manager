@@ -269,9 +269,8 @@ export function SectionLabel({
 }
 
 /**
- * En-tête de section de carte (maquette §4.10) : titre à l’accent, double
- * filet, puis la note. C’est ce filet qui donne à la carte sa structure
- * « imprimée » — sans lui, la page redevient une liste plate.
+ * En-tête de section : titre en casse de phrase, note secondaire et espace
+ * de respiration. La police reste celle du restaurant.
  */
 export function SectionHead({
   title,
@@ -285,17 +284,16 @@ export function SectionHead({
   aside?: ReactNode;
 }) {
   return (
-    <div className="pb-3">
+    <div className="pb-4">
       <div className="flex items-end justify-between gap-3">
         <h2
           id={id}
-          className="font-display text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accentink"
+          className="font-display text-[19px] font-bold leading-tight tracking-[-0.025em] text-ink"
         >
           {title}
         </h2>
         {aside}
       </div>
-      <div aria-hidden className="sm-rule mt-2" />
       {note && <p className="mt-2 text-[13px] leading-snug text-mut">{note}</p>}
     </div>
   );
@@ -305,7 +303,7 @@ export function SectionHead({
 // Surfaces
 // ─────────────────────────────────────────────────────────────
 
-/** Carte niveau 2 (#111) : dégradé vertical, filet 6 %, ombre portée douce. */
+/** Carte opaque : surface, forme et ombre restent celles du masque. */
 export function Surface({
   children,
   className,
@@ -319,7 +317,7 @@ export function Surface({
     <div
       style={style}
       className={cx(
-        "rounded-panel border border-ink/6 bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_120px)] shadow-card",
+        "rounded-panel border border-ink/6 bg-surface shadow-card",
         className,
       )}
     >
@@ -1070,7 +1068,7 @@ export function Sheet({
       >
         {chrome === "bar" ? (
           <div
-            className="sm-grab relative shrink-0 border-b border-ink/6 bg-[linear-gradient(180deg,var(--cf-surface-6),transparent)] px-4 pb-3 pt-2.5"
+            className="sm-grab relative shrink-0 border-b border-ink/6 bg-surface px-4 pb-3 pt-2.5"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
@@ -1116,7 +1114,7 @@ export function Sheet({
           <div
             className={cx(
               "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-med ease-sm",
-              sunk ? "border-b border-ink/8 bg-surface/95 backdrop-blur-md" : "",
+              sunk ? "border-b border-ink/8 bg-surface" : "",
             )}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -1146,7 +1144,7 @@ export function Sheet({
                 "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-med disabled:cursor-wait disabled:opacity-40 disabled:active:scale-100",
                 sunk
                   ? "border-ink/12 bg-surface2 hover:border-ink/30"
-                  : "border-ink/15 bg-bg/55 backdrop-blur-md hover:bg-bg/75",
+                  : "border-ink/15 bg-surface hover:bg-surface2",
               )}
             >
               <Icon name="close" size={17} stroke={2.4} />

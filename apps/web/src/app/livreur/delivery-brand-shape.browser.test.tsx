@@ -6,7 +6,7 @@ import { chromium, type Browser, type BrowserContext, type Locator, type Page } 
 import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { DIRECTIONS, type Brand, type BrandShape, type DeliveryMissionView } from '@sm/contracts';
+import { DIRECTIONS, ratioContraste, type Brand, type BrandShape, type DeliveryMissionView } from '@sm/contracts';
 
 // Real access/session parser, mission views, handoff sheet and theme preferences.
 // Only HTTP is a local fixture; no mutation or external request is permitted.
@@ -91,7 +91,16 @@ describe('identité des formes — Livreur réel', () => {
       expect(await radius(page.locator('.lv-stat').first())).toBe(expected.card);
       expect(await radius(page.locator('.lv-mcard').first())).toBe(expected.card);
       expect(await page.locator('.lv-app').evaluate(element => ({ background: getComputedStyle(element).backgroundColor, scheme: getComputedStyle(element).colorScheme })))
-        .toEqual({ background: theme === 'light' ? 'rgb(236, 236, 234)' : 'rgb(0, 0, 0)', scheme: theme });
+        .toEqual({ background: theme === 'light' ? 'rgb(245, 245, 243)' : 'rgb(22, 25, 22)', scheme: theme });
+      const colors = await page.locator('.lv-app').evaluate(element => {
+        const css = getComputedStyle(element);
+        return Object.fromEntries(['bg', 'surface', 'surface2', 'text', 'dim', 'accent-text', 'green-t', 'red-t', 'amber-t'].map(key => [key, css.getPropertyValue(`--lv-${key}`).trim()]));
+      });
+      for (const foreground of ['text', 'dim', 'accent-text', 'green-t', 'red-t', 'amber-t']) {
+        for (const background of ['bg', 'surface', 'surface2']) {
+          expect(ratioContraste(colors[foreground], colors[background]), `${foreground}/${background}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
       // Brand mode is light; the driver's explicit dark choice remains dark.
       expect(await radius(page.locator('.lv-avatar').first())).toBe('50%');
       await page.getByRole('button', { name: 'Voir la mission n°12', exact: true }).click();

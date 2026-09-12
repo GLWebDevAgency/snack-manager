@@ -4,7 +4,7 @@ import { Icon } from '@sm/ui-native';
 import { alpha, CHANNEL_FILTERS, contrastOn, makeUi, radius, SETTINGS_TRIGGER_ID, STATUS_TONE, tabular, type ChannelFilter } from '../ui';
 import { useUi } from '../theme';
 import { scaledStyles, type Layout } from '../useLayout';
-import { Chip, Pill, Sheen, StatusDot, Tap } from './primitives';
+import { Chip, Pill, StatusDot, Tap } from './primitives';
 
 export interface Counts { new: number; preparing: number; ready: number; total: number }
 
@@ -79,7 +79,6 @@ export function Toolbar({
   const bar = barStyles(layout, theme);
   return (
     <View style={bar.bar}>
-      <Sheen height={layout.fs(70)} />
       <View style={bar.left}>
         <BrandTile name={tenantName} logoUrl={logoUrl} accent={accent} size={layout.fs(34)} />
         <View style={bar.identity}>
@@ -123,7 +122,6 @@ export function CompactBar({
   return (
     <View style={bar.compactShell}>
       <View style={bar.compactBar}>
-        <Sheen height={layout.fs(56)} />
         <BrandTile name={tenantName} logoUrl={logoUrl} accent={accent} size={layout.fs(30)} />
         {layout.compactIdentity ? <View style={bar.identity}>
           <Text style={bar.appTitle} numberOfLines={1}>Cuisine</Text>
@@ -161,10 +159,10 @@ const barStyles = scaledStyles((l: Layout, theme) => {
     right: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: l.fs(14), flexWrap: 'wrap', rowGap: l.fs(8), flexGrow: 1 },
     counter: { alignItems: 'flex-start', minWidth: l.fs(44) },
     counterValue: { fontFamily: type.hero.fontFamily, fontSize: l.far(24), fontWeight: '900', letterSpacing: -1, lineHeight: l.far(26.5), ...tabular },
-    counterLabel: { fontFamily: type.micro.fontFamily, fontSize: l.fs(10.5), fontWeight: '700', letterSpacing: 0.7, textTransform: 'uppercase', color: ink.dim },
+    counterLabel: { fontFamily: type.micro.fontFamily, fontSize: l.fs(11.5), fontWeight: '600', letterSpacing: -0.1, color: ink.dim },
     divider: { width: 1, alignSelf: 'stretch', minHeight: l.fs(30), backgroundColor: hair2 },
     clock: { fontFamily: type.clock.fontFamily, fontSize: l.far(23), fontWeight: '800', letterSpacing: -0.6, color: palette.text, ...tabular },
-    iconButton: { width: l.touch, height: l.touch, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: surface.el, borderWidth: 1, borderColor: hair2, flexShrink: 0 },
+    iconButton: { width: l.touch, height: l.touch, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: surface.card, borderWidth: 1, borderColor: hair2, flexShrink: 0 },
     compactShell: { backgroundColor: surface.card, borderBottomWidth: 1, borderBottomColor: hair, flexShrink: 0 },
     compactBar: { flexDirection: 'row', alignItems: 'center', gap: l.fs(8), paddingHorizontal: l.gap, paddingVertical: l.fs(9), flexShrink: 0 },
     clockSm: { marginLeft: 'auto', fontFamily: type.clock.fontFamily, fontSize: l.far(17), fontWeight: '800', letterSpacing: -0.4, color: palette.text, ...tabular },

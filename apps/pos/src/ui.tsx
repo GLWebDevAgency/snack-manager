@@ -126,19 +126,27 @@ export function Press({
   disabled,
   style,
   activeStyle,
-  scale = 0.97,
+  scale = 0.985,
   children,
   accessibilityLabel,
   accessibilityRole = 'button',
   selected,
   testID,
 }: PressProps) {
+  const { palette } = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
+      onFocus={(event) => {
+        if (Platform.OS !== 'web') return;
+        const target = event.target as unknown as { matches?: (selector: string) => boolean };
+        setFocused(target.matches?.(':focus-visible') ?? false);
+      }}
+      onBlur={() => setFocused(false)}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       aria-checked={accessibilityRole === 'checkbox' || accessibilityRole === 'radio' || accessibilityRole === 'switch' ? !!selected : undefined}
@@ -150,6 +158,7 @@ export function Press({
       }
       style={({ pressed }) => [
         style,
+        Platform.OS === 'web' && focused ? { outlineWidth: 3, outlineStyle: 'solid', outlineColor: palette.text, outlineOffset: 2 } as ViewStyle : null,
         pressed && !disabled ? activeStyle : null,
         pressed && !disabled ? { transform: [{ scale }] } : null,
         disabled ? { opacity: 0.38 } : null,
@@ -238,12 +247,13 @@ export function Btn({
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel ?? label}
-      scale={0.975}
+      scale={0.985}
       style={[
         {
           minHeight: h,
           paddingHorizontal: size === 'sm' ? 14 : 18,
-          borderRadius: R.pill,
+          borderRadius: R.ctrl,
+          borderCurve: 'continuous',
           backgroundColor: bg,
           borderWidth: 1,
           borderColor: border,
@@ -279,7 +289,7 @@ export function Btn({
   );
 }
 
-/** Bouton rond « fermer » — 44 px de zone tactile au minimum pour un glyphe de 16. */
+/** Bouton « fermer » — 44 px de zone tactile au minimum pour un glyphe de 16. */
 export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; label?: string }) {
   const { palette } = useTheme();
   const L = useLayout();
@@ -290,7 +300,7 @@ export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; l
       style={{
         width: L.touch(),
         height: L.touch(),
-        borderRadius: R.pill,
+        borderRadius: R.ctrl,
         backgroundColor: palette.surface2,
         borderWidth: 1,
         borderColor: palette.line2,
@@ -347,7 +357,7 @@ export function Chip({
         minHeight: L.touch(minHeight),
         paddingHorizontal: L.sp(14),
         paddingVertical: L.sp(8),
-        borderRadius: R.pill,
+        borderRadius: R.ctrl,
         borderWidth: 1,
         borderColor: on ? 'transparent' : palette.line,
         backgroundColor: on ? activeBg : palette.surface2,
@@ -424,7 +434,7 @@ export function Segmented<T extends string>({
       style={{
         flexDirection: 'row',
         backgroundColor: palette.surface2,
-        borderRadius: R.pill,
+        borderRadius: R.ctrl + 3,
         borderWidth: 1,
         borderColor: palette.line2,
         padding: 3,
@@ -445,7 +455,7 @@ export function Segmented<T extends string>({
             style={{
               minHeight: h,
               paddingHorizontal: opt.detail ? Math.min(L.segmentPadX, L.sp(12)) : L.segmentPadX,
-              borderRadius: R.pill,
+              borderRadius: R.ctrl,
               backgroundColor: on ? accent : 'transparent',
               flexDirection: 'row',
               alignItems: 'center',
@@ -531,7 +541,7 @@ export function Stepper({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: palette.surface2,
-        borderRadius: R.pill,
+        borderRadius: R.ctrl,
         borderWidth: 1,
         borderColor: palette.line2,
         overflow: 'hidden',

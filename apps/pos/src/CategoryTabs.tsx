@@ -53,11 +53,11 @@ export function CategoryTabs({ categories, activeId, onSelect, brand }: {
       accessibilityLabel="Catégories"
       onContentSizeChange={(width) => setContentWidth(width)}
       style={{ flex: 1, minWidth: 0 }}
-      contentContainerStyle={{ gap: L.sp(6), alignItems: 'center' }}
+      contentContainerStyle={{ gap: L.sp(8), alignItems: 'center' }}
     >
       {categories.map((category) => {
         const selected = category._id === activeId;
-        const foreground = selected ? brand.onAccent : palette.mut;
+        const foreground = selected ? palette.text : palette.mut;
         return (
           <View
             key={category._id}
@@ -74,10 +74,10 @@ export function CategoryTabs({ categories, activeId, onSelect, brand }: {
                 alignItems: 'center',
                 gap: L.sp(8),
                 paddingHorizontal: L.sp(12),
-                borderRadius: R.pill,
+                borderRadius: R.ctrl,
                 borderWidth: 1,
                 borderColor: selected ? brand.accent : palette.line2,
-                backgroundColor: selected ? brand.accent : palette.surface,
+                backgroundColor: selected ? brand.tint : palette.surface,
               }}
               activeStyle={{ opacity: 0.82 }}
             >
@@ -85,7 +85,7 @@ export function CategoryTabs({ categories, activeId, onSelect, brand }: {
               <Text style={{ fontFamily: FONT, color: foreground, fontWeight: '600', fontSize: L.fs(13.5) }}>
                 {railLabel(category.name)}
               </Text>
-              <View style={{ paddingHorizontal: L.sp(7), paddingVertical: L.sp(1), borderRadius: R.pill, backgroundColor: selected ? withAlpha(brand.onAccent, 0.15) : palette.line2 }}>
+              <View style={{ paddingHorizontal: L.sp(6), paddingVertical: L.sp(1), borderRadius: R.pill, backgroundColor: selected ? withAlpha(brand.accent, 0.12) : palette.surface2 }}>
                 <Text style={{ fontFamily: FONT, color: foreground, fontSize: L.fs(12), fontWeight: '700', fontVariant: ['tabular-nums'] }}>
                   {category.products.length}
                 </Text>

@@ -54,6 +54,8 @@ import {
 import { roleAdmin } from "./session";
 import { AdminAccess } from "./access";
 import { orderAccessScope } from "@sm/contracts/commerce";
+import { backofficeVisualStyle } from "@/components/backoffice/visual-style";
+import "@/components/backoffice/backoffice.css";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -551,7 +553,7 @@ function Shell({ children }: { children: ReactNode }) {
     */
     // `h-dvh` et non `h-screen` : sur téléphone, 100vh déborde derrière la
     // barre d'adresse et la barre basse perdrait ses derniers pixels sous elle.
-    <div className="flex h-dvh flex-col overflow-hidden bg-bg">
+    <div className="sm-backoffice flex h-dvh flex-col overflow-hidden bg-bg" style={backofficeVisualStyle}>
       {/*
         Anti-zoom iOS : Safari zoome toute la page au focus d'un champ dont le
         corps est sous 16 px. Les contrôles du DS sont à 14 px — très bien à la
@@ -616,7 +618,7 @@ function Shell({ children }: { children: ReactNode }) {
         >
           <aside
             className={cx(
-              "absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-fill px-3 py-[18px]",
+              "absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-surface px-3 py-[18px]",
               "transition-[width,box-shadow] duration-[280ms] ease-[var(--sm-ease)] motion-reduce:transition-none",
               open && "shadow-[18px_0_44px_rgba(0,0,0,0.45)] xl:shadow-none",
             )}

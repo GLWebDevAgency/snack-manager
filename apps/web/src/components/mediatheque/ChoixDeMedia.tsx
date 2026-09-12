@@ -32,6 +32,7 @@ import { ApiError, envoiFichier } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { Btn, EmptyState, Icon, Modal, Skeleton } from "@/components/ui";
 import { BoutonDepot } from "./BoutonDepot";
+import { BibliothequeIllustrations } from "./BibliothequeIllustrations";
 import { etatDuQuota, poids, reduirePourEnvoi, type Mediatheque } from "./photos";
 
 /** Ce que rend `POST /medias` — le média, le quota d'après, et le dédoublonnage. */
@@ -172,6 +173,8 @@ export function ChoixDeMedia({
     >
       <div className="flex flex-col gap-3">
         {aide && <p className="text-[13px] text-mut">{aide}</p>}
+
+        <BibliothequeIllustrations envoi={envoi} onFichier={deposer} canAct={canAct} />
 
         {etat === "chargement" && <Skeleton className="h-[180px] w-full" />}
 

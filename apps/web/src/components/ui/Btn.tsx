@@ -85,7 +85,7 @@ export function Btn({
       type={type}
       className={cx(
         block ? "flex w-full" : "inline-flex",
-        "cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em]",
+        "sm-button cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em]",
         "disabled:cursor-not-allowed disabled:opacity-40",
         size === "sm" ? "px-3.5 py-[9px] text-[13px]" : "px-5 py-[13px] text-sm",
         VARIANTS[variant],

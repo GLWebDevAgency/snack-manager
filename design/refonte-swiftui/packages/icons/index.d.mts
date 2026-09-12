@@ -1,0 +1,4 @@
+export type IconName="user"|"truck"|"store"|"pos"|"kitchen"|"table"|"orders"|"menu"|"chart"|"search"|"plus"|"minus"|"arrow"|"close"|"check"|"moon"|"sun"|"clock"|"burger"|"grid"|"cup"|"bowl"|"wrap"|"fries"|"cookie"|"note"|"cash"|"card"|"expand"|"refresh"|"bag"|"shield"|"info"|"gift"|"qr"|"camera"|"pin"|"route"|"phone"|"users"|"lock"|"warning"|"wifi"|"offline"|"settings"|"chevron"|"down"|"back"|"filter"|"calendar"|"download"|"star"|"bell"|"box"|"globe"|"sound"|"dessert"|"kebab"|"coffee"|"leaf"|"logout"|"edit"|"dots"|"tacos"|"print"|"tv"|"mail"|"tag"|"headset"|"pizza"|"smash"|"panini"|"wings"|"noodles"|"rice"|"curry"|"spicy"|"thai";
+export declare const shapes:Readonly<Record<IconName,string>>;
+export declare const iconNames:readonly IconName[];
+export declare function renderIcon(name:IconName):string;

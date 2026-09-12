@@ -1,0 +1,569 @@
+export const screens=Object.freeze([
+  {
+    "id": "pos-sale",
+    "title": "Caisse",
+    "family": "POS",
+    "kind": "pos",
+    "source": "apps/pos/src/PosScreen.tsx"
+  },
+  {
+    "id": "pos-config",
+    "title": "Configurer un produit",
+    "family": "POS",
+    "kind": "pos",
+    "source": "apps/pos/src/QuickConfig.tsx"
+  },
+  {
+    "id": "pos-payment",
+    "title": "Encaisser une commande",
+    "family": "POS",
+    "kind": "payment",
+    "source": "apps/pos/src/CollectPaymentModal.tsx"
+  },
+  {
+    "id": "pos-service",
+    "title": "Service",
+    "family": "POS",
+    "kind": "orders",
+    "source": "apps/pos/src/ServicePanel.tsx"
+  },
+  {
+    "id": "pos-loyalty",
+    "title": "Fidélité au comptoir",
+    "family": "POS",
+    "kind": "pos",
+    "source": "apps/pos/src/LoyaltyPanel.tsx"
+  },
+  {
+    "id": "pos-settings",
+    "title": "Réglages de la caisse",
+    "family": "POS",
+    "kind": "prefs",
+    "source": "apps/pos/src/SettingsModal.tsx"
+  },
+  {
+    "id": "pos-pairing",
+    "title": "Appairer la caisse",
+    "family": "POS",
+    "kind": "auth",
+    "source": "apps/pos/src/PinScreen.tsx"
+  },
+  {
+    "id": "pos-pin",
+    "title": "Ouvrir la caisse",
+    "family": "POS",
+    "kind": "auth",
+    "source": "apps/pos/src/PinScreen.tsx"
+  },
+  {
+    "id": "kds-board",
+    "title": "Cuisine",
+    "family": "KDS",
+    "kind": "kds",
+    "source": "apps/kds/src/Board.tsx"
+  },
+  {
+    "id": "kds-settings",
+    "title": "Réglages cuisine",
+    "family": "KDS",
+    "kind": "prefs",
+    "source": "apps/kds/src/components/SettingsSheet.tsx"
+  },
+  {
+    "id": "kds-pin",
+    "title": "Ouvrir la cuisine",
+    "family": "KDS",
+    "kind": "auth",
+    "source": "apps/kds/src/components/PinScreen.tsx"
+  },
+  {
+    "id": "online-menu",
+    "title": "Carte",
+    "family": "Commande",
+    "kind": "storefront",
+    "source": "apps/web/src/components/order/Storefront.tsx"
+  },
+  {
+    "id": "online-product",
+    "title": "Choisir un produit",
+    "family": "Commande",
+    "kind": "storefront",
+    "source": "apps/web/src/components/order/ProductSheet.tsx"
+  },
+  {
+    "id": "online-checkout",
+    "title": "Votre commande",
+    "family": "Commande",
+    "kind": "checkout",
+    "source": "apps/web/src/components/order/Checkout.tsx"
+  },
+  {
+    "id": "online-tracking",
+    "title": "Suivre ma commande",
+    "family": "Commande",
+    "kind": "tracking",
+    "source": "apps/web/src/components/order/Tracking.tsx"
+  },
+  {
+    "id": "online-orders",
+    "title": "Commandes",
+    "family": "Commande",
+    "kind": "customer-orders",
+    "source": "apps/web/src/components/order/DeviceOrdersSheet.tsx"
+  },
+  {
+    "id": "online-account",
+    "title": "Mon compte",
+    "family": "Commande",
+    "kind": "account",
+    "source": "apps/web/src/components/customer-account/CustomerAccountPanel.tsx"
+  },
+  {
+    "id": "loyalty-card",
+    "title": "Ma fidélité",
+    "family": "Fidélité",
+    "kind": "loyalty",
+    "source": "apps/web/src/components/loyalty/LoyaltyCardApp.tsx"
+  },
+  {
+    "id": "loyalty-scan",
+    "title": "Scanner mon ticket",
+    "family": "Fidélité",
+    "kind": "scanner",
+    "source": "apps/web/src/components/loyalty/LoyaltyScanner.tsx"
+  },
+  {
+    "id": "courier-access",
+    "title": "Espace livreur",
+    "family": "Livreur",
+    "kind": "auth",
+    "source": "apps/web/src/app/livreur/delivery-access.tsx"
+  },
+  {
+    "id": "courier-tour",
+    "title": "Tournée",
+    "family": "Livreur",
+    "kind": "courier",
+    "source": "apps/web/src/app/livreur/delivery-missions.tsx"
+  },
+  {
+    "id": "courier-map",
+    "title": "Carte",
+    "family": "Livreur",
+    "kind": "route",
+    "source": "apps/web/src/app/livreur/delivery-missions.tsx"
+  },
+  {
+    "id": "courier-history",
+    "title": "Historique",
+    "family": "Livreur",
+    "kind": "customer-orders",
+    "source": "apps/web/src/app/livreur/DeliveryHistory.tsx"
+  },
+  {
+    "id": "courier-account",
+    "title": "Compte",
+    "family": "Livreur",
+    "kind": "prefs",
+    "source": "apps/web/src/app/livreur/delivery-preferences.tsx"
+  },
+  {
+    "id": "admin-dashboard",
+    "title": "Aujourd’hui",
+    "family": "Restaurant",
+    "kind": "dashboard",
+    "source": "apps/web/src/app/admin/dashboard/page.tsx",
+    "route": "/admin/dashboard",
+    "group": "Service",
+    "icon": "home",
+    "fields": []
+  },
+  {
+    "id": "admin-orders",
+    "title": "Commandes",
+    "family": "Restaurant",
+    "kind": "orders",
+    "source": "apps/web/src/app/admin/orders/page.tsx",
+    "route": "/admin/orders",
+    "group": "Service",
+    "icon": "orders",
+    "fields": []
+  },
+  {
+    "id": "admin-livraison",
+    "title": "Livraison",
+    "family": "Restaurant",
+    "kind": "dispatch",
+    "source": "apps/web/src/app/admin/livraison/page.tsx",
+    "route": "/admin/livraison",
+    "group": "Service",
+    "icon": "truck",
+    "fields": []
+  },
+  {
+    "id": "admin-menu",
+    "title": "Carte",
+    "family": "Restaurant",
+    "kind": "catalog-admin",
+    "source": "apps/web/src/app/admin/menu/page.tsx",
+    "route": "/admin/menu",
+    "group": "Carte",
+    "icon": "grid",
+    "fields": []
+  },
+  {
+    "id": "admin-ingredients",
+    "title": "Stocks",
+    "family": "Restaurant",
+    "kind": "data",
+    "source": "apps/web/src/app/admin/ingredients/page.tsx",
+    "route": "/admin/ingredients",
+    "group": "Carte",
+    "icon": "fries",
+    "fields": [
+      "Ingrédient",
+      "Unité",
+      "Stock théorique",
+      "Coût unitaire",
+      "Disponibilité"
+    ]
+  },
+  {
+    "id": "admin-fidelite",
+    "title": "Fidélité",
+    "family": "Restaurant",
+    "kind": "loyalty-admin",
+    "source": "apps/web/src/app/admin/fidelite/page.tsx",
+    "route": "/admin/fidelite",
+    "group": "Clients",
+    "icon": "gift",
+    "fields": []
+  },
+  {
+    "id": "admin-promos",
+    "title": "Promotions",
+    "family": "Restaurant",
+    "kind": "data",
+    "source": "apps/web/src/app/admin/promos/page.tsx",
+    "route": "/admin/promos",
+    "group": "Clients",
+    "icon": "tag",
+    "fields": [
+      "Promotion",
+      "Période",
+      "Avantage",
+      "État"
+    ]
+  },
+  {
+    "id": "admin-reviews",
+    "title": "Avis",
+    "family": "Restaurant",
+    "kind": "reviews",
+    "source": "apps/web/src/app/admin/reviews/page.tsx",
+    "route": "/admin/reviews",
+    "group": "Clients",
+    "icon": "star",
+    "fields": []
+  },
+  {
+    "id": "admin-team",
+    "title": "Équipe",
+    "family": "Restaurant",
+    "kind": "data",
+    "source": "apps/web/src/app/admin/team/page.tsx",
+    "route": "/admin/team",
+    "group": "Équipe",
+    "icon": "users",
+    "fields": [
+      "Équipier",
+      "Rôle",
+      "Pointage",
+      "Accès"
+    ]
+  },
+  {
+    "id": "admin-planning",
+    "title": "Planning",
+    "family": "Restaurant",
+    "kind": "planning",
+    "source": "apps/web/src/app/admin/planning/page.tsx",
+    "route": "/admin/planning",
+    "group": "Équipe",
+    "icon": "calendar",
+    "fields": []
+  },
+  {
+    "id": "admin-stats",
+    "title": "Statistiques",
+    "family": "Restaurant",
+    "kind": "stats",
+    "source": "apps/web/src/app/admin/stats/page.tsx",
+    "route": "/admin/stats",
+    "group": "Analyse",
+    "icon": "chart",
+    "fields": []
+  },
+  {
+    "id": "admin-site",
+    "title": "Site web",
+    "family": "Restaurant",
+    "kind": "site",
+    "source": "apps/web/src/app/admin/site/page.tsx",
+    "route": "/admin/site",
+    "group": "Présence",
+    "icon": "globe",
+    "fields": []
+  },
+  {
+    "id": "admin-screens",
+    "title": "Écrans de salle",
+    "family": "Restaurant",
+    "kind": "screens",
+    "source": "apps/web/src/app/admin/screens/page.tsx",
+    "route": "/admin/screens",
+    "group": "Présence",
+    "icon": "tv",
+    "fields": []
+  },
+  {
+    "id": "admin-encaissement",
+    "title": "Encaissement en ligne",
+    "family": "Restaurant",
+    "kind": "settings",
+    "source": "apps/web/src/app/admin/encaissement/page.tsx",
+    "route": "/admin/encaissement",
+    "group": "Présence",
+    "icon": "card",
+    "fields": [
+      "Compte de paiement",
+      "Raccordement",
+      "Statut du compte"
+    ]
+  },
+  {
+    "id": "admin-settings",
+    "title": "Établissement",
+    "family": "Restaurant",
+    "kind": "settings",
+    "source": "apps/web/src/app/admin/settings/page.tsx",
+    "route": "/admin/settings",
+    "group": "Réglages",
+    "icon": "settings",
+    "fields": [
+      "Nom de l’établissement",
+      "Adresse",
+      "Téléphone",
+      "Couleur de marque"
+    ]
+  },
+  {
+    "id": "admin-hours",
+    "title": "Horaires et créneaux",
+    "family": "Restaurant",
+    "kind": "hours",
+    "source": "apps/web/src/app/admin/hours/page.tsx",
+    "route": "/admin/hours",
+    "group": "Réglages",
+    "icon": "clock",
+    "fields": []
+  },
+  {
+    "id": "admin-devices",
+    "title": "Appareils",
+    "family": "Restaurant",
+    "kind": "devices",
+    "source": "apps/web/src/app/admin/devices/page.tsx",
+    "route": "/admin/devices",
+    "group": "Réglages",
+    "icon": "print",
+    "fields": []
+  },
+  {
+    "id": "admin-abonnement",
+    "title": "Abonnement",
+    "family": "Restaurant",
+    "kind": "billing",
+    "source": "apps/web/src/app/admin/abonnement/page.tsx",
+    "route": "/admin/abonnement",
+    "group": "Réglages",
+    "icon": "mail",
+    "fields": []
+  },
+  {
+    "id": "admin-loyalty-programme",
+    "title": "Programme",
+    "family": "Restaurant",
+    "kind": "settings",
+    "source": "apps/web/src/app/admin/fidelite/programme/page.tsx",
+    "route": "/admin/fidelite/programme",
+    "group": "Clients",
+    "icon": "gift",
+    "fields": [
+      "Nom du programme",
+      "Unité de fidélité",
+      "Règle d’acquisition",
+      "Expiration"
+    ]
+  },
+  {
+    "id": "admin-loyalty-recompenses",
+    "title": "Récompenses",
+    "family": "Restaurant",
+    "kind": "rewards",
+    "source": "apps/web/src/app/admin/fidelite/recompenses/page.tsx",
+    "route": "/admin/fidelite/recompenses",
+    "group": "Clients",
+    "icon": "gift",
+    "fields": []
+  },
+  {
+    "id": "admin-loyalty-clients",
+    "title": "Clients",
+    "family": "Restaurant",
+    "kind": "data",
+    "source": "apps/web/src/app/admin/fidelite/clients/page.tsx",
+    "route": "/admin/fidelite/clients",
+    "group": "Clients",
+    "icon": "gift",
+    "fields": [
+      "Client",
+      "Solde",
+      "Dernière visite",
+      "Consentement"
+    ]
+  },
+  {
+    "id": "admin-login",
+    "title": "Connexion restaurateur",
+    "family": "Restaurant",
+    "kind": "auth",
+    "source": "apps/web/src/app/admin/login/page.tsx"
+  },
+  {
+    "id": "sm-dashboard",
+    "title": "Tableau de bord",
+    "family": "Plateforme",
+    "kind": "dashboard",
+    "source": "apps/web/src/app/sm/page.tsx",
+    "route": "/sm",
+    "icon": "home",
+    "fields": []
+  },
+  {
+    "id": "sm-pipeline",
+    "title": "Prospection",
+    "family": "Plateforme",
+    "kind": "pipeline",
+    "source": "apps/web/src/app/sm/pipeline/page.tsx",
+    "route": "/sm/pipeline",
+    "icon": "grid",
+    "fields": []
+  },
+  {
+    "id": "sm-clients",
+    "title": "Restaurants",
+    "family": "Plateforme",
+    "kind": "data",
+    "source": "apps/web/src/app/sm/clients/page.tsx",
+    "route": "/sm/clients",
+    "icon": "store",
+    "fields": [
+      "Restaurant",
+      "Offre",
+      "État",
+      "Dernier contact"
+    ]
+  },
+  {
+    "id": "sm-signals",
+    "title": "File du jour",
+    "family": "Plateforme",
+    "kind": "data",
+    "source": "apps/web/src/app/sm/signals/page.tsx",
+    "route": "/sm/signals",
+    "icon": "bell",
+    "fields": [
+      "Signal",
+      "Restaurant",
+      "Priorité",
+      "Suivi"
+    ]
+  },
+  {
+    "id": "sm-facturation",
+    "title": "Facturation",
+    "family": "Plateforme",
+    "kind": "billing",
+    "source": "apps/web/src/app/sm/facturation/page.tsx",
+    "route": "/sm/facturation",
+    "icon": "card",
+    "fields": []
+  },
+  {
+    "id": "sm-production",
+    "title": "Production",
+    "family": "Plateforme",
+    "kind": "data",
+    "source": "apps/web/src/app/sm/production/page.tsx",
+    "route": "/sm/production",
+    "icon": "check",
+    "fields": [
+      "Dossier",
+      "Restaurant",
+      "Étape",
+      "Responsable"
+    ]
+  },
+  {
+    "id": "sm-erreurs",
+    "title": "Erreurs",
+    "family": "Plateforme",
+    "kind": "data",
+    "source": "apps/web/src/app/sm/erreurs/page.tsx",
+    "route": "/sm/erreurs",
+    "icon": "warning",
+    "fields": [
+      "Événement",
+      "Service",
+      "Dernière occurrence",
+      "État"
+    ]
+  },
+  {
+    "id": "sm-reseaux",
+    "title": "Vitrine Snack Manager",
+    "family": "Plateforme",
+    "kind": "settings",
+    "source": "apps/web/src/app/sm/reseaux/page.tsx",
+    "route": "/sm/reseaux",
+    "icon": "tv",
+    "fields": [
+      "Titre",
+      "Description",
+      "Lien",
+      "Publication"
+    ]
+  },
+  {
+    "id": "system-components",
+    "title": "Composants",
+    "family": "Design system",
+    "kind": "components",
+    "source": "design/refonte-swiftui/packages/ui-web"
+  },
+  {
+    "id": "system-assets",
+    "title": "Illustrations & icônes",
+    "family": "Design system",
+    "kind": "assets",
+    "source": "design/refonte-swiftui/packages/assets"
+  },
+  {
+    "id": "system-tokens",
+    "title": "Tokens & matières",
+    "family": "Design system",
+    "kind": "tokens",
+    "source": "design/refonte-swiftui/packages/tokens"
+  }
+]);

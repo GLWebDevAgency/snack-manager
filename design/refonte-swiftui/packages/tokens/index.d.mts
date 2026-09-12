@@ -1,0 +1,21 @@
+
+export type Mode='light'|'dark';
+export type ThemeKey='canvas'|'surface'|'secondary'|'ink'|'muted'|'line'|'focus'|'success'|'successSoft'|'warning'|'warningSoft'|'danger'|'dangerSoft'|'info'|'infoSoft'|'scrim'|'glass';
+export type Palette=Readonly<Record<ThemeKey,string>>;
+export declare const provenance:Readonly<{repo:string;ref:string;source:string}>;
+export declare const brand:Readonly<{snackManager:string;preview:string}>;
+export declare const functional:Readonly<{ready:string;urgent:string;preparing:string}>;
+export declare const light:Palette,dark:Palette;
+export declare const space:Readonly<{xs:4;sm:8;md:12;lg:16;xl:24;xxl:32;xxxl:48}>;
+export declare const radius:Readonly<{field:12;button:12;card:20;sheet:28;pill:999}>;
+export declare const density:Readonly<Record<'compact'|'comfortable'|'kitchen',Readonly<{target:number;gap:number}>>>;
+export declare const typography:Readonly<{web:string;native:string;display:32;title:24;heading:20;body:16;label:14;caption:12}>;
+export declare const motion:Readonly<{press:90;hover:120;state:160;sheet:240;celebration:600;curve:string}>;
+export declare function motionFor(reduced?:boolean):Record<string,string|number>;
+export declare function rgb(hex:string):number[];
+export declare function luminance(hex:string):number;
+export declare function contrast(a:string,b:string):number;
+export declare function onColor(hex:string):'#000000'|'#ffffff';
+export declare function theme(mode?:Mode,accent?:string):Palette&{accent:string;onAccent:string};
+export declare function cssVariables(mode?:Mode,accent?:string):string;
+export declare function legacyPalette<T extends Record<string,unknown>>(existing:T,mode:Mode,accent:string):Omit<T,'bg'|'surface'|'surface2'|'text'|'mut'|'line'|'green'|'red'|'amber'|'greenText'|'redText'|'amberText'>&Record<'bg'|'surface'|'surface2'|'text'|'mut'|'line'|'green'|'red'|'amber'|'greenText'|'redText'|'amberText',string>;

@@ -11,6 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@sm/design-assets": "workspace:*",
+    "@sm/design-icons": "workspace:*",
+    "@sm/design-tokens": "workspace:*",
     "@simplewebauthn/browser": "^14.0.0",
     "@sm/client-core": "workspace:*",
     "@sm/contracts": "workspace:*",
