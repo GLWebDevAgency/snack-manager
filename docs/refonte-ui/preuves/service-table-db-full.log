@@ -1,0 +1,68 @@
+
+> @sm/db@0.0.1 test /Users/limameghassene/development/SnackManager-refonte-ui/packages/db
+> vitest run --maxWorkers=2 --minWorkers=1
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/packages/db
+
+ ✓ src/order-capacity-immutability.test.ts (54 tests | 10 skipped) 24ms
+ ✓ src/order-capacity-control.schema.test.ts (61 tests) 178ms
+ ✓ src/order-capacity-historical-admission.test.ts (71 tests) 61ms
+ ✓ src/customer-sale-attribution.schema.test.ts (51 tests) 96ms
+ ✓ src/cli/railway.test.ts (22 tests) 4ms
+ ✓ src/order-refund-flow.schema.test.ts (62 tests) 87ms
+stdout | src/schemas.brand.test.ts
+◇ injected env (0) from ../../.env // tip: ⌘ enable debugging { debug: true }
+
+ ✓ src/schemas.brand.test.ts (15 tests) 34ms
+stdout | src/schemas.medias.test.ts
+◇ injected env (0) from ../../.env // tip: ⌁ auth for agents [www.vestauth.com]
+
+ ✓ src/schemas.medias.test.ts (13 tests) 13ms
+stdout | src/backfill-founder.test.ts
+◇ injected env (0) from ../../.env // tip: ⌁ auth for agents [www.vestauth.com]
+
+stdout | src/backfill-founder.test.ts
+◇ injected env (0) from ../../.env // tip: ⌘ enable debugging { debug: true }
+
+ ✓ src/backfill-founder.test.ts (10 tests) 3ms
+ ✓ src/disposable-mongo-target.test.ts (44 tests) 8ms
+stdout | src/backfill-brand.test.ts
+◇ injected env (0) from ../../.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+
+ ✓ src/backfill-brand.test.ts (11 tests) 13ms
+ ✓ src/order-capacity.schema.test.ts (22 tests) 26ms
+ ✓ src/registres-append-only.test.ts (20 tests) 9ms
+ ✓ src/order-payment-counter.schema.test.ts (13 tests) 17ms
+ ✓ src/order-concurrency.test.ts (6 tests) 22ms
+ ✓ src/delivery-handoff.schema.test.ts (10 tests) 36ms
+ ✓ src/delivery-mission.schema.test.ts (7 tests) 39ms
+ ✓ src/menu-brand-presentation.schema.test.ts (4 tests) 16ms
+ ✓ src/disposable-mongo-entrypoints.test.ts (32 tests) 9350ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed.ts' refuse les preuves de 'tenants' avant les dépendances du writer  593ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed.ts' refuse les preuves de 'public_order_admissions' avant les dépendances du writer  503ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed.ts' refuse les preuves de 'order_capacity_days' avant les dépendances du writer  451ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed-orders.ts' refuse les preuves de 'tenants' avant les dépendances du writer  414ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed-orders.ts' refuse les preuves de 'public_order_admissions' avant les dépendances du writer  435ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > 'seed-orders.ts' refuse les preuves de 'order_capacity_days' avant les dépendances du writer  455ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > seed.ts ferme une lecture durable échouée sans entrer dans le writer  405ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > seed-orders.ts ferme une lecture durable échouée sans entrer dans le writer  436ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > seed.ts atteint le writer seulement après trois contrôles vides, sans écrire  3894ms
+   ✓ seeds réels : les gardes précèdent les dépendances et les writes > seed-orders.ts atteint le writer seulement après trois contrôles vides, sans écrire  660ms
+ ✓ src/invoice-issuance.schema.test.ts (3 tests) 9ms
+ ✓ src/backfill-flags.test.ts (4 tests) 3ms
+ ✓ src/user-roles.test.ts (3 tests) 2ms
+ ✓ src/order-ready-notification.schema.test.ts (2 tests) 11ms
+ ✓ src/delivery-fees.schema.test.ts (9 tests) 22ms
+ ✓ src/order-recovery.schema.test.ts (5 tests) 31ms
+ ✓ src/studio-schema.test.ts (2 tests) 8ms
+ ✓ src/customer-order-owner.test.ts (4 tests) 5ms
+ ✓ src/retention-indexes.test.ts (3 tests) 1ms
+ ✓ src/password-hash.test.ts (1 test) 94ms
+ ✓ src/purge-test-invoices.test.ts (1 test) 2ms
+ ✓ src/user-session-version.test.ts (1 test) 2ms
+
+ Test Files  31 passed (31)
+      Tests  556 passed | 10 skipped (566)
+   Start at  21:24:54
+   Duration  12.00s (transform 416ms, setup 0ms, collect 8.14s, tests 10.23s, environment 18ms, prepare 1.30s)

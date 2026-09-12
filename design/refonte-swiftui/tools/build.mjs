@@ -9,7 +9,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const out=path.join(root,'dist');
 await rm(out,{recursive:true,force:true});
 for(const folder of ['screens','assets/food','assets/icons','tokens','prompts'])await mkdir(path.join(out,folder),{recursive:true});
-const modules=['packages/tokens/index.mjs','packages/icons/index.mjs','packages/assets/original.mjs','packages/assets/index.mjs','studio/screens.mjs','studio/fixtures.mjs','studio/app.mjs'];
+const modules=['packages/tokens/index.mjs','packages/icons/index.mjs','packages/icons/aliases.mjs','packages/assets/original.mjs','packages/assets/index.mjs','studio/screens.mjs','studio/fixtures.mjs','studio/app.mjs'];
 const code=(await Promise.all(modules.map(async file=>(await readFile(path.join(root,file),'utf8')).replace(/^import .*?;\s*$/gm,'').replace(/^export /gm,'')))).join('\n');
 const css=(await Promise.all(['packages/ui-web/styles.css','studio/styles.css'].map(file=>readFile(path.join(root,file),'utf8')))).join('\n');
 function html(id){return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Snack Manager · Design Studio</title><meta name="description" content="Maquettes de référence de Snack Manager. Données fictives, aucune opération réelle."><style>${css}</style></head><body class="sm-ui" data-start="${id}" style="${cssVariables('light',brand.preview)}"><div id="app"></div><noscript>Activez JavaScript pour explorer les maquettes.</noscript><script>(()=>{'use strict';\n${code.replace(/<\/script/gi,'<\\/script')}\n})();</script></body></html>`;}

@@ -306,6 +306,8 @@ export interface OrderTicket {
   statusLabel: string;
   pickup: TicketPickup | null;
   delivery?: OrderDelivery | null;
+  /** Libellé historique uniquement ; aucune identité interne de tablée sur le ticket client. */
+  dining?: { tableLabel: string } | null;
   lines: TicketLine[];
   totals: TicketTotals;
   payment: TicketPayment;
@@ -513,6 +515,8 @@ export interface PublicSiteResponse {
  *     ici créerait une action que rien n'écrit.
  */
 export const TENANT_AUDIT_ACTIONS = [
+  'dining.table.create', 'dining.table.update', 'dining.session.open', 'dining.session.transfer', 'dining.session.close', 'dining.session.order',
+  'dining.session.serve',
   // ─── Commandes : l'argent qui sort de la recette du jour ───
   'order.cancel',
   'order.collect',
@@ -593,6 +597,13 @@ export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
  * lettres dans le registre d'un restaurateur.
  */
 export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
+  'dining.table.create': 'Création de table',
+  'dining.table.update': 'Configuration de table',
+  'dining.session.open': 'Ouverture de tablée',
+  'dining.session.transfer': 'Transfert de tablée',
+  'dining.session.close': 'Clôture de tablée',
+  'dining.session.order': 'Envoi cuisine de tablée',
+  'dining.session.serve': 'Service du ticket à table',
   'order.cancel': 'Annulation de commande',
   'order.collect': 'Encaissement de commande',
   'order.assign': 'Affectation de livraison',

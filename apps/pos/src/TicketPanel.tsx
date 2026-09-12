@@ -22,6 +22,8 @@ import { Btn, Chip, CloseBtn, EmptyState, Field, Press, Stepper } from './ui';
 import { useLayout, type Layout } from './useLayout';
 import type { LoyaltyTicketMember } from './loyalty-state';
 
+type DiningTicketControls = { label: string; blocked: boolean; onSend: () => void };
+
 export function TicketPanel({
   lines,
   mode,
@@ -44,6 +46,7 @@ export function TicketPanel({
   onLoyalty,
   onCollapse,
   phone,
+  dining,
   side = 'right',
   powered = true,
 }: {
@@ -69,6 +72,7 @@ export function TicketPanel({
   /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
   onCollapse?: () => void;
   phone: PhoneTicketControls;
+  dining?: DiningTicketControls;
   side?: 'left' | 'right';
   powered?: boolean;
 }) {
@@ -100,7 +104,7 @@ export function TicketPanel({
       <View style={[sheet.between, { paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text accessibilityRole="header" style={[type.h2, { fontSize: L.fs(22), letterSpacing: -0.6 }]}>Ticket</Text>
-          <Text style={[type.mut, { marginTop: 4, fontSize: L.fs(13) }]}>{MODE_LABEL[mode]}</Text>
+          <Text style={[type.mut, { marginTop: 4, fontSize: L.fs(13) }]}>{dining ? `Table · ${dining.label}` : MODE_LABEL[mode]}</Text>
         </View>
         {lines.length > 0 ? (
           <View style={[sheet.row, { gap: 6 }]}>
@@ -209,7 +213,7 @@ export function TicketPanel({
             justifyContent: 'center',
           }}
         >
-          <Icon name="star" size={17} color={loyalty ? brand.accent : palette.mut} />
+          <Icon name="gift" size={20} color={loyalty ? brand.accent : palette.mut} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.strong, { fontSize: L.fs(14) }]} numberOfLines={1}>
@@ -304,6 +308,10 @@ export function TicketPanel({
             <Text style={type.mut}>Le restaurant confirme le créneau avant tout encaissement.</Text>
             <Btn label={busy ? 'Confirmation…' : 'Confirmer le créneau'} kind="primary" accent={brand.accent}
               onAccent={brand.onAccent} disabled={!phone.canSubmit || busy} onPress={phone.onSubmit} block />
+          </> : dining ? <>
+            <Text style={type.mut}>Envoyez les plats en cuisine, puis encaissez les tickets depuis la tablée.</Text>
+            <Btn label={busy ? 'Envoi…' : 'Envoyer en cuisine'} icon="kitchen" kind="primary" accent={brand.accent} onAccent={brand.onAccent}
+              disabled={!canSend || dining.blocked} onPress={dining.onSend} block />
           </> : <>
           <View style={{ flexDirection: 'row', gap: S.sm }}>
             <Btn
@@ -511,6 +519,7 @@ export function TicketDock({
   onOpen,
   onPay,
   phone,
+  dining,
 }: {
   lines: CartLine[];
   mode: Mode;
@@ -523,6 +532,7 @@ export function TicketDock({
   onOpen: () => void;
   onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
   phone: PhoneTicketControls;
+  dining?: DiningTicketControls;
 }) {
   const { palette, type } = useTheme();
   const L = useLayout();
@@ -563,7 +573,7 @@ export function TicketDock({
         }}
         activeStyle={{ backgroundColor: palette.press2 }}
       >
-        <Icon name="star" size={20} color={loyalty ? brand.accent : palette.mut} />
+        <Icon name="gift" size={20} color={loyalty ? brand.accent : palette.mut} />
       </Press> : null}
       <Press
         onPress={onOpen}
@@ -602,7 +612,9 @@ export function TicketDock({
           place ne manque pas. */}
       {mode === 'tel' ? <Btn label={busy ? 'Confirmation…' : 'Confirmer'} kind="primary" size="md"
         accent={brand.accent} onAccent={brand.onAccent} disabled={!phone.canSubmit || busy} onPress={phone.onSubmit}
-        accessibilityLabel="Confirmer le créneau téléphone avant encaissement" /> : <><Btn
+        accessibilityLabel="Confirmer le créneau téléphone avant encaissement" /> : dining ? <Btn label="Cuisine" icon="kitchen" kind="primary" size="md"
+        accent={brand.accent} onAccent={brand.onAccent} disabled={!canSend || dining.blocked} onPress={dining.onSend}
+        accessibilityLabel="Envoyer les plats de la table en cuisine" /> : <><Btn
         label="Carte"
         icon="card"
         kind="primary"

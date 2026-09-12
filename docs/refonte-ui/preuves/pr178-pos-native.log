@@ -1,0 +1,35 @@
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:92905) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+iOS Bundled 8473ms apps/pos/index.ts (985 modules)
+Android Bundled 11619ms apps/pos/index.ts (983 modules)
+
+› Assets (2):
+../../packages/ui-native/assets/fonts/InterVariable.ttf (880KB)
+assets/mark.png (16KB)
+
+› ios bundles (1):
+_expo/static/js/ios/index-ab9542b858b926301ef82de813e41781.hbc (3.3MB)
+
+› android bundles (1):
+_expo/static/js/android/index-17afddd9f830f5fe2e77dcbbcefa5deb.hbc (3.3MB)
+
+› Files (1):
+metadata.json (494B)
+
+Exported: /tmp/snackmanager-refonte-v2-pos-native

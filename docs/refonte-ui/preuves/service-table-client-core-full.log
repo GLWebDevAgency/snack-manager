@@ -1,0 +1,24 @@
+
+> @sm/client-core@0.0.1 test /Users/limameghassene/development/SnackManager-refonte-ui/packages/client-core
+> vitest run --maxWorkers=2 --minWorkers=1
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/packages/client-core
+
+ ✓ src/sync-queue.test.ts (40 tests) 192ms
+ ✓ src/demo/retour.test.ts (15 tests) 4ms
+ ✓ src/temps-reel.test.ts (15 tests) 10ms
+ ✓ src/demo/transport.test.ts (17 tests) 464ms
+   ✓ latence > répond en 60 à 180 ms — une application instantanée ne fait pas vrai  438ms
+ ✓ src/api.test.ts (5 tests) 18ms
+ ✓ src/demo/mode.test.ts (9 tests) 18ms
+ ✓ src/direct-operation-safety.test.ts (6 tests) 8ms
+ ✓ src/storage.test.ts (7 tests) 5ms
+ ✓ src/orders-window.test.ts (9 tests) 3ms
+ ✓ src/supplement-categories.test.ts (3 tests) 3ms
+ ✓ src/status.test.ts (5 tests) 2ms
+
+ Test Files  11 passed (11)
+      Tests  131 passed (131)
+   Start at  21:24:54
+   Duration  2.25s (transform 330ms, setup 0ms, collect 901ms, tests 725ms, environment 1ms, prepare 545ms)

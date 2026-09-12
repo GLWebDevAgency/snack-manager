@@ -10,10 +10,12 @@ export function BibliothequeIllustrations({
   envoi,
   onFichier,
   canAct,
+  onBusyChange,
 }: {
   envoi: boolean;
   onFichier: (fichier: File) => Promise<void>;
   canAct?: () => boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [recherche, setRecherche] = useState("");
   const [famille, setFamille] = useState("toutes");
@@ -23,6 +25,10 @@ export function BibliothequeIllustrations({
   const rechercheId = useId();
   useLayoutEffect(() => { canActRef.current = canAct; }, [canAct]);
   useEffect(() => { actif.current = true; return () => { actif.current = false; }; }, []);
+  useEffect(() => {
+    onBusyChange?.(preparation !== null);
+    return () => onBusyChange?.(false);
+  }, [onBusyChange, preparation]);
   const resultat = filtrerIllustrations(recherche, famille);
   const bloque = envoi || preparation !== null;
 
@@ -44,7 +50,7 @@ export function BibliothequeIllustrations({
   }
 
   return (
-    <details className="rounded-card border border-line bg-surface">
+    <details open className="rounded-card border border-line bg-surface">
       <summary className="flex min-h-12 cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-accent">
         <Icon name="grid" size={18} />
         Illustrations Snack Manager

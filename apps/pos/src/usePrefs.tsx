@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { KeyValueStore } from '@sm/client-core';
 import { client } from './client';
-import { DEFAULT_PREFS, PREFS_KEY, parsePrefs, type PosLayoutId, type PosPrefs, type PosTheme } from './prefs';
+import { DEFAULT_PREFS, PREFS_KEY, parsePrefs, type CatalogDensity, type PosLayoutId, type PosPrefs, type PosTheme } from './prefs';
 
 interface PrefsValue {
   prefs: PosPrefs;
@@ -9,11 +9,15 @@ interface PrefsValue {
   setLayout: (layout: PosLayoutId) => void;
   setTheme: (theme: PosTheme) => void;
   setSplash: (splash: boolean) => void;
+  setCatalogDensity: (density: CatalogDensity) => void;
+  setReduceMotion: (value: boolean) => void;
+  setReduceTransparency: (value: boolean) => void;
 }
 
 const PrefsContext = createContext<PrefsValue>({
   prefs: { ...DEFAULT_PREFS }, ready: false,
   setLayout: () => undefined, setTheme: () => undefined, setSplash: () => undefined,
+  setCatalogDensity: () => undefined, setReduceMotion: () => undefined, setReduceTransparency: () => undefined,
 });
 
 /** La clé React réinitialise les valeurs avant le premier rendu d'un autre établissement. */
@@ -65,7 +69,11 @@ function ScopedPrefs({ scope, store, children }: { scope: string | null; store: 
   const setLayout = useCallback((layout: PosLayoutId) => change({ layout }), [change]);
   const setTheme = useCallback((theme: PosTheme) => change({ theme }), [change]);
   const setSplash = useCallback((splash: boolean) => change({ splash }), [change]);
-  const value = useMemo(() => ({ prefs, ready, setLayout, setTheme, setSplash }), [prefs, ready, setLayout, setTheme, setSplash]);
+  const setCatalogDensity = useCallback((catalogDensity: CatalogDensity) => change({ catalogDensity }), [change]);
+  const setReduceMotion = useCallback((reduceMotion: boolean) => change({ reduceMotion }), [change]);
+  const setReduceTransparency = useCallback((reduceTransparency: boolean) => change({ reduceTransparency }), [change]);
+  const value = useMemo(() => ({ prefs, ready, setLayout, setTheme, setSplash, setCatalogDensity, setReduceMotion, setReduceTransparency }),
+    [prefs, ready, setLayout, setTheme, setSplash, setCatalogDensity, setReduceMotion, setReduceTransparency]);
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>;
 }
 

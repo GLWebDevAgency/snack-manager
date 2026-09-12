@@ -97,10 +97,12 @@ import { withDemoLoyalty } from './demo-loyalty';
 import { withDemoPayment } from './demo-payment';
 import { assertPhoneOrderPurgeSafe } from './phone-order-attempt';
 import { pendingCollectionIds } from './service-payment';
+import { assertDiningPurgeSafe } from './dining-operation';
 export { KEYS };
 
 /** Lecture sous le verrou de purge : aucun journal direct ne passe par la file. */
 async function assertDirectOperationsSettled(store: KeyValueStore): Promise<void> {
+  await assertDiningPurgeSafe(store);
   await assertPhoneOrderPurgeSafe(store);
   if ((await pendingCollectionIds(store)).length > 0) {
     throw new Error('Un encaissement reste à vérifier. Aucun désappairage ni effacement de sa référence n’est autorisé.');

@@ -35,7 +35,7 @@ export function CustomerAccess({ state, flow, available, onSignup }: Props) {
     try { await navigator.clipboard.writeText(state.code); setCopyMessage('Code copié. Conservez-le dans un endroit sûr.'); }
     catch { setCopyMessage('La copie est indisponible. Vous pouvez recopier ce code.'); }
   }
-  return <section aria-label="Connexion personnelle" aria-busy={state.busy} className="space-y-4 rounded-panel border border-ink/10 bg-surface2 p-4 sm:p-5">
+  return <section aria-label="Connexion personnelle" aria-busy={state.busy} className="sm-account-card space-y-4">
     <div><p className="mb-1 text-[11px] font-bold uppercase tracking-[.14em] text-accentink">Votre accès personnel</p>
       <h3 ref={heading} tabIndex={-1} className="font-display text-xl font-extrabold leading-tight outline-none">{title}</h3></div>
     {state.message && <p role="status" className="rounded-card border border-prep/25 bg-prep/10 p-3 text-sm leading-6 text-prept">{state.message}</p>}

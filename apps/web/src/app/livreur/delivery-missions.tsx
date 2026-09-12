@@ -86,7 +86,7 @@ export function DeliveryMissions({ session, available, onRevoked, tab = "tour", 
     seen.current = ids;
     if (fresh && preferences.alerts) void alert();
   }, [state.loaded, state.stale, state.loading, state.missions, available, preferences.alerts, alert]);
-  const { selectTab, contentProps } = useSMTabTransition({ activeKey: tab, onSelect: onTab });
+  const { selectTab, contentProps } = useSMTabTransition({ activeKey: tab, onSelect: onTab, reduceMotion: preferences.reduceMotion });
   function closeMission() { if (!state.busy && !handoffBusyRef.current) { setHanding(false); setSelectedId(null); } }
   function closeHandoff() { if (!handoffBusyRef.current) setHanding(false); }
   const next = route.find(mission => mission.id !== selectedId);
@@ -122,7 +122,7 @@ export function DeliveryMissions({ session, available, onRevoked, tab = "tour", 
       </section>
       <section className="lv-page" hidden={tab !== "map"} aria-labelledby="lv-map-title">
         <h2 id="lv-map-title" className="lv-section-title">Votre parcours</h2><p className="lv-copy">Vos arrêts et leurs adresses. Ouvrez votre application de navigation pour calculer un itinéraire réel.</p>
-        {session.restaurantAddress && <div className="lv-route-stop"><span className="lv-route-marker"><Icon name="home" size={20} /></span><div><b>{session.restaurantName}</b><p>{session.restaurantAddress}</p><a href={deliveryNavigationUrl(session.restaurantAddress, preferences.navigation)} target="_blank" rel="noreferrer" className="lv-map-link">Revenir au restaurant<Icon name="arrow" size={14} /></a></div></div>}
+        {session.restaurantAddress && <div className="lv-route-stop"><span className="lv-route-marker"><Icon name="store" size={20} /></span><div><b>{session.restaurantName}</b><p>{session.restaurantAddress}</p><a href={deliveryNavigationUrl(session.restaurantAddress, preferences.navigation)} target="_blank" rel="noreferrer" className="lv-map-link">Revenir au restaurant<Icon name="arrow" size={14} /></a></div></div>}
         {route.length === 0 && <p className="lv-msg">Aucune mission en route. Vos départs confirmés apparaîtront ici.</p>}
         <ol className="lv-route-list">{route.map((mission, index) => <li key={mission.id} className="lv-route-stop"><span className="lv-route-marker">{index + 1}</span><div><b>N°{mission.number} · {mission.customer.name || "Client"}</b><MissionAddress mission={mission} /><div className="lv-route-actions"><a href={deliveryNavigationUrl(mission.address, preferences.navigation)} target="_blank" rel="noreferrer" className="lv-map-link">Itinéraire<Icon name="arrow" size={14} /></a><button type="button" className="lv-map-link" disabled={disabled} onClick={() => void inspect(mission.id)}>Voir la mission</button></div></div></li>)}</ol>
         <p className="lv-fine">Les arrêts suivent l’ordre des missions affichées. Ce schéma n’est pas géographique : aucune distance ni optimisation du trajet n’est présumée.</p>
@@ -131,8 +131,13 @@ export function DeliveryMissions({ session, available, onRevoked, tab = "tour", 
       <DeliveryHistory operatorId={session.operatorId} available={available} active={tab === "history"} onRevoked={onRevoked} />
       <section className="lv-page lv-account" hidden={tab !== "account"} aria-labelledby="lv-account-title">
         <h2 id="lv-account-title">Mon compte</h2>{accountIdentity}
-        <h3 className="lv-group">Affichage</h3><div className="lv-tabs" aria-label="Thème de l’application">{(["dark", "light", "auto"] as const).map(value => <button type="button" key={value} aria-pressed={preferences.theme === value} onClick={() => update({ theme: value })}>{value === "dark" ? "Sombre" : value === "light" ? "Clair" : "Système"}</button>)}</div>
-        <p className="lv-fine">Le mode Système suit le réglage clair ou sombre du téléphone.</p>
+        <section className="lv-preference-group" aria-labelledby="lv-appearance-title">
+          <h3 id="lv-appearance-title">Apparence</h3>
+          <div className="lv-tabs lv-theme-options" aria-label="Thème de l’application">{(["light", "dark", "auto"] as const).map(value => <button type="button" key={value} aria-pressed={preferences.theme === value} onClick={() => update({ theme: value })}>{value !== "auto" && <Icon name={value === "light" ? "sun" : "moon"} size={16} />}{value === "dark" ? "Sombre" : value === "light" ? "Clair" : "Système"}</button>)}</div>
+          <p className="lv-fine">Le mode Système suit le réglage clair ou sombre du téléphone.</p>
+          <label className="lv-setting"><span><b>Réduire les mouvements</b><small>Changements d’onglets et pressions immédiats</small></span><input type="checkbox" role="switch" checked={preferences.reduceMotion} onChange={event => update({ reduceMotion: event.target.checked })} /></label>
+          <label className="lv-setting"><span><b>Réduire la transparence</b><small>Navigation et fonds de dialogue opaques</small></span><input type="checkbox" role="switch" checked={preferences.reduceTransparency} onChange={event => update({ reduceTransparency: event.target.checked })} /></label>
+        </section>
         <h3 className="lv-group">En tournée</h3>
         <label className="lv-setting"><span><b>Alerte nouvelle mission</b><small>Son et vibration lorsque l’application est ouverte</small></span><input type="checkbox" role="switch" checked={preferences.alerts} onChange={event => { update({ alerts: event.target.checked }); if (event.target.checked) void alert(true); }} /></label>
         {preferences.alerts && <><Btn block variant="ghost" onClick={() => void alert(true)}>Tester l’alerte</Btn>{alertMessage && <p className="lv-fine" role="status">{alertMessage}</p>}</>}
@@ -144,7 +149,7 @@ export function DeliveryMissions({ session, available, onRevoked, tab = "tour", 
       </section>
       <SMTabBarSpacer />
     </div>
-    <div className="lv-navigation"><SMTabBar items={[{ key: "tour", label: "Tournée", icon: color => <Icon name="truck" size={23} style={{ color }} />, badge: ready || undefined }, { key: "map", label: "Carte", icon: color => <Icon name="pin" size={23} style={{ color }} /> }, { key: "history", label: "Historique", icon: color => <Icon name="clock" size={23} style={{ color }} /> }, { key: "account", label: "Compte", icon: color => <Icon name="user" size={23} style={{ color }} /> }]} activeKey={tab} onSelect={selectTab} theme={theme} minimizable={!selected} hidden={Boolean(selected)} ariaLabel="Navigation livreur" /></div>
+    <div className="lv-navigation"><SMTabBar items={[{ key: "tour", label: "Tournée", icon: color => <Icon name="truck" size={23} style={{ color }} />, badge: ready || undefined }, { key: "map", label: "Carte", icon: color => <Icon name="pin" size={23} style={{ color }} /> }, { key: "history", label: "Historique", icon: color => <Icon name="clock" size={23} style={{ color }} /> }, { key: "account", label: "Compte", icon: color => <Icon name="user" size={23} style={{ color }} /> }]} activeKey={tab} onSelect={selectTab} theme={theme} reduceMotion={preferences.reduceMotion} reduceTransparency={preferences.reduceTransparency} minimizable={!selected} hidden={Boolean(selected)} ariaLabel="Navigation livreur" /></div>
     <DeliveryDialog open={Boolean(selected)} title={selected ? `Mission n°${selected.number}` : "Mission"} onClose={closeMission} closeDisabled={state.busy || handoffBusy} footer={selected && <>
       {!selected.dispatchedAt && <p className="lv-why"><Icon name={selected.canDispatch ? "check" : "alert"} size={15} />{why}</p>}
       {!selected.dispatchedAt ? <button type="button" className="lv-cta" disabled={disabled || selectedPending || !selected.canDispatch} aria-busy={state.busy} onClick={() => void client.dispatch(selected.id)}><Icon name="truck" size={20} />{state.busy ? "Confirmation…" : "Confirmer mon départ"}</button>
@@ -192,7 +197,8 @@ function missionEta(mission: DeliveryMissionView, now: number) {
 function MissionCard({ mission, now, disabled, onOpen }: { mission: DeliveryMissionView; now: number; disabled: boolean; onOpen: () => void }) {
   const tone = missionTone(mission, now);
   return <button type="button" className={`lv-mcard ${tone}`} aria-label={`Voir la mission n°${mission.number}`} disabled={disabled} onClick={onOpen}>
-    <span className="lv-rail" aria-hidden /><span className="lv-mh"><span className="lv-number"><small>N°</small><b>{mission.number}</b></span><span className="lv-mmeta"><span className={`lv-status ${tone}`}><Icon name={tone === "route" ? "truck" : tone === "blocked" ? "alert" : tone === "ready" ? "bag" : "clock"} size={14} />{missionStatus(mission)}</span><span className="lv-eta">{missionEta(mission, now)}</span></span><Icon name="arrow" size={20} /></span>
+    <span className="lv-rail" aria-hidden /><span className="lv-mh"><b className="lv-order-title">Commande #{mission.number}</b><Icon name="chevron" size={20} /></span>
+    <span className="lv-mmeta"><span className={`lv-status ${tone}`}><Icon name={tone === "route" ? "truck" : tone === "blocked" ? "warning" : tone === "ready" ? "bag" : "clock"} size={14} />{missionStatus(mission)}</span><span className="lv-eta">{missionEta(mission, now)}</span></span>
     <span className="lv-card-address"><Icon name="pin" size={16} /><span>{mission.address.line1}<small>{[mission.address.line2, `${mission.address.postalCode} ${mission.address.city}`].filter(Boolean).join(" · ")}</small></span></span>
     <span className="lv-mf"><span className="lv-chip"><Icon name="bag" size={12} />{mission.items.reduce((sum, item) => sum + item.qty, 0)} articles</span>{mission.paymentReady && <span className="lv-chip ok"><Icon name="check" size={12} />{mission.paymentSummary?.method === "online" ? "Payée en ligne" : "Paiement confirmé"}</span>}{mission.instructions && <span className="lv-chip warn"><Icon name="message" size={12} />Consigne</span>}</span>
   </button>;

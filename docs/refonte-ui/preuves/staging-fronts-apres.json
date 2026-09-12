@@ -1,0 +1,57 @@
+{
+  "at": "2026-09-12T17:24:55.145Z",
+  "mergeSha": "a01f857c4c0649e85b3b8059fc644ced95602095",
+  "result": [
+    {
+      "service": "web",
+      "url": "https://web-staging-6f5f.up.railway.app",
+      "status": 200,
+      "htmlSha256": "1e31913938b481229363c32ad222ee7fcc8f7440f2d5eb166f2fee8076afe1af",
+      "addedAssets": [
+        {
+          "asset": "/_next/static/chunks/0tmykgy95b0j4.css",
+          "status": 200,
+          "contentType": "text/css; charset=UTF-8",
+          "sha256": "22cd63178368ae6fa721f8a2e67b69d26d5b873a934a2956b62f1852c52a1caa",
+          "bytes": 124546
+        }
+      ],
+      "changed": true,
+      "pass": true
+    },
+    {
+      "service": "pos",
+      "url": "https://pos-staging-7f92.up.railway.app",
+      "status": 200,
+      "htmlSha256": "55a02aee46dd0d2d8887532dc260a586305b21b9d806e91cd57df2ee5b627ebb",
+      "addedAssets": [
+        {
+          "asset": "/_expo/static/js/web/index-82858bdf83c732e21bc11e78fa26b390.js",
+          "status": 200,
+          "contentType": "text/javascript; charset=utf-8",
+          "sha256": "de32271fed634a6467e5112018ca92f8d19d0ea3865f795f609594c5d0b46e44",
+          "bytes": 1669594
+        }
+      ],
+      "changed": true,
+      "pass": true
+    },
+    {
+      "service": "kds",
+      "url": "https://kds-staging-90da.up.railway.app",
+      "status": 200,
+      "htmlSha256": "cd9dac8d558a6b4482adc094d8bf87c7963caa092fb4d9b26df032cabdaf7bec",
+      "addedAssets": [
+        {
+          "asset": "/_expo/static/js/web/index-2ac97696c3682be4824708680006e46e.js",
+          "status": 200,
+          "contentType": "text/javascript; charset=utf-8",
+          "sha256": "22ca277c29f83c5e17dd6845d8f582fdc65f5eb938c6c8be7df7729612d410e6",
+          "bytes": 1470595
+        }
+      ],
+      "changed": true,
+      "pass": true
+    }
+  ]
+}

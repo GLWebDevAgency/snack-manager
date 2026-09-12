@@ -49,11 +49,11 @@ export function CustomerOrdersPage({ slug, restaurantName, deviceOrders, onAccou
     <header className="sm-account-page-heading"><p>{restaurantName}</p><h2 id={`${id}-title`}>Mes commandes</h2></header>
     <div className="sm-account-page-content space-y-5">
       {access ? <>
-        <div role="tablist" aria-label="Source des commandes" className="grid grid-cols-2 gap-1 rounded-ctrl bg-ink/5 p-1">
+        <div role="tablist" aria-label="Source des commandes" className="sm-account-sources">
           {([['account', 'Mon compte'], ['device', 'Cet appareil']] as const).map(([key, label]) => <Tap key={key}
             role="tab" id={`${id}-${key}`} aria-controls={`${id}-orders`} aria-selected={activeSource === key}
             tabIndex={activeSource === key ? 0 : -1} disabled={locked} onKeyDown={keySelect} onClick={() => select(key)}
-            className={`min-h-11 rounded-ctrl px-2 text-sm font-bold ${activeSource === key ? 'bg-surface text-ink shadow-sm' : 'text-mut'}`}>{label}</Tap>)}
+            className="sm-account-source">{label}</Tap>)}
         </div>
         <div role="tabpanel" id={`${id}-orders`} aria-labelledby={`${id}-${activeSource}`} tabIndex={0} className="min-w-0 outline-none">
           {activeSource === 'account' ? <CustomerOrders key={privateKey} slug={slug} access={access} presentation="page"

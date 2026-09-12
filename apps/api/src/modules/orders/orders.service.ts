@@ -29,7 +29,7 @@ import {
   StaffPhoneOrderAttemptRequestSchema,
   GuestOrderReorderResponseSchema,
 } from '@sm/contracts';
-import type { Counter, Order, Product, Promotion, Tenant } from '@sm/db';
+import type { Counter, Order, Product, Promotion, Tenant, DiningOrderPricingRecord } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { AuditService } from '../audit/audit.module';
@@ -47,6 +47,8 @@ import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-
 import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
 import type { OrderAdmissionBinding } from './order-admission-identity';
 import { customerOrderReorder } from './customer-order-projection';
+import type { DiningOrderCommitter } from './dining-order-commit';
+import { DiningPricingStore, type DiningPricingIdentity } from './dining-pricing';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -72,6 +74,7 @@ export class OrdersService {
     private readonly capacites: CapacitesService,
     private readonly payments: PaymentsService,
     @Optional() private readonly admissions?: PublicOrderAdmissionService,
+    @Optional() @InjectModel('DiningOrderPricing') private readonly diningPricing?: Model<DiningOrderPricingRecord>,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
@@ -128,6 +131,8 @@ export class OrdersService {
     delete payload.loyaltyEarnLeaseUntil;
     delete payload.paymentFlow;
     delete payload.counterCollection;
+    delete payload.diningServeReceipt;
+    delete payload.diningServeRejections;
     delete payload.publicRecovery;
     delete payload.customerOwner;
     delete payload.customerSaleAttribution;
@@ -263,6 +268,7 @@ export class OrdersService {
     origin: 'legacy' | 'staff' = 'legacy',
     beforeCommit?: CustomerOrderCommitAuthority,
     prepareLoyaltyAttribution?: PrepareCustomerSaleAttribution,
+    dining?: DiningOrderCommitter,
   ) {
     const permitted = await this.readFilter(tenantId, {});
     if (permitted.channel && dto.channel !== permitted.channel) {
@@ -281,24 +287,36 @@ export class OrdersService {
     }
     const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery +customerOwner');
     if (existing) {
+      if (dining) await dining.assertExisting(existing);
       assertPublicRecoveryReplay(existing, recovery);
       return { order: await this.withTrackingToken(existing), created: false as const };
     }
 
-    const candidateId = admissionBinding ? new Types.ObjectId() : undefined;
+    const candidateId = admissionBinding || dining ? new Types.ObjectId() : undefined;
     let admissionCommitStarted = false;
     let promotion: Awaited<ReturnType<OrdersService['resoudrePromotion']>> = null;
     try {
-      const ids = [...new Set(dto.lines.map((l) => l.productId))];
-      const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
-      const { subtotal, lines } = priceOrderLines(prods, dto.lines);
+      const price = async () => {
+        const ids = [...new Set(dto.lines.map((l) => l.productId))];
+        const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
+        return priceOrderLines(prods, dto.lines);
+      };
+      const pricingStore = dining ? this.diningPricingStore() : null;
+      const priced = dining && pricingStore ? await pricingStore.resolve(tenantId, dining.identity, async () => {
+        const priced = await price();
+        const candidates = await this.promotions.find(promotionCandidatesFilter(tenantId, dto.promoCode)).lean();
+        const selected = selectCartPromotion(candidates, { ...priced, channel: dto.channel, promoCode: dto.promoCode, now: new Date() });
+        return { ...priced, promotion: selected ? { ...selected, id: String(selected.id) } : null };
+      }) : { ...await price(), promotion: null };
+      const { subtotal, lines } = priced;
 
     // LA PROMOTION, RÉSOLUE CÔTÉ SERVEUR comme les prix.
     //
     // Le corps ne porte qu'un CODE : le montant est calculé ici contre la
     // promotion en base. Un client qui enverrait sa propre remise n'obtient
     // rien — même règle que pour les prix, et pour la même raison.
-      promotion = await this.resoudrePromotion(tenantId, dto, subtotal, lines);
+      promotion = dining && pricingStore ? await pricingStore.reserve(tenantId, dining.identity, priced)
+        : await this.resoudrePromotion(tenantId, dto, subtotal, lines);
 
     // Ce que le client doit RÉELLEMENT — le seul montant qui fasse autorité
     // pour l'encaissement, le rendu monnaie et le ticket.
@@ -334,6 +352,7 @@ export class OrdersService {
         loyaltyEarnLeaseUntil: null,
         channel: dto.channel,
         type: dto.type,
+        ...(dining ? { dining: dining.context } : {}),
         lines,
         totals: { subtotal, discount: promotion?.discount ?? null, deliveryFee: delivery?.feeCents ?? 0, total: totalDu },
         delivery,
@@ -363,6 +382,10 @@ export class OrdersService {
           : null,
         note: dto.note ?? null,
       };
+      if (dining) {
+        const outcome = await dining.commit(candidate);
+        return outcome;
+      }
       if (admissionBinding) {
         admissionCommitStarted = true;
         const outcome = recovery
@@ -375,6 +398,11 @@ export class OrdersService {
       this.publish(tenantId, WS_EVENTS.orderCreated, this.orderEventPayload(order));
       return { order, created: true as const };
     } catch (err: unknown) {
+      if (dining) {
+        // Table pricing and quota belong to the OPERATION, shared by every
+        // candidate. Only a durable rejected session decision can release them.
+        throw err;
+      }
       if (admissionBinding && !recovery) {
         if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof ForbiddenException || err instanceof NotFoundException) {
           try {
@@ -425,6 +453,15 @@ export class OrdersService {
       }
       throw err;
     }
+  }
+
+  private diningPricingStore() {
+    if (!this.diningPricing) throw new ServiceUnavailableException('La reprise du prix de table est indisponible.');
+    return new DiningPricingStore(this.diningPricing, this.promotions);
+  }
+
+  async releaseDiningPromotion(tenantId: string, identity: DiningPricingIdentity): Promise<void> {
+    await this.diningPricingStore().release(tenantId, identity);
   }
 
   /**

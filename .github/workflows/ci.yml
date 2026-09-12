@@ -282,6 +282,12 @@ jobs:
           ORDER_RECOVERY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_recovery_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/orders/public-order-admission.integration.test.ts
 
+      - name: Tests MongoDB réels — tables et admissions de salle
+        env:
+          DINING_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_dining_test_ci
+          DINING_PRICING_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_dining_pricing_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/orders/dining.integration.test.ts src/modules/orders/dining-pricing.test.ts
+
       - name: Tests MongoDB réels — accès livreur et révocation
         env:
           DELIVERY_OPERATOR_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_test_ci

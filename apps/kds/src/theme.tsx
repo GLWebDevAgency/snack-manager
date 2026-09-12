@@ -3,11 +3,11 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { makeUi } from './ui';
 import type { KdsTheme } from './prefs';
 
-const ThemeContext = createContext(makeUi('dark'));
+const ThemeContext = createContext({ ...makeUi('light'), reducedTransparency: false });
 
 /** Le thème change les tokens sans remonter le tableau ni sa session. */
-export function ThemeProvider({ theme = 'dark', children }: { theme?: KdsTheme; children: ReactNode }) {
-  const ui = useMemo(() => makeUi(theme), [theme]);
+export function ThemeProvider({ theme = 'light', reducedTransparency = false, children }: { theme?: KdsTheme; reducedTransparency?: boolean; children: ReactNode }) {
+  const ui = useMemo(() => ({ ...makeUi(theme), reducedTransparency }), [theme, reducedTransparency]);
   return <ThemeContext.Provider value={ui}>{children}</ThemeContext.Provider>;
 }
 

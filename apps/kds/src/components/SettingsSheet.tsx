@@ -71,7 +71,7 @@ function ToggleRow({ title, hint, value, onToggle, layout, reducedMotion, disabl
 
 /** Préférences du poste uniquement : aucun handler de commande n'entre dans ce dialogue. */
 export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity, onToggleSound, onToggleAllDay,
-  onToggleSplash, onClose, onLogout, tenantName, deviceName, pending, soundSupported, accent: accentProp }: {
+  onToggleSplash, onToggleReduceMotion, onToggleReduceTransparency, onClose, onLogout, tenantName, deviceName, pending, soundSupported, accent: accentProp }: {
   layout: Layout;
   reducedMotion: boolean;
   prefs: KdsPrefs;
@@ -80,6 +80,8 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
   onToggleSound: () => void;
   onToggleAllDay: () => void;
   onToggleSplash: () => void;
+  onToggleReduceMotion: () => void;
+  onToggleReduceTransparency: () => void;
   onClose: () => void;
   onLogout: () => void;
   tenantName: string;
@@ -123,7 +125,7 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
         </View>
       </Section>
       <Section title="Thème" layout={layout}>
-        <Segmented value={prefs.theme} onChange={onTheme} options={[{ key: 'dark', label: 'Sombre' }, { key: 'light', label: 'Clair' }]}
+        <Segmented value={prefs.theme} onChange={onTheme} options={[{ key: 'light', label: 'Clair' }, { key: 'dark', label: 'Sombre' }]}
           accent={accent} layout={layout} reducedMotion={reducedMotion} label="Thème" />
       </Section>
       <Section title="Service" layout={layout}>
@@ -134,6 +136,14 @@ export function SettingsSheet({ layout, reducedMotion, prefs, onTheme, onDensity
             value={prefs.allDay} onToggle={onToggleAllDay} layout={layout} reducedMotion={reducedMotion} />
           <ToggleRow title="Animation du logo au démarrage" hint="Au lancement à froid uniquement"
             value={prefs.splash} onToggle={onToggleSplash} layout={layout} reducedMotion={reducedMotion} />
+        </View>
+      </Section>
+      <Section title="Accessibilité" layout={layout}>
+        <View style={{ gap: layout.fs(8) }}>
+          <ToggleRow title="Réduire les mouvements" hint="Supprime les animations d’entrée et de pression. Le réglage système reste prioritaire."
+            value={prefs.reduceMotion} onToggle={onToggleReduceMotion} layout={layout} reducedMotion={reducedMotion} />
+          <ToggleRow title="Réduire la transparence" hint="Fond opaque derrière les fenêtres, sans reflet décoratif."
+            value={prefs.reduceTransparency} onToggle={onToggleReduceTransparency} layout={layout} reducedMotion={reducedMotion} />
         </View>
       </Section>
       <Section title="Écran" layout={layout}>

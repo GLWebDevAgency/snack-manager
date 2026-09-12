@@ -54,8 +54,9 @@ import {
 import { roleAdmin } from "./session";
 import { AdminAccess } from "./access";
 import { orderAccessScope } from "@sm/contracts/commerce";
-import { backofficeVisualStyle } from "@/components/backoffice/visual-style";
+import { backofficeStyle } from "@/components/backoffice/visual-style";
 import "@/components/backoffice/backoffice.css";
+import { AppearanceButton, useBackofficeTheme } from "@/components/backoffice/appearance";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -176,6 +177,7 @@ const navSubscribe = (cb: () => void) => {
 const emptySubscribe = () => () => {};
 
 function Shell({ children }: { children: ReactNode }) {
+  const { theme, toggleTheme } = useBackofficeTheme();
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
@@ -553,7 +555,7 @@ function Shell({ children }: { children: ReactNode }) {
     */
     // `h-dvh` et non `h-screen` : sur téléphone, 100vh déborde derrière la
     // barre d'adresse et la barre basse perdrait ses derniers pixels sous elle.
-    <div className="sm-backoffice flex h-dvh flex-col overflow-hidden bg-bg" style={backofficeVisualStyle}>
+    <div className="sm-backoffice flex h-dvh flex-col overflow-hidden bg-bg" data-sm-theme={theme} style={backofficeStyle(theme, tenantAccentPalette(tenant?.brandColor).accent)}>
       {/*
         Anti-zoom iOS : Safari zoome toute la page au focus d'un champ dont le
         corps est sous 16 px. Les contrôles du DS sont à 14 px — très bien à la
@@ -859,6 +861,7 @@ function Shell({ children }: { children: ReactNode }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
+              <AppearanceButton theme={theme} onToggle={toggleTheme} />
               {/* La recherche globale « présente, non câblée » a été RETIRÉE
                   (24/08/2026) : un champ qui avale une requête sans répondre
                   se lit comme une panne. Elle reviendra branchée. */}

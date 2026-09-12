@@ -13,6 +13,7 @@ import { CustomerOrders } from './CustomerOrders';
 import { CustomerLoyalty } from './CustomerLoyalty';
 import { sameOrderAccess } from './orders';
 import type { CustomerAccountAccess } from './client';
+import './customer-account.css';
 
 type Account = ReturnType<typeof useCustomerAccount>;
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:cursor-wait disabled:opacity-40';
@@ -40,13 +41,13 @@ function Profile({ account, view, forLoyalty = false }: { account: Account; view
     if (await logout(logoutChoice)) setLogoutChoice(null);
   }
   return <div className="space-y-5">
-    <section aria-label="Votre profil" className="rounded-panel border border-ink/10 bg-surface2 p-4 sm:p-5">
-      <div className="mb-5 flex items-start gap-3">
+    <section aria-label="Votre profil" className="sm-account-card">
+      <div className="sm-account-card-heading flex items-start gap-3">
         <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
         <div className="min-w-0"><h3 className="font-display text-lg font-extrabold tracking-tight">Votre profil</h3>
           <p className="mt-1 text-xs leading-5 text-mut">{forLoyalty ? 'Le même profil pour votre compte et votre carte fidélité.' : 'Vos coordonnées personnelles, pour ce restaurant.'}</p></div>
       </div>
-      <div className="mb-5 rounded-card border border-ink/10 bg-surface p-3">
+      <div className="mb-5 rounded-card border border-ink/10 bg-surface2 p-3">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-mut"><Icon name="check" size={14} />Téléphone vérifié</p>
         <p className="cf-fig mt-1 break-all text-base font-bold">{view.profile.phoneE164}</p>
         <p className="mt-1 text-xs leading-5 text-mut">Le changement de numéro n’est pas encore disponible.</p>
@@ -66,7 +67,7 @@ function Profile({ account, view, forLoyalty = false }: { account: Account; view
         </Tap>
       </form>
     </section>
-    {!forLoyalty && <section aria-label="Votre session" className="space-y-3 border-t border-ink/10 pt-4">
+    {!forLoyalty && <section aria-label="Votre session" className="sm-account-card space-y-3">
       <h3 className="text-sm font-bold">Votre session</h3>
       {logoutChoice === null ? <div className="grid gap-2 sm:grid-cols-2">
         <Tap className={secondary} disabled={locked} onClick={() => setLogoutChoice(false)}>Déconnecter cet appareil</Tap>
@@ -179,7 +180,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           <div aria-hidden className="mt-5 space-y-3"><div className="h-4 w-1/2 rounded bg-ink/10" /><div className="h-11 rounded-ctrl bg-ink/5" /><div className="h-4 w-3/4 rounded bg-ink/10" /></div>
         </div> : state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)
           ? <p role="status" className="text-sm leading-6 text-mut">Vous naviguez en invité. La commande reste possible sans créer de compte.</p>
-          : <section role="status" aria-live="polite" aria-atomic="true" className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
+          : <section role="status" aria-live="polite" aria-atomic="true" className="sm-account-card sm-account-intro">
           <div className="flex items-start gap-3">
             <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
             <h3 className="self-center font-display text-lg font-extrabold leading-tight tracking-tight">{title}</h3>

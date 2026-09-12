@@ -23,6 +23,8 @@ export interface SMTabBarProps<Key extends string = string> {
   scrollRef?: SMTabScrollRef;
   theme?: 'dark' | 'light';
   minimizable?: boolean;
+  reduceMotion?: boolean;
+  reduceTransparency?: boolean;
   hidden?: boolean;
   disabled?: boolean;
   onTick?: () => void;
@@ -35,10 +37,11 @@ type Gesture = { id: number; x: number; y: number; dragging: boolean };
 
 /** Chrome partagé : aucune route, aucun panier et aucun état métier interne. */
 export function SMTabBar<Key extends string>({ items, activeKey, onSelect, scrollRef, theme = 'dark', minimizable = true,
-  hidden = false, disabled = false, onTick, ariaLabel = 'Navigation principale', className, style }: SMTabBarProps<Key>) {
+  hidden = false, disabled = false, reduceMotion = false, reduceTransparency = false, onTick, ariaLabel = 'Navigation principale', className, style }: SMTabBarProps<Key>) {
   const activeIndex = Math.max(0, items.findIndex(item => item.key === activeKey));
   const badgeId = useId();
-  const reducedMotion = useSMReducedMotion();
+  const systemReducedMotion = useSMReducedMotion();
+  const reducedMotion = reduceMotion || systemReducedMotion;
   const { target, expand } = useSMMinimize(scrollRef, minimizable && !hidden, activeKey);
   const progress = useSMAnimatedValue(target, SM_TAB_BAR.collapseMs, reducedMotion);
   const [slideTarget, setSlideTarget] = useState(activeIndex);
@@ -131,6 +134,7 @@ export function SMTabBar<Key extends string>({ items, activeKey, onSelect, scrol
   if (items.length < 2 || items.length > 5) return null;
   return <nav className={[styles.root, theme === 'light' ? styles.light : '', hidden ? styles.hidden : '', className ?? ''].join(' ')}
     aria-label={ariaLabel} aria-hidden={hidden || undefined} inert={hidden}
+    data-sm-reduce-motion={reducedMotion || undefined} data-sm-reduce-transparency={reduceTransparency || undefined}
     data-sm-tabbar="" data-sm-tabbar-minimized={target === 1 ? 'true' : 'false'} data-sm-tabbar-dragging={dragging ? 'true' : 'false'}
     style={{ ...style, '--sm-p': progress, '--sm-n': items.length, '--sm-slide': slide } as Vars}>
     <div className={styles.falloff} aria-hidden="true">

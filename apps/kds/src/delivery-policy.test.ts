@@ -43,6 +43,25 @@ describe('livraison en cuisine', () => {
     expect(reconcileKitchenRows([], [order({ status: 'ready' })])).toHaveLength(1);
     expect(reconcileKitchenRows([], [order({ type: 'pickup', status: 'ready' })])).toHaveLength(1);
   });
+  it('retire du passe une table servie sans confondre service et paiement', () => {
+    const dining = { sessionId: 'session-table', tableId: 'table-08', tableLabel: 'Terrasse 08', servedAt: '2026-09-12T12:15:00Z' };
+    const served = order({ type: 'surplace', status: 'ready', dining, payment: { status: 'pending', method: 'counter' } });
+    expect(isKitchenEligible(served)).toBe(false);
+    expect(kitchenNextStatus(served)).toBeNull();
+    expect(reconcileKitchenRows([], [served])).toEqual([]);
+    expect(served.payment.status).toBe('pending');
+    expect(served.status).toBe('ready');
+    expect(isKitchenEligible({ ...served, dining: { ...dining, servedAt: null } })).toBe(true);
+    expect(isKitchenEligible({ ...served, status: 'preparing' })).toBe(true);
+    expect(isKitchenEligible({ ...served, type: 'pickup' })).toBe(true);
+    expect(isKitchenEligible({ ...served, type: 'emporter' })).toBe(true);
+  });
+  it('le repère de service serveur gagne sur un doublon prêt non servi', () => {
+    const ready = order({ type: 'surplace', status: 'ready' });
+    const served = { ...ready, dining: { sessionId: 'session-table', tableId: 'table-08', tableLabel: '08', servedAt: '2026-09-12T12:15:00Z' } };
+    expect(reconcileKitchenRows([ready], [ready, served])).toEqual([]);
+    expect(reconcileKitchenRows([ready], [served, ready])).toEqual([]);
+  });
   it('ne double pas une livraison qui avance entre deux lectures serveur', () => {
     const rows = reconcileKitchenRows([], [order(), order({ status: 'preparing' })]);
     expect(rows).toHaveLength(1);

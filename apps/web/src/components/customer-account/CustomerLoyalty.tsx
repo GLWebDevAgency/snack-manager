@@ -7,6 +7,7 @@ import { Icon } from '../ui/icons';
 import { Tap } from '../order/primitives';
 import { customerAccountRequest, type CustomerAccountAccess } from './client';
 import { createCustomerLoyaltyClient } from './loyalty';
+import './customer-account.css';
 
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:cursor-wait disabled:opacity-40';
 const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-extrabold text-onaccent disabled:cursor-not-allowed disabled:opacity-40';
@@ -27,7 +28,7 @@ function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJo
   const [accepted, setAccepted] = useState(false);
   return <div className="space-y-4">
     {changed && <p role="alert" className="rounded-card border border-prep/30 bg-prep/10 p-3 text-sm leading-6 text-prept">Les conditions ont changé. Relisez-les et confirmez à nouveau votre choix.</p>}
-    <div className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
+    <div className="sm-account-card sm-account-intro">
       <span className="inline-flex min-h-6 items-center rounded-pill bg-accentwash px-2.5 text-xs font-bold text-accentink">Carte gratuite · adhésion facultative</span>
       <h4 className="mt-4 font-display text-xl font-extrabold leading-tight tracking-tight">{program.name}</h4>
       <p className="mt-2 text-sm leading-6 text-mut">Une seule carte pour ce restaurant, utilisable au comptoir et depuis votre compte.</p>
@@ -109,7 +110,7 @@ function AttachmentOffer({ slug, program, changed, onAttach, onCancel }: {
   useEffect(() => { if (!scanning && restoreScanFocus.current) { restoreScanFocus.current = false; scan.current?.focus(); } }, [scanning]);
   const read = useCallback((value: string) => { setCode(value); setAccepted(false); setScanning(false); input.current?.focus(); }, []);
   return <div className="space-y-4">
-    <div className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
+    <div className="sm-account-card sm-account-intro">
       <p className="text-xs font-bold text-accentink">Votre carte existante</p>
       <h4 ref={heading} tabIndex={-1} className="mt-2 font-display text-xl font-extrabold tracking-tight outline-none">Rattacher ma carte</h4>
       <p className="mt-2 text-sm leading-6 text-mut">Scannez ou collez le code de votre carte pour la retrouver dans ce compte. Rien n’est envoyé avant votre confirmation.</p>
@@ -117,7 +118,7 @@ function AttachmentOffer({ slug, program, changed, onAttach, onCancel }: {
       <p className="mt-2 text-sm leading-6 text-mut">Le téléphone de cette carte doit correspondre au numéro déjà vérifié dans votre compte.</p>
     </div>
     {changed && <p role="alert" className="rounded-card border border-prep/30 bg-prep/10 p-3 text-sm leading-6 text-prept">Les conditions ont changé. Relisez-les, saisissez à nouveau votre carte et confirmez votre choix.</p>}
-    <Tap ref={scan} className={secondary + ' w-full'} onClick={() => setScanning(true)} disabled={scanning}>Scanner ma carte</Tap>
+    <Tap ref={scan} className={secondary + ' w-full'} onClick={() => setScanning(true)} disabled={scanning}><Icon name="camera" size={18} />Scanner ma carte</Tap>
     {scanning && <AttachmentScanner slug={slug} onRead={read} onClose={() => { restoreScanFocus.current = true; setScanning(false); }} />}
     <form onSubmit={event => { event.preventDefault(); if (!token || !accepted) return; setCode(''); setAccepted(false); setScanning(false); onAttach(token, true); }} className="space-y-4">
       <div><label htmlFor={codeId} className="text-sm font-bold">Code de votre carte</label>
@@ -197,15 +198,14 @@ export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, p
       key={`${response.program.id}:${response.program.version}:${response.state}`} program={response.program} name={profileName}
       profileReady={response.profileReady} changed={response.state === 'terms_changed'} onProfile={onProfile} onJoin={accepted => void client.join(accepted)} onAttach={() => setAttachment(true)} profileEditor={profileEditor} />)}
     {response && (response.state === 'member' || response.state === 'card') && <div className="space-y-4">
-      <div className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 text-center">
-        <span aria-hidden className="mx-auto grid size-11 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="gift" size={22} /></span>
-        <h4 className="mt-3 font-display text-lg font-extrabold">Votre carte est liée à ce compte</h4>
-        <p className="cf-fig mt-3 text-2xl font-extrabold tabular-nums">{response.member.balanceUnits} {response.member.balanceUnits === 1 ? response.member.unitLabelSingular : response.member.unitLabelPlural}</p>
-        <p className="mt-2 text-xs leading-5 text-mut">Solde confirmé lors de cette lecture.</p>
+      <div className="sm-account-balance">
+        <div className="sm-account-balance-heading"><h4>Votre carte est liée à ce compte</h4><Icon name="gift" size={23} /></div>
+        <p className="sm-account-balance-value cf-fig"><strong>{response.member.balanceUnits}</strong>{' '}<span>{response.member.balanceUnits === 1 ? response.member.unitLabelSingular : response.member.unitLabelPlural}</span></p>
+        <p className="sm-account-balance-note">Solde confirmé lors de cette lecture.</p>
       </div>
       {response.state === 'card' ? <><CardQr key={response.qrToken} token={response.qrToken} /><p className="text-center text-xs leading-5 text-mut">Présentez ce QR au restaurant. Il ne permet pas de se connecter à votre compte.</p>
         <Tap className={secondary + ' w-full'} onClick={client.hideCard}>Masquer ma carte</Tap></>
-        : <Tap className={primary} onClick={() => void client.card()}><Icon name="gift" size={18} />Afficher ma carte</Tap>}
+        : <Tap className={primary} onClick={() => void client.card()}><Icon name="qr" size={18} />Afficher ma carte</Tap>}
     </div>}
     {response?.state === 'name_required' && (profileEditor ?? <div className="space-y-3"><p role="status" className="text-sm leading-6 text-mut">Votre profil doit comporter un prénom ou nom pour créer une carte.</p><Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil</Tap></div>)}
     {(response?.state === 'existing_card' || response?.state === 'attachment_refused') && <div className="space-y-3"><p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">{response.state === 'existing_card' ? 'Aucune nouvelle carte n’a été créée. Si vous avez déjà une carte de ce restaurant, rattachez-la ici à votre compte pour retrouver les mêmes points. Aucun rattachement automatique n’a été effectué.' : 'Cette carte ne peut pas être rattachée à ce compte. Vérifiez votre carte ou demandez l’aide du restaurant. Aucun rattachement n’a été effectué.'}</p>

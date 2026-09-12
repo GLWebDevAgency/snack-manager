@@ -34,7 +34,8 @@ const SHEEN_STOPS = [1, 0.8, 0.6, 0.45, 0.32, 0.2, 0.12, 0.05];
  * La force du reflet suit le thème ; aucune image distante n'est nécessaire.
  */
 export function Sheen({ height = 110, radius: r = 0 }: { height?: number; radius?: number }) {
-  const { theme, palette } = useUi();
+  const { theme, palette, reducedTransparency } = useUi();
+  if (reducedTransparency) return null;
   if (Platform.OS === 'web') return <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none', borderTopLeftRadius: r, borderTopRightRadius: r, backgroundImage: `linear-gradient(180deg, ${palette.sheen}, transparent 55%)` } as ViewStyle]} />;
   return (
     <View
@@ -833,7 +834,7 @@ export function Overlay({ layout, reducedMotion, onClose, label, returnFocusId, 
   returnFocusId?: string;
   children: ReactNode;
 }) {
-  const { surface, hair, shadow, scrim } = useUi();
+  const { surface, hair, shadow, scrim, reducedTransparency } = useUi();
   const root = useRef<HTMLElement | null>(null);
   const requestClose = useWebModalLayer(root, onClose, 'first', undefined, returnFocusId);
   const progress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
@@ -853,7 +854,7 @@ export function Overlay({ layout, reducedMotion, onClose, label, returnFocusId, 
     style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? { position: 'fixed' } as unknown as ViewStyle : null,
       { zIndex: 80, alignItems: 'center', justifyContent: 'center' }]}>
     <Pressable tabIndex={-1} focusable={false} importantForAccessibility="no" accessibilityElementsHidden
-      onPress={requestClose} style={[StyleSheet.absoluteFill, { backgroundColor: scrim }]} />
+      onPress={requestClose} style={[StyleSheet.absoluteFill, { backgroundColor: reducedTransparency ? surface.bg : scrim }]} />
     <Animated.View style={{ width: layout.modalW, maxWidth: '96%', maxHeight: layout.height - layout.pad * 2,
       flexShrink: 1, opacity: progress, transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }],
       backgroundColor: surface.card, borderColor: hair, borderWidth: 1, borderRadius: radius.sheet, overflow: 'hidden', ...shadow.panel }}>

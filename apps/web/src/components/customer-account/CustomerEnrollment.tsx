@@ -89,7 +89,7 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   const supported = typeof window !== 'undefined' && window.isSecureContext && Boolean(navigator.credentials && navigator.locks)
     && typeof PublicKeyCredential !== 'undefined' && typeof indexedDB !== 'undefined';
   const locked = state.busy || suspended || state.storageError;
-  return <section aria-label="Inscription protégée" aria-busy={state.busy} className="space-y-4 rounded-panel border border-ink/10 bg-surface2 p-4 sm:p-5">
+  return <section aria-label="Inscription protégée" aria-busy={state.busy} className="sm-account-card space-y-4">
     <div><p className="mb-1 text-[11px] font-bold uppercase tracking-[.14em] text-accentink">Votre accès personnel</p>
       <h3 ref={heading} tabIndex={-1} className="font-display text-xl font-extrabold leading-tight outline-none">{title}</h3></div>
     {state.message && <p role="status" className="rounded-card border border-prep/25 bg-prep/10 p-3 text-sm leading-6 text-prept">{state.message}</p>}

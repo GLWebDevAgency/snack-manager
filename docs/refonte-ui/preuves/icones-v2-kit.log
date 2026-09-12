@@ -1,0 +1,70 @@
+
+> snack-manager-visual-system@0.1.0 verify
+> npm run test && npm run build
+
+
+> snack-manager-visual-system@0.1.0 test
+> node --test tests/*.test.mjs
+
+✔ light and dark expose identical semantic roles (1.845542ms)
+✔ light: ink/surface contrast >= 4.5 (0.26325ms)
+✔ light: muted/surface contrast >= 4.5 (0.063292ms)
+✔ light: ink/canvas contrast >= 4.5 (0.074292ms)
+✔ light: muted/canvas contrast >= 4.5 (0.08ms)
+✔ light: success/successSoft contrast >= 4.5 (0.051166ms)
+✔ light: warning/warningSoft contrast >= 4.5 (0.055667ms)
+✔ light: danger/dangerSoft contrast >= 4.5 (0.048917ms)
+✔ light: info/infoSoft contrast >= 4.5 (0.069083ms)
+✔ dark: ink/surface contrast >= 4.5 (0.117041ms)
+✔ dark: muted/surface contrast >= 4.5 (0.06875ms)
+✔ dark: ink/canvas contrast >= 4.5 (0.060167ms)
+✔ dark: muted/canvas contrast >= 4.5 (0.035792ms)
+✔ dark: success/successSoft contrast >= 4.5 (0.027375ms)
+✔ dark: warning/warningSoft contrast >= 4.5 (0.02675ms)
+✔ dark: danger/dangerSoft contrast >= 4.5 (0.028958ms)
+✔ dark: info/infoSoft contrast >= 4.5 (0.039083ms)
+✔ brand on-colors meet normal text contrast (0.093625ms)
+✔ unsupported themes and injected colors rejected (0.187917ms)
+✔ functional colors preserve existing meanings (0.059583ms)
+✔ legacy palette retains unknown keys (0.083292ms)
+✔ CSS exports deterministic kebab semantic names (0.202209ms)
+✔ motion reduced to zero with curve retained (0.102333ms)
+✔ tokens are immutable and tactile minimum 44 (0.040542ms)
+✔ uncertain state never exposes an enabled business action (0.058583ms)
+✔ pending and denied actions disabled; error is not success (0.039125ms)
+✔ all explicit presentation phases handled (0.054667ms)
+✔ existing photo always takes precedence over illustration (0.050666ms)
+✔ no inferred recipe for missing media (0.03225ms)
+✔ roving index wraps in both directions (0.053667ms)
+✔ asset IDs unique and all art deterministic (2.00675ms)
+✔ all SVG fragment references resolve (0.512625ms)
+✔ art IDs isolate repeated instances (0.056166ms)
+✔ assets and icons contain no active or remote content (0.513667ms)
+✔ art and icon allowlists reject injection (0.098209ms)
+✔ icons share viewport stroke and nonsemantic SVG role (0.178833ms)
+✔ screen manifest and JS registry identical (6.890417ms)
+✔ all seven application families represented (0.115875ms)
+✔ all screens have unique IDs and a source path (0.165875ms)
+✔ studio isolated from app APIs and real storage (0.931375ms)
+✔ KDS terminal label cannot trigger handoff action in the studio (0.410084ms)
+✔ web CSS scopes typography and honors reduced motion (0.388709ms)
+✔ six package manifests have no production dependency upgrade (1.812125ms)
+✔ mobile content preserves intrinsic card heights (0.378916ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 44
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 93.866542
+
+> snack-manager-visual-system@0.1.0 build
+> node tools/build.mjs
+
+{
+  "screens": 57,
+  "foodAssets": 41,
+  "icons": 78,
+  "out": "/Users/limameghassene/development/SnackManager-refonte-ui/design/refonte-swiftui/dist"
+}

@@ -1,0 +1,10 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui
+
+ ✓ packages/ui-native/src/Icon.test.tsx (5 tests) 4ms
+ ✓ apps/pos/src/category-icons.test.ts (18 tests) 2ms
+
+ Test Files  2 passed (2)
+      Tests  23 passed (23)
+   Start at  20:27:34
+   Duration  370ms (transform 51ms, setup 0ms, collect 72ms, tests 6ms, environment 0ms, prepare 62ms)

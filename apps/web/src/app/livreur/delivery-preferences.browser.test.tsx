@@ -57,7 +57,7 @@ it("conserve les préférences validées sans identifiants et suit le thème sys
   await page.getByRole("button", { name: "Waze", exact: true }).click(); await page.reload();
   await expect.poll(() => page.locator("#nav").getAttribute("href")).toBe("https://waze.com/ul?q=10%20rue%20%26%20test%2C%2075001%2C%20Paris%2C%20FR&navigate=yes");
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("sm.delivery.preferences.v2")!));
-  expect(stored).toEqual({ theme: "light", navigation: "waze", alerts: false, wake: false });
+  expect(stored).toEqual({ theme: "light", navigation: "waze", alerts: false, wake: false, reduceMotion: false, reduceTransparency: false });
   await page.getByRole("button", { name: "Système", exact: true }).click(); await page.emulateMedia({ colorScheme: "dark" });
   await expect.poll(() => page.locator("[data-theme]").getAttribute("data-theme")).toBe("dark");
   expect(await page.locator("#sms").getAttribute("href")).toBe("sms:+33612345678?body=Bonjour%20%26%20%C3%A0%20bient%C3%B4t"); expect(requests).toEqual([]);

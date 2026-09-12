@@ -1,0 +1,19 @@
+PASS 320-clair-invite
+PASS 320-clair-connecte
+PASS 320-clair-ferme
+PASS 320-sombre-invite
+PASS 320-sombre-connecte
+PASS 320-sombre-ferme
+PASS 390-clair-invite
+PASS 390-clair-connecte
+PASS 390-clair-ferme
+PASS 390-sombre-invite
+PASS 390-sombre-connecte
+PASS 390-sombre-ferme
+PASS 1440-clair-invite
+PASS 1440-clair-connecte
+PASS 1440-clair-ferme
+PASS 1440-sombre-invite
+PASS 1440-sombre-connecte
+PASS 1440-sombre-ferme
+18/18 scenarios passed; 144 captures

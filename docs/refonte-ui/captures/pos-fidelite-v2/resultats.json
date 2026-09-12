@@ -1,0 +1,551 @@
+{
+  "phase": "fidelite-v2",
+  "base": "http://127.0.0.1:8092",
+  "fixture": "packages/client-core/src/demo/snapshot.ts",
+  "browser": "Playwright Chromium; Browser plugin not available",
+  "results": [
+    {
+      "name": "desktop-light",
+      "viewport": {
+        "width": 1512,
+        "height": 982
+      },
+      "theme": "light",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "keyboard product focus visibly outlined",
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total",
+        "edit note preserved",
+        "settings Escape dismissal",
+        "layout preference C persisted",
+        "web viewport rotation rendered"
+      ],
+      "shots": [
+        "desktop-light-catalogue.png",
+        "desktop-light-focus-clavier.png",
+        "desktop-light-configuration.png",
+        "desktop-light-ticket.png",
+        "desktop-light-parametres.png",
+        "desktop-light-liste-dense.png",
+        "desktop-light-rotation-web.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "tablette-light",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "theme": "light",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total"
+      ],
+      "shots": [
+        "tablette-light-catalogue.png",
+        "tablette-light-configuration.png",
+        "tablette-light-ticket.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "mobile-light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total"
+      ],
+      "shots": [
+        "mobile-light-catalogue.png",
+        "mobile-light-configuration.png",
+        "mobile-light-ticket.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "desktop-dark",
+      "viewport": {
+        "width": 1512,
+        "height": 982
+      },
+      "theme": "dark",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "keyboard product focus visibly outlined",
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total",
+        "edit note preserved",
+        "settings Escape dismissal",
+        "layout preference C persisted",
+        "web viewport rotation rendered"
+      ],
+      "shots": [
+        "desktop-dark-catalogue.png",
+        "desktop-dark-focus-clavier.png",
+        "desktop-dark-configuration.png",
+        "desktop-dark-ticket.png",
+        "desktop-dark-parametres.png",
+        "desktop-dark-liste-dense.png",
+        "desktop-dark-rotation-web.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "tablette-dark",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "theme": "dark",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total"
+      ],
+      "shots": [
+        "tablette-dark-catalogue.png",
+        "tablette-dark-configuration.png",
+        "tablette-dark-ticket.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "mobile-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "layout": "B",
+      "pass": true,
+      "checks": [
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total"
+      ],
+      "shots": [
+        "mobile-dark-catalogue.png",
+        "mobile-dark-configuration.png",
+        "mobile-dark-ticket.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    },
+    {
+      "name": "desktop-rail-light",
+      "viewport": {
+        "width": 1512,
+        "height": 982
+      },
+      "theme": "light",
+      "layout": "A",
+      "pass": true,
+      "checks": [
+        "category selection",
+        "real product configuration",
+        "add configured line",
+        "ticket item and total"
+      ],
+      "shots": [
+        "desktop-rail-light-catalogue.png",
+        "desktop-rail-light-configuration.png",
+        "desktop-rail-light-ticket.png"
+      ],
+      "errors": [],
+      "consoleMessages": [],
+      "blocked": [
+        {
+          "websocket": "ws://localhost:3001/socket.io/?EIO=4&transport=websocket"
+        }
+      ],
+      "requests": [
+        [
+          "POST",
+          "fixture",
+          "/public/devices/heartbeat"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/public/tenants/le-comptoir/menu"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "fixture",
+          "/orders"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/doner-kebab.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/wrap-tenders.webp"
+        ],
+        [
+          "GET",
+          "local-photo",
+          "/photos/black-burger.webp"
+        ]
+      ]
+    }
+  ]
+}

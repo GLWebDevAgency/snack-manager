@@ -47,7 +47,11 @@ try {
   await waitEvidence('renders', 41);
   assert.deepEqual((await evidence()).errors, []);
   results.checks.push('41 actual PNG 1600x1100, accepted by planifierDepot and unchanged by reduirePourEnvoi');
-  const openProduct = async () => { await page.getByRole('button', { name: /^Médiathèque/ }).click(); await page.locator('summary').filter({ hasText: 'Illustrations Snack Manager' }).click(); };
+  const showIllustrations = async () => {
+    const details = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: 'Illustrations Snack Manager' }) });
+    if (await details.getAttribute('open') === null) await details.locator('summary').click();
+  };
+  const openProduct = async () => { await page.getByRole('button', { name: /^Médiathèque/ }).click(); await showIllustrations(); };
   const add = async (search, label, attempts) => {
     await page.getByRole('searchbox', { name: 'Rechercher une illustration' }).fill(search);
     await page.getByRole('button', { name: "Ajouter l'illustration " + label, exact: true }).click();
@@ -97,7 +101,7 @@ try {
   results.checks.push('quota refusal visible; closing during native canvas toBlob preparation prevents upload callback');
   await page.getByRole('checkbox', { name: 'Raster lent (5 secondes)' }).uncheck();
   await page.getByRole('button', { name: 'Ouvrir le choix de marque' }).click();
-  await page.locator('summary').filter({ hasText: 'Illustrations Snack Manager' }).click();
+  await showIllustrations();
   await add('pizza végét', 'Pizza végétarienne', 6);
   assert.deepEqual((await evidence()).updates.at(-1), { kind: 'brand', id: 'local-media-4' });
   await page.getByRole('button', { name: /illustration-pizza-vegetarian.png/ }).waitFor();
@@ -106,7 +110,7 @@ try {
   await close();
   await page.getByRole('checkbox', { name: 'Retirer le droit d’action' }).check();
   await page.getByRole('button', { name: 'Ouvrir le choix de marque' }).click();
-  await page.locator('summary').filter({ hasText: 'Illustrations Snack Manager' }).click();
+  await showIllustrations();
   await page.getByRole('searchbox', { name: 'Rechercher une illustration' }).fill('cola');
   await page.getByRole('button', { name: "Ajouter l'illustration Canette cola", exact: true }).click();
   await close();

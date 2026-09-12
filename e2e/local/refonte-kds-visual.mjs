@@ -17,7 +17,7 @@ await mkdir(artifacts, { recursive: true });
 const tenant = { ...snapshot.SNAPSHOT_TENANT };
 const device = { id: 'local-refonte-kds', name: 'Écran QA local', kind: 'kds', kindLabel: 'Écran cuisine' };
 function seedOrders() {
-  return snapshot.SNAPSHOT_ORDERS.map((seed, index) => {
+  const rows = snapshot.SNAPSHOT_ORDERS.map((seed, index) => {
     const lines = seed.lines.map(line => {
       const product = snapshot.SNAPSHOT_PRODUCTS.find(p => p.id === line.productId);
       const variant = (product.variants ?? []).find(v => v.key === line.variantKey);
@@ -35,10 +35,16 @@ function seedOrders() {
     const createdAt = new Date(Date.now() - seed.ageMin * 60_000).toISOString();
     const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
     return { ...seed, _id: `demo-order-${index + 1}`, clientId: `demo-client-${index + 1}`, number: index + 1,
+      payment: index === 4 ? { status: 'pending', method: 'counter' } : seed.payment,
+      dining: index === 4 ? { sessionId: 'local-dining-session-terrasse', tableId: 'local-table-08', tableLabel: 'Terrasse 08' } : null,
       createdAt, statusHistory: [{ status: seed.status, at: createdAt }], lines,
       totals: { subtotal, discount: null, total: subtotal },
       pickup: seed.customerName ? { slot: new Date().toISOString(), customerName: seed.customerName, customerPhone: seed.customerPhone ?? null } : null };
   });
+  rows.push({ ...rows[0], _id: 'demo-order-88', clientId: 'demo-client-88', number: 88,
+    payment: { status: 'pending', method: 'counter' },
+    dining: { sessionId: 'local-served-session', tableId: 'local-served-table', tableLabel: 'Déjà servie', servedAt: new Date().toISOString() } });
+  return rows;
 }
 const browser = await chromium.launch({ headless: true });
 const results = [];
@@ -92,6 +98,10 @@ async function scenario(name, viewport, theme, stale = false) {
     await page.evaluate(() => document.fonts.ready);
     assert.equal(new URL(page.url()).origin, base);
     assert.ok(await page.title());
+    await page.getByText('Table : Terrasse 08', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Table : Terrasse 08', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('#88', { exact: true }).count(), 0);
+    checks.push('table label from Order.dining is visible only on its linked ticket; already served table excluded without collecting payment');
     if (stale) {
       await page.getByText(/Serveur injoignable — le service continue hors ligne/).waitFor();
       assert.ok(await page.getByRole('button', { name: 'Accepter — commande numéro 5', exact: true }).isVisible());
@@ -131,14 +141,44 @@ async function scenario(name, viewport, theme, stale = false) {
       if (viewport.width === 1440) {
         await trigger.click();
         await page.getByRole('radio', { name: /^Dense\./ }).click();
+        const motion = settings.getByRole('switch', { name: 'Réduire les mouvements', exact: true });
+        const transparency = settings.getByRole('switch', { name: 'Réduire la transparence', exact: true });
+        await motion.click();
+        await transparency.click();
+        assert.equal(await motion.getAttribute('aria-checked'), 'true');
+        assert.equal(await transparency.getAttribute('aria-checked'), 'true');
+        const backdrop = await settings.locator(':scope > div').first().evaluate(element => getComputedStyle(element).backgroundColor);
+        assert.match(backdrop, /^rgb\(/, `reduced transparency uses an opaque backdrop: ${backdrop}`);
+        await shot('accessibilite');
         await settings.getByRole('button', { name: 'Fermer', exact: true }).last().click();
         await page.waitForFunction(() => JSON.parse(localStorage.getItem('sm.kds.prefs.v1')).density === 'dense');
+        await page.waitForFunction(() => {
+          const prefs = JSON.parse(localStorage.getItem('sm.kds.prefs.v1'));
+          return prefs.reduceMotion === true && prefs.reduceTransparency === true;
+        });
+        await page.reload();
+        await page.getByRole('button', { name: 'Accepter — commande numéro 5', exact: true }).waitFor();
+        await trigger.click();
+        assert.equal(await settings.getByRole('switch', { name: 'Réduire les mouvements', exact: true }).getAttribute('aria-checked'), 'true');
+        assert.equal(await settings.getByRole('switch', { name: 'Réduire la transparence', exact: true }).getAttribute('aria-checked'), 'true');
+        await page.keyboard.press('Escape');
+        await settings.waitFor({ state: 'hidden' });
+        checks.push('reduce motion and transparency settings persist through reload; backdrop becomes opaque');
         await shot('dense');
         await page.getByRole('button', { name: 'Accepter — commande numéro 5', exact: true }).click();
         await page.getByRole('button', { name: 'Marquer prête — commande numéro 5', exact: true }).waitFor();
         await page.getByRole('button', { name: 'Marquer prête — commande numéro 5', exact: true }).click();
         await page.getByLabel('Remise à confirmer par la caisse — commande numéro 5', { exact: true }).waitFor();
+        await page.getByText('Table : Terrasse 08', { exact: true }).waitFor();
+        assert.equal(rows.find(row => row.number === 5).dining.tableLabel, 'Terrasse 08');
         await shot('avancement-pret');
+        const served = rows.find(row => row.number === 5);
+        served.dining.servedAt = new Date().toISOString();
+        await page.getByText('Table : Terrasse 08', { exact: true }).waitFor({ state: 'hidden' });
+        assert.equal(served.status, 'ready');
+        assert.equal(served.payment.status, 'pending');
+        await shot('table-servie');
+        checks.push('server marks table served while payment stays pending: next poll removes it from pass, leaving status ready');
         checks.push('density preference persisted', 'new to preparing to ready through existing handlers');
       }
     }

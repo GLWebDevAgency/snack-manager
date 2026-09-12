@@ -369,8 +369,9 @@ function SuspendedScreen({ name }: { name: string }) {
 function Appearance({ ready, unpaired, children, splashDone, finishSplash, deviceName }: { deviceName?: string; ready: boolean; unpaired: boolean; children: ReactNode; splashDone: boolean; finishSplash: () => void }) {
   const { prefs, ready: prefsReady } = usePrefs();
   const startupKnown = prefsReady || (ready && unpaired);
-  const startupVisible = !splashDone && (!startupKnown || prefs.splash);
-  useEffect(() => { if (prefsReady && !prefs.splash) finishSplash(); }, [prefsReady, prefs.splash, finishSplash]);
+  const playSplash = prefs.splash && !prefs.reduceMotion;
+  const startupVisible = !splashDone && (!startupKnown || playSplash);
+  useEffect(() => { if (prefsReady && !playSplash) finishSplash(); }, [prefsReady, playSplash, finishSplash]);
   return <ThemeProvider theme={prefs.theme}>
     <AppearanceFrame startupVisible={startupVisible}>{children}</AppearanceFrame>
     {startupVisible ? startupKnown

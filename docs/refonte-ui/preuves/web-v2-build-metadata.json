@@ -1,0 +1,10 @@
+{
+  "branch": "refactor/ui-handoff-fidelity",
+  "head": "d90e7f8d8a9b001dc2019214b423f9f430516806",
+  "buildId": "NOW-B7HpG8-KO3pxCTIsn",
+  "api": "http://localhost:3001",
+  "base": "http://127.0.0.1:3092",
+  "note": "\u00c9tat avant adaptation PR178",
+  "sourceFreezeMatches": true,
+  "harnessSha256": "508ba8e3a97d59a52221c1607ebf9f91068491d14163f2a781867672b0493b55"
+}

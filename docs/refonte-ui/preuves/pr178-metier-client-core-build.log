@@ -1,0 +1,3 @@
+
+> @sm/client-core@0.0.1 build /Users/limameghassene/development/SnackManager-refonte-ui/packages/client-core
+> tsc --noEmit

@@ -1,0 +1,9 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/order/glyphs.test.tsx (5 tests) 18ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  20:37:45
+   Duration  974ms (transform 373ms, setup 0ms, collect 553ms, tests 18ms, environment 0ms, prepare 130ms)

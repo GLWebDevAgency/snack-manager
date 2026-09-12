@@ -103,12 +103,14 @@ export async function collectExistingOrder(
 
 /** Journal de ce poste seulement : ne pas importer une vente web comme une nouvelle vente locale. */
 export function reconcileCollectedJournal(entries: readonly DayEntry[], row: ServerOrderRow): DayEntry[] {
-  if (row.payment?.status !== 'paid') return [...entries];
+  if (!['paid', 'refunded'].includes(row.payment?.status ?? '')) return [...entries];
   const methods: Record<string, PayMethod> = { cash: 'especes', card: 'cb', meal_voucher: 'tr' };
-  const method = methods[row.payment.tender ?? ''];
+  const method = methods[row.payment?.tender ?? ''];
   if (!method) return [...entries];
-  return entries.map((entry) => entry.serverId === row._id || entry.clientId === row.clientId ? {
+  return entries.map((entry) => (entry.serverId === row._id || entry.clientId === row.clientId)
+    && !(entry.refunded && row.payment?.status !== 'refunded') ? {
     ...entry, paid: true, method,
+    ...(row.payment?.status === 'refunded' ? { refunded: true as const } : {}),
     serverId: row._id, serverNumber: row.number,
     trackingToken: row.trackingToken ?? entry.trackingToken,
     total: (row.totals?.total ?? entry.total - (entry.discount ?? 0)) + (row.totals?.discount?.amount ?? entry.discount ?? 0),

@@ -1,0 +1,38 @@
+
+> @sm/pos@1.0.0 build /Users/limameghassene/development/SnackManager-refonte-ui/apps/pos
+> node ../../scripts/verifier-build-terrain.mjs && expo export --platform web --output-dir dist --clear
+
+✓ Origines du build terrain verrouillées sur local
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:75446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+Web Bundled 4465ms apps/pos/index.ts (607 modules)
+
+› Assets (2):
+../../packages/ui-native/assets/fonts/InterVariable.7c80433dfb0d6e565327d9beeb774bac.ttf (880KB)
+assets/mark.a7704e4e44e3334a8046ed7ac4082f93.png (16KB)
+
+› web bundles (1):
+_expo/static/js/web/index-2fd628f40eefe1c55603fbf282285579.js (1.7MB)
+
+› Files (3):
+favicon.ico (15KB)
+index.html (1.2KB)
+metadata.json (49B)
+
+Exported: dist

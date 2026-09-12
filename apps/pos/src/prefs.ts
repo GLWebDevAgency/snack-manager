@@ -1,6 +1,7 @@
 /** Préférences de présentation du poste, sans dépendance à React ou à la plateforme. */
 export type PosLayoutId = 'A' | 'B' | 'C';
 export type PosTheme = 'dark' | 'light';
+export type CatalogDensity = 'comfortable' | 'compact';
 
 export const LAYOUTS: Record<PosLayoutId, { label: string; hint: string }> = {
   A: { label: 'Rail', hint: 'Catégories à gauche, ticket à droite, configuration en fenêtre. La disposition historique.' },
@@ -14,9 +15,13 @@ export interface PosPrefs {
   layout: PosLayoutId;
   theme: PosTheme;
   splash: boolean;
+  catalogDensity: CatalogDensity;
+  reduceMotion: boolean;
+  reduceTransparency: boolean;
 }
 
-export const DEFAULT_PREFS: Readonly<PosPrefs> = { layout: DEFAULT_LAYOUT, theme: 'dark', splash: true };
+export const DEFAULT_PREFS: Readonly<PosPrefs> = { layout: DEFAULT_LAYOUT, theme: 'dark', splash: true,
+  catalogDensity: 'comfortable', reduceMotion: false, reduceTransparency: false };
 
 /** Une valeur invalide ne doit invalider aucune des autres préférences connues. */
 export function parsePrefs(raw: string | null): PosPrefs {
@@ -28,6 +33,9 @@ export function parsePrefs(raw: string | null): PosPrefs {
       layout: prefs.layout === 'A' || prefs.layout === 'B' || prefs.layout === 'C' ? prefs.layout : DEFAULT_PREFS.layout,
       theme: prefs.theme === 'dark' || prefs.theme === 'light' ? prefs.theme : DEFAULT_PREFS.theme,
       splash: typeof prefs.splash === 'boolean' ? prefs.splash : DEFAULT_PREFS.splash,
+      catalogDensity: prefs.catalogDensity === 'compact' ? 'compact' : 'comfortable',
+      reduceMotion: prefs.reduceMotion === true,
+      reduceTransparency: prefs.reduceTransparency === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };

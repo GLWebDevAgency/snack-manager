@@ -112,6 +112,7 @@ export class TicketService {
       typeLabel: ORDER_TYPE_LABELS[type] ?? type,
       status,
       statusLabel: ORDER_STATUS_LABELS[status] ?? status,
+      ...(type === 'surplace' && order.dining?.tableLabel ? { dining: { tableLabel: order.dining.tableLabel } } : {}),
       pickup:
         order.pickup && pickupSlot
           ? {
@@ -184,10 +185,11 @@ export class TicketService {
     p.align('left').rule('=');
 
     // ── Numéro de retrait : l'information la plus lue du ticket ──
-    p.align('center').bold(true).line(ticket.type === 'delivery' ? 'COMMANDE À LIVRER' : 'NUMÉRO DE RETRAIT').bold(false);
+    p.align('center').bold(true).line(ticket.type === 'delivery' ? 'COMMANDE À LIVRER' : ticket.dining ? 'COMMANDE À TABLE' : 'NUMÉRO DE RETRAIT').bold(false);
     p.size(3, 3).bold(true).line(String(ticket.pickupNumber)).bold(false).size(1, 1);
     p.size(1, 2).bold(true);
     p.line(ticket.typeLabel.toUpperCase());
+    if (ticket.dining) p.wrapped(`TABLE : ${ticket.dining.tableLabel}`);
     p.size(1, 1).bold(false);
     if (ticket.pickup) {
       p.line(`${ticket.type === 'delivery' ? 'Livraison estimée' : 'Retrait'} ${ticket.pickup.slotLabel} · ${ticket.pickup.customerName}`);

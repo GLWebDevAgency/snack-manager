@@ -137,3 +137,29 @@ describe('identité des formes — Livreur réel', () => {
     await openSheet(); expect(await radius(page.locator('.lv-sheet .lv-dialog-panel'))).toBe(radii.net.wide);
   });
 });
+
+it('conserve les réglages locaux d’accessibilité et la forme du restaurant après rechargement', async () => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await openRoute();
+  await page.getByRole('button', { name: 'Mon accès et paramètres', exact: true }).click();
+  const appearance = page.getByRole('region', { name: 'Apparence', exact: true });
+  for (const choice of await appearance.getByRole('button').all()) {
+    expect(await choice.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await appearance.getByRole('switch', { name: /^Réduire les mouvements/ }).check();
+  await appearance.getByRole('switch', { name: /^Réduire la transparence/ }).check();
+  await expect.poll(() => page.locator('.lv-app').getAttribute('data-reduce-motion')).toBe('true');
+  await expect.poll(() => page.locator('[data-sm-tabbar]').getAttribute('data-sm-reduce-transparency')).toBe('true');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sm.delivery.preferences.v2')!));
+  expect(stored).toEqual({ theme: 'dark', navigation: 'google', alerts: false, wake: false, reduceMotion: true, reduceTransparency: true });
+  await page.reload(); await page.getByRole('button', { name: 'Mon accès et paramètres', exact: true }).click();
+  expect(await appearance.getByRole('switch', { name: /^Réduire les mouvements/ }).isChecked()).toBe(true);
+  expect(await appearance.getByRole('switch', { name: /^Réduire la transparence/ }).isChecked()).toBe(true);
+  expect(await page.locator('.lv-app').evaluate(element => getComputedStyle(element).getPropertyValue('--lv-scrim').trim())).toBe(await page.locator('.lv-app').evaluate(element => getComputedStyle(element).getPropertyValue('--lv-bg').trim()));
+  await page.getByRole('tab', { name: 'Tournée', exact: true }).click();
+  await page.getByRole('button', { name: /^En route/ }).click();
+  expect(await radius(page.locator('.lv-mcard').first())).toBe(radii.net.card);
+  expect(await page.locator('.lv-mcard').first().evaluate(element => getComputedStyle(element).transitionDuration)).toBe('0s');
+});

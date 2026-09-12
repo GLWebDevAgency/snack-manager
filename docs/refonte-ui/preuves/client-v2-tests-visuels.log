@@ -1,0 +1,33 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/order/ProductSheet.browser.test.tsx (8 tests) 4197ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 320px  821ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 390px  647ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > préserve les identités distinctes de même libellé et les sélections récupérées sans les fusionner  378ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > permet le choix au clavier sans désélectionner une option obligatoire ni dépasser le plafond  332ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > ne retire pas le supplément facultatif unique quand le client utilise une flèche  354ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > garde les choix restaurés visibles dans un groupe long et préserve la sélection après repli  345ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > maintient les bornes et prix par variante sans perdre retraits ni supplément dédié  503ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > classe les suppléments par catégorie native sans fusionner deux libellés identiques  406ms
+ ✓ src/app/livreur/delivery-brand-shape.browser.test.tsx (9 tests) 4377ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'dark'  463ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'light'  416ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'dark'  407ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'light'  416ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'dark'  409ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'light'  417ms
+   ✓ identité des formes — Livreur réel > répercute une marque relue dans la même session sans écrire une préférence de forme  626ms
+   ✓ identité des formes — Livreur réel > applique le repli de marque lorsque la session legacy ne porte pas encore brand  391ms
+   ✓ conserve les réglages locaux d’accessibilité et la forme du restaurant après rechargement  515ms
+ ✓ src/components/ui/SMTabBar.browser.test.tsx (12 tests) 3665ms
+   ✓ SMTabBar — navigation partagée sans état métier > se replie sur document et sur une ref, remonte au retap et respecte le rebond  313ms
+   ✓ SMTabBar — navigation partagée sans état métier > remonte la nouvelle vue sans mouvement, y compris retour navigateur (ref=false)  1124ms
+ ✓ src/app/livreur/delivery-preferences.browser.test.tsx (7 tests) 2061ms
+   ✓ conserve les préférences validées sans identifiants et suit le thème système  376ms
+   ✓ ne montre aucune mission étrangère et efface l’historique après révocation  354ms
+
+ Test Files  4 passed (4)
+      Tests  36 passed (36)
+   Start at  21:12:18
+   Duration  15.83s (transform 90ms, setup 0ms, collect 950ms, tests 14.30s, environment 0ms, prepare 136ms)

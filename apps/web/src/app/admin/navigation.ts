@@ -145,7 +145,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // tableaux, il montre LA JOURNÉE — le chiffre du jour, l'objectif, les
       // commandes en cours. Et le nom tient sous le pouce, ce qui supprime le
       // libellé court « Accueil » qui le doublait dans la barre basse.
-      { href: "/admin/dashboard", label: "Aujourd’hui", icon: "home", capacite: "bo" },
+      { href: "/admin/dashboard", label: "Aujourd’hui", icon: "grid", capacite: "bo" },
       { href: "/admin/orders", label: "Commandes", icon: "ticket", capacite: "bo" },
       { href: "/admin/livraison", label: "Livraison", icon: "truck", capacite: "delivery", roles: ["owner", "gerant", "cogerant"] },
     ],
@@ -156,12 +156,12 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // « Carte », pas « Menu & prix » : c'est déjà le mot qu'emploient la
       // barre basse, la recherche de l'écran et la modale d'import. Le nom
       // était le seul endroit à dire autre chose.
-      { href: "/admin/menu", label: "Carte", icon: "grid", capacite: "menu" },
+      { href: "/admin/menu", label: "Carte", icon: "menu", capacite: "menu" },
       // « Stocks » voisine la carte parce que le prix de vente et le coût
       // matière sont le MÊME objet économique : on ne décide pas de l'un sans
       // regarder l'autre. « Ingrédients & stocks » nommait la matière, pas la
       // question qu'on vient s'y poser.
-      { href: "/admin/ingredients", label: "Stocks", icon: "fries", capacite: "stocks" },
+      { href: "/admin/ingredients", label: "Stocks", icon: "box", capacite: "stocks" },
     ],
   },
   {
@@ -178,7 +178,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
   {
     titre: "Équipe",
     items: [
-      { href: "/admin/team", label: "Équipe", icon: "user" },
+      { href: "/admin/team", label: "Équipe", icon: "users" },
       // Le planning répond à l'équipe : là on badge ce qui s'est passé, ici on
       // décide ce qui va se passer. L'écart entre prévu et pointé est
       // justement ce que le planning affiche.
@@ -189,7 +189,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // (`payroll-access.ts`), et la semaine publiée est faite pour être lue
       // par les salariés. Masquer l'entrée retirerait à un équipier la seule
       // page qui lui dit quand il travaille.
-      { href: "/admin/planning", label: "Planning", icon: "check", capacite: "planning" },
+      { href: "/admin/planning", label: "Planning", icon: "calendar", capacite: "planning" },
     ],
   },
   {
@@ -221,7 +221,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // « Site web » : la page était complète — adresse, nom de domaine, état
       // de propagation DNS — et le restaurateur qui achetait un domaine ne
       // pouvait l'atteindre qu'en connaissant l'URL par cœur.
-      { href: "/admin/site", label: "Site web", icon: "cart" },
+      { href: "/admin/site", label: "Site web", icon: "globe" },
       // « Écrans de salle », pas « Écrans TV » : ce qu'on y règle est le
       // CONTENU diffusé au-dessus du comptoir. Son voisin « Appareils » porte
       // l'APPAIRAGE des caisses et des imprimantes. Les deux écrans restent

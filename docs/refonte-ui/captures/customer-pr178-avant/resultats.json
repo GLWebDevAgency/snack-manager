@@ -1,0 +1,490 @@
+[
+  {
+    "name": "320-clair-connecte",
+    "status": "passed",
+    "checks": [
+      "five real destinations; complete labels and >=44px touch targets at current width",
+      "configured cart preserved through all tabs and browser Back; checkout opens with original item",
+      "direct account/orders/loyalty URLs load actual Next public shells",
+      "private card read on explicit action and removed with balance when leaving loyalty",
+      "profile draft and existing logout confirmation/cancel remain usable; no mutation submitted",
+      "legacy QR card restore remains independent across account navigation; no automatic attachment"
+    ],
+    "shots": [
+      "320-clair-connecte-carte.png",
+      "320-clair-connecte-rechercher.png",
+      "320-clair-connecte-commandes.png",
+      "320-clair-connecte-fidelite.png",
+      "320-clair-connecte-compte.png",
+      "320-clair-connecte-panier.png",
+      "320-clair-connecte-qr-prive.png",
+      "320-clair-connecte-carte-historique.png"
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/commandes/recherche"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/commandes/recherche"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "card"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-clair/compte/fidelite",
+        "step": "view"
+      }
+    ],
+    "blocked": [],
+    "errors": []
+  },
+  {
+    "name": "320-clair-ferme",
+    "status": "passed",
+    "checks": [
+      "five real destinations; complete labels and >=44px touch targets at current width",
+      "configured cart preserved through all tabs and browser Back; checkout opens with original item",
+      "direct account/orders/loyalty URLs load actual Next public shells",
+      "legacy QR card restore remains independent across account navigation; no automatic attachment"
+    ],
+    "shots": [
+      "320-clair-ferme-carte.png",
+      "320-clair-ferme-rechercher.png",
+      "320-clair-ferme-commandes.png",
+      "320-clair-ferme-fidelite.png",
+      "320-clair-ferme-compte.png",
+      "320-clair-ferme-panier.png",
+      "320-clair-ferme-carte-historique.png"
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-clair/fidelite/card-session"
+      }
+    ],
+    "blocked": [],
+    "errors": []
+  },
+  {
+    "name": "320-sombre-connecte",
+    "status": "passed",
+    "checks": [
+      "five real destinations; complete labels and >=44px touch targets at current width",
+      "configured cart preserved through all tabs and browser Back; checkout opens with original item",
+      "direct account/orders/loyalty URLs load actual Next public shells",
+      "private card read on explicit action and removed with balance when leaving loyalty",
+      "profile draft and existing logout confirmation/cancel remain usable; no mutation submitted",
+      "legacy QR card restore remains independent across account navigation; no automatic attachment"
+    ],
+    "shots": [
+      "320-sombre-connecte-carte.png",
+      "320-sombre-connecte-rechercher.png",
+      "320-sombre-connecte-commandes.png",
+      "320-sombre-connecte-fidelite.png",
+      "320-sombre-connecte-compte.png",
+      "320-sombre-connecte-panier.png",
+      "320-sombre-connecte-qr-prive.png",
+      "320-sombre-connecte-carte-historique.png"
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/commandes/recherche"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/commandes/recherche"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "card"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "POST",
+        "path": "/r/recette-ui-sombre/compte/fidelite",
+        "step": "view"
+      }
+    ],
+    "blocked": [],
+    "errors": []
+  },
+  {
+    "name": "320-sombre-ferme",
+    "status": "passed",
+    "checks": [
+      "five real destinations; complete labels and >=44px touch targets at current width",
+      "configured cart preserved through all tabs and browser Back; checkout opens with original item",
+      "direct account/orders/loyalty URLs load actual Next public shells",
+      "legacy QR card restore remains independent across account navigation; no automatic attachment"
+    ],
+    "shots": [
+      "320-sombre-ferme-carte.png",
+      "320-sombre-ferme-rechercher.png",
+      "320-sombre-ferme-commandes.png",
+      "320-sombre-ferme-fidelite.png",
+      "320-sombre-ferme-compte.png",
+      "320-sombre-ferme-panier.png",
+      "320-sombre-ferme-carte-historique.png"
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/compte/capacites"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      },
+      {
+        "method": "GET",
+        "path": "/r/recette-ui-sombre/fidelite/card-session"
+      }
+    ],
+    "blocked": [],
+    "errors": []
+  }
+]

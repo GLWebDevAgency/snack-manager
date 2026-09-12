@@ -127,3 +127,29 @@ paths = [
   # se signaler lui-même.
   '''(^|/)\.gitleaksignore$''',
 ]
+
+# PR 179 : empreintes de sources recalculées au commit de chaque preuve.
+# Liste fermée de valeurs, limitée à ces trois manifests ET à la règle
+# générique : les autres chemins, valeurs et règles restent contrôlés.
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "SHA-256 de sources vérifiées dans les preuves de refonte UI"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''^docs/refonte\-ui/preuves/pr178\-terrain\-source\-freeze\.json$''',
+  '''^docs/refonte\-ui/preuves/pr178\-web\-source\-freeze\.json$''',
+  '''^docs/refonte\-ui/preuves/web\-v2\-source\-freeze\.json$''',
+]
+regexes = [
+  '''^083332d2464b8b9aa635759a97c3f256fbe8d35ccdc142e6e1fd70251cb6a643$''',
+  '''^1f5fc245beca4706baac0f50ce31087617d9ab70bbb26b507a511e50cd2a5787$''',
+  '''^267c0d050828d74cff8badd461b5c6f862f4600f3db098b5f3e5feaa36042848$''',
+  '''^2dd25f6f4dbf1bccc5ae5e28924a055ef18c353ac8853743fc340f9fc5cf1f56$''',
+  '''^46dfc8449415ab2c42b6c0ed1560e1eadc57905c5e8661c8e52f63fa32d3ee16$''',
+  '''^4f484f8f7856b982e8005ec4f354500ebd3bbeb973a262ae7d93f619b325d0d4$''',
+  '''^61818c711626a6dd133a19c87a208a923e4a165b17cf034b2834127426ecc40d$''',
+  '''^85bba84b1d59df63c0d21fbb780fa85a3b17c35c6743c8b9ef7719f44b2bdb1b$''',
+  '''^b013b4b93f88dbcc7c00c1e510d36e0e53abf047d1afccd4f14d79a9d8955492$''',
+  '''^d65cd936af136a7e6e258792c2541d3329da9d8aa414f78dc36524ec43615c4e$''',
+]

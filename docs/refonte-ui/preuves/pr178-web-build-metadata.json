@@ -1,0 +1,10 @@
+{
+  "head": "4431fcd3c250de79d750a9f8e68a44b558bf8635",
+  "buildId": "bPzLIBZiO8taFULNJdNVv",
+  "api": "http://localhost:3001",
+  "builtFrom": "2026-09-12T20:01:33.057Z",
+  "checkedAt": "2026-09-12T20:03:27.841Z",
+  "unchangedFrozenSources": 49,
+  "fixture": "Repository demo Le Comptoir, localhost read-only HTTP and synthetic protected responses",
+  "harnessSha256": "d888002a82b3fedf164b4968210f727f36c8e27aad971dc0049996b158962fef"
+}

@@ -1,0 +1,48 @@
+{
+  "at": "2026-09-12T16:56:19.121Z",
+  "result": [
+    {
+      "service": "web",
+      "url": "https://web-staging-6f5f.up.railway.app",
+      "status": 200,
+      "title": "Snack Manager — Plus de commandes, moins de galère, zéro commission",
+      "sha256": "a4ba391c5c5f292aaedb7ff2a1f1765e4c15ad32ae3d1f5592c46e48a4a0f493",
+      "assets": [
+        "/_next/static/chunks/1edf0rcjw2u6v.css",
+        "/_next/static/chunks/0mq0wbeirnata.css",
+        "/_next/static/chunks/3r0ppge-13kr5.css",
+        "/_next/static/chunks/1wu0q9fn_k7mj.js",
+        "/_next/static/chunks/2i51e627rllld.js",
+        "/_next/static/chunks/2tm56lt1u9cfk.js",
+        "/_next/static/chunks/10n-p5z-lx4sq.js",
+        "/_next/static/chunks/turbopack-0xy-7x3hfl0f5.js",
+        "/_next/static/chunks/38v7tzbmp0zjo.js",
+        "/_next/static/chunks/19si-9a-hw-f5.js",
+        "/_next/static/chunks/3_a_01z8t653m.js",
+        "/_next/static/chunks/1lzk4k02_me45.js",
+        "/_next/static/chunks/0cz1d0mv5g_q7.js",
+        "/_next/static/chunks/1wu0q9fn_k7mj.js"
+      ]
+    },
+    {
+      "service": "pos",
+      "url": "https://pos-staging-7f92.up.railway.app",
+      "status": 200,
+      "title": "Snack Manager — Caisse",
+      "sha256": "f78bb29bc36e309acfb949be91600b51523370792b07c49d27215543f8980905",
+      "assets": [
+        "/_expo/static/js/web/index-a0039196af9bed9ae3f3d4ab1165220b.js"
+      ]
+    },
+    {
+      "service": "kds",
+      "url": "https://kds-staging-90da.up.railway.app",
+      "status": 200,
+      "title": "Snack Manager — Cuisine",
+      "sha256": "857c551d7affd57bb32c7110b55484c1963edb466351d6e9b196a629d7c723ec",
+      "assets": [
+        "/_expo/static/js/web/index-93bea6989c106b81abb5ee3776cc2460.js"
+      ]
+    }
+  ]
+}

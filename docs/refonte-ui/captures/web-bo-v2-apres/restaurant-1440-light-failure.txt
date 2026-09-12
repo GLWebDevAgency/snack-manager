@@ -1,0 +1,156 @@
+←
+Retour au site
+SM
+Snack Manager
+Démonstration — données fictives, rien n’est enregistré
+L
+Le Comptoir
+SERVICE
+Aujourd’hui
+Commandes
+Livraison
+CARTE
+Carte
+Stocks
+CLIENTS
+Fidélité
+Promotions
+Avis
+ÉQUIPE
+Équipe
+Planning
+ANALYSE
+Statistiques
+PRÉSENCE
+Site web
+Écrans de salle
+Encaissement en ligne
+RÉGLAGES
+Établissement
+Horaires et créneaux
+Appareils
+Abonnement
+C
+Camille Fournier
+14 rue des Halles — 76000 Rouen
+Snack Manager
+Aujourd’hui
+
+Samedi 12 septembre 2026 · service du soir
+
+Ouvert
+Aujourd'hui
+7 jours
+30 jours
+CA
+1 256 €
+▲
+En hausse :
+ +36,8 % vs hier
+COMMANDES
+64
+▲
+En hausse :
+ +36,8 %
+PANIER MOYEN
+19,63 €
+▲
+En hausse :
+ +0 %
+TEMPS DE PRÉPA
+15,7 min
+Objectif du jour
+1 256,48 €
+/ 900,00 €
+
+Objectif atteint — bravo à l'équipe.
+
+Prévisions du service
+PRÉDICTIF
+Rush attendu 19h00 – 21h00 — samedi type : ≈ 61 commandes sur le créneau (moyenne 30 j)
+Volume attendu aujourd’hui : ≈ 110 commandes (moyenne des samedis sur 30 j)
+2 en cuisine + 1 comptoir recommandés sur le créneau 19h00 – 21h00
+À faire maintenant
+5
+Commandes en ligne à accepter
+8
+Avis clients sans réponse
+Commandes en direct
+Tout voir
+26
+Sarah · 2 articles
+#o26 · En ligne · il y a 2 min
+NOUVELLE
+15,50 €
+25
+Caisse · 1 article
+#o25 · Caisse · il y a 4 min
+NOUVELLE
+9,00 €
+24
+Caisse · 1 article
+#o24 · Caisse · il y a 7 min
+NOUVELLE
+8,50 €
+23
+Caisse · 3 articles
+#o23 · Caisse · il y a 9 min
+EN PRÉPA
+20,50 €
+Commandes du jour · par heure
+
+Total · 64 commandes
+
+4
+11h
+9
+12h
+6
+13h
+14h
+15h
+16h
+17h
+6
+18h
+19
+19h
+20
+20h
+21h
+22h
+Commandes du jour · par heure — Total · 64 commandes
+Libellé	Valeur
+11h	4
+12h	9
+13h	6
+14h
+15h
+16h
+17h
+18h	6
+19h	19
+20h	20
+21h
+22h
+Top ventes de la semaine
+1
+Compose ton Tacos
+109 vendus
+1 255 €
+2
+Freez
+33 vendus
+99 €
+3
+Canette 33 cl
+32 vendus
+48 €
+4
+Bouteille 50 cl
+29 vendus
+73 €
+5
+Bouteille 1,5 L
+26 vendus
+91 €

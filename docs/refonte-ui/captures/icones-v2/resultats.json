@@ -1,0 +1,17 @@
+{
+  "base": "http://127.0.0.1:57449",
+  "results": [
+    {
+      "theme": "clair",
+      "count": 92,
+      "pass": true
+    },
+    {
+      "theme": "sombre",
+      "count": 92,
+      "pass": true
+    }
+  ],
+  "faults": [],
+  "nativeLimit": "react-native-svg rendered through react-native-web; no iOS/Android device screenshot"
+}

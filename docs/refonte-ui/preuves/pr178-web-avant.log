@@ -1,0 +1,5 @@
+PASS 320-clair-connecte
+PASS 320-clair-ferme
+PASS 320-sombre-connecte
+PASS 320-sombre-ferme
+4/4 scenarios passed; 30 captures

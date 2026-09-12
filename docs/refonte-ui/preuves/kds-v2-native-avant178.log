@@ -1,0 +1,34 @@
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:54731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+iOS Bundled 9130ms apps/kds/index.ts (929 modules)
+Android Bundled 12144ms apps/kds/index.ts (927 modules)
+
+› Assets (1):
+../../packages/ui-native/assets/fonts/InterVariable.ttf (880KB)
+
+› ios bundles (1):
+_expo/static/js/ios/index-d5ef9ea2743c195946623cf1010528ed.hbc (2.8MB)
+
+› android bundles (1):
+_expo/static/js/android/index-53ef537379565158b9a43b56c10077c3.hbc (2.8MB)
+
+› Files (1):
+metadata.json (368B)
+
+Exported: /tmp/snackmanager-refonte-v2-kds-native
