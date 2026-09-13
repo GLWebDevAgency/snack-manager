@@ -179,7 +179,6 @@ export default function SettingsPage() {
 <Panel
         title="L'identité de l'enseigne"
         sub="Le nom s'applique partout : caisse, cuisine, tickets, page de commande."
-        className="max-w-[720px]"
         bodyClassName="flex flex-col gap-4"
       >
         {me === null ? (
@@ -227,7 +226,7 @@ export default function SettingsPage() {
           </>
         )}
       </Panel>
-<Panel title="Ce qui ne s'édite pas ici" className="max-w-[720px]" bodyClassName="flex flex-col gap-2">
+<Panel title="Ce qui ne s'édite pas ici" bodyClassName="flex flex-col gap-2">
         <p className="text-[13px] leading-relaxed text-mut">
           <b className="text-ink">L&apos;adresse publique</b> ({me ? `${me.slug}.snackmanager.app` : "votre-slug.snackmanager.app"})
           ne se change pas seul : elle casse la fiche Google et les QR imprimés. Un appel, et on
@@ -271,7 +270,6 @@ export default function SettingsPage() {
 <Panel
         title="Votre compte"
         sub="Le nom de la personne connectée — celui qui s'affiche sous votre pastille, en bas de la barre. Ce n'est pas le nom de l'enseigne."
-        className="max-w-[720px]"
         bodyClassName="flex flex-col gap-4"
       >
         {identite === null ? (
@@ -340,7 +338,6 @@ export default function SettingsPage() {
       <Panel
         title="Journal des gestes sensibles"
         sub="Prix, ruptures, stocks, horaires et identité — le registre de votre établissement, inaltérable"
-        className="max-w-[1040px]"
         bodyClassName="flex flex-col gap-1.5"
       >
         {journal === null ? (

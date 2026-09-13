@@ -144,7 +144,7 @@ function SalleConnectee({ identite, tenantId }: { identite: AuthMe; tenantId: st
   const occupied = room?.sessions.filter(session => session.state === "open") ?? [];
   const activeCount = room?.tables.filter(table => table.active).length ?? 0;
   const editingSession = editor && editor !== "new" ? occupied.find(session => session.tableId === editor.id) : undefined;
-  return <section id="salle" aria-label="Configuration de la salle" className="max-w-[1040px] scroll-mt-6">
+  return <section id="salle" aria-label="Configuration de la salle" className="min-w-0 scroll-mt-6">
     <Panel title={<span className="inline-flex items-center gap-2"><Icon name="table" size={21} /> Salle</span>}
       sub="Nommez vos tables, indiquez leurs couverts et retrouvez leur occupation."
       actions={<Btn variant="ghost" size="sm" disabled={loading || busy} onClick={() => { setLoading(true); void load(); }}>Actualiser</Btn>}

@@ -192,7 +192,7 @@ function SiteAddressesPanel() {
 
   // ─── Chargement / erreur ───
 
-  if (!online) return <div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel /></div>;
+  if (!online) return <div className="min-w-0 p-4 md:p-[26px]"><WebsitePanel /></div>;
 
   if (loadState === "loading")
     return (
@@ -478,7 +478,7 @@ export default function SitePage() {
   const scope = useAdminScopeToken();
   const permissions = useSitePermissions();
   const online = permissions.online;
-  if (!online) return <SiteEditScopeContext.Provider value={scope}><div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel key={scope} /></div></SiteEditScopeContext.Provider>;
+  if (!online) return <SiteEditScopeContext.Provider value={scope}><div className="min-w-0 p-4 md:p-[26px]"><WebsitePanel key={scope} /></div></SiteEditScopeContext.Provider>;
   return <SiteEditScopeContext.Provider value={scope}><div className="min-w-0 p-4 md:p-[26px]">
     <AdminSections label="Rubriques du site web" defaultSection="commande" sections={[
       { id: "commande", label: "Commande en ligne", icon: "bag", content: <MarqueDuSite /> },

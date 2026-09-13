@@ -1,0 +1,31 @@
+{
+  "branch": "fix/admin-panels-full-width",
+  "base": "8c7721ef05cec6057cd16fb4d8a67a19009c0b06",
+  "buildId": "2ugXm_7GX89t7a7B1qhfR",
+  "files": [
+    {
+      "path": "apps/web/src/app/admin/encaissement/page.tsx",
+      "sha256": "c09ead7275b9def944a7cb1781e89e50b48ba322eb353ae2ac4d713875b54fec"
+    },
+    {
+      "path": "apps/web/src/app/admin/livraison/page.tsx",
+      "sha256": "dd2834590869ca0a04095b2fe985624314c574de54d9620eb2080596c9b5c563"
+    },
+    {
+      "path": "apps/web/src/app/admin/settings/EditeurDeMarque.tsx",
+      "sha256": "fa74465cd11aacbdb2a45171856136f6f86486aa875e9327b84481d2f49fadd9"
+    },
+    {
+      "path": "apps/web/src/app/admin/settings/Salle.tsx",
+      "sha256": "383899a1802c4d894353219956463a419ffaeb01b93c68efa31619ab69a3fcf5"
+    },
+    {
+      "path": "apps/web/src/app/admin/settings/page.tsx",
+      "sha256": "723261695c9ab100fb43fa19e4c3e9673224701531eb095356ea43390a1dc92c"
+    },
+    {
+      "path": "apps/web/src/app/admin/site/page.tsx",
+      "sha256": "981e1e36d260fdab3ab82a30e432cb36d03b7e1ac09d0a274a41bdbf3313e2a1"
+    }
+  ]
+}
