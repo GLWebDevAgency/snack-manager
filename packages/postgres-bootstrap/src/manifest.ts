@@ -24,6 +24,7 @@ export const CUSTOMER_PROTECTED_ACCESS_MIGRATION = 1_788_922_800_000;
 export const CUSTOMER_LOYALTY_MEMBERSHIPS_MIGRATION = 1_788_930_000_000;
 export const CUSTOMER_PRODUCTION_FUNDING_MIGRATION = 1_788_937_200_000;
 export const CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION = 1_788_944_400_000;
+export const CUSTOMER_PROVIDER_FRESHNESS_MIGRATION = 1_788_951_600_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -64,6 +65,7 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
     introduced('table','customer',name,'customer',CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION)),
   ...['preserve_production_admission_policy','guard_production_cutover','guard_production_admission'].map(name =>
     introduced('function','customer',name,'customer',CUSTOMER_PRODUCTION_ADMISSIONS_MIGRATION)),
+  introduced('function', 'customer', 'guard_provider_freshness', 'customer', CUSTOMER_PROVIDER_FRESHNESS_MIGRATION),
 
   managed('schema', 'drizzle', 'drizzle'),
   introduced(
