@@ -16,6 +16,9 @@ import { seedCustomerBrowserFixture } from '../customer-account/browser-journal.
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
 let faults: string[], calls: { path: string; method: string; body: unknown }[];
 let authenticated: boolean, savedCard: boolean, expiry: number;
+let cardNetworkFailure: boolean, publishedReward: boolean;
+let cardFailures: string[];
+let capabilities: { available: boolean; registrationAvailable?: boolean; accessAvailable?: boolean };
 let restoreGate: Promise<void> | null, releaseRestore: (() => void) | null;
 let deleteGate: Promise<void> | null, releaseDelete: (() => void) | null;
 let reorderGate: Promise<void> | null, releaseReorder: (() => void) | null;
@@ -25,6 +28,7 @@ const catalog = {
   program: { name: 'Les habitués du Comptoir', mechanism: 'points', unitLabelSingular: 'point', unitLabelPlural: 'points', termsSummary: 'Récompenses à demander au comptoir.' },
   rewards: [],
 };
+const reward = { id: '60000000-0000-4000-8000-000000000006', name: 'Boisson au choix', description: 'Une boisson du restaurant', costUnits: 20, kind: 'custom', valueCents: null, productRef: null, affordable: false };
 const pastOrder = { _id: 'a'.repeat(24), number: 42, createdAt: '2026-09-09T12:00:00.000Z', status: 'delivered', type: 'pickup', pickupSlot: null, totalCents: 150, payment: { method: 'counter', status: 'paid', refundedCents: 0, pendingRefundCents: 0 } };
 const member = { id: '50000000-0000-4000-8000-000000000005', joinedAt: '2026-09-01T12:00:00.000Z', qrGeneration: 1,
   balanceUnits: 25, unitLabelSingular: 'point', unitLabelPlural: 'points' };
@@ -35,7 +39,7 @@ beforeAll(async () => {
   const bundle = await build({
     stdin: { sourcefile: 'loyalty-account-entry.tsx', resolveDir: directory, loader: 'tsx', contents: `
       import React from 'react';import{createRoot}from'react-dom/client';import{LoyaltyCardApp}from'./LoyaltyCardApp';import{Storefront}from'../order/Storefront';import{orderingApi}from'../order/api';import{demoSite}from'../order/demo/fixture';import{resumeFidelite}from'../order/fidelite';import{DemoStorefront}from'../order/demo/DemoStorefront';
-      const catalog=${JSON.stringify(catalog)};const params=new URLSearchParams(location.search);if(params.has('demo'))catalog.restaurant.slug='demo';
+      const catalog=${JSON.stringify(catalog)};const params=new URLSearchParams(location.search);if(params.has('demo'))catalog.restaurant.slug='demo';if(params.has('shape'))catalog.restaurant.brand.shape=params.get('shape');
       async function start(){let node=<LoyaltyCardApp catalog={catalog} orderingAvailable={false}/>;
       if(params.has('order')){const raw=demoSite(new Date(),()=>0);raw.tenant.slug=params.has('demo')?'demo':'recette';raw.tenant.brand=catalog.restaurant.brand;
       raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
@@ -75,7 +79,7 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(async () => {
-  faults = []; calls = []; authenticated = false; savedCard = false; expiry = Date.now() + 600_000;
+  faults = []; calls = []; authenticated = false; savedCard = false; expiry = Date.now() + 600_000; capabilities = { available: false }; cardNetworkFailure = false; publishedReward = false; cardFailures = [];
   restoreGate = null; releaseRestore = null;
   deleteGate = null; releaseDelete = null; reorderGate = null; releaseReorder = null;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
@@ -99,10 +103,11 @@ beforeEach(async () => {
       savedCard = false; return route.fulfill({ status: 204 });
     }
     if (path.endsWith('/fidelite/card-session') && method === 'GET') {
+      if (cardNetworkFailure) return route.abort('internetdisconnected');
       if (restoreGate) await restoreGate;
-      return savedCard ? route.fulfill({ json: { ...catalog, restaurant: {slug:'recette',name:'Le Comptoir',brand,brandColor:'#c9a15a'}, member: { alias: 'Camille carte existante', balanceUnits: 12 }, activity: [] } }) : route.fulfill({ status: 204 });
+      return savedCard ? route.fulfill({ json: { ...catalog, restaurant: {slug:'recette',name:'Le Comptoir',brand,brandColor:'#c9a15a'}, member: { alias: 'Camille carte existante', balanceUnits: 12 }, rewards: publishedReward ? [reward] : [], activity: [] } }) : route.fulfill({ status: 204 });
     }
-    if (path.endsWith('/compte/capacites') && method === 'GET') return route.fulfill({ json: { available: false } });
+    if (path.endsWith('/compte/capacites') && method === 'GET') return route.fulfill({ json: capabilities });
     if (path.endsWith('/compte/session') && method === 'GET' && authenticated) return route.fulfill({ json: {
       expiresAt: expiry, profile: { name: 'Camille Compte', phoneE164: '+33600000000', phoneVerifiedAt: 1_700_000_000_000, revision: 0 },
     } });
@@ -117,10 +122,12 @@ beforeEach(async () => {
     return route.fulfill({json:raw});
   });
   page = await context.newPage(); page.setDefaultTimeout(3_000);
+  page.on('requestfailed', request => { if (new URL(request.url()).pathname.endsWith('/fidelite/card-session')) cardFailures.push(request.failure()?.errorText ?? ''); });
   page.on('pageerror', error => faults.push(error.message));
   page.on('console', message => {
     if (!['warning', 'error'].includes(message.type())) return;
     if (/Service Worker registration blocked by Playwright/.test(message.text())) return;
+    if (cardNetworkFailure && message.location().url.endsWith('/fidelite/card-session') && /net::ERR_INTERNET_DISCONNECTED/.test(message.text())) return;
     faults.push(`Unexpected browser ${message.type()}: ${message.text()}`);
   });
 });
@@ -129,19 +136,19 @@ afterAll(async () => { await browser?.close(); if (server) await new Promise<voi
 
 const accountCalls = () => calls.filter(call => call.path.includes('/compte/'));
 const loyaltyCalls = () => accountCalls().filter(call => call.path.endsWith('/fidelite'));
-const legacy = () => page.locator('summary').filter({ hasText: 'Carte remise par le restaurant' });
+const qrAccess = () => page.locator('summary').filter({ hasText: 'Afficher une carte avec son QR' });
 const tab = (name: string) => page.getByRole('tab', { name, exact: true });
 async function authenticate() {
   authenticated = true; await seedCustomerBrowserFixture(page, 'recette'); await page.reload(); await tab('Carte').waitFor();
 }
 
 describe('application client — navigation commune et cartes existantes', () => {
-  it('vitrine absente : deux destinations réelles, compte en page et ancien QR conservé', async () => {
+  it('vitrine absente : deux destinations réelles, compte en page et carte QR conservée', async () => {
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Ma fidélité', exact: true }).waitFor();
     expect(await page.getByRole('tab').allTextContents()).toEqual(['Fidélité', 'Compte']);
     expect(await page.getByRole('dialog').count()).toBe(0);
-    await legacy().click(); await page.getByRole('button', { name: 'Scanner mon QR', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Scanner mon QR', exact: true }).waitFor();
     expect(await page.getByRole('link', { name: 'Voir le menu du restaurant' }).count()).toBe(0);
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
@@ -153,12 +160,92 @@ describe('application client — navigation commune et cartes existantes', () =>
     expect(calls.some(call => call.method !== 'GET')).toBe(false);
   });
 
+  it.each([320, 390, 1440])('donne priorité à la carte à %ipx lorsque le compte est fermé, sans action de relance', async width => {
+    await page.setViewportSize({ width, height: 1000 }); await page.goto(origin + '/?order=1');
+    await tab('Fidélité').click();
+    const scanner = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scanner.waitFor();
+    const notice = page.getByText('La connexion au compte est indisponible pour le moment.', { exact: true });
+    await notice.waitFor();
+    expect(await qrAccess().isVisible()).toBe(false);
+    expect(await page.getByRole('button', { name: /Actualiser mon compte|Réessayer|Commencer mon inscription/ }).count()).toBe(0);
+    expect(await page.locator('main').textContent()).not.toMatch(/ancienne carte|naviguez en invité|création.*fermée/i);
+    expect((await scanner.boundingBox())!.y).toBeLessThan((await notice.boundingBox())!.y);
+    expect((await scanner.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(accountCalls().every(call => call.method === 'GET')).toBe(true);
+    if (process.env.SM_QA_CUSTOMER_NAV_DIR) { await mkdir(process.env.SM_QA_CUSTOMER_NAV_DIR, { recursive: true }); await page.screenshot({ path: join(process.env.SM_QA_CUSTOMER_NAV_DIR, `${width}-fidélité-carte.png`) }); }
+  });
+
+  it.each([['net', 320], ['doux', 390], ['rond', 1440]] as const)('conserve le masque %s sur la carte courante et la connexion complémentaire à %ipx', async (shape, width) => {
+    savedCard = true; await page.setViewportSize({ width, height: 1000 }); await page.goto(origin + '/?shape=' + shape);
+    const present = page.getByRole('button', { name: 'Présenter ma carte', exact: true }); await present.waitFor();
+    const notice = page.getByRole('heading', { name: 'Votre carte sur vos appareils', exact: true }); await notice.waitFor();
+    expect((await present.boundingBox())!.y).toBeLessThan((await notice.boundingBox())!.y);
+    const radii = await page.evaluate(() => {
+      const card = document.querySelector('.sm-account-card-access section')!;
+      const account = document.querySelector('.sm-account-intro')!;
+      return { card: getComputedStyle(card).borderTopLeftRadius, account: getComputedStyle(account).borderTopLeftRadius, expected: getComputedStyle(account).getPropertyValue('--cf-r-lg').trim() };
+    });
+    expect(radii.card).toBe(radii.expected); expect(radii.account).toBe(radii.expected);
+    expect(await page.getByRole('progressbar').count()).toBe(0);
+    expect(await page.getByRole('heading', { name: 'Vos récompenses', exact: true }).count()).toBe(0);
+    expect(await page.getByText('Votre solde atteint tous les paliers publiés.', { exact: true }).count()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(loyaltyCalls()).toEqual([]);
+    if (process.env.SM_QA_CUSTOMER_NAV_DIR) { await mkdir(process.env.SM_QA_CUSTOMER_NAV_DIR, { recursive: true }); await page.screenshot({ path: join(process.env.SM_QA_CUSTOMER_NAV_DIR, `${width}-fidélité-solde-${shape}.png`) }); }
+  });
+
+  it('affiche le vrai seuil publié et conserve Présenter ma carte avant Commander', async () => {
+    savedCard = true; publishedReward = true; await page.goto(origin + '/?order=1'); await tab('Fidélité').click();
+    const present = page.getByRole('button', { name: 'Présenter ma carte', exact: true }); await present.waitFor();
+    const order = page.getByRole('link', { name: 'Commander chez Le Comptoir', exact: true }); await order.waitFor();
+    const progress = page.getByRole('progressbar', { name: 'Progression vers « Boisson au choix »', exact: true });
+    expect(await progress.getAttribute('aria-valuenow')).toBe('12'); expect(await progress.getAttribute('aria-valuemax')).toBe('20');
+    expect(await page.getByRole('heading', { name: 'Vos récompenses', exact: true }).count()).toBe(1);
+    expect((await present.boundingBox())!.y).toBeLessThan((await order.boundingBox())!.y);
+    expect(await present.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await order.evaluate(node => getComputedStyle(node).backgroundColor));
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+  });
+
+  it('conserve le dernier solde daté quand la lecture réseau échoue, sans reconstruire identité ou QR', async () => {
+    cardNetworkFailure = true;
+    await context.addInitScript(() => localStorage.setItem('sm_fidelite_recette', JSON.stringify({ version: 2, solde: 12, vuA: new Date(Date.now() - 60_000).toISOString() })));
+    await page.goto(origin);
+    await page.getByRole('heading', { name: /Dernier solde connu : 12 points/ }).waitFor();
+    await page.getByText('Connectez-vous au réseau pour afficher votre carte et actualiser vos points.', { exact: true }).waitFor();
+    expect(await page.getByText('Dernière consultation il y a 1 min.', { exact: true }).count()).toBe(1);
+    expect(await page.getByText('Seul ce solde est enregistré sur cet appareil. Votre identité et votre historique ne sont pas conservés hors connexion.', { exact: true }).count()).toBe(1);
+    expect(await page.getByText(/Vous pouvez utiliser votre carte avec son QR|Source : copie locale|échec du rafraîchissement/).count()).toBe(0);
+    expect(cardFailures).toEqual(['net::ERR_INTERNET_DISCONNECTED']);
+    expect(await page.getByRole('button', { name: /Présenter ma carte|Afficher ma carte|Scanner mon QR/ }).count()).toBe(0);
+    expect(await page.getByRole('img', { name: /QR/ }).count()).toBe(0);
+    expect(await page.locator('body').textContent()).not.toMatch(/Camille|25 points/);
+    expect(loyaltyCalls()).toEqual([]);
+    if (process.env.SM_QA_CUSTOMER_NAV_DIR) { await mkdir(process.env.SM_QA_CUSTOMER_NAV_DIR, { recursive: true }); await page.screenshot({ path: join(process.env.SM_QA_CUSTOMER_NAV_DIR, '390-fidélité-solde-non-vérifié.png') }); }
+  });
+
+  it('propose la connexion autorisée après la carte, sans demander de téléphone ni envoyer un SMS à l’ouverture', async () => {
+    capabilities = { available: false, accessAvailable: true, registrationAvailable: true };
+    await page.goto(origin);
+    const scanner = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scanner.waitFor();
+    const connect = page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }); await connect.waitFor();
+    expect((await scanner.boundingBox())!.y).toBeLessThan((await connect.boundingBox())!.y);
+    expect(await page.getByLabel('Numéro de mobile', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(1);
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+    await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).click();
+    await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).waitFor();
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+  });
+
   it('affiche la carte déjà liée sans nouveau téléphone, adhésion ni scan et efface le DOM privé au retour', async () => {
     await page.goto(origin + '/?order=1'); await tab('Carte').waitFor(); await authenticate();
     await tab('Fidélité').click(); await page.getByText('25 points', { exact: true }).waitFor();
     expect(loyaltyCalls().map(call => call.body)).toEqual([{ step: 'view' }]);
     expect(await page.getByLabel(/Téléphone|Numéro de mobile/).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).count()).toBe(1);
+    expect(await qrAccess().isVisible()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Scanner mon QR', exact: true }).isVisible()).toBe(false);
     expect(await page.getByRole('img', { name: 'QR de votre carte fidélité', exact: true }).count()).toBe(0);
     expect(await page.getByRole('dialog').count()).toBe(0);
     await tab('Carte').click();
@@ -181,7 +268,7 @@ describe('application client — navigation commune et cartes existantes', () =>
   });
 
   it('garde la carte QR existante après une visite dans le compte sans la transformer en carte privée', async () => {
-    savedCard = true; await page.goto(origin); await legacy().click();
+    savedCard = true; await page.goto(origin);
     await page.getByText('Solde de Camille carte existante', { exact: true }).waitFor();
     await tab('Compte').click(); await page.getByRole('heading', { name: 'Mon compte', exact: true }).waitFor();
     expect(await page.getByText('Solde de Camille carte existante', { exact: true }).isVisible()).toBe(false);
@@ -194,7 +281,7 @@ describe('application client — navigation commune et cartes existantes', () =>
     restoreGate = new Promise(resolve => { releaseRestore = resolve; });
     await page.goto(origin + '/?order=1'); await tab('Carte').waitFor(); await authenticate();
     await tab('Fidélité').click(); await page.getByText('25 points', { exact: true }).waitFor();
-    savedCard = true; releaseRestore?.(); await legacy().click();
+    savedCard = true; releaseRestore?.(); await qrAccess().click();
     await page.getByText('Solde de Camille carte existante', { exact: true }).waitFor();
     expect(await page.getByText('25 points', { exact: true }).count()).toBe(1);
     expect(loyaltyCalls().map(call => call.body)).toEqual([{ step: 'view' }]);
@@ -281,7 +368,7 @@ describe('application client — navigation commune et cartes existantes', () =>
 
   it('garde la page pendant un retrait QR en cours, y compris le retour du navigateur', async () => {
     savedCard = true; await page.goto(origin + '/r/recette/fidelite');
-    await tab('Compte').click(); await tab('Fidélité').click(); await legacy().click();
+    await tab('Compte').click(); await tab('Fidélité').click();
     await page.getByText('Solde de Camille carte existante', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Retirer', exact: true }).click();
     deleteGate = new Promise(resolve => { releaseDelete = resolve; });

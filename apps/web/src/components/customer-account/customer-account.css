@@ -21,13 +21,14 @@
 .sm-account-source{min-width:0;min-height:44px;padding:8px;border-radius:var(--cf-r-sm);color:var(--cf-mut);font-size:14px;font-weight:600}
 .sm-account-source[aria-selected=true]{background:var(--cf-surface);color:var(--cf-text);box-shadow:0 1px 3px color-mix(in srgb,var(--cf-text) 10%,transparent)}
 .sm-account-source:disabled{opacity:.5;cursor:wait}
-.sm-account-source:focus-visible,.sm-account-legacy>summary:focus-visible{outline:2px solid var(--cf-accent);outline-offset:3px}
-.sm-account-legacy>summary{display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 0;cursor:pointer;list-style:none;font-size:14px;font-weight:650;line-height:1.5;color:var(--cf-text)}
-.sm-account-legacy>summary::-webkit-details-marker{display:none}
-.sm-account-legacy>summary>span{flex:1;min-width:0}
-.sm-account-legacy>summary>svg{flex-shrink:0}
-.sm-account-legacy[open]>summary>.sm-account-legacy-chevron{transform:rotate(180deg)}
-.sm-account-legacy[open]>summary{margin-bottom:12px;border-bottom:1px solid color-mix(in srgb,var(--cf-text) 10%,transparent);padding-bottom:16px}
+.sm-account-source:focus-visible,.sm-account-card-access>summary:focus-visible{outline:2px solid var(--cf-accent);outline-offset:3px}
+.sm-account-card-access>summary:not([hidden]){display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 0;cursor:pointer;list-style:none;font-size:14px;font-weight:650;line-height:1.5;color:var(--cf-text)}
+.sm-account-card-access>summary[hidden]{display:none}
+.sm-account-card-access>summary::-webkit-details-marker{display:none}
+.sm-account-card-access>summary>span{flex:1;min-width:0}
+.sm-account-card-access>summary>svg{flex-shrink:0}
+.sm-account-card-access[open]>summary>.sm-account-card-chevron{transform:rotate(180deg)}
+.sm-account-card-access[open]>summary{margin-bottom:12px;border-bottom:1px solid color-mix(in srgb,var(--cf-text) 10%,transparent);padding-bottom:16px}
 .sm-account-destinations{display:grid;overflow:hidden;border:1px solid color-mix(in srgb,var(--cf-text) 12%,transparent);border-radius:var(--cf-r-lg);background:var(--cf-surface)}
 .sm-account-destination{display:flex;align-items:center;gap:14px;min-height:76px;padding:14px 16px;text-align:left;transition:background-color 160ms ease}
 .sm-account-destination+.sm-account-destination{border-top:1px solid color-mix(in srgb,var(--cf-text) 9%,transparent)}

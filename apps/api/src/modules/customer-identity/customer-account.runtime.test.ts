@@ -651,3 +651,49 @@ function reviseCosts(f: ReturnType<typeof fixture>, smsUpperBound: number): void
   evidence.costs.reference = 'updated-cost-reference'; evidence.costs.smsSegmentUpperBoundMicrousd = smsUpperBound;
   f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify(policy); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
 }
+
+describe('published rates with an explicit operator reserve', () => {
+  function fundedFixture() {
+    const f = fixture('production');
+    const evidence = JSON.parse(f.env.SM_CUSTOMER_VERIFY_EVIDENCE!);
+    const { smsSegmentUpperBoundMicrousd: _sms, successfulVerificationUpperBoundMicrousd: _success,
+      allFeesIncluded: _fees, ...scope } = evidence.costs;
+    evidence.costs = { ...scope, model: 'published_rates_operator_reserve_v1',
+      publishedRatesReference: 'synthetic-rates', publishedRatesObservedAt: scope.attestedAt,
+      publishedSmsSegmentMicrousd: 10, publishedSuccessfulVerificationMicrousd: 5,
+      operatorReservePerSendMicrousd: 100, operatorReserveDecisionReference: 'synthetic-reserve-decision' };
+    f.env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
+    if (f.pending.funding.mode === 'production_paid') f.pending.funding.reservedMicrousd = 100;
+    return f;
+  }
+  it('reserves the explicit amount durably before the provider call', async () => {
+    const f = fundedFixture();
+    f.provider.start.mockImplementation(async () => {
+      expect(f.repository.reserve).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        limits: expect.objectContaining({ productionBudget: expect.objectContaining({
+          authorizationRef: 'operator-budget-A', costEvidenceReference: 'operator-costs', reservePerSendMicrousd: 100,
+        }) }),
+      }));
+      return { verificationSid: f.pending.verificationSid };
+    });
+    await f.runtime.execute(f.relay, f.start);
+    expect(f.provider.start).toHaveBeenCalledOnce();
+  });
+  it('does not fund an SMS merely because published rates and an operator decision are present', async () => {
+    const f = fundedFixture(); f.repository.reserve.mockResolvedValue({ kind: 'denied' });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.provider.start).not.toHaveBeenCalled();
+  });
+  it('rejects a reserve change made while the initial amount is being reserved', async () => {
+    const f = fundedFixture();
+    f.repository.reserve.mockImplementation(async () => {
+      const evidence = JSON.parse(f.env.SM_CUSTOMER_VERIFY_EVIDENCE!);
+      evidence.costs.operatorReservePerSendMicrousd = 101;
+      f.env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
+      return { kind: 'reserved', challengeId: f.pending.challengeId };
+    });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.provider.start).not.toHaveBeenCalled();
+    expect(f.repository.settleSend).toHaveBeenCalledWith(expect.objectContaining({ verificationSid: null }));
+  });
+});

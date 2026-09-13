@@ -383,8 +383,10 @@ export function Storefront({
           section={activeTab === "loyalty" ? "loyalty" : "profile"} onCatalogVerified={updateCatalogue}
           onBack={() => transition.selectTab(activeTab === "loyalty" ? "account" : "menu")}
           onLoyalty={loyaltyCatalog ? () => transition.selectTab("loyalty") : undefined}
-          onOrders={() => transition.selectTab("orders")} onDevicePreferences={() => setPreferencesOpen(true)} onNavigationLockedChange={setAccountLocked} />}
-        {activeTab === "loyalty" && loyaltyCatalog && <LoyaltyCardApp catalog={loyaltyCatalog} embedded legacyOnly
+          onOrders={() => transition.selectTab("orders")} onDevicePreferences={() => setPreferencesOpen(true)} onNavigationLockedChange={setAccountLocked}
+          loyaltyCard={activeTab === "loyalty" && loyaltyCatalog ? <LoyaltyCardApp catalog={loyaltyCatalog} embedded legacyOnly
+            onNavigationLockedChange={setLegacyLocked} /> : undefined} />}
+        {(embed || demo) && activeTab === "loyalty" && loyaltyCatalog && <LoyaltyCardApp catalog={loyaltyCatalog} embedded legacyOnly
           onNavigationLockedChange={setLegacyLocked} />}
         {!embed && activeTab === "menu" && <OrderHero site={site} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
         {activeTab === "orders" && !demo && (embed ? deviceOrders : <CustomerOrdersPage slug={site.tenant.slug}

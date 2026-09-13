@@ -60,6 +60,45 @@ function productionFixture(environment: 'staging' | 'production' = 'production',
 }
 
 describe('production snapshots without auto-attesting provider or SQL funding', () => {
+  function publishedReserveFixture() {
+    const input = productionFixture();
+    const evidence = JSON.parse(input.api.SM_CUSTOMER_VERIFY_EVIDENCE!);
+    const { smsSegmentUpperBoundMicrousd: _sms, successfulVerificationUpperBoundMicrousd: _success,
+      allFeesIncluded: _fees, ...scope } = evidence.costs;
+    evidence.costs = { ...scope, model: 'published_rates_operator_reserve_v1',
+      publishedRatesReference: 'synthetic-published-rates', publishedRatesObservedAt: scope.attestedAt,
+      publishedSmsSegmentMicrousd: 31, publishedSuccessfulVerificationMicrousd: 8,
+      operatorReservePerSendMicrousd: 100, operatorReserveDecisionReference: 'synthetic-operator-decision' };
+    input.api.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
+    input.observations.production.budget.reservePerSendMicrousd = 100;
+    return input;
+  }
+  it('labels an explicit published-price reserve without turning it into an invoice guarantee', () => {
+    const input = publishedReserveFixture(); const report = customerAccountPreflight(input, now);
+    expect(report).toMatchObject({ decision: 'configuration_valid', sms: 'configuration_valid' });
+    expect(check(report, 'funding.cost_basis')).toMatchObject({ source: 'configuration', status: 'pass',
+      code: 'operator_reserve_not_invoice_guarantee' });
+    expect(JSON.stringify(report)).not.toContain('synthetic-operator-decision');
+  });
+  it('requires the SQL funding observation to match the full operator reserve, not just published charges', () => {
+    const input = publishedReserveFixture(); input.observations.production.budget.reservePerSendMicrousd = 70;
+    const report = customerAccountPreflight(input, now);
+    expect(report.decision).toBe('blocked');
+    expect(check(report, 'production.budget')?.code).toBe('budget_unavailable_or_mismatched');
+  });
+  it.each([
+    { operatorReservePerSendMicrousd: 69 }, { operatorReservePerSendMicrousd: undefined },
+    { publishedRatesObservedAt: now + 1 }, { publishedRatesObservedAt: now - 7 * 86_400_000 - 1 },
+    { allFeesIncluded: true }, { operatorReserveDecisionReference: undefined },
+  ])('blocks invalid published-price evidence even before a provider observation (%#)', change => {
+    const input = publishedReserveFixture();
+    const evidence = JSON.parse(input.api.SM_CUSTOMER_VERIFY_EVIDENCE!);
+    Object.assign(evidence.costs, change); input.api.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
+    Reflect.deleteProperty(input.observations.production, 'provider');
+    const report = customerAccountPreflight(input, now);
+    expect(report).toMatchObject({ decision: 'blocked', sms: 'blocked', access: 'configuration_valid' });
+    expect(check(report, 'funding.attestations')?.status).toBe('blocked');
+  });
   it.each([undefined, 0, 1001, 1.5, '50'])('blocks a production snapshot without an explicit valid IP ceiling (%s)', ipSendReservations => {
     const input = productionFixture(); input.api.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify({
       ...JSON.parse(input.api.SM_CUSTOMER_VERIFY_POLICY!), ipSendReservations });
