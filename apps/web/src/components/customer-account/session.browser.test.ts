@@ -57,6 +57,27 @@ const value = (p = page) => p.locator("output").textContent();
 const authenticated = (p = page) => expect.poll(() => value(p)).toContain('"status":"authenticated"');
 
 describe("Session personnelle — navigateur natif et plusieurs onglets", () => {
+  it("relit la session au retour après une perte du focus du document", async () => {
+    await authenticated();
+    const reads = requests.filter(request => request === 'GET /r/recette/compte/session').length;
+    // Model an OS/window focus transition explicitly: headless Chromium does
+    // not reliably blur a document when another page is brought to the front.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    session = null;
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
+      // A later iframe transition must not erase the recorded departure.
+      window.dispatchEvent(new FocusEvent('blur'));
+      window.dispatchEvent(new FocusEvent('focus'));
+      Reflect.deleteProperty(document, 'hasFocus');
+    });
+    await expect.poll(() => value()).toContain('"status":"guest"');
+    expect(await value()).not.toContain('33600000001');
+    expect(requests.filter(request => request === 'GET /r/recette/compte/session')).toHaveLength(reads + 1);
+  });
   it("refuse le DELETE et masque le profil si la barrière privée du checkout ne peut pas être persistée", async () => {
     await authenticated();
     await page.evaluate(() => {

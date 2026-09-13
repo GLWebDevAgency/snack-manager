@@ -15,20 +15,26 @@ declare global { interface Window { checkoutAccountFixture: {
   journal: typeof Journal; clears: number; accountStatus: string; logout(): Promise<boolean>; refresh(): Promise<void>;
   access(): Journal.CheckoutAccountAccess | null; latePaid?: () => void;
   cartSnapshot: unknown; clearEntered: number; lockHeld?: boolean; releaseLock?: () => void; logoutResult?: boolean;
-  changeCart(): void; lateStart?: () => boolean;
+  changeCart(): void; lateStart?: () => boolean; confirms?: number; paymentAmount?: number;
+  focusEvents?: { type: string; hasFocus: boolean; visibility: string }[];
 } } }
-let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string, captures: string;
+let server: Server, providerServer: Server, browser: Browser, context: BrowserContext, page: Page, origin: string, providerOrigin: string, captures: string;
 let faults: string[], calls: { path: string; body: Record<string, unknown>; headers: Record<string, string | string[] | undefined> }[];
 let authenticated: boolean, expiresAt: number, verifiedAt: number, holdCreate: boolean, holdPayment: boolean;
 let heldCreate: { res: ServerResponse; body: unknown } | null, heldPayment: ServerResponse | null;
 let holdRecovery: boolean, heldRecovery: ServerResponse | null, accountReads: number;
-let heldAbandon: ServerResponse | null;
+let heldAbandon: ServerResponse | null, createdTotal: number;
 const orderId = 'b'.repeat(24), iso = '2030-09-09T16:00:00.000Z';
 const slots = { date: '2030-09-09', timezone: 'Europe/Paris', intervalMin: 10, capacity: 4, leadTimeMin: 30,
   slots: [{ iso, label: '18:00', service: 'dinner', remaining: 4, full: false, load: 'calm' }], closedToday: false, nextOpenDate: null, closureReason: null, paused: false };
-const order = (method = 'counter') => ({ _id: orderId, number: 4242, status: 'new', type: 'pickup',
-  payment: { method, status: 'pending' }, totals: { subtotal: 500, deliveryFee: 0, discount: null, total: 500 },
-  pickup: { slot: iso, customerName: 'Compte Recette' }, delivery: null, trackingToken: 'fixture-tracking' });
+const deliveryAddress = { line1: '1 rue de Recette', line2: '', postalCode: '69001', city: 'Lyon', country: 'FR' };
+const deliveryQuote = { zoneId: 'recette', zoneName: 'Zone de recette', feeCents: 200, minimumOrderCents: 500,
+  subtotalCents: 500, totalCents: 700, estimatedMinutes: 45 };
+const order = (method = 'counter', delivery = false) => ({ _id: orderId, number: 4242, status: 'new', type: delivery ? 'delivery' : 'pickup',
+  payment: { method, status: 'pending' }, totals: { subtotal: 500, deliveryFee: delivery ? 200 : 0, discount: null, total: delivery ? 700 : 500 },
+  pickup: { slot: iso, customerName: 'Compte Recette' }, delivery: delivery ? { address: deliveryAddress, instructions: '',
+    zoneId: deliveryQuote.zoneId, zoneName: deliveryQuote.zoneName, feeCents: 200, estimatedMinutes: 45,
+    dispatchedAt: null, deliveredAt: null, driverName: null } : null, trackingToken: 'fixture-tracking' });
 const recovered = () => ({ _id: orderId, number: 4242, status: 'new', type: 'pickup', trackingToken: 'fixture-tracking',
   payment: { method: 'online', status: 'pending' }, totals: { total: 500 }, pickup: { slot: iso } });
 const payment = { unavailable: false, publishableKey: 'pk_test_fixture', clientSecret: 'fixture-secret', stripeAccount: 'acct_fixture', paymentIntentId: 'pi_fixture', currency: 'eur', amount: 500 };
@@ -40,6 +46,16 @@ function json(res: ServerResponse, value: unknown, status = 200) {
 // Provider widgets are explicit fixtures: no Stripe, Turnstile, SMS or real order.
 beforeAll(async () => {
   captures = await mkdtemp(join(tmpdir(), 'sm-checkout-account-'));
+  // A separate local origin models the browser focus boundary of Stripe's
+  // field without loading any bank script or accepting a payment request.
+  providerServer = createServer((req, res) => {
+    if (req.method !== 'GET' || req.url !== '/card') { res.writeHead(404).end(); return; }
+    res.setHeader('Content-Type', 'text/html'); res.setHeader('Cache-Control', 'no-store');
+    res.end('<!doctype html><html><body><input aria-label="Carte de recette" /></body></html>');
+  });
+  await new Promise<void>(resolve => providerServer.listen(0, '127.0.0.1', resolve));
+  const providerAddress = providerServer.address(); if (!providerAddress || typeof providerAddress === 'string') throw Error('No card fixture address');
+  providerOrigin = `http://127.0.0.1:${providerAddress.port}`;
   const cssPath = fileURLToPath(new URL('../../app/globals.css', import.meta.url));
   const bundle = await build({ stdin: { loader: 'tsx', resolveDir: fileURLToPath(new URL('.', import.meta.url)), contents: `
     import React from 'react';import{createRoot}from'react-dom/client';import{Checkout}from'./Checkout';
@@ -59,6 +75,7 @@ beforeAll(async () => {
       return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg text-ink"><h1>Checkout compte fixture</h1>
         <button onClick={()=>setOpen(true)}>Rouvrir</button><Checkout open={open} recovery={recovery} slug="recette" tenantName="Restaurant de recette" tenantAddress="Adresse de recette"
           stripeApparence={{}} mode="dark" prixMono={false} cart={cart} paused={false} pauseMessage={null} initialSlots={${JSON.stringify(slots)}}
+          delivery={location.search.includes('delivery')?{available:true,zones:[],leadTimeMin:45,paymentRequired:'online'}:undefined}
           onClose={()=>setOpen(false)} onBrowse={()=>{}} onEditLine={()=>{}}/></main>}
     async function start(){let node=<App/>;if(location.pathname==='/embed-storefront'){
       // Fixed HTTP fixture: Monday noon in Europe/Paris, with bookable pickup slots regardless of runner time.
@@ -78,7 +95,7 @@ beforeAll(async () => {
       builder.onResolve({ filter: /\/(StripeCard|TurnstileCheck)$/ }, args => ({ path: args.path.split('/').at(-1)!, namespace: 'fixture-provider' }));
       builder.onLoad({ filter: /.*/, namespace: 'fixture-provider' }, args => ({ loader: 'tsx', resolveDir: fileURLToPath(new URL('.', import.meta.url)), contents: args.path === 'TurnstileCheck'
         ? `import{useEffect}from'react';export function TurnstileCheck({onToken,resetKey}){useEffect(()=>{onToken('fixture-human-proof')},[onToken,resetKey]);return null}`
-        : `export const apparenceStripeDe=()=>({});export function StripeCard({onPaid,onConfirmStart,onConfirmEnd}){window.checkoutAccountFixture.latePaid=onPaid;window.checkoutAccountFixture.lateStart=onConfirmStart;return <button onClick={()=>{if(onConfirmStart()){onPaid();onConfirmEnd('paid')}}}>Confirmer Stripe fixture</button>}` }));
+        : `export const apparenceStripeDe=()=>({});export function StripeCard({onPaid,onConfirmStart,onConfirmEnd,amount}){window.checkoutAccountFixture.paymentAmount=amount;window.checkoutAccountFixture.latePaid=onPaid;window.checkoutAccountFixture.lateStart=onConfirmStart;return <><iframe title="Champ carte de recette" src="${providerOrigin}/card"/><button onClick={()=>{if(onConfirmStart()){window.checkoutAccountFixture.confirms=(window.checkoutAccountFixture.confirms??0)+1;onPaid();onConfirmEnd('paid')}}}>Confirmer Stripe fixture</button></>}` }));
     } }],
   });
   const css = await postcss([tailwind({ base: fileURLToPath(new URL('../../..', import.meta.url)) })]).process(await readFile(cssPath, 'utf8'), { from: cssPath });
@@ -99,14 +116,16 @@ beforeAll(async () => {
     if (path === '/api/public/funnel' && req.method === 'POST') { res.writeHead(204).end(); return; }
     let raw = ''; for await (const chunk of req) raw += chunk.toString(); const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
     calls.push({ path, body, headers: req.headers });
+    if (path === '/api/public/tenants/recette/delivery/quote') { json(res, deliveryQuote); return; }
     if (path === '/r/recette/compte/commandes' || path === '/api/public/tenants/recette/orders') {
-      const value = order((body.payment as { method: string }).method);
+      const value = order((body.payment as { method: string }).method, body.fulfillment === 'delivery');
+      createdTotal = value.totals.total;
       const response = path.startsWith('/r/') ? { state: 'created', expiresAt, order: value } : value;
       if (holdCreate) { heldCreate = { res, body: response }; return; } json(res, response); return;
     }
     if (path === '/api/public/tenants/recette/orders/recovery') { if (holdRecovery) { heldRecovery = res; return; } json(res, { state: 'created', order: recovered() }); return; }
     if (path === '/api/public/tenants/recette/orders/abandon') { heldAbandon = res; return; }
-    if (path === `/api/public/orders/${orderId}/payment-intent`) { if (holdPayment) { heldPayment = res; return; } json(res, payment); return; }
+    if (path === `/api/public/orders/${orderId}/payment-intent`) { if (holdPayment) { heldPayment = res; return; } json(res, { ...payment, amount: createdTotal }); return; }
     faults.push(`Unexpected ${req.method} ${path}`); json(res, {}, 404);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -115,15 +134,23 @@ beforeAll(async () => {
 }, 30_000);
 beforeEach(async () => {
   faults = []; calls = []; authenticated = true; expiresAt = Date.now() + 300_000; verifiedAt = Date.now() - 1_000; holdCreate = false; holdPayment = false; heldCreate = null; heldPayment = null;
-  holdRecovery = false; heldRecovery = null; heldAbandon = null; accountReads = 0;
+  holdRecovery = false; heldRecovery = null; heldAbandon = null; accountReads = 0; createdTotal = 500;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
-  await context.route('**/*', route => { if (new URL(route.request().url()).origin === origin) return route.continue(); faults.push('External request refused'); return route.abort(); });
+  await context.route('**/*', route => {
+    const url = new URL(route.request().url());
+    if (url.origin === origin || (url.origin === providerOrigin && url.pathname === '/card' && route.request().method() === 'GET')) return route.continue();
+    faults.push('External request refused'); return route.abort();
+  });
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
   await page.goto(origin + '/empty'); await seedCustomerBrowserFixture(page, 'recette'); await page.goto(origin);
   await page.waitForFunction(() => !!window.checkoutAccountFixture?.access());
 });
 afterEach(async () => { heldCreate?.res.destroy(); heldPayment?.destroy(); heldRecovery?.destroy(); heldAbandon?.destroy(); await context.close(); expect(faults).toEqual([]); });
-afterAll(async () => { await browser?.close(); if (server) await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }); process.stdout.write(`Checkout fixture captures: ${captures}\n`); });
+afterAll(async () => {
+  await browser?.close();
+  for (const fixture of [server, providerServer]) if (fixture) await new Promise<void>(resolve => { fixture.closeAllConnections(); fixture.close(() => resolve()); });
+  process.stdout.write(`Checkout fixture captures: ${captures}\n`);
+});
 async function activate(target: Locator) { await expect.poll(() => target.isEnabled()).toBe(true); await target.focus(); await target.press('Enter'); }
 async function checkout(method: 'counter' | 'online' = 'counter', submit = true) {
   await activate(page.getByRole('button', { name: /^Choisir le retrait/ }));
@@ -192,6 +219,92 @@ async function holdLock(name: string) {
 }
 
 describe('Checkout compte — vraie admission navigateur, sans fournisseur', () => {
+  it.each(['pointer', 'keyboard'] as const)('preserves the same account payment when focus returns from the native card iframe (%s)', async interaction => {
+    await checkout('online');
+    const confirm = page.getByRole('button', { name: 'Confirmer Stripe fixture', exact: true });
+    await confirm.waitFor();
+    const access = await page.evaluate(() => window.checkoutAccountFixture.access());
+    expect(access).not.toBeNull();
+    const reads = accountReads;
+    await page.evaluate(() => {
+      const f = window.checkoutAccountFixture; f.focusEvents = [];
+      for (const type of ['blur', 'focus']) window.addEventListener(type, () => {
+        f.focusEvents!.push({ type, hasFocus: document.hasFocus(), visibility: document.visibilityState });
+      });
+    });
+    const field = page.frameLocator('iframe[title="Champ carte de recette"]').getByRole('textbox', { name: 'Carte de recette', exact: true });
+    await field.fill('4242');
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    expect(await page.evaluate(() => window.checkoutAccountFixture.focusEvents)).toContainEqual({ type: 'blur', hasFocus: true, visibility: 'visible' });
+    if (interaction === 'pointer') {
+      // One native gesture. A false privacy fence can remove the button at
+      // pointerdown, before its click handler ever confirms the payment.
+      const bounds = await confirm.boundingBox(); if (!bounds) throw Error('Missing confirmation button');
+      await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    } else {
+      await field.press('Tab');
+      await page.waitForFunction(() => window.checkoutAccountFixture.focusEvents?.some(event => event.type === 'focus'));
+      expect(await page.getByRole('heading', { name: 'Demande privée masquée', exact: true }).count()).toBe(0);
+      await expect.poll(() => confirm.evaluate(node => node === document.activeElement)).toBe(true);
+      await page.keyboard.press('Enter');
+    }
+    await page.waitForFunction(() => (window.checkoutAccountFixture.confirms ?? 0) > 0
+      || document.body.textContent?.includes('Demande privée masquée'));
+    expect(await page.getByRole('heading', { name: 'Demande privée masquée', exact: true }).count()).toBe(0);
+    await page.getByRole('dialog', { name: 'Commande confirmée', exact: true }).waitFor();
+    expect(await page.evaluate(() => window.checkoutAccountFixture.focusEvents)).toContainEqual({ type: 'focus', hasFocus: true, visibility: 'visible' });
+    expect(await page.evaluate(() => window.checkoutAccountFixture.access())).toEqual(access);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.confirms)).toBe(1);
+    expect(posts()).toHaveLength(1); expect(payments()).toHaveLength(1);
+    expect(posts()[0]!.path).toBe('/r/recette/compte/commandes');
+    expect(accountReads).toBe(reads);
+  });
+
+  it.each(['account', 'guest'] as const)('confirms one quoted delivery payment after native iframe focus without changing its %s provenance', async source => {
+    if (source === 'guest') expect(await page.evaluate(() => window.checkoutAccountFixture.logout())).toBe(true);
+    await page.goto(origin + '/?delivery=1');
+    await page.waitForFunction(status => window.checkoutAccountFixture?.accountStatus === status, source === 'account' ? 'authenticated' : 'guest');
+    await activate(page.getByRole('radio', { name: /Livraison chez vous/ }));
+    await activate(page.getByRole('button', { name: /^Choisir la livraison/ }));
+    await page.getByLabel('Prénom et nom', { exact: true }).fill('Compte Recette');
+    await page.getByLabel('Téléphone', { exact: true }).fill('0600000001');
+    await page.getByLabel('Numéro et rue', { exact: true }).fill(deliveryAddress.line1);
+    await page.getByLabel('Code postal', { exact: true }).fill(deliveryAddress.postalCode);
+    await page.getByLabel('Ville', { exact: true }).fill(deliveryAddress.city);
+    await activate(page.getByRole('button', { name: 'Vérifier mon adresse', exact: true }));
+    await page.getByText('Nous livrons à cette adresse', { exact: true }).waitFor();
+    await activate(page.getByRole('button', { name: 'Choisir le créneau', exact: true }));
+    await activate(page.getByRole('button', { name: /^18:00(?: —|$)/ }));
+    await activate(page.getByRole('button', { name: /^Continuer · livraison/ }));
+    expect(await page.getByRole('radio', { name: /Payer au comptoir/ }).count()).toBe(0);
+    const submit = page.getByRole('button', { name: /^Payer/ });
+    expect((await submit.textContent())?.replace(/\s/g, '')).toContain('7,00€');
+    await activate(submit);
+    const confirm = page.getByRole('button', { name: 'Confirmer Stripe fixture', exact: true });
+    await confirm.waitFor();
+    expect(await page.evaluate(() => window.checkoutAccountFixture.paymentAmount)).toBe(700);
+    const quote = calls.filter(call => call.path.endsWith('/delivery/quote'));
+    expect(quote).toHaveLength(1);
+    expect(quote[0]!.body).toEqual({ address: deliveryAddress,
+      lines: [{ productId: 'a'.repeat(24), options: [], removed: [], qty: 1 }] });
+    const post = posts()[0]!;
+    expect(post.path).toBe(source === 'account' ? '/r/recette/compte/commandes' : '/api/public/tenants/recette/orders');
+    expect(post.body).toMatchObject({ fulfillment: 'delivery', payment: { method: 'online' },
+      delivery: { address: deliveryAddress, instructions: '' }, pickup: { slot: iso } });
+    const attempt = await page.evaluate(id => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', id), post.body.clientId as string);
+    expect(attempt?.provenance?.kind).toBe(source);
+    await page.frameLocator('iframe[title="Champ carte de recette"]').getByRole('textbox', { name: 'Carte de recette', exact: true }).fill('4242');
+    const bounds = await confirm.boundingBox(); if (!bounds) throw Error('Missing confirmation button');
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.waitForFunction(() => (window.checkoutAccountFixture.confirms ?? 0) > 0
+      || document.body.textContent?.includes('Demande privée masquée'));
+    expect(await page.getByRole('heading', { name: 'Demande privée masquée', exact: true }).count()).toBe(0);
+    await page.getByRole('dialog', { name: 'Commande confirmée', exact: true }).waitFor();
+    expect(await page.evaluate(() => window.checkoutAccountFixture.confirms)).toBe(1);
+    expect(posts()).toHaveLength(1); expect(payments()).toHaveLength(1);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.clears)).toBe(1);
+  });
+
   it('pins account C01 and sends only the private route for counter checkout', async () => {
     await checkout();
     await expect.poll(() => posts().length).toBe(1);

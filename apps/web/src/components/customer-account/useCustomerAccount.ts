@@ -14,6 +14,7 @@ export function checkoutAccountAccessKey(access: CheckoutAccountAccess | null) {
  * Cross-tab messages contain ONLY an invalidation nonce, never a personal field. */
 function runtime(slug: string) {
   let users = 0; let expiry: ReturnType<typeof setTimeout> | undefined;
+  let documentLostFocus = false;
   let channel: BroadcastChannel | null = null;
   const key = `sm:customer:invalidate:${slug}`;
   let barrierFailed = false;
@@ -64,6 +65,15 @@ function runtime(slug: string) {
   const refresh = () => { if (active()) void client.refresh(); };
   const pause = () => { client.invalidate(navigator.onLine === false ? "offline" : "idle"); };
   const resume = () => { pause(); refresh(); };
+  // Stripe fields live in an iframe. Returning from that frame also emits
+  // window.focus, although the document never lost focus. Invalidating here
+  // would revoke the checkout and unmount its Pay button before the click.
+  const blur = () => { documentLostFocus ||= !document.hasFocus(); };
+  const focus = () => {
+    if (!documentLostFocus) return;
+    documentLostFocus = false;
+    resume();
+  };
   const visibility = () => { if (document.visibilityState === "hidden") pause(); else resume(); };
   const incoming = () => { pause(); refresh(); /* Reads wait for the same mutation lock. */ };
   const storage = (event: StorageEvent) => { if (event.key === key || event.key === null) incoming(); };
@@ -83,8 +93,9 @@ function runtime(slug: string) {
     }, retain: () => {
     users++;
     if (users === 1) {
+      documentLostFocus = !document.hasFocus();
       try { channel = new BroadcastChannel(key); channel.addEventListener("message", incoming); } catch { channel = null; }
-      window.addEventListener("storage", storage); window.addEventListener("focus", resume);
+      window.addEventListener("storage", storage); window.addEventListener("blur", blur); window.addEventListener("focus", focus);
       window.addEventListener(key, incoming);
       window.addEventListener("pageshow", resume); window.addEventListener("pagehide", pause);
       window.addEventListener("online", resume); window.addEventListener("offline", pause);
@@ -95,7 +106,7 @@ function runtime(slug: string) {
       users--;
       if (users === 0) {
         client.invalidate(); clearTimeout(expiry); unsubscribeExpiry?.(); channel?.close(); channel = null;
-        window.removeEventListener("storage", storage); window.removeEventListener("focus", resume);
+        window.removeEventListener("storage", storage); window.removeEventListener("blur", blur); window.removeEventListener("focus", focus);
         window.removeEventListener(key, incoming);
         window.removeEventListener("pageshow", resume); window.removeEventListener("pagehide", pause);
         window.removeEventListener("online", resume); window.removeEventListener("offline", pause);

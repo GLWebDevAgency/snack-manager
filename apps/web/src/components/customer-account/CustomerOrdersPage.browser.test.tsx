@@ -171,13 +171,24 @@ describe('unified orders destination', () => {
     await openVerified(); held = '/detail';
     await page.getByRole('button', { name: 'Voir la commande n° 42' }).click(); await expect.poll(() => Boolean(release)).toBe(true);
     await page.evaluate(async () => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('sm-customer-preparation-v1', 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-      try { await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction('preparations', 'readwrite'); const store = tx.objectStore('preparations'); const request = store.get('recette');
-        request.onsuccess = () => { const value = request.result; value.verification.operationId = '50000000-0000-4000-8000-000000000005'; store.put(value, 'recette'); };
-        tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(new Error('Fixture journal update failed'));
-      }); } finally { db.close(); }
-      window.dispatchEvent(new Event('focus'));
+      // Model a real departure from the document, not the window focus event
+      // also emitted when returning from a payment iframe in the same page.
+      const hasFocus = Object.getOwnPropertyDescriptor(document, 'hasFocus');
+      Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+      window.dispatchEvent(new FocusEvent('blur'));
+      try {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('sm-customer-preparation-v1', 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+        try { await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction('preparations', 'readwrite'); const store = tx.objectStore('preparations'); const request = store.get('recette');
+          request.onsuccess = () => { const value = request.result; value.verification.operationId = '50000000-0000-4000-8000-000000000005'; store.put(value, 'recette'); };
+          tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(new Error('Fixture journal update failed'));
+        }); } finally { db.close(); }
+        Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
+        window.dispatchEvent(new FocusEvent('focus'));
+      } finally {
+        if (hasFocus) Object.defineProperty(document, 'hasFocus', hasFocus);
+        else Reflect.deleteProperty(document, 'hasFocus');
+      }
     });
     await expectPrivateAbsent(); held = null; release?.();
     await page.getByRole('button', { name: 'Voir la commande n° 42' }).waitFor();
