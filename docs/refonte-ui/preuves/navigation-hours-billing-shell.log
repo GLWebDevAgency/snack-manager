@@ -1,0 +1,16 @@
+PASS hours-320-light
+PASS abonnement-320-light
+PASS hours-320-dark
+PASS abonnement-320-dark
+PASS hours-768-light
+PASS abonnement-768-light
+PASS hours-768-dark
+PASS abonnement-768-dark
+PASS hours-1440-light
+PASS abonnement-1440-light
+PASS hours-1440-dark
+PASS abonnement-1440-dark
+PASS tablet-default-and-history
+PASS desktop-preference-open
+PASS desktop-preference-closed
+15/15 passed; 40 captures; local build Kws_-Jw8xTKQB-BO0WFhd

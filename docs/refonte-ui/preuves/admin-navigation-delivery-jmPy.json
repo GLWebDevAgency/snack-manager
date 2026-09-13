@@ -1,0 +1,2682 @@
+{
+  "status": "PASS",
+  "scope": "all",
+  "startedAt": "2026-09-13T12:07:23.331Z",
+  "updatedAt": "2026-09-13T12:07:36.756Z",
+  "buildId": "jmPy-hN2KP_NSd0YoxvDu",
+  "base": "http://127.0.0.1:3092",
+  "api": "http://127.0.0.1:3094",
+  "browser": "151.0.7922.34",
+  "evidence": "Actual built Next UI with in-memory API fixtures and local onboarding pages; no database, Stripe or external server contacted.",
+  "results": [
+    {
+      "name": "livraison-320-light",
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-320-light-zones.png",
+        "livraison-320-light-capacite-brouillon.png",
+        "livraison-320-light-livreurs-brouillon.png",
+        "livraison-320-light-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-390-light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-390-light-zones.png",
+        "livraison-390-light-capacite-brouillon.png",
+        "livraison-390-light-livreurs-brouillon.png",
+        "livraison-390-light-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-768-light",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "tablet navigation initially collapsed, leaving section controls unobstructed",
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-768-light-zones.png",
+        "livraison-768-light-capacite-brouillon.png",
+        "livraison-768-light-livreurs-brouillon.png",
+        "livraison-768-light-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-1440-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-1440-light-zones.png",
+        "livraison-1440-light-capacite-brouillon.png",
+        "livraison-1440-light-livreurs-brouillon.png",
+        "livraison-1440-light-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-absent-320-light",
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "actif",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/raccordement",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/raccordement",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request",
+        "two explicit fresh-link POSTs, busy action blocked, two distinct local onboarding URLs, one resync per real return without query parameter; final active state"
+      ],
+      "shots": [
+        "encaissement-absent-320-light-absent.png",
+        "encaissement-absent-320-light-retour-actif.png"
+      ],
+      "syncs": 3,
+      "links": 2,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-en_cours-390-light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "en_cours",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-en_cours-390-light-en_cours.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-restreint-768-light",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "restreint",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-restreint-768-light-restreint.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-actif-1440-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "actif",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-actif-1440-light-actif.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-320-dark",
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-320-dark-zones.png",
+        "livraison-320-dark-capacite-brouillon.png",
+        "livraison-320-dark-livreurs-brouillon.png",
+        "livraison-320-dark-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-390-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-390-dark-zones.png",
+        "livraison-390-dark-capacite-brouillon.png",
+        "livraison-390-dark-livreurs-brouillon.png",
+        "livraison-390-dark-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-768-dark",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "tablet navigation initially collapsed, leaving section controls unobstructed",
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-768-dark-zones.png",
+        "livraison-768-dark-capacite-brouillon.png",
+        "livraison-768-dark-livreurs-brouillon.png",
+        "livraison-768-dark-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-1440-dark",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=capacite&source=recette-navigation",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Zone publiée localement",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 650,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 60,
+        "slotCapacity": 4
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Zone publiée localement",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 650,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 60,
+          "slotCapacity": 4
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "draft survives all three sections, browser Back/Forward, and driver modal; URL preserves other parameters; cancel restores zones and capacity without a write",
+        "one schema-validated PATCH publishes hidden zones and capacity together; inputs and save disabled in flight, navigation remains available",
+        "invalid hidden zone produces visible global alert and no PATCH; draft remains editable",
+        "reload restores the saved fixture configuration and selected URL section; no unsaved reload durability claimed",
+        "direct capacity URL activates the intended section after a full page entry"
+      ],
+      "shots": [
+        "livraison-1440-dark-zones.png",
+        "livraison-1440-dark-capacite-brouillon.png",
+        "livraison-1440-dark-livreurs-brouillon.png",
+        "livraison-1440-dark-erreur-champ-masque.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-absent-320-dark",
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "actif",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/raccordement",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/raccordement",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        },
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request",
+        "two explicit fresh-link POSTs, busy action blocked, two distinct local onboarding URLs, one resync per real return without query parameter; final active state"
+      ],
+      "shots": [
+        "encaissement-absent-320-dark-absent.png",
+        "encaissement-absent-320-dark-retour-actif.png"
+      ],
+      "syncs": 3,
+      "links": 2,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-en_cours-390-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "en_cours",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-en_cours-390-dark-en_cours.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-restreint-768-dark",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "restreint",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-restreint-768-dark-restreint.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-actif-1440-dark",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "actif",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "initial POST synchroniser exactly once; explanatory content, history and appearance change cause no payment API request"
+      ],
+      "shots": [
+        "encaissement-actif-1440-dark-actif.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "livraison-publication-refusee-390-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/livraison?section=zones",
+      "delivery": {
+        "enabled": true,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Brouillon à republier",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ],
+        "leadTimeMin": 45,
+        "slotCapacity": 2
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings",
+          "query": ""
+        }
+      ],
+      "writes": [
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Brouillon à republier",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 500,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 45,
+          "slotCapacity": 2
+        },
+        {
+          "enabled": true,
+          "zones": [
+            {
+              "id": "centre",
+              "name": "Brouillon à republier",
+              "postalCodes": [
+                "69001",
+                "69002"
+              ],
+              "feeCents": 500,
+              "minimumOrderCents": 1500,
+              "freeDeliveryFromCents": null
+            }
+          ],
+          "leadTimeMin": 45,
+          "slotCapacity": 2
+        }
+      ],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "failed publication retains hidden zone draft and allows explicit retry of the same complete configuration"
+      ],
+      "shots": [
+        "livraison-publication-refusee-390-dark-brouillon-conserve.png"
+      ],
+      "syncs": 0,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-indisponible-320-light",
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "theme": "light",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "absent",
+      "disponible": false,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "unconfigured platform cannot expose a connection action"
+      ],
+      "shots": [
+        "encaissement-indisponible-320-light-indisponible.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": false,
+      "failSave": false
+    },
+    {
+      "name": "encaissement-erreur-390-dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "pass": true,
+      "url": "http://127.0.0.1:3092/admin/encaissement",
+      "delivery": {
+        "enabled": true,
+        "leadTimeMin": 45,
+        "slotCapacity": 2,
+        "zones": [
+          {
+            "id": "centre",
+            "name": "Centre-ville",
+            "postalCodes": [
+              "69001",
+              "69002"
+            ],
+            "feeCents": 500,
+            "minimumOrderCents": 1500,
+            "freeDeliveryFromCents": null
+          }
+        ]
+      },
+      "etat": "absent",
+      "disponible": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "query": ""
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser",
+          "query": ""
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count",
+          "query": "?status=new&since=2026-09-12T22%3A00%3A00.000Z"
+        }
+      ],
+      "writes": [],
+      "errors": [],
+      "external": [],
+      "unknown": [],
+      "transport": [
+        {
+          "method": "GET",
+          "path": "/socket.io/",
+          "outcome": "503 local realtime fixture"
+        }
+      ],
+      "console": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        }
+      ],
+      "checks": [
+        "failed initial synchronization renders existing error state without a connection action"
+      ],
+      "shots": [
+        "encaissement-erreur-390-dark-erreur.png"
+      ],
+      "syncs": 1,
+      "links": 0,
+      "failSync": true,
+      "failSave": false
+    }
+  ]
+}

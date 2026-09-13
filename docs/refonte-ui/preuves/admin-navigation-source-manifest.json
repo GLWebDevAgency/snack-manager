@@ -1,0 +1,131 @@
+{
+  "branch": "feat/admin-section-navigation",
+  "base": "4d8525615924aa701a4b92b9ae3709bbd0dd6607",
+  "buildId": "Kws_-Jw8xTKQB-BO0WFhd",
+  "files": [
+    {
+      "path": "apps/web/src/app/admin/abonnement/page.tsx",
+      "sha256": "3a8e69c211c7dd2c9f3128579f4d0b8ef8dba25022493b2dbbaa3ed0099feaa0"
+    },
+    {
+      "path": "apps/web/src/app/admin/encaissement/page.tsx",
+      "sha256": "70b56f6c940d90d2ed175706e406d226cd65161a78cfd719ebb1794ef6f789df"
+    },
+    {
+      "path": "apps/web/src/app/admin/hours/hours-billing-navigation.browser.test.tsx",
+      "sha256": "4cde792075c434114cda17ebad42d643e884df879a08f00f1e3fc38527f149aa"
+    },
+    {
+      "path": "apps/web/src/app/admin/hours/page.tsx",
+      "sha256": "2deb5bb1c21368ef683c43ea58c3cbbc775e75e33b6517ccd1cf3baf5fbbbe06"
+    },
+    {
+      "path": "apps/web/src/app/admin/layout.tsx",
+      "sha256": "1ebb09283f9e39a764ea460d27a10ab9e674db0b26aab1cea917c4b1e28e0637"
+    },
+    {
+      "path": "apps/web/src/app/admin/livraison/page.tsx",
+      "sha256": "45b2d16129a33689aee6663f3547aae67a90412730957672967b7722a6563000"
+    },
+    {
+      "path": "apps/web/src/app/admin/planning/grid.tsx",
+      "sha256": "9ef63c3f42df88878aac8d9ad89f1cd5cc3e259f2610274f6c72b6595b27edf7"
+    },
+    {
+      "path": "apps/web/src/app/admin/planning/page.tsx",
+      "sha256": "12a40586b922d04afd42b992af975b3a0000412c9ee48be23f4e8ffe2679c9ca"
+    },
+    {
+      "path": "apps/web/src/app/admin/screens/navigation.module.css",
+      "sha256": "fdfba150d3d6854bb5bc516f1ed5759d57c8ab96b88f4834d837420d95e2583c"
+    },
+    {
+      "path": "apps/web/src/app/admin/screens/page.tsx",
+      "sha256": "f77bd8762dfd0a52abc51d3e2d2d5b41e6bb06e1f13829ba38148bc1acb88683"
+    },
+    {
+      "path": "apps/web/src/app/admin/screens/playlist-drawer.tsx",
+      "sha256": "a6b40a5f39353bc9f29a64bf3fc647353ce77c9cc27c5bef62f2cca9d3cde1fd"
+    },
+    {
+      "path": "apps/web/src/app/admin/screens/screen-card.tsx",
+      "sha256": "1e7477decf711bcf0dd189c1cd69332f5cc9e55e4ac0422a0ad0d0143e2e0c4c"
+    },
+    {
+      "path": "apps/web/src/app/admin/settings/page.tsx",
+      "sha256": "fe70bddfda64b203ce7606b0dba01cee2b08ec0db10b524b72e568ab6f0d3908"
+    },
+    {
+      "path": "apps/web/src/app/admin/settings/salle.browser.test.ts",
+      "sha256": "d2c4c28aa51998077adc2dad65de1848b515fd8e85268e8fefbba58dd91dc2a5"
+    },
+    {
+      "path": "apps/web/src/app/admin/site/page.tsx",
+      "sha256": "e9bc7d735bb4e94dddc27158e627e748b3dd6cd66da942a920eddb99bdca5742"
+    },
+    {
+      "path": "apps/web/src/app/admin/site/parts.tsx",
+      "sha256": "27a71fc108f142acf2feefd094577bdcbe8d0974a48b3eea21aa5f61baa07aad"
+    },
+    {
+      "path": "apps/web/src/app/admin/site/pilotage.module.css",
+      "sha256": "d5f4e5287976b09aeb5ef23266b9d9da29f353f964b31d29816ef55e6ce1d44d"
+    },
+    {
+      "path": "apps/web/src/app/admin/stats/page.tsx",
+      "sha256": "7df1b3158b56a4e27f8b607b8b3fa7bdfa99795ee1f7d11cffdf8201cd2f1889"
+    },
+    {
+      "path": "apps/web/src/app/admin/team/page.tsx",
+      "sha256": "245e1ac86620fc852f4edc174feefb264b51701de7cbe6b03a811f1139dc7582"
+    },
+    {
+      "path": "apps/web/src/components/admin/AdminSections.browser.test.tsx",
+      "sha256": "6acfdc3252855014082f284dbf23c34d6a22d5668e0eec51c459d63285cf5213"
+    },
+    {
+      "path": "apps/web/src/components/admin/AdminSections.module.css",
+      "sha256": "8ba43479778a51e44f1988f731ad8b0b9e1b260437ca98e4a695e417cbdb80e8"
+    },
+    {
+      "path": "apps/web/src/components/admin/AdminSections.tsx",
+      "sha256": "87d8c34abf1dbc009d14376cafdddcebbac40c5523a6ebd686d421bcc7035504"
+    },
+    {
+      "path": "apps/web/src/components/ui/BarChart.tsx",
+      "sha256": "43e843403f3d6c491c92d4cb14684f8a291dcb57e5eaa88a89d68fc15fe80cac"
+    },
+    {
+      "path": "apps/web/src/components/ui/useDialogLayer.browser.test.tsx",
+      "sha256": "b905beadbef7e212e1b3f909f52105bcc3407986b2bfc8be884546486017b6d4"
+    },
+    {
+      "path": "apps/web/src/components/ui/useDialogLayer.ts",
+      "sha256": "55dbd6a7085f1c8a7a82c21ae6756ff6905684833c77990ce6205dce3e885eda"
+    },
+    {
+      "path": "e2e/demo/ecran-apparence.test.mjs",
+      "sha256": "358e8f23dd849216d2c899984fedcdf75d1d5ee758e3db509690cee2502e522e"
+    },
+    {
+      "path": "e2e/local/admin-navigation-delivery.mjs",
+      "sha256": "145b4903d9d792847125329e71ade1ff6e0056b25c433087f9d0b5d60af58192"
+    },
+    {
+      "path": "e2e/local/admin-navigation-shell.mjs",
+      "sha256": "11f9c4b3dfde0e3f055fe4f9855f117c6e5b8bc77405777b1c0f453d032a8f44"
+    },
+    {
+      "path": "e2e/local/admin-navigation.mjs",
+      "sha256": "25dd2c255e179c4be6a9f5ae7b9cebc93bdae0d1059ca0c33290cf14bfd65fe6"
+    },
+    {
+      "path": "e2e/local/admin-site-screens-navigation.mjs",
+      "sha256": "9388ef6c0906d4b1223267b6c4d88b5ab482a242a0ae8c3adefb7847db5738d6"
+    },
+    {
+      "path": "e2e/local/refonte-web-visual.mjs",
+      "sha256": "2612acb9dd8845e86e1549a88f0607bb009cad7241eca781e5f09a5379ecbc28"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+.screenGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:16px; align-items:stretch; }
+.playlistFooter { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.playlistFooterStatus { font-size:13px; line-height:1.45; color:var(--cf-mut); overflow-wrap:anywhere; }
+.playlistFooterActions { display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; min-width:0; }
+.playlistFooterActions > button { min-height:44px; min-width:0; max-width:100%; white-space:normal; }
+.playlistFooterActions > button:last-child { flex:1 1 180px; }
+.scene { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; padding:12px; min-width:0; border:1px solid var(--cf-line); border-radius:var(--cf-r-card,16px); background:var(--cf-surface); }
+.sceneHeading { display:flex; grid-column:1 / -1; align-items:center; gap:10px; min-width:0; }
+.sceneHeading strong { display:block; overflow-wrap:anywhere; font-size:14px; line-height:1.4; font-weight:650; color:var(--cf-text); }
+.sceneActions { display:flex; gap:4px; }
+.sceneDuration { min-height:44px; width:84px; max-width:100%; }
+@media(min-width:540px) {
+  .scene { grid-template-columns:minmax(0,1fr) 84px auto; }
+  .sceneHeading { grid-column:auto; }
+}

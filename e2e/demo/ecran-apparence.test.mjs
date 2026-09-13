@@ -162,8 +162,9 @@ scenario(
 
 scenario('Identité — aperçu TV du brouillon sans enregistrement', { format: FORMATS.comptoir, delai: 180_000 }, async (page) => {
   await page.goto(`${web}/admin/settings?demo=1`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Identité visuelle', exact: true }).click();
   await page.getByRole('tab', { name: 'Écrans TV', exact: true }).click();
-  const panel = page.getByRole('tabpanel');
+  const panel = page.getByRole('tabpanel', { name: 'Écrans TV', exact: true });
   await attendreTexte(panel, 'Aperçu à jour');
   const stage = panel.locator('.bd-root');
   const initial = await stage.evaluate((element) => ({ color: getComputedStyle(element).getPropertyValue('--cf-accent'), font: getComputedStyle(element).getPropertyValue('--cf-font-display') }));

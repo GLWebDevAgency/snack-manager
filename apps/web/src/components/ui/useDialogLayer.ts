@@ -25,7 +25,9 @@ type DialogLayer = {
   root: HTMLElement;
   close: () => void;
   initialFocus: HTMLElement | null;
-  restoreFocus: HTMLElement | null;
+  active: boolean;
+  /** Nearest opener first, including ancestor openers if a parent unmounts. */
+  restoreFocus: readonly { element: HTMLElement; owner: DialogLayer | null }[];
 };
 
 type IsolationSnapshot = {
@@ -357,6 +359,7 @@ function stopRuntime(document: Document) {
 function registerLayer(layer: DialogLayer) {
   const document = layer.root.ownerDocument;
   startRuntime(document);
+  layer.active = true;
   const id = layers.push(layer);
   applyIsolation();
   focusLayer(layer);
@@ -364,6 +367,7 @@ function registerLayer(layer: DialogLayer) {
   return () => {
     const result = layers.remove(id);
     if (!result.removed) return;
+    layer.active = false;
 
     if (layers.size === 0) {
       stopRuntime(document);
@@ -372,8 +376,14 @@ function registerLayer(layer: DialogLayer) {
     }
 
     if (!result.wasTop) return;
-    if (canRestoreFocus(layer.restoreFocus)) {
-      focusElement(layer.restoreFocus!);
+    const target = layer.restoreFocus.find(({ element, owner }) =>
+      // Layout-effect cleanup runs before React detaches the parent's DOM.
+      // A connected opener may already belong to a layer being removed.
+      (!owner || owner.active) && canRestoreFocus(element)
+        && (!layers.top || layers.top.root.contains(element)),
+    );
+    if (target) {
+      focusElement(target.element);
     } else if (layers.top) {
       focusLayer(layers.top);
     }
@@ -409,10 +419,18 @@ export function useDialogLayer({
 
     const document = root.ownerDocument;
     const activeElement = document.activeElement;
-    const restoreFocus =
+    const opener =
       isHTMLElement(activeElement, document) && !root.contains(activeElement)
         ? activeElement
         : null;
+    // React can clean up the parent before the confirmation above it. Capture
+    // the complete return path now, while both layers still exist, rather than
+    // trying to reconstruct it from the stack during their joint removal.
+    const parent = layers.top;
+    const restoreFocus = [
+      ...(opener ? [{ element: opener, owner: parent?.root.contains(opener) ? parent : null }] : []),
+      ...(parent?.restoreFocus ?? []),
+    ];
 
     // Retire le garde-fou posé dans le JSX juste avant d'isoler le fond.
     root.inert = false;
@@ -422,6 +440,7 @@ export function useDialogLayer({
       root,
       close: () => onCloseRef.current(),
       initialFocus: initialFocusRef?.current ?? null,
+      active: false,
       restoreFocus,
     });
   }, [initialFocusRef, open]);

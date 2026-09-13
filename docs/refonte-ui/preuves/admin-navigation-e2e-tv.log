@@ -1,0 +1,11 @@
+✔ Écrans TV — tuiles visibles, pause réelle et enregistrement explicite en démo (18825.190917ms)
+✔ Identité — aperçu TV du brouillon sans enregistrement (4038.769ms)
+✔ Écrans TV — rejouer une scène en pause sans changer le contenu ni enregistrer (3016.527041ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26254.53075

@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminSections } from "@/components/admin/AdminSections";
+
 /**
  * Vue « Équipe & pointage » (spec backoffice-restaurant §12) :
  * KPI, cartes membres avec badge arrivée/départ 1-clic, ajout/édition
@@ -323,19 +325,23 @@ export default function TeamPage() {
         ) : (
           <>
             <Kpi
-              label="En poste maintenant"
+              label="En poste"
               value={`${onDutyCount} / ${activeMembers.length}`}
               icon="user"
+              className="min-w-0 max-sm:p-3"
             />
             <Kpi
-              label="Heures équipe cette semaine"
-              value={currentTotal == null ? "—" : `${fmtH(currentTotal)} h`}
+              label="Heures cette semaine"
+              value={<span className="whitespace-nowrap text-2xl sm:text-[30px]">{currentTotal == null ? "—" : `${fmtH(currentTotal)} h`}</span>}
               icon="clock"
+              className="min-w-0 max-sm:p-3"
             />
           </>
         )}
       </div>
 
+      <AdminSections label="Rubriques de l’équipe" sections={[
+        { id: "membres", label: "Membres", icon: "users", content: <>
       {/* ── Cartes membres ── */}
       <Panel
         title="Équipe"
@@ -353,7 +359,7 @@ export default function TeamPage() {
           membersError ? (
             <ErrorBlock msg={membersError} onRetry={loadMembers} />
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-4">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-[150px]" />
               ))}
@@ -380,7 +386,7 @@ export default function TeamPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-4">
             {activeMembers.map((m) => (
               <MemberCard
                 key={m._id}
@@ -416,7 +422,7 @@ export default function TeamPage() {
                   type="button"
                   onClick={() => setModal({ mode: "edit", member: m })}
                   title={`Ouvrir la fiche de ${m.name} — le bouton « Réactiver » s'y trouve`}
-                  className="cf-press inline-flex max-w-full items-center gap-2 rounded-pill border border-line bg-white/3 px-3 py-2 text-[13px] font-bold text-mut hover:border-white/25 hover:text-ink"
+                  className="cf-press inline-flex min-h-11 max-w-full items-center gap-2 rounded-pill border border-line bg-white/3 px-3 py-2 text-[13px] font-bold text-mut hover:border-white/25 hover:text-ink"
                 >
                   {/*
                     Le NOM porte le clic, pas un verbe : ce bouton ouvre la
@@ -433,6 +439,8 @@ export default function TeamPage() {
         )}
       </Panel>
 
+        </> },
+        { id: "pointages", label: "Pointages", icon: "clock", content: <>
       {/* ── Pointages de la semaine ── */}
       <Panel
         title="Pointages de la semaine"
@@ -454,7 +462,7 @@ export default function TeamPage() {
             hint="Les badges d'arrivée et de départ apparaîtront ici."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Pointages par jour — défilement horizontal">
             {/* `min-w` : neuf colonnes (employé + 7 jours + total) écrasées à
                 390 px devenaient illisibles — la table garde sa largeur de
                 lecture et défile dans SON cadre. */}
@@ -561,6 +569,9 @@ export default function TeamPage() {
           vers la paie · absences justifiées archivées.
         </p>
       </Panel>
+
+        </> },
+      ]} />
 
       {modal && (
         <MemberModal

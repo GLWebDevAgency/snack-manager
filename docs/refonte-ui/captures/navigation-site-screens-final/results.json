@@ -1,0 +1,198 @@
+{
+  "base": "http://127.0.0.1:3092",
+  "collectedAt": "2026-09-13T12:12:46.377Z",
+  "results": [
+    {
+      "name": "site-320-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-320-light-adresses.png",
+        "site-320-light-commande-brouillon.png",
+        "site-320-light-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-320-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-320-light-installation.png",
+        "screens-320-light-ecrans.png",
+        "screens-320-light-playlist-brouillon.png",
+        "screens-320-light-apercu.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "site-320-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-320-dark-adresses.png",
+        "site-320-dark-commande-brouillon.png",
+        "site-320-dark-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-320-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-320-dark-installation.png",
+        "screens-320-dark-ecrans.png",
+        "screens-320-dark-playlist-brouillon.png",
+        "screens-320-dark-apercu.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "site-768-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-768-light-adresses.png",
+        "site-768-light-commande-brouillon.png",
+        "site-768-light-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-768-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-768-light-installation.png",
+        "screens-768-light-ecrans.png",
+        "screens-768-light-playlist-brouillon.png",
+        "screens-768-light-apercu.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "site-768-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-768-dark-adresses.png",
+        "site-768-dark-commande-brouillon.png",
+        "site-768-dark-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-768-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-768-dark-installation.png",
+        "screens-768-dark-ecrans.png",
+        "screens-768-dark-playlist-brouillon.png",
+        "screens-768-dark-apercu.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "site-1440-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-1440-light-adresses.png",
+        "site-1440-light-commande-brouillon.png",
+        "site-1440-light-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-1440-light",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-1440-light-installation.png",
+        "screens-1440-light-ecrans.png",
+        "screens-1440-light-playlist-brouillon.png",
+        "screens-1440-light-apercu.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "site-1440-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "name, brand, website and DNS drafts survive outer tabs and browser Back/Forward",
+        "Home/End updates URL and focus; inner editor selection retained",
+        "expanded site preview remains operable across browser Back; close reveals requested section and retained fields"
+      ],
+      "shots": [
+        "site-1440-dark-adresses.png",
+        "site-1440-dark-commande-brouillon.png",
+        "site-1440-dark-apercu-retour.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-1440-dark",
+      "status": "passed",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme",
+        "TV list retained through history; scene duration/reorder retained through cancel guard; focus restored",
+        "real demo preview, simulated lunch service, pause, close and restored focus"
+      ],
+      "shots": [
+        "screens-1440-dark-installation.png",
+        "screens-1440-dark-ecrans.png",
+        "screens-1440-dark-playlist-brouillon.png",
+        "screens-1440-dark-apercu.png"
+      ],
+      "faults": []
+    }
+  ]
+}

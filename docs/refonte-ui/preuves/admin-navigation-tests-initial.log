@@ -1,0 +1,1141 @@
+
+> @sm/web@0.1.0 test /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+> vitest run
+
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+(node:32860) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:32860) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+(node:32861) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:32861) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+Loyalty UI captures: /var/folders/9d/2cz3khqj0c7d0tnwwq1mdzcc0000gn/T/sm-account-loyalty-ui-2prBac
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > recovers a phone collision by rereading terms and explicitly attaching the existing card without a second join
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '4', bytes: 51 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > keeps an actual before-headers response failure distinct from completed JSON/UI
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '3', bytes: 2263 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > pastes an existing card without a name and requires a separate explicit attachment consent
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '1', bytes: 19 }, { id: '2', bytes: 123 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > keeps an actual truncated response failure distinct from completed JSON/UI
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '4', bytes: 820 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > never navigates pasted links and refuses foreign-restaurant or noncanonical codes
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '3', bytes: 355 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > keeps an actual invalid-contract response failure distinct from completed JSON/UI
+Chromium notifications despite verified JSON/UI completion [
+  { fixtureId: '2', bytes: 136 },
+  { fixtureId: '3', bytes: 2263 },
+  { fixtureId: '4', bytes: 820 }
+]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > requires a fresh code and consent after attachment terms changed
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '4', bytes: 359 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > verifies each of twenty refreshes independently of Chromium network notifications
+Chromium notifications despite verified JSON/UI completion [
+  { fixtureId: '5', bytes: 2265 },
+  { fixtureId: '9', bytes: 2265 },
+  { fixtureId: '10', bytes: 2265 },
+  { fixtureId: '11', bytes: 2265 },
+  { fixtureId: '13', bytes: 2265 },
+  { fixtureId: '14', bytes: 2265 },
+  { fixtureId: '18', bytes: 2265 }
+]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > opens only on demand, works with SMS closed and keeps device shortcuts separate
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '2', bytes: 136 }, { fixtureId: '3', bytes: 2263 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > loads the selected detail, lines and totals without a tracking URL or secret storage
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '4', bytes: 820 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > clears code and a live camera on offline, then rereads without any automatic attachment
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '4', bytes: 19 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > clears code and a live camera on hidden, then rereads without any automatic attachment
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '4', bytes: 19 }, { id: '6', bytes: 355 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > renders a complete held response when the selected identity has not changed
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '3', bytes: 2263 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > keeps paste available after camera denial and cancel erases the entered code and consent
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '2', bytes: 136 }, { id: '3', bytes: 355 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > clears rendered data immediately offline and does not restore it from a local order cache
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '3', bytes: 2263 } ]
+
+stdout | src/components/customer-account/CustomerOrders.browser.test.ts > private orders — actual UI/client, read-only local HTTP fixture > preserves layout, focus, keyboard and reduced motion at 320px
+Chromium notifications despite verified JSON/UI completion [ { fixtureId: '2', bytes: 136 } ]
+
+ ✓ src/app/livreur/delivery-missions.browser.test.ts (21 tests) 23986ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'bouton' : arrête la caméra de remise, permission tardive=false, et réouvre sans action métier  2172ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'Échap' : arrête la caméra de remise, permission tardive=false, et réouvre sans action métier  1390ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'bouton' : arrête la caméra de remise, permission tardive=true, et réouvre sans action métier  1595ms
+   ✓ missions livreur et affectation BO rendues > fermeture 'Échap' : arrête la caméra de remise, permission tardive=true, et réouvre sans action métier  1290ms
+   ✓ missions livreur et affectation BO rendues > liste sans modale en 320px et bureau : contenu utile, sans débordement ni mouvement imposé  604ms
+   ✓ missions livreur et affectation BO rendues > réactive la navigation après fermeture du détail et ne laisse aucune action derrière la modale  1084ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation longue, sans attendre qu’elle disparaisse pour l’oublier  1151ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation ralentie, sans attendre qu’elle disparaisse pour l’oublier  1206ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation infinie, sans attendre qu’elle disparaisse pour l’oublier  1141ms
+   ✓ missions livreur et affectation BO rendues > le contrôle du mouvement refuse une animation bloquée, sans attendre qu’elle disparaisse pour l’oublier  1278ms
+   ✓ missions livreur et affectation BO rendues > une vérification d’accès conserve la géométrie compacte et désactive les actions  634ms
+   ✓ missions livreur et affectation BO rendues > mobile : attend préparation/paiement, montre le détail puis le départ réellement confirmé  1314ms
+   ✓ missions livreur et affectation BO rendues > reprend après réponse perdue et reload, avec UUID et paramètres inchangés, sans coordonnées stockées  1328ms
+   ✓ missions livreur et affectation BO rendues > un stockage refusé ne transmet aucun départ  652ms
+   ✓ missions livreur et affectation BO rendues > 404 retire seulement cette mission ; une autre fonctionne, puis 401 efface les coordonnées et ferme le détail  910ms
+   ✓ missions livreur et affectation BO rendues > un refus terminal reste un avertissement et n’annonce pas attendre une cuisine déjà prête  707ms
+   ✓ missions livreur et affectation BO rendues > BO desktop : affecte avant paiement/préparation, puis confirme séparément le départ  754ms
+   ✓ missions livreur et affectation BO rendues > la caisse voit l’affectation sans annuaire ni contrôle de réaffectation  594ms
+   ✓ missions livreur et affectation BO rendues > BO : annuaire paginé et lien explicite vers la création d’accès, sans envoyer avant le choix  648ms
+   ✓ missions livreur et affectation BO rendues > BO : changement de personne pendant recovery 409 ne clôture pas son journal et ne repeint pas les anciennes coordonnées  732ms
+   ✓ missions livreur et affectation BO rendues > BO : un refus durable retire seulement l’intention et reste un avertissement  821ms
+ ✓ src/components/customer-account/CustomerOrders.browser.test.ts (20 tests) 25018ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > distinguishes the complete CI response refused for identity change from an accepted UI response  989ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > does not treat the authenticated fallback UI as proof of a valid capabilities contract  917ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > never classifies incomplete, unvalidated, ambiguous or abandoned reads as application completion  739ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > keeps an actual before-headers response failure distinct from completed JSON/UI  1490ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > keeps an actual truncated response failure distinct from completed JSON/UI  1379ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > keeps an actual invalid-json response failure distinct from completed JSON/UI  1021ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > keeps an actual invalid-contract response failure distinct from completed JSON/UI  1357ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > verifies each of twenty refreshes independently of Chromium network notifications  3248ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > opens only on demand, works with SMS closed and keeps device shortcuts separate  1406ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > loads the selected detail, lines and totals without a tracking URL or secret storage  1506ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > explains HTTP 401 without displaying an empty list or stale detail  1103ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > explains HTTP 404 without displaying an empty list or stale detail  888ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > explains HTTP 503 without displaying an empty list or stale detail  734ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > renders a complete held response when the selected identity has not changed  814ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > drops a held A response when the public journal selects B with an identical session projection (invalid fixture contract: false)  833ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > drops a held A response when the public journal selects B with an identical session projection (invalid fixture contract: true)  603ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > clears rendered data immediately offline and does not restore it from a local order cache  699ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > preserves layout, focus, keyboard and reduced motion at 320px  1034ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > preserves layout, focus, keyboard and reduced motion at 390px  1077ms
+   ✓ private orders — actual UI/client, read-only local HTTP fixture > preserves layout, focus, keyboard and reduced motion at 1440px  1132ms
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > keeps attachment consent and controls reachable at 1440px
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '1', bytes: 19 }, { id: '3', bytes: 355 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > replays a lost join with the identical operation and body
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '4', bytes: 227 } ]
+
+ ✓ src/components/customer-account/CustomerAccess.browser.test.ts (15 tests) 29168ms
+   ✓ customer credential access — native rendered browser > signs in using a real discoverable key while all SMS capabilities are closed  2328ms
+   ✓ customer credential access — native rendered browser > reloads after a lost login response and recovers its receipt without another assertion  2270ms
+   ✓ customer credential access — native rendered browser > requires a new native key, possession and saved new code before recovery publication  2473ms
+   ✓ customer credential access — native rendered browser > recovers a lost final response without resending or burning another code  2582ms
+   ✓ customer credential access — native rendered browser > pauses on dismissal, wipes the code and does not close or rotate automatically  1895ms
+   ✓ customer credential access — native rendered browser > a failed receipt offers an explicit new attempt, never an automatic loop  1558ms
+   ✓ customer credential access — native rendered browser > remains a storage-free guest without access capability  1775ms
+   ✓ customer credential access — native rendered browser > blocks before any POST when the public journal cannot be stored  1267ms
+   ✓ customer credential access — native rendered browser > never displays a late secret after going offline during the response  1588ms
+   ✓ customer credential access — native rendered browser > offers a genuine new login after logout without erasing or adopting the old receipt  1736ms
+   ✓ customer credential access — native rendered browser > keeps credential entry closed until the pending logout has finished  2354ms
+   ✓ customer credential access — native rendered browser > shares the real Web Lock between tabs; a pending assertion cannot be bypassed by another result action  2110ms
+   ✓ customer credential access — native rendered browser > keeps branded controls readable, keyboard reachable and reduced motion at 320px  1125ms
+   ✓ customer credential access — native rendered browser > keeps branded controls readable, keyboard reachable and reduced motion at 390px  917ms
+   ✓ customer credential access — native rendered browser > keeps branded controls readable, keyboard reachable and reduced motion at 1440px  1075ms
+ ✓ src/components/customer-account/CustomerEnrollment.browser.test.ts (14 tests) 29897ms
+   ✓ protected customer enrollment — rendered native browser > notifie une seule fois la publication confirmée avec un callback parent instable  3456ms
+   ✓ protected customer enrollment — rendered native browser > continues the new account into its card with one phone verification and a recoverable join (lost reply: false)  3471ms
+   ✓ protected customer enrollment — rendered native browser > continues the new account into its card with one phone verification and a recoverable join (lost reply: true)  3006ms
+   ✓ protected customer enrollment — rendered native browser > uses actual native keys and activates only after the recovery code is re-entered  2080ms
+   ✓ protected customer enrollment — rendered native browser > lost activation response resumes the exact publication without sending the secret again  2728ms
+   ✓ protected customer enrollment — rendered native browser > pauses on panel close, clears a displayed recovery code, and never closes or rotates automatically  1808ms
+   ✓ protected customer enrollment — rendered native browser > does not expose signup or mutate any journal while the server capability is closed  1112ms
+   ✓ protected customer enrollment — rendered native browser > keeps a prepared enrollment usable but does not send when SMS admission is closed  1255ms
+   ✓ protected customer enrollment — rendered native browser > explicit device resumption without a cookie keeps signup possible and never fabricates a journal or session  993ms
+   ✓ protected customer enrollment — rendered native browser > discards a recovery-code response received after going offline, including after returning online  2397ms
+   ✓ protected customer enrollment — rendered native browser > another tab’s explicit resumption clears the displayed secret without sharing it  2568ms
+   ✓ protected customer enrollment — rendered native browser > keeps a sober, keyboard-accessible 320px entry without automatic sends  849ms
+   ✓ protected customer enrollment — rendered native browser > keeps a sober, keyboard-accessible 390px entry without automatic sends  1026ms
+   ✓ protected customer enrollment — rendered native browser > keeps a sober, keyboard-accessible 1440px entry without automatic sends  874ms
+Checkout fixture captures: /var/folders/9d/2cz3khqj0c7d0tnwwq1mdzcc0000gn/T/sm-checkout-account-Rj0964
+ ✓ src/components/order/Checkout.account.browser.test.tsx (19 tests) 30911ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > pins account C01 and sends only the private route for counter checkout  2144ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > keeps a held account response private after logout and does not request Stripe or clear the cart  1591ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > keeps a pre-existing legacy guest attempt guest when the account is authenticated  1287ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > rejects late A after journal B without retargeting or exposing its recovered ticket  1669ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > settles a hidden uncertain C01 only by explicit read after reload, never resend  1663ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > explicitly closes only a masked pending attempt after confirmation (rejected)  2347ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > explicitly closes only a masked pending attempt after confirmation (created)  1756ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > explicitly closes only a masked pending attempt after confirmation (lost)  2275ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > does not mount a held payment response or resurrect its cached callback after logout  1437ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > expires the account while creation is held and settles without payment or cart clear  1166ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > offers read-only reconciliation after offline then revalidation of the same A, not an inert return button  1379ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > removes the live Stripe widget on offline and ignores its old onPaid callback  1063ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > removes the live Stripe widget on hidden and ignores its old onPaid callback  1186ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > removes the live Stripe widget on logout and ignores its old onPaid callback  1542ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > revalidates inside a held cart lock before clearing when the account goes offline  1474ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > serializes logout against a receipt awaiting the cart lock without clearing after access loss  1442ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > captures the cart at the submit gesture before the account admission lock waits  1126ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > does not admit or downgrade an account gesture that loses access while waiting for its lock  1387ms
+   ✓ Checkout compte — vraie admission navigateur, sans fournisseur > renders the actual embedded Storefront without account endpoints or private aliases while preserving guest receipts  1078ms
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > completes the name inline, hides private data until ACK, then rereads terms before an explicit join without a phone
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '3', bytes: 356 }, { id: '4', bytes: 123 } ]
+
+ ✓ src/components/customer-account/verification.browser.test.ts (18 tests) 30876ms
+   ✓ Customer verification — native browser continuity through the real BFF > prepares, starts, checks, reads its durable result then exposes only the selected private profile  2790ms
+   ✓ Customer verification — native browser continuity through the real BFF > two native tabs serialize intention and start, so only one send is admitted  1326ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost intention headers never issues a second proof; recovery or explicit close is required  895ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost intention body never issues a second proof; recovery or explicit close is required  1124ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost start headers resumes by result only after reload, never another send  790ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost start body resumes by result only after reload, never another send  1145ms
+   ✓ Customer verification — native browser continuity through the real BFF > a real native fetch deadline keeps the admitted start uncertain until a result read, never a second send  12730ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost check headers and lost result remain checking, then recover without another OTP check  806ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost check body and lost result remain checking, then recover without another OTP check  1401ms
+   ✓ Customer verification — native browser continuity through the real BFF > a wrong code with a lost response is recovered as incorrect; only a new explicit code creates another check  1318ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost close headers resumes only the same close even when its cookie was erased  800ms
+   ✓ Customer verification — native browser continuity through the real BFF > lost close body resumes only the same close even when its cookie was erased  867ms
+   ✓ Customer verification — native browser continuity through the real BFF > a session cookie received by check cannot publish a profile before result and the completed journal  603ms
+   ✓ Customer verification — native browser continuity through the real BFF > late intention A Set-Cookie cannot replace B because their protected cookie names are distinct  517ms
+   ✓ Customer verification — native browser continuity through the real BFF > missing journal refuses cookie adoption, recovery and private profile without HTTP  738ms
+   ✓ Customer verification — native browser continuity through the real BFF > corrupt journal refuses cookie adoption, recovery and private profile without HTTP  963ms
+   ✓ Customer verification — native browser continuity through the real BFF > unavailable native indexedDB prevents an intention without network fallback  580ms
+   ✓ Customer verification — native browser continuity through the real BFF > unavailable native locks prevents an intention without network fallback  490ms
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > hides loyalty without public eligibility, including a requested profile destination
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '1', bytes: 19 } ]
+
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > does not disclose any other member after a phone collision
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '3', bytes: 51 } ]
+
+ ✓ src/components/order/customer-memory.browser.test.ts (33 tests) 39262ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > préremplit uniquement les champs vierges, sans sauvegarde automatique  1934ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > un profil HTTP retardé conserve la saisie volontaire et un champ volontairement vidé  967ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > la mémoire consentie passe avant le compte même si sa lecture arrive après le profil  1083ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > la mémoire consentie reste prioritaire quand le profil arrive en dernier  923ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > une mémoire verrouillée ne retarde le compte que jusqu’à sa borne native de cinq secondes  5856ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > une modification du nom ne transforme pas le téléphone du compte en saisie volontaire  751ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > la mémorisation du profil exige un clic et reste consentie après perte de session et recharge  1211ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > aucune lecture du compte en démonstration et aucune donnée privée transportée au changement de restaurant  733ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > le checkout intégré désactive le compte sans désactiver la mémoire invitée  1415ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > le vrai Storefront embed raccorde le vrai checkout invité sans aucune route compte  1397ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > hidden retire uniquement le profil, pas la saisie, même après relecture mémoire  636ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > offline retire uniquement le profil, pas la saisie, même après relecture mémoire  663ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > une invalidation interonglets écarte aussi une réponse de profil retardée sans mémorisation  855ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > fermer puis rouvrir relit la mémoire avant de réutiliser le compte  1004ms
+   ✓ coordonnées du compte : vrai hook et réponses HTTP locales, sans fournisseur > ne tronque pas un nom compte long : il reste intégral et modifiable  466ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > ne sauvegarde rien sans geste explicite puis préremplit après recharge  933ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > écarte la clé globale ancienne sans la rattacher à un restaurant  484ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > ne transporte ni saisie ni cache vers un autre restaurant  857ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > la démonstration ne lit, retire ni écrit aucune mémoire réelle  825ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > efface la mémoire inter-onglets sans effacer un brouillon nouvellement saisi  1433ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > un oubli dans B efface aussi le formulaire ayant sauvegardé dans A  1496ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > la saisie pendant une sauvegarde en attente reste un brouillon non mémorisé  825ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une saisie nouvelle pendant un effacement en attente reste un brouillon non mémorisé  1063ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une lecture retardée ne fuit pas après changement de restaurant  1192ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une lecture retardée ne fuit pas après changement de démonstration  1070ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > un retour au même contexte après sauvegarde en attente ne reste pas occupé : formulaire  735ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > un retour au même contexte après sauvegarde en attente ne reste pas occupé : démonstration  811ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > un oubli après sauvegarde terminée formulaire fermé ne restaure pas les anciennes coordonnées  1448ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une mise à jour externe ne remplace pas le champ déjà modifié  1167ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > retire le préremplissage à expiration sans prolonger la durée au focus  878ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une erreur de relecture retire le préremplissage sans bloquer une nouvelle saisie  740ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > une erreur de stockage est explicite et n’empêche pas la saisie  758ms
+   ✓ coordonnées : vrais contrôles React et stockage navigateur > l’effacement ne touche ni panier, tentative C01, ni accès de remise  954ms
+stdout | src/components/customer-account/CustomerLoyalty.browser.test.ts > account loyalty — native UI with isolated HTTP > an inter-tab publication change masks the old card and drops its held attach result
+Chromium notifications despite exact complete JSON/contract/UI [ { id: '3', bytes: 355 } ]
+
+ ✓ src/components/order/DeviceOrdersSheet.browser.test.ts (13 tests) 15652ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > ouvre à la demande, distingue les états serveur et inconnus, sans faux payé depuis le reçu  1067ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > limite la lecture à huit reçus et trois requêtes simultanées puis charge explicitement la suite  956ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > ne recommence pas un lot paginé encore en cours au tick périodique et atteint le dernier reçu  1638ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > ne promet pas de progression livraison sans paiement confirmé (undefined)  886ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > ne promet pas de progression livraison sans paiement confirmé ({"method":"counter","status":"pending"})  707ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > ne promet pas de progression livraison sans paiement confirmé ({"method":"online","status":"pending"})  803ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > efface les anciens états et ignore une réponse après hidden, puis vérifie au retour  830ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > efface les anciens états et ignore une réponse après offline, puis vérifie au retour  878ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > oublie seulement après confirmation, conserve la preuve privée et refuse le reçu encore actif durablement  1363ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > respecte le focus, le clavier, le mouvement réduit et les largeurs 320px/bureau  999ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > aucun reçu d’un autre restaurant, et une erreur de stockage ne se fait pas passer pour une liste vide  1007ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > raccorde le vrai Storefront indépendamment du panier et laisse la reprise disponible  1167ms
+   ✓ Mes commandes sur cet appareil — rendu et IndexedDB natifs > classe uniquement une réponse corrélée et valide : annulation, remboursement et absence de paiement  536ms
+ ✓ src/components/delivery-handoff/handoff.browser.test.ts (16 tests) 16591ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > code confirmé, clavier, pas de double POST ni secret persistant et aucun débordement à 320px  1001ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > code incorrect terminal : avertissement, nouvelle saisie explicite, UUID différent  813ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > réponse perdue puis mission disparue : reprise dédiée sans PIN et même opération  1119ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > incident puis exception motivée côté gérant, sans faux paiement ni livraison à l’incident  1175ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > caisse sans exception, caméra refusée avec retour PIN, stockage refusé sans POST  1162ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > décode un vrai QR sur flux vidéo synthétique : mauvais ordre refusé puis confirmation explicite et caméra arrêtée  1648ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > client : fragment conservé avant départ, import validé puis reload sans fragment, PIN jamais dans IDB  1094ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > import expiré : garde le fragment sur refus durable, aucun ancien reçu n’est prolongé  630ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > ne révèle pas un code dont la réponse arrive après hidden  734ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > ne révèle pas un code dont la réponse arrive après offline  469ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > reprend explicitement C01 avant Stripe, conserve l’accès au retour et ne transmet jamais le fragment au fournisseur  1036ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > refuse Stripe et conserve le fragment si l’attestation C01 est wrong  803ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > refuse Stripe et conserve le fragment si l’attestation C01 est pending  615ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > refuse Stripe et conserve le fragment si l’attestation C01 est lost  804ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > un simple lien de suivi ne donne aucun code client et ne déclenche aucun appel proof  580ms
+   ✓ remise livraison rendue, navigateur et stockage natifs > révocation efface la vue de remise et interdit le geste  661ms
+ ✓ src/app/admin/menu/product-media.browser.test.ts (10 tests) 16564ms
+   ✓ création et édition avec illustrations — vraie page Menu > rend le choix dès création, persiste PNG et attachement, puis retrouve l’image après rechargement  2031ms
+   ✓ création et édition avec illustrations — vraie page Menu > reprend le même produit après refuse sans deuxième POST  1692ms
+   ✓ création et édition avec illustrations — vraie page Menu > reprend le même produit après timeout-after-write sans deuxième POST  1628ms
+   ✓ création et édition avec illustrations — vraie page Menu > ferme puis réouvre le produit confirmé en distinguant la bibliothèque de l’attachement non enregistré  1858ms
+   ✓ création et édition avec illustrations — vraie page Menu > affiche le refus de dépôt 403 sans fausse sélection ni création  1032ms
+   ✓ création et édition avec illustrations — vraie page Menu > affiche le refus de dépôt 409 sans fausse sélection ni création  898ms
+   ✓ création et édition avec illustrations — vraie page Menu > préserve photo principale, cadrage, recette et prix en édition  1059ms
+   ✓ création et édition avec illustrations — vraie page Menu > garde le dépôt de fichier ordinaire disponible dès création  1188ms
+   ✓ création et édition avec illustrations — vraie page Menu > bloque Enregistrer pendant la préparation et annule le dépôt si le choix est fermé  2246ms
+   ✓ création et édition avec illustrations — vraie page Menu > montre les 41 choix sur mobile sans dépasser l’écran  855ms
+ ✓ src/components/customer-account/CustomerAccount.browser.test.ts (46 tests) 49980ms
+   ✓ customer entry placement — real Storefront and loyalty components > relie les onglets au panneau stable et conserve le panier pendant la navigation clavier et le retour navigateur  2442ms
+   ✓ customer entry placement — real Storefront and loyalty components > keeps ordering primary and personal entries aligned at 320px  1355ms
+   ✓ customer entry placement — real Storefront and loyalty components > keeps ordering primary and personal entries aligned at 390px  1281ms
+   ✓ customer entry placement — real Storefront and loyalty components > keeps ordering primary and personal entries aligned at 1440px  1262ms
+   ✓ customer entry placement — real Storefront and loyalty components > opens orders from the common navigation while account is a page, without competing dialogs  1676ms
+   ✓ customer entry placement — real Storefront and loyalty components > isolates the reflow counterexample in one browser turn and rejects a displaced sibling  849ms
+   ✓ customer entry placement — real Storefront and loyalty components > keeps the loyalty card and ordering readable, with no duplicate link back to the same card  1271ms
+   ✓ customer entry placement — real Storefront and loyalty components > returns to the actual destination through the common navigation on storefront  1046ms
+   ✓ customer entry placement — real Storefront and loyalty components > returns to the actual destination through the common navigation on loyalty  1432ms
+   ✓ customer entry placement — real Storefront and loyalty components > describes the scanner before opening it, without inventing a saved card or an account  1214ms
+   ✓ customer account entry — real hook and client, isolated HTTP boundary > shows real offline state without a no-op retry and reads authority only after reconnecting  1419ms
+   ✓ customer account entry — real hook and client, isolated HTTP boundary > loads only on opening, saves through fresh session checks and confirms server logout  1240ms
+   ✓ customer account entry — real hook and client, isolated HTTP boundary > removes the private view while saving and after a lost response, then rereads only on request  1119ms
+   ✓ customer account entry — real hook and client, isolated HTTP boundary > refuses a stale profile at preflight and exposes an explicit refresh without rewriting it  1163ms
+   ✓ customer account panel — rendered boundaries > renders account as a destination without a dialog at 320px  1426ms
+   ✓ customer account panel — rendered boundaries > renders account as a destination without a dialog at 390px  1453ms
+   ✓ customer account panel — rendered boundaries > renders account as a destination without a dialog at 820px  1157ms
+   ✓ customer account panel — rendered boundaries > renders account as a destination without a dialog at 1440px  1044ms
+   ✓ customer account panel — rendered boundaries > keeps the account usable without advertising loyalty when the restaurant has no loyalty destination  763ms
+   ✓ customer account panel — rendered boundaries > presents one factual guest state without duplicate advice  725ms
+   ✓ customer account panel — rendered boundaries > presents one factual unavailable state without duplicate advice  662ms
+   ✓ customer account panel — rendered boundaries > presents one factual offline state without duplicate advice  674ms
+   ✓ customer account panel — rendered boundaries > presents one factual error state without duplicate advice  564ms
+   ✓ customer account panel — rendered boundaries > preserves the exact action or quota message: L’action n’est pas confirmée. Actualisez votre compte avant de recommencer.  475ms
+   ✓ customer account panel — rendered boundaries > preserves the exact action or quota message: Votre accès ou votre profil a changé. Actualisez votre compte avant de continuer.  456ms
+   ✓ customer account panel — rendered boundaries > preserves the exact action or quota message: Trop de demandes. Patientez avant de réessayer.  530ms
+   ✓ customer account panel — rendered boundaries > keeps the concise closed panel operable at 320px including short mobile height  1197ms
+   ✓ customer account panel — rendered boundaries > keeps the concise closed panel operable at 390px including short mobile height  1639ms
+   ✓ customer account panel — rendered boundaries > keeps the concise closed panel operable at 1440px including short mobile height  1268ms
+   ✓ customer account panel — rendered boundaries > opens only on demand and preserves the honest guest journey without an OTP CTA  811ms
+   ✓ customer account panel — rendered boundaries > returns keyboard focus to the trigger and traps tab inside the real Sheet  879ms
+   ✓ customer account panel — rendered boundaries > keeps device orders explicitly local and the loyalty link free of identity secrets  1056ms
+   ✓ customer account panel — rendered boundaries > edits the name explicitly, does not edit the verified phone and reports confirmed save  783ms
+   ✓ customer account panel — rendered boundaries > does not silently send a draft against a newer authoritative revision  779ms
+   ✓ customer account panel — rendered boundaries > clears the draft on a failed mutation and requires an explicit reread, not a silent rewrite  778ms
+   ✓ customer account panel — rendered boundaries > clears personal drafts immediately when the verified view disappears  561ms
+   ✓ customer account panel — rendered boundaries > requests explicit logout confirmation and never claims success on an uncertain response  924ms
+   ✓ customer account panel — rendered boundaries > revokes all sessions only after its dedicated confirmation and removes the displayed profile  842ms
+   ✓ customer account panel — rendered boundaries > does not turn a technical available capability into an invented sign-in form  651ms
+   ✓ customer account panel — rendered boundaries > drops an unsubmitted draft when closing and reopening the personal panel  793ms
+   ✓ customer account panel — rendered boundaries > blocks repeated actions and closing while a mutation is in progress  684ms
+   ✓ customer account panel — rendered boundaries > shows an honest unavailable state with appropriate recovery, not an invented profile  919ms
+   ✓ customer account panel — rendered boundaries > shows an honest offline state with appropriate recovery, not an invented profile  582ms
+   ✓ customer account panel — rendered boundaries > shows an honest error state with appropriate recovery, not an invented profile  749ms
+   ✓ customer account panel — rendered boundaries > allows explicit refresh from an invalidated idle state without claiming an ongoing read  916ms
+   ✓ customer account panel — rendered boundaries > respects brand geometry at 320px and desktop with reduced motion  993ms
+ ✓ src/components/order/checkout-attempt.test.ts (50 tests) 23878ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > conserve retrait et livraison après recharge, sans corps ni capacité privée dans le magasin ou sa projection  831ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > refuse l’oubli actif avec conflict puis oublie le suivi et son alias, jamais l’accès privé ni la tentative suivante  596ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > migre v1 : seulement active/last reçus, sans modifier les originaux ni importer les accès privés  314ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > migre v2 : seulement active/last reçus, sans modifier les originaux ni importer les accès privés  311ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > la rétention dure sept jours depuis le reçu, passe minuit et n’est prolongée ni par replay, ni par archive/reload  423ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > réserve le 128e suivi avant admission entre deux onglets et refuse le 129e sans perdre les précédents  595ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > sérialise oubli et nouveau reçu entre deux onglets sans effacer le nouveau suivi ni ressusciter l’ancien  515ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > l’oubli interrompu annule aussi la suppression de l’alias et ne touche jamais une tentative prepared  323ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > une projection corrompue (proof) bloque lecture et admission sans effacement  300ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > une projection corrompue (payload) bloque lecture et admission sans effacement  420ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > une projection corrompue (origin) bloque lecture et admission sans effacement  584ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > notifie les ajouts et oublis après commit, sans notification de lecture ni données du reçu  654ms
+   ✓ suivis de commandes sur cet appareil, IndexedDB natif > une migration interrompue restaure la version v2, sa tentative incertaine et ses alias intacts  379ms
+   ✓ journal de checkout durable, IndexedDB natif > importe un accès vérifié sur une nouvelle origine sans créer une tentative et le restaure après reload  855ms
+   ✓ journal de checkout durable, IndexedDB natif > l’attestation C01 avant paiement exige ordre, type et jeton de suivi exacts, sans fabriquer de preuve PIN  371ms
+   ✓ journal de checkout durable, IndexedDB natif > un import ne consomme jamais la place réservée à une livraison incertaine et ne purge pas les 127 autres  721ms
+   ✓ journal de checkout durable, IndexedDB natif > crée et relit après recharge une identité cryptographique et un corps immuable  599ms
+   ✓ journal de checkout durable, IndexedDB natif > acquiert atomiquement une seule tentative entre deux onglets  885ms
+   ✓ journal de checkout durable, IndexedDB natif > isole les établissements et les origines  536ms
+   ✓ journal de checkout durable, IndexedDB natif > conserve indéfiniment une tentative incertaine et refuse son archivage  527ms
+   ✓ journal de checkout durable, IndexedDB natif > enregistre le reçu puis supprime le corps et la preuve ; archive explicitement sans perdre le suivi  422ms
+   ✓ journal de checkout durable, IndexedDB natif > ne remplace jamais un reçu connu par une autre commande ou un autre jeton  351ms
+   ✓ journal de checkout durable, IndexedDB natif > conserve uniquement la capacité privée initiale de livraison dans le reçu, y compris après recharge et archivage  778ms
+   ✓ journal de checkout durable, IndexedDB natif > retrouve chaque reçu privé après plusieurs commandes, sans mélanger restaurant, ordre ni origine  554ms
+   ✓ journal de checkout durable, IndexedDB natif > refuse une nouvelle livraison avant POST à 128 reçus privés puis purge seulement les reçus anciens  612ms
+   ✓ journal de checkout durable, IndexedDB natif > migre v1 sans perdre une tentative incertaine ni recréer son identité  347ms
+   ✓ journal de checkout durable, IndexedDB natif > ne confirme pas le reçu si la copie privée par commande échoue : toute la transaction est annulée  446ms
+   ✓ journal de checkout durable, IndexedDB natif > refuse toute preuve injectée dans le reçu serveur et conserve l’original privé intact  393ms
+   ✓ journal de checkout durable, IndexedDB natif > relit les reçus historiques sans capacité et refuse une capacité corrompue sans effacement  349ms
+   ✓ journal de checkout durable, IndexedDB natif > ne libère un rejet qu’après preuve serveur enregistrée, et efface ses données détaillées  312ms
+   ✓ journal de checkout durable, IndexedDB natif > refuse d’effacer un reçu créé avec un rejet tardif contradictoire  302ms
+   ✓ journal de checkout durable, IndexedDB natif > notifie le document et un autre onglet après commit, uniquement avec le tenant  745ms
+   ✓ journal de checkout durable, IndexedDB natif > attend le commit strict, pas le succès de la requête ; un abort interdit le POST  437ms
+   ✓ journal de checkout durable, IndexedDB natif > un échec d’écriture du reçu conserve la tentative et sa preuve de reprise  421ms
+   ✓ journal de checkout durable, IndexedDB natif > refuse un stockage interdit sans fallback mémoire  333ms
+   ✓ journal de checkout durable, IndexedDB natif > refuse le mode de durabilité relâchée et l’absence de crypto fiable  355ms
+   ✓ journal de checkout durable, IndexedDB natif > détecte un schéma physique endommagé sans effacer le reçu actif  453ms
+   ✓ journal de checkout durable, IndexedDB natif > bloque une ligne corrompue (version) sans la supprimer  380ms
+   ✓ journal de checkout durable, IndexedDB natif > bloque une ligne corrompue (payload) sans la supprimer  537ms
+   ✓ journal de checkout durable, IndexedDB natif > bloque une ligne corrompue (tenant) sans la supprimer  377ms
+   ✓ journal de checkout durable, IndexedDB natif > bloque une ligne corrompue (proof) sans la supprimer  365ms
+   ✓ journal de checkout durable, IndexedDB natif > bloque une ligne corrompue (extra-secret) sans la supprimer  337ms
+   ✓ journal de checkout durable, IndexedDB natif > ne journalise ni Turnstile ni secrets Stripe passés par erreur  323ms
+ ✓ src/components/customer-account/CustomerLoyalty.browser.test.ts (36 tests) 51382ms
+   ✓ account loyalty — native UI with isolated HTTP > recovers a phone collision by rereading terms and explicitly attaching the existing card without a second join  2106ms
+   ✓ account loyalty — native UI with isolated HTTP > pastes an existing card without a name and requires a separate explicit attachment consent  1645ms
+   ✓ account loyalty — native UI with isolated HTTP > never navigates pasted links and refuses foreign-restaurant or noncanonical codes  1578ms
+   ✓ account loyalty — native UI with isolated HTTP > retries the identical attachment after a lost reply and reloads by view without the old QR  1876ms
+   ✓ account loyalty — native UI with isolated HTTP > requires a fresh code and consent after attachment terms changed  1370ms
+   ✓ account loyalty — native UI with isolated HTTP > rereads real terms explicitly after a uniform attachment refusal  1464ms
+   ✓ account loyalty — native UI with isolated HTTP > decodes a real QR from synthetic video without sending it and stops camera before consent  1215ms
+   ✓ account loyalty — native UI with isolated HTTP > cancels an awaiting camera permission and stops its late synthetic stream without restoring the QR  1063ms
+   ✓ account loyalty — native UI with isolated HTTP > clears code and a live camera on offline, then rereads without any automatic attachment  1511ms
+   ✓ account loyalty — native UI with isolated HTTP > clears code and a live camera on hidden, then rereads without any automatic attachment  1591ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps paste available after camera denial and cancel erases the entered code and consent  1233ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps attachment consent and controls reachable at 320px  1756ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps attachment consent and controls reachable at 390px  1984ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps attachment consent and controls reachable at 1440px  3048ms
+   ✓ account loyalty — native UI with isolated HTTP > requires the exact held request and post-EOF disposal proof, never merely a closed screen  632ms
+   ✓ account loyalty — native UI with isolated HTTP > requires exact request, complete JSON, valid contract and matching UI before classifying a Chromium notification  452ms
+   ✓ account loyalty — native UI with isolated HTTP > requires opt-in and a separate card gesture, renders the restaurant identity  887ms
+   ✓ account loyalty — native UI with isolated HTTP > replays a lost join with the identical operation and body  1036ms
+   ✓ account loyalty — native UI with isolated HTTP > changed terms reset the checkbox and require a new explicit consent  1008ms
+   ✓ account loyalty — native UI with isolated HTTP > completes the name inline, hides private data until ACK, then rereads terms before an explicit join without a phone  1071ms
+   ✓ account loyalty — native UI with isolated HTTP > hides loyalty without public eligibility, including a requested profile destination  622ms
+   ✓ account loyalty — native UI with isolated HTTP > hides loyalty without public eligibility, including a requested loyalty destination  664ms
+   ✓ account loyalty — native UI with isolated HTTP > opens an eligible direct loyalty destination only after reading the protected session, without automatic enrollment  932ms
+   ✓ account loyalty — native UI with isolated HTTP > does not disclose any other member after a phone collision  1031ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps the account accessible when loyalty is unavailable  921ms
+   ✓ account loyalty — native UI with isolated HTTP > masks private content offline and never restores the QR on reconnect  974ms
+   ✓ account loyalty — native UI with isolated HTTP > a late response after leaving the screen cannot republish private data  923ms
+   ✓ account loyalty — native UI with isolated HTTP > an inter-tab publication change masks the old card and drops its held view result  1709ms
+   ✓ account loyalty — native UI with isolated HTTP > an inter-tab publication change masks the old card and drops its held attach result  1796ms
+   ✓ account loyalty — native UI with isolated HTTP > expiry removes an already rendered QR and balance  2498ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps visible, reachable controls at 320px including short height  1472ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps visible, reachable controls at 390px including short height  1368ms
+   ✓ account loyalty — native UI with isolated HTTP > keeps visible, reachable controls at 1440px including short height  1720ms
+   ✓ account loyalty — native UI with isolated HTTP > never classifies an actual truncated card response using the previous valid same-URL card  1533ms
+   ✓ account loyalty — native UI with isolated HTTP > never classifies an actual invalid-json card response using the previous valid same-URL card  1077ms
+   ✓ account loyalty — native UI with isolated HTTP > never classifies an actual invalid-contract card response using the previous valid same-URL card  739ms
+ ✓ src/components/loyalty/LoyaltyAccountEntry.browser.test.tsx (17 tests) 24520ms
+   ✓ application client — navigation commune et cartes existantes > vitrine absente : deux destinations réelles, compte en page et ancien QR conservé  780ms
+   ✓ application client — navigation commune et cartes existantes > affiche la carte déjà liée sans nouveau téléphone, adhésion ni scan et efface le DOM privé au retour  1054ms
+   ✓ application client — navigation commune et cartes existantes > conserve un panier réel pendant Carte → Recherche → Fidélité → Compte → retour navigateur  1119ms
+   ✓ application client — navigation commune et cartes existantes > garde la carte QR existante après une visite dans le compte sans la transformer en carte privée  780ms
+   ✓ application client — navigation commune et cartes existantes > ne remonte pas le compte lors d’une réponse tardive de la carte QR  1201ms
+   ✓ application client — navigation commune et cartes existantes > garde demo invité et sans lectures compte  528ms
+   ✓ application client — navigation commune et cartes existantes > garde embed invité et sans lectures compte  538ms
+   ✓ application client — navigation commune et cartes existantes > la démo réelle garde son lien fidélité explicite et ne propose aucun compte  738ms
+   ✓ application client — navigation commune et cartes existantes > omet la fidélité si aucun catalogue public n’est fourni  904ms
+   ✓ application client — navigation commune et cartes existantes > le lien fidélité de la vitrine rejoint la même app sans perdre le panier  966ms
+   ✓ application client — navigation commune et cartes existantes > conserve les destinations de consultation quand la commande publique est en pause  876ms
+   ✓ application client — navigation commune et cartes existantes > désactive aussi le panier flottant pendant la reprise privée et le rouvre sans quitter la coque  1399ms
+   ✓ application client — navigation commune et cartes existantes > montre les quatre destinations dans la coque réelle à 320px  2616ms
+   ✓ application client — navigation commune et cartes existantes > montre les quatre destinations dans la coque réelle à 390px  2695ms
+   ✓ application client — navigation commune et cartes existantes > montre les quatre destinations dans la coque réelle à 820px  2937ms
+   ✓ application client — navigation commune et cartes existantes > montre les quatre destinations dans la coque réelle à 1440px  1355ms
+   ✓ application client — navigation commune et cartes existantes > garde la page pendant un retrait QR en cours, y compris le retour du navigateur  881ms
+Reorder fixture: verified JSON despite Chromium notification (response 6)
+Reorder fixture: verified JSON despite Chromium notification (response 7)
+Reorder fixture: verified logout acknowledgement despite Chromium notification (response 5)
+ ✓ src/components/order/menu-layout.browser.test.tsx (16 tests) 25425ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 320 px  1225ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 390 px  1161ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > efface la recherche puis permet de retaper sans perdre le focus à 820 px  1060ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > annonce un minimum de section pour les formats et réserve le prix unique aux produits sans variante  520ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contient les 2 formats de chaque ligne sans recouvrir le produit suivant  1124ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contient les 3 formats de chaque ligne sans recouvrir le produit suivant  1134ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contient les 4 formats de chaque ligne sans recouvrir le produit suivant  925ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 320 px  734ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 330 px  606ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde prix dès 119,90 €, compteur et action dans les cartes à 390 px  826ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > contraint la photo intrinsèque 800×600 au plateau contain à 820 px  1471ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > répartit quatre formats sur deux colonnes quand la carte mobile est assez large  1138ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > garde Classique entier et les prix contenus dans la carte étroite, puis rétablit deux colonnes de formats  3193ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > applique réellement la forme 'net' aux cartes, chips et feuilles  887ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > applique réellement la forme 'doux' aux cartes, chips et feuilles  544ms
+   ✓ MenuBoard — géométrie responsive du catalogue réel > applique réellement la forme 'rond' aux cartes, chips et feuilles  950ms
+ ✓ src/components/order/Tracking.browser.test.tsx (18 tests) 15715ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > garde numéro, options, retraits, note et total lisibles en 320px  784ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > garde numéro, options, retraits, note et total lisibles en 390px  939ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > garde numéro, options, retraits, note et total lisibles en 1280px  1065ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > présente ready sans inventer une autre étape ou rouvrir le paiement  639ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > présente delivered sans inventer une autre étape ou rouvrir le paiement  1234ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > présente cancelled sans inventer une autre étape ou rouvrir le paiement  580ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > refuse une promesse de préparation ou de code privé pour une livraison ready encore impayée  508ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > affiche remboursement sans fausse annulation et poursuit le poll d’un remboursement en attente  802ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > avance par le poll réel puis arrête les lectures à la remise confirmée  692ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > garde le dernier état lors d’une panne sans présenter une progression non reçue  715ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > suspend les lectures en arrière-plan et vérifie immédiatement au retour visible  706ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > laisse le texte des étapes lisible sans collision avec le badge en 320px  1242ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > laisse le texte des étapes lisible sans collision avec le badge en 390px  1227ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > ne déduit jamais le code privé du seul jeton de suivi public  587ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > révèle la preuve seulement après action, conserve son accès dans IDB puis la masque à la remise  903ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > ignore une preuve retardée lorsque la livraison est terminée entretemps  746ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > ne change le paiement au comptoir qu’après confirmation explicite et ACK  506ms
+   ✓ suivi V2 — navigateur, paiement et preuve privée > reste utilisable sans ticket détaillé et ignore une réponse corrélée à une autre commande  607ms
+ ✓ src/components/order/cart-persistence.test.ts (14 tests) 15651ms
+   ✓ panier réel React et verrou inter-onglets > ajoute une reprise explicitement confirmée sans écraser le panier ni réutiliser les identifiants de prévisualisation  554ms
+   ✓ panier réel React et verrou inter-onglets > refuse la reprise si le panier a changé depuis la confirmation affichée  924ms
+   ✓ panier réel React et verrou inter-onglets > réévalue l’accès après attente du verrou panier avant tout ajout privé  1178ms
+   ✓ panier réel React et verrou inter-onglets > refuse un ajout partiel ou retarifé en silence  751ms
+   ✓ panier réel React et verrou inter-onglets > ne confirme jamais une reprise qui dépasserait les 50 lignes acceptées au checkout  1079ms
+   ✓ panier réel React et verrou inter-onglets > signale une sélection disparue après relecture sans réécrire le stockage ni perdre la ligne valide  1357ms
+   ✓ panier réel React et verrou inter-onglets > écrit les actions avant publication et conserve quantité/note après recharge  780ms
+   ✓ panier réel React et verrou inter-onglets > un callback A ancien ne vide pas le panier B et recharge son contenu  1064ms
+   ✓ panier réel React et verrou inter-onglets > ne réinjecte pas A après vidage, sous StrictMode, focus et recharge  1258ms
+   ✓ panier réel React et verrou inter-onglets > sérialise clear et une écriture en attente sans publication optimiste  868ms
+   ✓ panier réel React et verrou inter-onglets > réévalue l’autorisation du reçu dans le verrou avant de vider le panier  776ms
+   ✓ panier réel React et verrou inter-onglets > sans Web Locks, ne vide ni modifie le panier et retourne false  747ms
+   ✓ panier réel React et verrou inter-onglets > un quota atteint conserve l’écran et le panier existants sans promesse rejetée non gérée  546ms
+   ✓ panier réel React et verrou inter-onglets > isole les restaurateurs même dans un contexte navigateur partagé  1126ms
+ ✓ src/components/order/checkout-privacy.browser.test.ts (12 tests) 14174ms
+   ✓ checkout privé — projections UI et barrières natives > conserve le fragment explicitement copié si le reçu durable reste lié au compte, y compris après logout  2425ms
+   ✓ checkout privé — projections UI et barrières natives > retrouve un reçu privé arrivé après l’ouverture du suivi, sans vérification de PIN automatique  973ms
+   ✓ checkout privé — projections UI et barrières natives > ne recapture pas une nouvelle barrière après une réponse de session retardée  587ms
+   ✓ checkout privé — projections UI et barrières natives > focus, relecture et modification de nom ne réinitialisent pas les alias du compte  734ms
+   ✓ checkout privé — projections UI et barrières natives > sépare les raccourcis invités du reçu compte même pendant une session active  749ms
+   ✓ checkout privé — projections UI et barrières natives > persiste la barrière avant DELETE et masque le compte dans les deux onglets, sans supprimer l’invité  1705ms
+   ✓ checkout privé — projections UI et barrières natives > conserve seulement les métadonnées de réconciliation et ne réexpose pas un reçu arrivé après logout  774ms
+   ✓ checkout privé — projections UI et barrières natives > offline efface seulement la projection compte, sans incrémenter la barrière  543ms
+   ✓ checkout privé — projections UI et barrières natives > hidden efface seulement la projection compte, sans incrémenter la barrière  733ms
+   ✓ checkout privé — projections UI et barrières natives > expiry efface seulement la projection compte, sans incrémenter la barrière  792ms
+   ✓ checkout privé — projections UI et barrières natives > n’adopte pas un reçu A sous la publication B dont le profil est strictement identique  787ms
+   ✓ checkout privé — projections UI et barrières natives > efface le PIN affiché et refuse une réponse de preuve A retardée après sélection de B  1014ms
+ ✓ src/components/order/Checkout.slots-refresh.browser.test.tsx (15 tests) 17149ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > affiche l’adresse entière, les étapes et le motif du paiement bloqué à 320 px, y compris après rotation  871ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > Au plus tôt utilise le premier créneau libre du serveur et garde les coordonnées au paiement  815ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > Au plus tôt n’autorise rien quand aucun créneau n’est disponible  839ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > revenir à Au plus tôt utilise la dernière liste vérifiée sans refaire une requête  1286ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > bloque l’ancienne grille et annonce l’actualisation à 320 px  1348ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > bloque l’ancienne grille et annonce l’actualisation à 1440 px  975ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > bloque aussi Continuer avec une sélection antérieure tant que la relecture est retenue  1167ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > efface le créneau retiré sans sélectionner le suivant  907ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > efface le créneau complet sans sélectionner le suivant  1569ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > ne laisse pas continuer sur une erreur, puis conserve l’ISO lors du réessai réussi  1294ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > écarte un ancien réessai après sortie/réentrée, même s’il finit après la nouvelle lecture  1375ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > une date demandée bloque l’ancienne grille et ne réutilise pas l’ISO d’un autre jour  1010ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > écarte une réponse d’un ancien réessai après sélection d’une autre date  980ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > une réponse ne correspondant pas à la date demandée ne rouvre pas la progression  671ms
+   ✓ actualisation des créneaux — vrai Checkout et HTTP local retenu > un ancien retrait ne remplace pas les créneaux de livraison  1032ms
+ ✓ src/app/admin/site/SiteScope.browser.test.tsx (15 tests) 16786ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > le dépôt de logo vérifie encore sa session après lecture du fichier (changement=false)  1567ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > le dépôt de logo vérifie encore sa session après lecture du fichier (changement=true)  1341ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > réagit à un vrai événement storage provenant d’un autre onglet de même rôle  1267ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > refuse le brouillon A avec un jeton B avant même storage/focus : brand  911ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > refuse le brouillon A avec un jeton B avant même storage/focus : name  858ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > refuse le brouillon A avec un jeton B avant même storage/focus : card  1331ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > ignore la réponse /me A retenue quand B est devenu l’autorité  927ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : brand  795ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : name  1084ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : card  1233ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > garde le brouillon A dans son restaurant et ne l’applique jamais automatiquement à B  904ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un retour manuel à la valeur initiale ne ressuscite pas le brouillon au reload  1025ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > bloque les liens avant ACK et conserve les choix après réponse incertaine : name  584ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > bloque les liens avant ACK et conserve les choix après réponse incertaine : card  565ms
+Reorder flow captures: /var/folders/9d/2cz3khqj0c7d0tnwwq1mdzcc0000gn/T/sm-reorder-flow-qdlSqx
+ ✓ src/components/customer-account/ReorderFlow.browser.test.tsx (12 tests) 17309ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > préserve la preuve complète quand le signal est abandonné après la lecture native  1570ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > conserve un vrai abandon avant EOF comme échec de lecture  1033ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > prévisualise puis ajoute sans écraser le panier, au clavier en 320 px  1915ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > prévisualise puis ajoute sans écraser le panier, au clavier en 390 px  2073ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > prévisualise puis ajoute sans écraser le panier, au clavier en 1440 px  1943ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > recalcule le prix avec supplément et exige une nouvelle confirmation quand il change  1264ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > laisse la déconnexion agir pendant une lecture HTTP et jette la réponse privée tardive  771ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > relit le journal natif après attente du verrou panier et refuse une autre identité  868ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > refuse l’ajout lorsqu’une demande C01 native reste à vérifier  625ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > masque la prévisualisation quand le document devient offline  564ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > masque la prévisualisation quand le document devient hidden  598ms
+   ✓ reprise privée — vraie interface Chromium et stockage natif > retire un aperçu dont l’autorisation serveur expire avant la session affichée  666ms
+ ✓ src/components/customer-account/CustomerOrdersPage.browser.test.tsx (14 tests) 12258ms
+   ✓ unified orders destination > propose Mon compte sans annoncer une connexion lorsque le pilote est fermé  736ms
+   ✓ unified orders destination > ne lit rien hors onglet et laisse les reçus invités ouverts sans compte  1000ms
+   ✓ unified orders destination > sépare les sources, les relie au clavier et contient ses actions à 320px  898ms
+   ✓ unified orders destination > sépare les sources, les relie au clavier et contient ses actions à 390px  872ms
+   ✓ unified orders destination > sépare les sources, les relie au clavier et contient ses actions à 820px  684ms
+   ✓ unified orders destination > détruit le détail privé quand on choisit les reçus de cet appareil  696ms
+   ✓ unified orders destination > ramène le focus sur la liste au retour du détail sans titre redondant  628ms
+   ✓ unified orders destination > retire immédiatement le privé après offline sans effacer les reçus invités  460ms
+   ✓ unified orders destination > retire immédiatement le privé après expiry sans effacer les reçus invités  490ms
+   ✓ unified orders destination > refuse une réponse A tardive après changement de publication au profil identique  498ms
+   ✓ unified orders destination > verrouille les deux sources et les retours pendant la reprise, puis purge sur perte de session  532ms
+   ✓ unified orders destination > ne déverrouille pas le contrôleur des reçus quand sa source est en cours de mutation  585ms
+   ✓ unified orders destination > déverrouille après ajout confirmé et ouvre le panier sans navigation concurrente  718ms
+   ✓ unified orders destination > démonte le lecteur et refuse le détail en vol quand on quitte l’onglet  519ms
+ ✓ src/components/order/OrderReadyNotification.browser.test.tsx (15 tests) 8512ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > refus de permission : aucune inscription navigateur ni POST d’activation  389ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > ne continue pas la demande après Changer tenant pendant la permission  638ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > ne continue pas la demande après Changer preuve pendant la permission  537ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > ne continue pas la demande après Désactiver portée pendant la permission  483ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > ne continue pas la demande après Démonter pendant la permission  458ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > ne crée pas d’abonnement après démontage pendant getSubscription  571ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > aucun status ou abonnement après perte de portée pendant register initial  567ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > aucun status ou abonnement après perte de portée pendant getSubscription initial  678ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > une configuration indisponible peut être vérifiée de nouveau sans faux état activé  358ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > affiche activé uniquement après ACK et utilise la révision observée, sans preuve dans URL  553ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > révocation non acquittée : conserve activé et exprime l’incertitude  584ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > un conflit impose un nouveau consentement explicite avec sa nouvelle révision  651ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > retient l’invite native émise avant la première commande  448ms
+   ✓ consentement transactionnel — composants réels, navigateur et transport simulés > depuis le suivi secret, propose seulement une entrée publique d’installation  689ms
+ ✓ src/components/order/ProductSheet.browser.test.tsx (8 tests) 9047ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 320px  1533ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > présente un contrôle par retrait et conserve prix, règles et édition en 390px  1571ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > préserve les identités distinctes de même libellé et les sélections récupérées sans les fusionner  935ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > permet le choix au clavier sans désélectionner une option obligatoire ni dépasser le plafond  718ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > ne retire pas le supplément facultatif unique quand le client utilise une flèche  726ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > garde les choix restaurés visibles dans un groupe long et préserve la sélection après repli  788ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > maintient les bornes et prix par variante sans perdre retraits ni supplément dédié  873ms
+   ✓ fiche produit — retraits natifs et sélections en navigateur > classe les suppléments par catégorie native sans fusionner deux libellés identiques  769ms
+ ✓ src/components/order/StripeCard.browser.test.tsx (16 tests) 9292ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > garde le paiement carte si le portefeuille est absent (?unavailable)  548ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > garde le paiement carte si le portefeuille est absent (?throw-wallet)  428ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > utilise le même Elements et ignore la double confirmation wallet/carte pendant la réponse  329ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > conclut un refus du verrou sans soumettre ni déclencher le callback de fin  372ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > respecte le verrou courant même si le wallet émet après un changement de props  497ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > annonce validation sans payé et libère exactement le verrou acquis  561ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > annonce submit-network sans payé et libère exactement le verrou acquis  722ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > annonce confirm-error sans payé et libère exactement le verrou acquis  573ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > annonce confirm-network sans payé et libère exactement le verrou acquis  506ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > annonce unknown sans payé et libère exactement le verrou acquis  558ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > garde processing verrouillé et dirige vers le suivi sans annoncer un paiement terminé  511ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > ignore une réponse tardive après « Démonter le paiement » et détruit les deux Elements  515ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > ignore une réponse tardive après « Changer l’intention » et détruit les deux Elements  676ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > ignore une réponse tardive après « Changer le restaurant » et détruit les deux Elements  552ms
+   ✓ Stripe carte et wallets — composant réel, SDK simulé > ne confirme pas si l’intention change pendant elements.submit  479ms
+ ✓ src/app/livreur/DeliveryInvitation.browser.test.tsx (10 tests) 8488ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > prépare sans association automatique à 320 px puis confirme par un second geste  962ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > prépare sans association automatique à 1440 px puis confirme par un second geste  986ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > un lien étranger est effacé et refusé sans navigation ou requête  532ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > fermeture et Échap effacent le champ et rendent le focus au bouton  839ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > une relecture retire la saisie et une réponse inconnue ne permet pas l’import  750ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > une capture invalide demande de rouvrir une page propre, sans promettre un collage bloqué  707ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > le callback révoqué ferme la saisie jusqu’à une nouvelle absence confirmée  698ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > un cookie HttpOnly caché par un GET incertain n’autorise aucun remplacement  497ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > une réponse d’association perdue garde la même tentative sans nouveau collage  563ms
+   ✓ invitation manuelle — vrai client, formulaire et navigateur > un lien consommé demande une nouvelle invitation, sans prétendre transférer Safari vers la PWA  520ms
+ ✓ src/components/customer-account/session.browser.test.ts (8 tests) 6827ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > refuse le DELETE et masque le profil si la barrière privée du checkout ne peut pas être persistée  705ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > ne laisse pas Nom préparé sur A viser B après le verrou natif, malgré des projections identiques  823ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > ne laisse pas Quitter préparé sur A viser B après le verrou natif, malgré des projections identiques  715ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > un PATCH invalide l’autre onglet, attend le verrou puis publie le profil à jour  1123ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > déconnexion dans B : A perd son profil et redevient invité sans conserver de PII locale  868ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > hors ligne, pagehide et expiration ne laissent aucune projection personnelle  644ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > le dernier consommateur fermé efface la vue ; aucune route OTP n’est appelée  500ms
+   ✓ Session personnelle — navigateur natif et plusieurs onglets > aucune mutation quand les deux canaux d’invalidation sont indisponibles  618ms
+ ✓ src/components/customer-account/browser-preparation.browser.test.ts (16 tests) 9851ms
+   ✓ Customer preparation — native browser continuity > explicitly restores missing IDB from the received cookie, with no session adoption or cookie renewal across reload  895ms
+   ✓ Customer preparation — native browser continuity > restore never overwrites a present native journal  393ms
+   ✓ Customer preparation — native browser continuity > restore never overwrites a corrupt native journal  406ms
+   ✓ Customer preparation — native browser continuity > two tabs restore under one Web Lock and only one null-to-ready journal commit  1026ms
+   ✓ Customer preparation — native browser continuity > a delayed restore response cannot overwrite a selector created outside its lock  504ms
+   ✓ Customer preparation — native browser continuity > restore fails closed when the binding is cookie absent  538ms
+   ✓ Customer preparation — native browser continuity > restore fails closed when the binding is issued  625ms
+   ✓ Customer preparation — native browser continuity > restore fails closed when the binding is expired  485ms
+   ✓ Customer preparation — native browser continuity > persists its selector, receives a protected cookie and confirms after reload without issuing again  937ms
+   ✓ Customer preparation — native browser continuity > serializes two tabs using native Web Locks and a single durable issue  952ms
+   ✓ Customer preparation — native browser continuity > never reissues after losing the entire response before the cookie headers  538ms
+   ✓ Customer preparation — native browser continuity > recovers a cookie received with an unreadable body through a separate confirmation  326ms
+   ✓ Customer preparation — native browser continuity > missing journal never adopts existing cookies or reads a private profile  366ms
+   ✓ Customer preparation — native browser continuity > does not touch the network if native storage or Web Locks are unavailable  408ms
+   ✓ Customer preparation — native browser continuity > a late actual Set-Cookie A after B is refused with the selected B journal, never adopted as A  407ms
+ ✓ src/app/livreur/delivery-brand-shape.browser.test.tsx (9 tests) 10937ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'dark'  969ms
+   ✓ identité des formes — Livreur réel > 'net' garde les cartes, contrôles et la feuille cohérents en 'light'  1218ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'dark'  1160ms
+   ✓ identité des formes — Livreur réel > 'doux' garde les cartes, contrôles et la feuille cohérents en 'light'  1189ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'dark'  979ms
+   ✓ identité des formes — Livreur réel > 'rond' garde les cartes, contrôles et la feuille cohérents en 'light'  879ms
+   ✓ identité des formes — Livreur réel > répercute une marque relue dans la même session sans écrire une préférence de forme  1194ms
+   ✓ identité des formes — Livreur réel > applique le repli de marque lorsque la session legacy ne porte pas encore brand  586ms
+   ✓ conserve les réglages locaux d’accessibilité et la forme du restaurant après rechargement  1097ms
+ ✓ src/app/livreur/delivery-access.browser.test.ts (8 tests) 8327ms
+   ✓ accès livreur mobile réel, BFF et API locale > importe un lien HTTPS manuellement sans envoyer, puis associe sur un geste distinct et retrouve la session  1598ms
+   ✓ accès livreur mobile réel, BFF et API locale > retire le fragment avant le bundle client et attend une association explicite  872ms
+   ✓ accès livreur mobile réel, BFF et API locale > reprend le même échange après 503 puis conserve la session uniquement en cookie HttpOnly  1193ms
+   ✓ accès livreur mobile réel, BFF et API locale > montre la révocation serveur et ne conserve aucune identité associée  678ms
+   ✓ accès livreur mobile réel, BFF et API locale > retire aussi l’identité quand le premier chargement des missions découvre la révocation  575ms
+   ✓ accès livreur mobile réel, BFF et API locale > hors connexion, retire le succès et attend la confirmation réelle de déconnexion  916ms
+   ✓ accès livreur mobile réel, BFF et API locale > reste utilisable à 320 px, au clavier et avec moins de mouvement  424ms
+   ✓ accès livreur mobile réel, BFF et API locale > présente l’invitation et l’identité réelles sur mobile et grand écran  552ms
+ ✓ src/app/livreur/delivery-preferences.browser.test.tsx (7 tests) 4345ms
+   ✓ conserve les préférences validées sans identifiants et suit le thème système  929ms
+   ✓ ignore un stockage malformé et applique les préférences même si le stockage est refusé  365ms
+   ✓ ne demande le verrouillage écran qu’en tournée et le libère lorsque la tournée s’arrête  463ms
+   ✓ explique un refus audio sans empêcher l’historique  487ms
+   ✓ charge un historique paginé à la demande sans l’ajouter aux opérations actives  481ms
+   ✓ ne montre aucune mission étrangère et efface l’historique après révocation  484ms
+   ✓ ignore une réponse historique arrivée après la fermeture de la vue  554ms
+ ✓ src/components/admin/AdminSections.browser.test.tsx (10 tests) 4510ms
+   ✓ préserve brouillons, paramètres et repère au retour navigateur, sans rechargement  732ms
+   ✓ associe panneaux et onglets, avec flèches, Home, End et focus roving  367ms
+   ✓ ouvre les liens directs et les anciens liens salle, avec repli si droits retirés  673ms
+   ✓ garde tous les libellés et cibles tactiles accessibles à 390px  305ms
+   ✓ garde tous les libellés et cibles tactiles accessibles à 568px  379ms
+   ✓ garde tous les libellés et cibles tactiles accessibles à 1024px  312ms
+   ✓ garde tous les libellés et cibles tactiles accessibles à 1920px  359ms
+ ✓ src/components/order/checkout-account-privacy.browser.test.ts (21 tests) 7349ms
+   ✓ account checkout privacy, native IndexedDB > pins the immutable public selection and privacy epoch with C01 before admission  304ms
+   ✓ account checkout privacy, native IndexedDB > settles a late response without recreating any account capability, even after reload  430ms
+   ✓ account checkout privacy, native IndexedDB > serializes receipt-first against the other tab at the real IndexedDB write boundary  409ms
+   ✓ account checkout privacy, native IndexedDB > serializes logout-first against the other tab at the real IndexedDB write boundary  612ms
+   ✓ account checkout privacy, native IndexedDB > shows a rejected hidden account only as a settled selector, never its private payload  363ms
+   ✓ account checkout privacy, native IndexedDB > allows exact terminal receipt replay, rejects a different receipt, and never recreates aliases  381ms
+   ✓ account checkout privacy, native IndexedDB > isolates a tenant privacy fence from other tenant and origin receipts  640ms
+   ✓ account checkout privacy, native IndexedDB > fails closed on corrupt privacy metadata  322ms
+ ✓ src/components/order/order-header-joint.browser.test.tsx (4 tests) 4496ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 330 px et le recalcule quand l’identité change de hauteur  745ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 820 px et le recalcule quand l’identité change de hauteur  694ms
+   ✓ OrderHeader — raccord sticky avec les catégories > ferme le joint à 1280 px et le recalcule quand l’identité change de hauteur  695ms
+   ✓ OrderHeader — raccord sticky avec les catégories > conserve le raccord pendant les redimensionnements du viewport mobile vers tablette et bureau  678ms
+ ✓ src/app/admin/livraison/DeliveryOperatorsPanel.browser.test.ts (2 tests) 3125ms
+   ✓ horloge des ajouts livreurs, panneau complet dans Chromium > ne vieillit pas une demande fraîche après dix minutes d’inactivité, pendant le POST  756ms
+   ✓ horloge des ajouts livreurs, panneau complet dans Chromium > signale une demande de 31 minutes sans rajeunir ni remplacer son UUID à la reprise  519ms
+ ✓ src/components/ui/SMTabBar.browser.test.tsx (12 tests) 7053ms
+   ✓ SMTabBar — navigation partagée sans état métier > garde le clavier natif, les flèches et les descriptions de badges  350ms
+   ✓ SMTabBar — navigation partagée sans état métier > se replie sur document et sur une ref, remonte au retap et respecte le rebond  316ms
+   ✓ SMTabBar — navigation partagée sans état métier > remonte la nouvelle vue sans mouvement, y compris retour navigateur (ref=false)  1412ms
+   ✓ SMTabBar — navigation partagée sans état métier > remonte la nouvelle vue sans mouvement, y compris retour navigateur (ref=true)  534ms
+   ✓ SMTabBar — navigation partagée sans état métier > conserve les dimensions du kit et les cibles44px à320px avec5onglets  372ms
+   ✓ SMTabBar — navigation partagée sans état métier > suit le doigt sans navigation intermédiaire puis sélectionne une fois au relâchement  607ms
+   ✓ SMTabBar — navigation partagée sans état métier > annule un déplacement vertical sans sélectionner ni retenir le pointeur  379ms
+   ✓ SMTabBar — navigation partagée sans état métier > retire les onglets du clavier lorsque hidden et les restitue au retour  447ms
+   ✓ SMTabBar — navigation partagée sans état métier > reste visible mais bloque clic, retap, clavier et scrub pendant une mutation  718ms
+   ✓ SMTabBar — navigation partagée sans état métier > un retour navigateur remplace une sélection encore en transition  563ms
+   ✓ SMTabBar — navigation partagée sans état métier > termine uniquement la dernière transition et annule le travail au démontage  306ms
+   ✓ applique la réduction locale à la navigation JS et aux fonds sans affaiblir le réglage système  350ms
+ ✓ src/components/order/reorder-device.browser.test.tsx (7 tests) 6915ms
+   ✓ préférences et recommander — navigateur et stockage natifs > utilise le même historique en page/sheet, sans lecture avant ouverture ni faux paiement depuis le reçu  812ms
+   ✓ préférences et recommander — navigateur et stockage natifs > ajoute une reprise revue au panier existant et garde choix, prix actuel et identifiants uniques au rechargement  987ms
+   ✓ préférences et recommander — navigateur et stockage natifs > partage la carte vérifiée avec le panier parent quand le prix passe de 900 à 1000  786ms
+   ✓ préférences et recommander — navigateur et stockage natifs > refuse un reçu oublié dans un autre onglet pendant une lecture retardée  1173ms
+   ✓ préférences et recommander — navigateur et stockage natifs > mémorise des choix exacts après consentement, les synchronise et ne les applique pas à un autre restaurant  1112ms
+   ✓ préférences et recommander — navigateur et stockage natifs > un effacement ciblé garde le reçu actif, le panier et les demandes à vérifier  681ms
+   ✓ préférences et recommander — navigateur et stockage natifs > annonce un refus de stockage sans faire croire à un enregistrement  422ms
+(node:35229) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35229) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ ✓ src/app/r/[slug]/compte/customer-bff.test.ts (201 tests) 634ms
+ ✓ src/components/customer-account/client.test.ts (23 tests) 373ms
+ ✓ src/components/customer-account/loyalty.test.ts (25 tests) 361ms
+ ✓ src/app/r/[slug]/fidelite/card-session/rate-limit.test.ts (8 tests) 218ms
+ ✓ src/app/r/[slug]/fidelite/card-qr/route.test.ts (5 tests) 206ms
+ ✓ src/app/r/[slug]/icon.png/route.test.ts (22 tests) 272ms
+ ✓ src/app/livreur/delivery-worker.browser.test.ts (3 tests) 1559ms
+ ✓ src/components/board/scenographies/studio/Studio.test.ts (159 tests) 190ms
+ ✓ src/components/customer-account/passkey-browser.browser.test.ts (3 tests) 1446ms
+   ✓ customer key — actual browser ceremony > creates a resident key then verifies a distinct UV assertion without storage  323ms
+ ✓ src/components/order/reorder-device-client.test.ts (11 tests) 113ms
+ ✓ src/app/r/[slug]/fidelite/card-session/route.test.ts (15 tests) 134ms
+ ✓ src/components/customer-account/orders.test.ts (18 tests) 116ms
+ ✓ src/lib/demo/router.test.ts (86 tests) 189ms
+ ✓ src/app/livreur/missions/route.test.ts (148 tests) 90ms
+ ✓ src/components/customer-account/passkey-browser.test.ts (17 tests) 62ms
+ ✓ src/app/livreur/DeliveryInstall.browser.test.tsx (18 tests) 8243ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > prépare seulement le worker dédié, sans API privée ni écriture persistante  468ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > ne prépare aucun worker hors de la route livreur  311ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > accueille un événement tardif, demande un geste et ne consomme le prompt qu’une fois  554ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > un événement consommé ailleurs ne laisse pas de faux bouton Installer  373ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > deux clics dans le même tour navigateur n’affichent qu’une seule demande native  409ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > accepted n’est pas présenté comme une installation OS vérifiée  433ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > un nouveau prompt après un refus correspond à une nouvelle possibilité native  604ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > une promesse prompt refusée reste honnête et ne bloque pas les missions  530ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > une promesse choice refusée reste honnête et ne bloque pas les missions  431ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > explique le geste iOS/iPad sans bouton d’installation fictif ({"ios":true})  363ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > explique le geste iOS/iPad sans bouton d’installation fictif ({"ipad":true})  317ms
+   ✓ SM Livreur — installation progressive indépendante des accès privés > garde l’aide lisible, refermable et sans mouvement persistant à 320, 390 et 1440 px  458ms
+ ✓ src/components/customer-account/reorder-client.test.ts (19 tests) 68ms
+ ✓ src/app/r/[slug]/compte/customer-bff.loyalty.test.ts (31 tests) 35ms
+ ✓ src/components/masque/couleurs-brutes.test.ts (6 tests) 43ms
+ ✓ src/components/order/demo/mode.test.ts (16 tests) 57ms
+ ✓ src/components/board/scenographies/comptoir/Comptoir.test.ts (18 tests) 49ms
+ ✓ src/app/livreur/delivery-missions-operation.test.ts (15 tests) 66ms
+ ✓ src/app/r/[slug]/icon.png/normaliser-logo.test.ts (2 tests) 58ms
+ ✓ src/components/delivery-handoff/journal.test.ts (6 tests) 72ms
+ ✓ src/app/api/contact/route.test.ts (9 tests) 93ms
+ ✓ src/app/r/[slug]/compte/customer-bff.orders.test.ts (23 tests) 44ms
+ ✓ src/components/order/tracking-payment.test.ts (18 tests) 72ms
+ ✓ src/app/livreur/missions/[id]/handoff/route.test.ts (84 tests) 40ms
+ ✓ src/app/admin/formules-invisibles.test.ts (2 tests) 26ms
+ ✓ src/components/order/ProductSheet.test.ts (6 tests) 43ms
+ ✓ src/app/sm/OffreFields.test.ts (12 tests) 41ms
+ ✓ src/app/livreur/acces/route.test.ts (46 tests) 48ms
+ ✓ src/app/r/[slug]/compte/customer-bff.access.test.ts (21 tests) 34ms
+ ✓ src/components/loyalty/logo-incorpore.test.ts (23 tests) 42ms
+ ✓ src/app/r/[slug]/fidelite/pwa-routes.test.ts (14 tests) 57ms
+ ✓ src/lib/platform-metadata.test.ts (8 tests) 44ms
+ ✓ src/lib/demo/screen-preview.test.ts (9 tests) 46ms
+ ✓ src/lib/tenant-accent.test.ts (7 tests) 28ms
+ ✓ src/app/r/[slug]/compte/customer-bff.protection.test.ts (21 tests) 41ms
+ ✓ src/app/livreur/delivery-pwa.test.ts (18 tests) 22ms
+ ✓ src/components/customer-account/access.test.ts (22 tests) 26ms
+ ✓ src/components/board/board-stage.test.ts (5 tests) 29ms
+ ✓ src/app/admin/settings/marque.test.ts (35 tests) 27ms
+ ✓ src/components/order/highlights.test.ts (8 tests) 23ms
+ ✓ src/components/order/checkout-delivery-quote.test.ts (21 tests) 26ms
+ ✓ src/app/r/[slug]/ordering-metadata.test.ts (9 tests) 68ms
+ ✓ src/app/admin/menu/VariantesOptions.test.ts (6 tests) 23ms
+ ✓ src/components/mediatheque/photos.test.ts (22 tests) 18ms
+ ✓ src/components/customer-account/protection.test.ts (14 tests) 32ms
+ ✓ src/app/r/[slug]/page.test.tsx (7 tests) 20ms
+ ✓ src/components/customer-account/orders-request.test.ts (9 tests) 15ms
+ ✓ src/proxy.test.ts (68 tests) 28ms
+ ✓ src/app/livreur/access-client.test.ts (51 tests) 19ms
+ ✓ src/components/ui/icons.test.tsx (3 tests) 15ms
+ ✓ src/components/order/fidelite.test.ts (14 tests) 20ms
+ ✓ src/components/loyalty/scan-feedback.test.ts (8 tests) 21ms
+ ✓ src/components/loyalty/paliers.test.ts (13 tests) 15ms
+ ✓ src/app/admin/settings/journal.test.ts (13 tests) 17ms
+ ✓ src/components/customer-account/verification.test.ts (20 tests) 19ms
+ ✓ src/components/customer-account/request.test.ts (19 tests) 16ms
+ ✓ src/components/board/scenographies/ardoise/Ardoise.test.ts (5 tests) 14ms
+ ✓ src/components/order/device-preferences.test.ts (5 tests) 11ms
+ ✓ src/components/backoffice/visual-style.test.ts (10 tests) 13ms
+ ✓ src/components/customer-account/browser-preparation.test.ts (34 tests) 14ms
+ ✓ src/lib/restaurant-pages-metadata.test.ts (18 tests) 37ms
+ ✓ src/app/livreur/delivery-missions-client.test.ts (18 tests) 18ms
+ ✓ src/components/order/cart-options.test.ts (42 tests) 10ms
+ ✓ src/components/order/checkout-account.test.ts (23 tests) 11ms
+ ✓ src/app/admin/livraison/DeliveryOperatorsPanel.test.ts (8 tests) 19ms
+ ✓ src/lib/demo/featured.test.ts (3 tests) 12ms
+ ✓ src/app/admin/screens/apparence/use-screen-preview.test.ts (5 tests) 16ms
+ ✓ src/components/delivery-handoff/client.test.ts (9 tests) 20ms
+ ✓ src/components/order/hero.test.ts (11 tests) 11ms
+ ✓ src/app/r/[slug]/icon.svg/route.test.ts (11 tests) 45ms
+ ✓ src/app/admin/livraison/ZonePricingFields.test.ts (4 tests) 17ms
+ ✓ src/app/r/[slug]/sw.js/route.test.ts (7 tests) 19ms
+ ✓ src/app/admin/livraison/delivery-operators-data.test.ts (21 tests) 11ms
+ ✓ src/components/order/order-notifications-api.test.ts (4 tests) 31ms
+ ✓ src/components/order/checkout-recovery-api.test.ts (9 tests) 8ms
+ ✓ src/components/order/checkout-payment.test.ts (28 tests) 17ms
+ ✓ src/app/board/sw.js/route.test.ts (9 tests) 25ms
+ ✓ src/components/loyalty/icone-carte.test.ts (54 tests) 9ms
+ ✓ src/app/r/[slug]/error.test.ts (7 tests) 9ms
+ ✓ src/components/mediatheque/illustrations.test.ts (10 tests) 10ms
+ ✓ src/components/marketing/commerce-marketing.test.ts (9 tests) 11ms
+ ✓ src/app/admin/menu/product-validation.test.ts (11 tests) 18ms
+ ✓ src/components/loyalty/carte-locale.test.ts (9 tests) 8ms
+ ✓ src/app/admin/screens/apparence/preview-session.test.ts (6 tests) 44ms
+ ✓ src/components/ui/verrou.test.ts (14 tests) 10ms
+ ✓ src/components/masque/styleDuMasque.test.ts (4 tests) 6ms
+ ✓ src/components/loyalty/mouvement.test.ts (12 tests) 15ms
+ ✓ src/app/r/[slug]/manifest.webmanifest/route.test.ts (4 tests) 10ms
+ ✓ src/app/admin/navigation.test.ts (27 tests) 9ms
+ ✓ src/components/customer-account/reorder-preview.test.ts (16 tests) 6ms
+ ✓ src/components/order/order-worker.test.ts (3 tests) 6ms
+ ✓ src/components/order/glyphs.test.tsx (5 tests) 9ms
+ ✓ src/app/admin/hours/SlotSettingsPanel.test.ts (1 test) 56ms
+ ✓ src/app/admin/livraison/delivery-draft.test.ts (25 tests) 23ms
+ ✓ src/app/r/[slug]/compte/page.test.tsx (17 tests) 62ms
+ ✓ src/app/admin/settings/surfaces-installees.test.ts (10 tests) 8ms
+ ✓ src/app/admin/site/pilotage-drafts.test.ts (11 tests) 6ms
+ ✓ src/components/order/menu-presentation-api.test.ts (2 tests) 6ms
+ ✓ src/components/board/board-css.test.ts (10 tests) 7ms
+ ✓ src/lib/demo/retour.test.ts (17 tests) 4ms
+ ✓ src/lib/demo/mode.test.ts (14 tests) 8ms
+ ✓ src/components/order/uid.test.ts (4 tests) 5ms
+ ✓ src/components/board/scene-timer.test.ts (4 tests) 5ms
+ ✓ src/components/order/delivery-proof-access.test.ts (19 tests) 4ms
+ ✓ src/components/order/delivery-api.test.ts (6 tests) 13ms
+ ✓ src/app/livreur/invitation-bootstrap.test.ts (2 tests) 5ms
+ ✓ src/components/board/board-masque.test.ts (6 tests) 5ms
+ ✓ src/components/board/scenographies/comptoir/composition.test.ts (26 tests) 6ms
+ ✓ src/app/admin/fidelite/data.test.ts (5 tests) 4ms
+ ✓ src/app/admin/session.test.ts (12 tests) 11ms
+ ✓ src/app/admin/settings/salle-operation.test.ts (4 tests) 4ms
+ ✓ src/lib/identite.test.ts (11 tests) 3ms
+ ✓ src/app/sm/signature.test.ts (5 tests) 3ms
+ ✓ src/app/r/[slug]/fidelite/retour.test.ts (4 tests) 2ms
+ ✓ src/app/admin/menu/featured-conflict.test.ts (4 tests) 3ms
+ ✓ src/app/sm/navigation.test.ts (7 tests) 3ms
+ ✓ src/components/board/scenographies/comptoir/FadeText.test.ts (1 test) 1ms
+ ✓ src/lib/restaurant-metadata.test.ts (7 tests) 3ms
+ ✓ src/app/admin/screens/apparence/appearance-draft.test.ts (9 tests) 3ms
+ ✓ src/app/admin/orders/list-response.test.ts (6 tests) 4ms
+ ✓ src/app/admin/fidelite/clients/enrollment-recovery.test.ts (5 tests) 19ms
+ ✓ src/components/board/use-scene-rotation.test.ts (9 tests) 2ms
+ ✓ src/components/loyalty/relay-proof.test.ts (3 tests) 5ms
+ ✓ src/components/masque/polices.test.ts (2 tests) 4ms
+ ✓ src/app/admin/orders/delivery-mission-scope.test.ts (6 tests) 4ms
+ ✓ src/components/order/customer-memory.test.ts (12 tests) 3ms
+ ✓ src/app/admin/menu/photos.test.ts (7 tests) 2ms
+ ✓ src/components/board/scene-motion.test.ts (9 tests) 3ms
+ ✓ src/app/sm/clients/capacites.test.ts (6 tests) 3ms
+ ✓ src/components/order/demo/state-removables.test.ts (2 tests) 2ms
+ ✓ src/components/loyalty/installation.test.ts (13 tests) 2ms
+ ✓ src/components/board/board-presentation.test.ts (3 tests) 3ms
+ ✓ src/components/masque/masqueDeCapture.test.ts (4 tests) 2ms
+ ✓ src/components/loyalty/session-guards.test.ts (3 tests) 3ms
+ ✓ src/app/admin/fidelite/clients/qr-handoff-policy.test.ts (4 tests) 3ms
+ ✓ src/app/admin/abonnement/checkout-ui.test.ts (2 tests) 2ms
+ ✓ src/app/admin/orders/delivery-actions.test.ts (10 tests) 2ms
+ ✓ src/app/admin/screens/apparence/gallery-preview.test.ts (4 tests) 4ms
+ ✓ src/components/order/recommendation-model.test.ts (3 tests) 2ms
+ ❯ src/components/backoffice/appearance.browser.test.tsx (1 test) 10688ms
+   ✓ change les deux coquilles quand le quota bloque l’écriture mais laisse lire l’ancien thème  365ms
+ ✓ src/components/masque/FeuilleDuMasque.test.ts (4 tests) 4ms
+ ✓ src/app/admin/orders/refund-eligibility.test.ts (6 tests) 2ms
+ ✓ src/components/ui/dialog-stack.test.ts (2 tests) 2ms
+ ✓ src/app/admin/fidelite/clients/latest-request.test.ts (3 tests) 3ms
+ ✓ src/app/sm/refus.test.ts (6 tests) 2ms
+ ✓ src/app/admin/fidelite/clients/member-list-state.test.ts (3 tests) 2ms
+ ✓ src/app/admin/orders/refund-amount.test.ts (2 tests) 4ms
+ ✓ src/app/admin/fidelite/form-utils.test.ts (4 tests) 58ms
+ ✓ src/components/board/board-autonomie.test.ts (3 tests) 6ms
+ ✓ src/app/admin/fidelite/clients/consent-policy.test.ts (2 tests) 3ms
+ ✓ src/app/admin/ingredients/supplement.test.ts (4 tests) 2ms
+ ✓ src/components/backoffice/appearance.test.tsx (7 tests) 2ms
+ ✓ src/app/admin/fidelite/navigation.test.ts (3 tests) 2ms
+ ✓ src/components/board/use-stage.test.ts (4 tests) 2ms
+ ❯ src/app/admin/settings/salle.browser.test.ts (17 tests | 16 failed) 85138ms
+   × Salle dans les vrais réglages restaurant > crée une table avec couverts et la retrouve après rechargement 5490ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > renomme et désactive une table occupée en gardant sa tablée 5244ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > reprend un timeout après écriture avec exactement le même UUID et corps après rechargement 5283ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > conserve un conflit non définitif puis rejoue la référence sans créer une autre intention 5222ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > autorise la correction uniquement après le refus serveur rattaché à la référence 5431ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > interdit une reprise par un autre auteur 5201ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > ouvre la configuration au rôle cogerant 5114ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > ouvre la configuration au rôle gerant 5135ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > limite le rôle caisse à la lecture de l'occupation 5146ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > limite le rôle cuisine à la lecture de l'occupation 5100ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > respecte l'absence de capacité et ne charge pas une fausse salle 5065ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   ✓ Salle dans les vrais réglages restaurant > n'ouvre pas la salle au comptable 285ms
+   × Salle dans les vrais réglages restaurant > verrouille une deuxième fenêtre pendant un enregistrement en cours 5077ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > bloque l'envoi si le journal est illisible 5068ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > n'envoie rien quand le navigateur refuse de conserver la référence 5055ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > refuse l'envoi après changement de session dans le même onglet 5066ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Salle dans les vrais réglages restaurant > reste utilisable sur téléphone sans débordement horizontal 5065ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/backoffice/appearance.browser.test.tsx [ src/components/backoffice/appearance.browser.test.tsx ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ src/components/backoffice/appearance.browser.test.tsx:31:1
+     29| });
+     30| afterEach(async () => { await context.close(); expect(errors).toEqual(…
+     31| afterAll(async () => { await browser.close(); await new Promise<void>(…
+       | ^
+     32|
+     33| it("change les deux coquilles quand le quota bloque l’écriture mais la…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > crée une table avec couverts et la retrouve après rechargement
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:122:3
+    120|
+    121| describe("Salle dans les vrais réglages restaurant", () => {
+    122|   it("crée une table avec couverts et la retrouve après rechargement",…
+       |   ^
+    123|     await visit(); await add(); await confirmed();
+    124|     expect(mutations()).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > renomme et désactive une table occupée en gardant sa tablée
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:131:3
+    129|     await section().screenshot({ path: join(captures, "salle-configure…
+    130|   });
+    131|   it("renomme et désactive une table occupée en gardant sa tablée", as…
+       |   ^
+    132|     await visit(); await section().getByRole("button", { name: "Modifi…
+    133|     await page.getByText("Cette table accueille actuellement 3 convive…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > reprend un timeout après écriture avec exactement le même UUID et corps après rechargement
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:145:3
+    143|     await section().screenshot({ path: join(captures, "table-desactive…
+    144|   });
+    145|   it("reprend un timeout après écriture avec exactement le même UUID e…
+       |   ^
+    146|     fault = "after-write"; await visit(); await add();
+    147|     await section().getByRole("button", { name: "Vérifier l’enregistre…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > conserve un conflit non définitif puis rejoue la référence sans créer une autre intention
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:155:3
+    153|     expect(room.tables.filter(table => table.label === "Salle 2")).toH…
+    154|   });
+    155|   it("conserve un conflit non définitif puis rejoue la référence sans …
+       |   ^
+    156|     fault = "conflict"; await visit(); await add();
+    157|     await section().getByRole("alert").filter({ hasText: /La salle a c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > autorise la correction uniquement après le refus serveur rattaché à la référence
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:162:3
+    160|     expect(mutations()[1]).toEqual(mutations()[0]);
+    161|   });
+    162|   it("autorise la correction uniquement après le refus serveur rattach…
+       |   ^
+    163|     fault = "rejected"; await visit(); await add();
+    164|     await section().getByRole("alert").filter({ hasText: /déjà utilisé…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > interdit une reprise par un autre auteur
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:170:3
+    168|     expect(room.tables.some(table => table.label === "Salle 3")).toBe(…
+    169|   });
+    170|   it("interdit une reprise par un autre auteur", async () => {
+       |   ^
+    171|     fault = "after-write"; await visit(); await add(); await section()…
+    172|     actor = { ...actor, id: "other-owner" };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > ouvre la configuration au rôle cogerant
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > ouvre la configuration au rôle gerant
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:178:42
+    176|     expect(mutations()).toHaveLength(1);
+    177|   });
+    178|   it.each(["cogerant", "gerant"] as const)("ouvre la configuration au …
+       |                                          ^
+    179|     actor.role = role; actor.genre = role === "gerant" ? "staff" : "us…
+    180|     await visit(); await add(); await confirmed(); expect(mutations())…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > limite le rôle caisse à la lecture de l'occupation
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > limite le rôle cuisine à la lecture de l'occupation
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:182:41
+    180|     await visit(); await add(); await confirmed(); expect(mutations())…
+    181|   });
+    182|   it.each(["caisse", "cuisine"] as const)("limite le rôle %s à la lect…
+       |                                         ^
+    183|     actor.role = role; actor.genre = "staff"; await visit();
+    184|     await section().getByRole("article", { name: "Table Terrasse 1", e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > respecte l'absence de capacité et ne charge pas une fausse salle
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:189:3
+    187|     expect(mutations()).toHaveLength(0);
+    188|   });
+    189|   it("respecte l'absence de capacité et ne charge pas une fausse salle…
+       |   ^
+    190|     capabilities = ["online"]; await visit();
+    191|     await page.getByText("Le service à table nécessite la caisse de ce…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > verrouille une deuxième fenêtre pendant un enregistrement en cours
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:200:3
+    198|     expect(calls.some(call => call.path === "/api/dining/room")).toBe(…
+    199|   });
+    200|   it("verrouille une deuxième fenêtre pendant un enregistrement en cou…
+       |   ^
+    201|     await visit();
+    202|     const other = await context.newPage();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > bloque l'envoi si le journal est illisible
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:216:3
+    214|     await other.close();
+    215|   });
+    216|   it("bloque l'envoi si le journal est illisible", async () => {
+       |   ^
+    217|     await page.addInitScript(key => { localStorage.setItem(key, "{"); …
+    218|     await visit(); await section().getByRole("alert").filter({ hasText…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > n'envoie rien quand le navigateur refuse de conserver la référence
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:222:3
+    220|     expect(mutations()).toHaveLength(0);
+    221|   });
+    222|   it("n'envoie rien quand le navigateur refuse de conserver la référen…
+       |   ^
+    223|     await page.addInitScript(() => {
+    224|       const original = Storage.prototype.setItem;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > refuse l'envoi après changement de session dans le même onglet
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:234:3
+    232|     expect(mutations()).toHaveLength(0);
+    233|   });
+    234|   it("refuse l'envoi après changement de session dans le même onglet",…
+       |   ^
+    235|     await visit(); await section().getByRole("button", { name: "Ajoute…
+    236|     await page.evaluate(() => localStorage.setItem("sm.token.resto", "…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  src/app/admin/settings/salle.browser.test.ts > Salle dans les vrais réglages restaurant > reste utilisable sur téléphone sans débordement horizontal
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/app/admin/settings/salle.browser.test.ts:240:3
+    238|     expect(mutations()).toHaveLength(0);
+    239|   });
+    240|   it("reste utilisable sur téléphone sans débordement horizontal", asy…
+       |   ^
+    241|     await page.setViewportSize({ width: 390, height: 844 }); await vis…
+    242|     await section().getByRole("button", { name: "Ajouter une table", e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+
+ Test Files  2 failed | 194 passed (196)
+      Tests  16 failed | 3046 passed (3062)
+   Start at  13:49:56
+   Duration  118.62s (transform 8.25s, setup 0ms, collect 80.44s, tests 763.89s, environment 29ms, prepare 15.18s)
+
+/Users/limameghassene/development/SnackManager-refonte-ui/apps/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sm/web@0.1.0 test: `vitest run`
+Exit status 1

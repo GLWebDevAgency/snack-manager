@@ -1,0 +1,28 @@
+FAIL hours-320-light: TimeoutError: locator.fill: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m
+
+PASS abonnement-320-light
+FAIL hours-320-dark: TimeoutError: locator.fill: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m
+
+PASS abonnement-320-dark
+FAIL hours-768-light: TimeoutError: locator.fill: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m
+
+PASS abonnement-768-light
+FAIL hours-768-dark: TimeoutError: locator.fill: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m
+
+PASS abonnement-768-dark
+FAIL hours-1440-light: TimeoutError: locator.fill: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m
+
+PASS abonnement-1440-light
+FAIL hours-1440-dark: Error: locator.fill: Target page, context or browser has been closed
+Call log:
+[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })[22m

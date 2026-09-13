@@ -1,0 +1,253 @@
+PASS site-320-light
+FAIL screens-320-light: Error: locator.click: Error: strict mode violation: getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true }) resolved to 2 elements:
+    1) <button type="button" title="Fermer" aria-label="Fermer" class="cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-ink/40 hover:bg-[image:var(--cf-elev-hover)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line ml-auto">…</button> aka getByRole('button', { name: 'Fermer', description: 'Fermer' })
+    2) <button type="button" class="inline-flex sm-button cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-40 px-3.5 py-[9px] text-[13px] border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8">Fermer</button> aka getByText('Fermer')
+
+Call log:
+[2m  - waiting for getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true })[22m
+
+PASS site-320-dark
+FAIL screens-320-dark: Error: locator.click: Error: strict mode violation: getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true }) resolved to 2 elements:
+    1) <button type="button" title="Fermer" aria-label="Fermer" class="cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-ink/40 hover:bg-[image:var(--cf-elev-hover)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line ml-auto">…</button> aka getByRole('button', { name: 'Fermer', description: 'Fermer' })
+    2) <button type="button" class="inline-flex sm-button cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-40 px-3.5 py-[9px] text-[13px] border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8">Fermer</button> aka getByText('Fermer')
+
+Call log:
+[2m  - waiting for getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true })[22m
+
+FAIL site-768-light: TimeoutError: locator.click: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('tablist', { name: 'Rubriques du site web', exact: true }).getByRole('tab', { name: 'Commande en ligne', exact: true })[22m
+[2m    - locator resolved to <button role="tab" type="button" tabindex="-1" aria-selected="false" id="_r_1_-tab-commande" aria-controls="_r_1_-panel-commande" class="AdminSections-module__Cl4gWG__tab">…</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+[2m    - element is visible, enabled and stable[22m
+[2m    - scrolling into view if needed[22m
+[2m    - done scrolling[22m
+[2m    - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  2 × retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  7 × retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  - retrying click action[22m
+[2m    - waiting 500ms[22m
+
+FAIL screens-768-light: TimeoutError: locator.click: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('tablist', { name: 'Rubriques des écrans de salle', exact: true }).getByRole('tab', { name: 'Vos écrans', exact: true })[22m
+[2m    - locator resolved to <button role="tab" type="button" tabindex="-1" id="_r_1_-tab-ecrans" aria-selected="false" aria-controls="_r_1_-panel-ecrans" class="AdminSections-module__Cl4gWG__tab">…</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+[2m    - element is visible, enabled and stable[22m
+[2m    - scrolling into view if needed[22m
+[2m    - done scrolling[22m
+[2m    - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  2 × retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  7 × retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  - retrying click action[22m
+[2m    - waiting 500ms[22m
+
+FAIL site-768-dark: TimeoutError: locator.click: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('tablist', { name: 'Rubriques du site web', exact: true }).getByRole('tab', { name: 'Commande en ligne', exact: true })[22m
+[2m    - locator resolved to <button role="tab" type="button" tabindex="-1" aria-selected="false" id="_r_1_-tab-commande" aria-controls="_r_1_-panel-commande" class="AdminSections-module__Cl4gWG__tab">…</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+[2m    - element is visible, enabled and stable[22m
+[2m    - scrolling into view if needed[22m
+[2m    - done scrolling[22m
+[2m    - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  2 × retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  7 × retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  - retrying click action[22m
+[2m    - waiting 500ms[22m
+
+FAIL screens-768-dark: TimeoutError: locator.click: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('tablist', { name: 'Rubriques des écrans de salle', exact: true }).getByRole('tab', { name: 'Vos écrans', exact: true })[22m
+[2m    - locator resolved to <button role="tab" type="button" tabindex="-1" id="_r_1_-tab-ecrans" aria-selected="false" aria-controls="_r_1_-panel-ecrans" class="AdminSections-module__Cl4gWG__tab">…</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+[2m    - element is visible, enabled and stable[22m
+[2m    - scrolling into view if needed[22m
+[2m    - done scrolling[22m
+[2m    - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  2 × retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  7 × retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Commandes</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m      - waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <span class="min-w-0 flex-1 truncate whitespace-nowrap">Aujourd’hui</span> from <div class="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]">…</div> subtree intercepts pointer events[22m
+[2m  - retrying click action[22m
+[2m    - waiting 500ms[22m
+
+PASS site-1440-light
+FAIL screens-1440-light: Error: locator.click: Error: strict mode violation: getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true }) resolved to 2 elements:
+    1) <button type="button" title="Fermer" aria-label="Fermer" class="cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-ink/40 hover:bg-[image:var(--cf-elev-hover)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line ml-auto">…</button> aka getByRole('button', { name: 'Fermer', description: 'Fermer' })
+    2) <button type="button" class="inline-flex sm-button cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-40 px-3.5 py-[9px] text-[13px] border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8">Fermer</button> aka getByText('Fermer')
+
+Call log:
+[2m  - waiting for getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true })[22m
+
+PASS site-1440-dark
+FAIL screens-1440-dark: Error: locator.click: Error: strict mode violation: getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true }) resolved to 2 elements:
+    1) <button type="button" title="Fermer" aria-label="Fermer" class="cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-ink/40 hover:bg-[image:var(--cf-elev-hover)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line ml-auto">…</button> aka getByRole('button', { name: 'Fermer', description: 'Fermer' })
+    2) <button type="button" class="inline-flex sm-button cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-40 px-3.5 py-[9px] text-[13px] border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8">Fermer</button> aka getByText('Fermer')
+
+Call log:
+[2m  - waiting for getByRole('dialog').first().getByRole('button', { name: 'Fermer', exact: true })[22m
+
+4/12 passed; 32 captures

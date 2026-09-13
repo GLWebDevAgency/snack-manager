@@ -175,6 +175,12 @@ const navSubscribe = (cb: () => void) => {
   return () => window.removeEventListener(NAV_STORE, cb);
 };
 const emptySubscribe = () => () => {};
+const desktopNavSubscribe = (notify: () => void) => {
+  const query = window.matchMedia("(min-width: 1280px)");
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+};
+const desktopNavSnapshot = () => window.matchMedia("(min-width: 1280px)").matches;
 
 function Shell({ children }: { children: ReactNode }) {
   const { theme, toggleTheme } = useBackofficeTheme();
@@ -229,12 +235,22 @@ function Shell({ children }: { children: ReactNode }) {
   const role = useSyncExternalStore(emptySubscribe, () => roleAdmin(), () => null);
 
   // ── Sidebar ouverte/fermée — persistée dans localStorage["sm-bo-nav"] ──
-  const open = useSyncExternalStore(
+  const desktopOpen = useSyncExternalStore(
     navSubscribe,
     () => localStorage.getItem(NAV_STORE) !== "closed",
     () => true, // défaut : ouverte (spec §3.2)
   );
+  const desktopNav = useSyncExternalStore(desktopNavSubscribe, desktopNavSnapshot, () => true);
+  // On tablets the overlay is a temporary action, never an obstruction on
+  // arrival. A route change closes it without erasing the desktop preference.
+  const [tabletNav, setTabletNav] = useState<{ path: string; open: boolean } | null>(null);
+  if (tabletNav && tabletNav.path !== pathname) setTabletNav(null);
+  const open = desktopNav ? desktopOpen : tabletNav?.path === pathname && tabletNav.open;
   const toggleNav = () => {
+    if (!desktopNav) {
+      setTabletNav({ path: pathname, open: !open });
+      return;
+    }
     localStorage.setItem(NAV_STORE, open ? "closed" : "open");
     window.dispatchEvent(new Event(NAV_STORE));
   };
@@ -851,16 +867,16 @@ function Shell({ children }: { children: ReactNode }) {
             Deux surfaces adjacentes ne portent jamais la même valeur (DA §1) —
             la barre ne peut pas se contenter d'un filet pour se détacher.
           */}
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-4 py-3 md:gap-4 md:px-[26px] md:py-4">
+          <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-4 py-3 sm:gap-3 md:gap-4 md:px-[26px] md:py-4">
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-extrabold tracking-[-0.03em] text-ink md:text-2xl">
+              <h1 className="break-words text-lg font-extrabold leading-tight tracking-[-0.03em] text-ink sm:text-xl md:text-2xl">
                 {active.label}
               </h1>
               <p className="truncate text-sm text-mut" suppressHydrationWarning>
                 {subtitle}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <AppearanceButton theme={theme} onToggle={toggleTheme} />
               {/* La recherche globale « présente, non câblée » a été RETIRÉE
                   (24/08/2026) : un champ qui avale une requête sans répondre
@@ -878,7 +894,7 @@ function Shell({ children }: { children: ReactNode }) {
                     : "Commande en ligne active — cliquer pour mettre en pause"
                 }
                 className={cx(
-                  "cf-press flex items-center gap-2 rounded-pill border-2 bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-sm font-bold text-ink disabled:cursor-not-allowed disabled:opacity-40",
+                  "cf-press flex min-h-11 items-center gap-2 rounded-pill border-2 bg-[image:var(--cf-elev-gradient)] px-2 py-2 text-sm font-bold text-ink disabled:cursor-not-allowed disabled:opacity-40 sm:px-3.5",
                   paused ? "border-alert" : "border-ok",
                 )}
               >

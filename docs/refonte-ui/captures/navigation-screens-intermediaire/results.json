@@ -1,0 +1,96 @@
+{
+  "base": "http://127.0.0.1:3092",
+  "collectedAt": "2026-09-13T11:57:35.164Z",
+  "results": [
+    {
+      "name": "screens-320-light",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-320-light-installation.png",
+        "screens-320-light-ecrans.png",
+        "screens-320-light-playlist-brouillon.png",
+        "screens-320-light-failure.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-320-dark",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-320-dark-installation.png",
+        "screens-320-dark-ecrans.png",
+        "screens-320-dark-playlist-brouillon.png",
+        "screens-320-dark-failure.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-768-light",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-768-light-installation.png",
+        "screens-768-light-ecrans.png",
+        "screens-768-light-playlist-brouillon.png",
+        "screens-768-light-failure.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-768-dark",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-768-dark-installation.png",
+        "screens-768-dark-ecrans.png",
+        "screens-768-dark-playlist-brouillon.png",
+        "screens-768-dark-failure.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-1440-light",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-1440-light-installation.png",
+        "screens-1440-light-ecrans.png",
+        "screens-1440-light-playlist-brouillon.png",
+        "screens-1440-light-failure.png"
+      ],
+      "faults": []
+    },
+    {
+      "name": "screens-1440-dark",
+      "status": "failed",
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+      "checks": [
+        "direct URL, preserved demo/source query, selected tab, 44px controls, theme"
+      ],
+      "shots": [
+        "screens-1440-dark-installation.png",
+        "screens-1440-dark-ecrans.png",
+        "screens-1440-dark-playlist-brouillon.png",
+        "screens-1440-dark-failure.png"
+      ],
+      "faults": []
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type TenantMe } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { SlotSettingsPanel } from "./SlotSettingsPanel";
+import { AdminSections } from "@/components/admin/AdminSections";
 import { useAdminCapabilities } from "../access";
 import {
   Btn,
@@ -415,8 +416,17 @@ export default function HoursPage() {
     );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.3fr_1fr]">
-      {/* ── Panel « Horaires d'ouverture » (§9.1) ── */}
+    <div className="space-y-4 p-4 md:p-[26px]">
+      <div role="status" className="rounded-card border border-line bg-surface2 px-4 py-3 text-sm">
+        <p className={cx("font-semibold", paused ? "text-alertt" : "text-ink")}>
+          {paused ? "Commande en ligne en pause" : "Commande en ligne sans pause manuelle"}
+        </p>
+        <p className="mt-1 text-[13px] text-mut">
+          {paused ? "Les nouvelles commandes sont suspendues. La reprise se règle dans « Commande en ligne »." : "Les horaires, fermetures et créneaux continuent de déterminer les disponibilités proposées."}
+        </p>
+      </div>
+      <AdminSections label="Sections des horaires et créneaux" defaultSection="ouverture" sections={[
+        { id: "ouverture", label: "Ouverture", icon: "clock", modified: dirty, content: (
       <Panel
         title="Horaires d'ouverture"
         sub="Créneaux de retrait proposés au client"
@@ -530,10 +540,8 @@ export default function HoursPage() {
           </p>
         )}
       </Panel>
-
-      {/* ── Colonne droite ── */}
-      <div className="flex min-w-0 flex-col gap-4">
-        {/* Panel « Fermetures exceptionnelles » (§9.2) */}
+        ) },
+        { id: "fermetures", label: "Fermetures", icon: "calendar", content: (
         <Panel
           title="Fermetures exceptionnelles"
           actions={
@@ -590,11 +598,12 @@ export default function HoursPage() {
               ))}
             </ul>
           )}
-          <p className="mt-3 text-[13px] leading-relaxed text-mut">Une fermeture ne modifie pas une journée déjà préparée. Pour suspendre immédiatement les nouvelles commandes en ligne, utilisez la pause ci-dessous.</p>
+          <p className="mt-3 text-[13px] leading-relaxed text-mut">Une fermeture ne modifie pas une journée déjà préparée. Pour suspendre immédiatement les nouvelles commandes en ligne, utilisez la pause dans « Commande en ligne ».</p>
         </Panel>
-
-        {/* Carte « Pause commande en ligne » */}
-        {online && settings && <SlotSettingsPanel key={`${settings.slotIntervalMin}-${settings.slotCapacity}`} settings={settings} onSaved={setSettings} />}
+        ) },
+        { id: "commande", label: "Commande en ligne", icon: "cart", modified: msgDirty, content: (
+          <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
+{online && settings && <SlotSettingsPanel key={`${settings.slotIntervalMin}-${settings.slotCapacity}`} settings={settings} onSaved={setSettings} />}
         <Panel
           title="Pause commande en ligne"
           sub="Message affiché au client pendant la pause"
@@ -647,7 +656,9 @@ export default function HoursPage() {
             </div>
           </div>
         </Panel>
-      </div>
+          </div>
+        ) },
+      ]} />
 
       {/* ── Modale d'ajout de fermeture ── */}
       {draft && (
