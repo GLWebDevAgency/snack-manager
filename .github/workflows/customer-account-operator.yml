@@ -1,0 +1,242 @@
+name: Opérateur compte client
+
+# Amorçage : workflow_dispatch doit d'abord être enregistré sur main, branche
+# par défaut. Promouvoir ce fichier par PR relue ; sa présence sur develop
+# seule ne garantit pas qu'il soit déclenchable. Ne jamais utiliser une branche
+# de travail pour contourner ce garde. Le code opérateur doit aussi être présent
+# sur la branche choisie : develop pour staging, main pour production.
+# Le JSON est visible dans les entrées Actions : aucune clé, URL PostgreSQL,
+# donnée client ni numéro de téléphone. Les quatre actions ne contactent pas
+# Twilio, ne changent pas les variables et ne créent aucun rôle/migration.
+# Un résultat unconfirmed nécessite une inspection avant toute nouvelle action.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environnement autorisé par la branche
+        required: true
+        type: choice
+        options: [staging, production]
+      expected_sha:
+        description: SHA complet relu, encore en tête de develop ou main
+        required: true
+        type: string
+      request:
+        description: Document JSON strict {action,target,input}, sans secret ni donnée client
+        required: true
+        type: string
+      apply:
+        description: Appliquer explicitement après examen du dry-run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Même verrou que deploy.yml : aucune migration/livraison simultanée et aucune
+# interruption automatique d'une opération dont COMMIT pourrait être confirmé.
+concurrency:
+  group: deploiement-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  operator:
+    if: github.repository == 'GLWebDevAgency/snack-manager'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      INPUT_ENVIRONMENT: ${{ inputs.environment }}
+      INPUT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      INPUT_REQUEST: ${{ inputs.request }}
+      INPUT_APPLY: ${{ inputs.apply }}
+    steps:
+      - name: Refuser une branche, révision ou entrée ambiguë
+        run: |
+          node <<'NODE'
+          // BEGIN CUSTOMER_OPERATOR_EARLY_GUARD
+          const env = process.env;
+          const branch = { staging: 'refs/heads/develop', production: 'refs/heads/main' }[env.INPUT_ENVIRONMENT];
+          let valid = env.GITHUB_REPOSITORY === 'GLWebDevAgency/snack-manager'
+            && env.GITHUB_EVENT_NAME === 'workflow_dispatch' && Boolean(branch) && env.GITHUB_REF === branch
+            && /^[a-f0-9]{40}$/.test(env.INPUT_EXPECTED_SHA ?? '') && env.GITHUB_SHA === env.INPUT_EXPECTED_SHA
+            && ['true', 'false'].includes(env.INPUT_APPLY) && Buffer.byteLength(env.INPUT_REQUEST ?? '') <= 65536;
+          try { const value = JSON.parse(env.INPUT_REQUEST); valid = valid && value?.target?.environment === env.INPUT_ENVIRONMENT; }
+          catch { valid = false; }
+          if (!valid) { process.stdout.write('operator_dispatch_invalid\n'); process.exitCode = 2; }
+          // END CUSTOMER_OPERATOR_EARLY_GUARD
+          NODE
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Installer les dépendances sans identifiants opérateur
+        run: pnpm install --frozen-lockfile
+
+      - name: Préparer le pilote borné
+        run: |
+          cat > "$RUNNER_TEMP/customer-account-operator-workflow.mjs" <<'NODE'
+          // BEGIN CUSTOMER_OPERATOR_RUNNER
+          import { spawnSync } from 'node:child_process';
+          import { X509Certificate } from 'node:crypto';
+          import { writeFileSync, rmSync } from 'node:fs';
+          import { createRequire } from 'node:module';
+          import { join } from 'node:path';
+
+          const repository = 'GLWebDevAgency/snack-manager';
+          const detailKeys = {
+            'authorize-budget': ['authorizationRef', 'currency', 'authorizedSpendMicrousd', 'reservePerSendMicrousd', 'maxSendReservations', 'costEvidenceReference', 'notBefore', 'expiresAt'],
+            'activate-budget': ['authorizationRef', 'expectedActiveAuthorizationRef'],
+            'revoke-budget': ['authorizationRef'],
+            'authorize-admissions': ['policyRef', 'windowMs', 'browserSourceLimit', 'browserTenantLimit', 'browserParentLimit', 'intentBrowserLimit', 'intentSourceLimit', 'intentTenantLimit', 'intentParentLimit'],
+          };
+          function execute(command, args, options = {}) {
+            const result = spawnSync(command, args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 120000, maxBuffer: 2 * 1024 * 1024, ...options });
+            // Never echo stderr, raw Railway variables, failed command arguments or connection errors.
+            if (result.error || result.signal || result.status !== 0) throw new Error('operator_subprocess_failed');
+            return result.stdout;
+          }
+          export function dispatchTarget(env) {
+            const branch = { staging: 'develop', production: 'main' }[env.INPUT_ENVIRONMENT];
+            if (env.GITHUB_REPOSITORY !== repository || env.GITHUB_EVENT_NAME !== 'workflow_dispatch'
+              || !branch || env.GITHUB_REF !== `refs/heads/${branch}` || !/^[a-f0-9]{40}$/.test(env.INPUT_EXPECTED_SHA ?? '')
+              || env.GITHUB_SHA !== env.INPUT_EXPECTED_SHA || !['true', 'false'].includes(env.INPUT_APPLY)
+              || Buffer.byteLength(env.INPUT_REQUEST ?? '') > 65536) throw new Error('operator_dispatch_invalid');
+            const request = JSON.parse(env.INPUT_REQUEST);
+            if (request?.target?.environment !== env.INPUT_ENVIRONMENT) throw new Error('operator_target_mismatch');
+            return { branch, request };
+          }
+          function minimalEnv(env) {
+            return { PATH: env.PATH, HOME: env.HOME, TMPDIR: env.RUNNER_TEMP, CI: 'true', NODE_ENV: 'production' };
+          }
+          export function migrationEnvironment(env, native, write = writeFileSync) {
+            const environment = env.INPUT_ENVIRONMENT;
+            const role = `snackmanager_${environment}_migrator`;
+            const migration = new URL(env.DATABASE_MIGRATION_URL_RAW ?? '');
+            const expectedHost = environment === 'staging' ? 'zephyr.proxy.rlwy.net' : env.EXPECTED_MIGRATION_HOST_PRODUCTION;
+            const expectedPort = environment === 'staging' ? '34641' : env.EXPECTED_MIGRATION_PORT_PRODUCTION;
+            if (!['postgres:', 'postgresql:'].includes(migration.protocol) || !migration.username || !migration.password
+              || !expectedHost || !/^[1-9][0-9]{0,4}$/.test(expectedPort ?? '') || Number(expectedPort) > 65535
+              || migration.hostname !== expectedHost || migration.port !== expectedPort || migration.hostname.endsWith('.railway.internal')
+              || decodeURIComponent(migration.pathname) !== '/railway' || decodeURIComponent(migration.username) !== role
+              || migration.search || migration.hash) throw new Error('operator_migration_configuration_invalid');
+            const encodedCa = env.DATABASE_MIGRATION_ROOT_CA_B64?.trim() ?? '';
+            const ca = Buffer.from(encodedCa, 'base64');
+            if (!ca.length || ca.toString('base64') !== encodedCa || !new X509Certificate(ca).ca) throw new Error('operator_ca_invalid');
+            const path = join(env.RUNNER_TEMP, 'customer-operator-root-ca.pem');
+            write(path, ca, { mode: 0o600 });
+            migration.searchParams.set('sslmode', 'verify-ca');
+            migration.searchParams.set('uselibpqcompat', 'true');
+            migration.searchParams.set('sslrootcert', path);
+            return { ...minimalEnv(env), ...native, SM_ENV: environment, DATABASE_MIGRATION_URL: migration.toString(),
+              DATABASE_MIGRATION_ROLE: role, DATABASE_RUNTIME_ROLE: `snackmanager_${environment}_app` };
+          }
+          export function projectReport(value) {
+            if (value?.schemaVersion !== 1 || !['dry-run', 'apply'].includes(value.mode)
+              || !['planned', 'applied', 'conflict', 'not_found', 'invalid_input', 'blocked', 'unconfirmed'].includes(value.outcome)
+              || !['input_invalid', 'input_too_large', 'stdin_json_required', 'arguments_invalid', 'validated_only', 'native_target_mismatch',
+                'migration_configuration_invalid', 'database_checks_failed', 'grant_service_mismatch', 'runtime_operator_acl_unsafe',
+                'authorization_not_found', 'active_reference_conflict', 'operation_applied', 'operation_unconfirmed'].includes(value.code)) {
+              throw new Error('operator_report_invalid');
+            }
+            const report = { schemaVersion: 1, mode: value.mode, outcome: value.outcome, code: value.code };
+            if (Object.hasOwn(detailKeys, value.action)) {
+              report.action = value.action;
+              report.target = { environment: value.target.environment, slug: value.target.slug, tenantRef: value.target.tenantRef };
+              report.details = Object.fromEntries(detailKeys[value.action].map(key => [key, value.details[key]]));
+            }
+            return report;
+          }
+          export async function runOperatorWorkflow(env, io = {}) {
+            const exec = io.execute ?? execute;
+            const emit = io.emit ?? (value => process.stdout.write(`${JSON.stringify(value)}\n`));
+            let applyStarted = false;
+            try {
+              const { branch, request } = dispatchTarget(env);
+              const commandEnv = minimalEnv(env);
+              const checkHead = () => {
+                const head = JSON.parse(exec('gh', ['api', `repos/${repository}/git/ref/heads/${branch}`], {
+                  env: { ...commandEnv, GH_TOKEN: env.GH_TOKEN },
+                }));
+                if (head?.ref !== `refs/heads/${branch}` || head?.object?.type !== 'commit' || head.object.sha !== env.INPUT_EXPECTED_SHA) {
+                  throw new Error('operator_branch_moved');
+                }
+              };
+              // Dependencies and CLI validation run before any Railway/database credential is available.
+              const invokeCli = io.invokeCli ?? ((apply, childEnv) => {
+                const loader = createRequire(join(env.GITHUB_WORKSPACE, 'packages/customer/package.json')).resolve('tsx');
+                const result = spawnSync(process.execPath, ['--import', loader, join(env.GITHUB_WORKSPACE, 'scripts/customer-account-operator.ts'), ...(apply ? ['--apply'] : [])],
+                  { input: env.INPUT_REQUEST, env: childEnv, cwd: env.GITHUB_WORKSPACE, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 120000, maxBuffer: 65536 });
+                if (result.error || result.signal || ![0, 1, 2].includes(result.status)) throw new Error('operator_cli_failed');
+                return JSON.parse(result.stdout);
+              });
+              const plan = projectReport(await invokeCli(false, commandEnv));
+              if (plan.outcome !== 'planned' || plan.mode !== 'dry-run') { emit(plan); return 2; }
+              checkHead();
+              if (env.OPERATOR_PHASE === 'validate') { emit(plan); return 0; }
+              if (env.OPERATOR_PHASE !== 'apply' || env.INPUT_APPLY !== 'true' || !env.RAILWAY_TOKEN) throw new Error('operator_apply_not_authorized');
+              const variables = JSON.parse(exec('railway', ['variables', '--environment', env.INPUT_ENVIRONMENT, '--service', 'api', '--json'], {
+                env: { ...commandEnv, RAILWAY_TOKEN: env.RAILWAY_TOKEN },
+              }));
+              // Native IDs come from the scoped API service, never from the operator document.
+              const native = { RAILWAY_PROJECT_ID: variables.RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID: variables.RAILWAY_ENVIRONMENT_ID,
+                RAILWAY_ENVIRONMENT_NAME: variables.RAILWAY_ENVIRONMENT_NAME };
+              if (native.RAILWAY_PROJECT_ID !== request.target.railwayProjectId || native.RAILWAY_ENVIRONMENT_ID !== request.target.railwayEnvironmentId
+                || native.RAILWAY_ENVIRONMENT_NAME !== env.INPUT_ENVIRONMENT) throw new Error('operator_native_target_mismatch');
+              const databaseEnv = migrationEnvironment(env, native, io.writeFile);
+              checkHead();
+              applyStarted = true;
+              const result = projectReport(await invokeCli(true, databaseEnv));
+              emit(result);
+              return result.outcome === 'applied' && result.mode === 'apply' ? 0 : result.outcome === 'unconfirmed' ? 1 : 2;
+            } catch {
+              // A terminated/lost CLI response after apply is not evidence that no COMMIT occurred.
+              emit({ schemaVersion: 1, mode: env.OPERATOR_PHASE === 'apply' ? 'apply' : 'dry-run',
+                outcome: applyStarted ? 'unconfirmed' : 'blocked', code: applyStarted ? 'operation_unconfirmed' : 'workflow_preflight_failed' });
+              return applyStarted ? 1 : 2;
+            } finally {
+              try { if (env.OPERATOR_PHASE === 'apply') (io.removeFile ?? rmSync)(join(env.RUNNER_TEMP, 'customer-operator-root-ca.pem'), { force: true }); }
+              catch { /* Cleanup cannot rewrite a confirmed transaction outcome. */ }
+            }
+          }
+          if (process.env.SM_OPERATOR_WORKFLOW_MAIN === '1') process.exitCode = await runOperatorWorkflow(process.env);
+          // END CUSTOMER_OPERATOR_RUNNER
+          NODE
+
+      - name: Valider strictement et produire le dry-run sans secret opérateur
+        env:
+          OPERATOR_PHASE: validate
+          SM_OPERATOR_WORKFLOW_MAIN: '1'
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/customer-account-operator-workflow.mjs"
+
+      - name: Installer la CLI Railway vérifiée pour l’application explicite
+        if: inputs.apply
+        env:
+          VERSION_RAILWAY: 5.47.1
+          SHA256_RAILWAY: bf8e79049a8a51095006ee60a7f0697855fed3521a8bfedf5906a96b4e3a2f78
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/customer-operator-railway.tar.gz"
+          curl -sSfL "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" -o "$archive"
+          printf '%s  %s\n' "$SHA256_RAILWAY" "$archive" | sha256sum --check --status
+          sudo tar -xzf "$archive" -C /usr/local/bin railway
+
+      - name: Appliquer avec le seul migrateur existant et la cible native relue
+        if: inputs.apply
+        env:
+          OPERATOR_PHASE: apply
+          SM_OPERATOR_WORKFLOW_MAIN: '1'
+          GH_TOKEN: ${{ github.token }}
+          RAILWAY_TOKEN: ${{ inputs.environment == 'production' && secrets.RAILWAY_TOKEN_PRODUCTION || inputs.environment == 'staging' && secrets.RAILWAY_TOKEN_STAGING || '' }}
+          DATABASE_MIGRATION_URL_RAW: ${{ inputs.environment == 'production' && secrets.SM_DATABASE_MIGRATION_URL_PRODUCTION || inputs.environment == 'staging' && secrets.SM_DATABASE_MIGRATION_URL_STAGING || '' }}
+          DATABASE_MIGRATION_ROOT_CA_B64: ${{ inputs.environment == 'production' && secrets.SM_DATABASE_ROOT_CA_PRODUCTION || inputs.environment == 'staging' && secrets.SM_DATABASE_ROOT_CA_STAGING || '' }}
+          EXPECTED_MIGRATION_HOST_PRODUCTION: ${{ vars.SM_DATABASE_MIGRATION_HOST_PRODUCTION }}
+          EXPECTED_MIGRATION_PORT_PRODUCTION: ${{ vars.SM_DATABASE_MIGRATION_PORT_PRODUCTION }}
+        run: node "$RUNNER_TEMP/customer-account-operator-workflow.mjs"

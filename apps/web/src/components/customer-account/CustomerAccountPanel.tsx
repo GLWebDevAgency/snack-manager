@@ -98,7 +98,7 @@ function AccountSurface({ presentation, title, restaurantName, open, onClose, lo
     headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>} footer={footer}>{children}</Sheet>;
 }
 
-export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, onDevicePreferences, onCatalogVerified, account, slug, mode = 'light', returnLabel = 'Revenir au menu', initialSection = 'profile', presentation = 'sheet', onOrders, onLoyalty, onNavigationLockedChange }: {
+export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, onDevicePreferences, onCatalogVerified, account, slug, mode = 'light', returnLabel = 'Revenir au menu', initialSection = 'profile', presentation = 'sheet', onOrders, onLoyalty, onNavigationLockedChange, loyaltyCard }: {
   open: boolean; onClose: () => void; restaurantName: string; loyaltyHref?: string | undefined;
   onDeviceOrders?: (() => void) | undefined; onDevicePreferences?: (() => void) | undefined; account: Account;
   slug?: string; mode?: BrandMode; onCatalogVerified?: (categories: MenuCategory[]) => void;
@@ -106,6 +106,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   initialSection?: 'profile' | 'loyalty';
   presentation?: 'sheet' | 'page';
   onOrders?: () => void; onLoyalty?: () => void; onNavigationLockedChange?: (locked: boolean) => void;
+  loyaltyCard?: ReactNode;
 }) {
   const { state, refresh, currentAccess } = account;
   const [enrollmentActive, setEnrollmentActive] = useState(false);
@@ -126,6 +127,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   // Public visibility is only a navigation hint. Every private read and write
   // still rechecks the current subscription, programme and protected session.
   const loyaltyEnabled = Boolean(slug && loyaltyHref);
+  const loyaltyContext = initialSection === 'loyalty' && loyaltyEnabled;
   const readingLoyalty = !!view && loyaltyEnabled && sameOrderAccess(loyaltyAccess, account.currentAccess?.() ?? null);
   useEffect(() => {
     if (!open || !view || !loyaltyEnabled || !loyaltyRequested || state.busy) return;
@@ -153,11 +155,12 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   const title = state.status === 'offline' ? 'Vous êtes hors connexion'
     : state.status === 'unavailable' ? 'Compte indisponible pour le moment'
       : state.status === 'error' ? 'Vérification interrompue'
-        : state.status === 'idle' ? 'Compte à actualiser' : 'Vous naviguez en invité';
+        : state.status === 'idle' ? 'Compte à actualiser' : loyaltyContext ? 'Votre carte sur vos appareils' : 'Votre compte';
   // Keep the exact authoritative action/quota message. Only its presentation
   // changes; availability is never used to infer a missing or invalid session.
   const message = state.message ?? (state.status === 'guest'
-    ? state.accessAvailable ? 'Vous pouvez retrouver votre compte ou continuer votre commande en invité.' : state.registrationAvailable ? 'Vous pouvez créer un compte protégé ou continuer votre commande en invité.' : 'La création et la connexion au compte ne sont pas encore ouvertes.'
+    ? state.accessAvailable ? 'Connectez-vous pour retrouver votre accès personnel.' : state.registrationAvailable ? 'Créez votre accès personnel pour retrouver votre carte et vos commandes.'
+      : loyaltyContext && loyaltyCard ? 'La connexion au compte est indisponible pour le moment. Vous pouvez utiliser votre carte avec son QR.' : 'La connexion et la création de compte sont indisponibles pour le moment.'
     : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
       : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
   return <AccountSurface presentation={presentation} compact={initialSection === 'loyalty'} open={open} onClose={closePanel}
@@ -166,10 +169,15 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
       {returnLabel}
     </Tap>}>
     <div className={presentation === 'page' ? 'sm-account-page-content space-y-5' : 'space-y-4 p-4 pb-5 sm:p-5'}>
-      {readingLoyalty && loyaltyAccess && slug && view ? <CustomerLoyalty slug={slug} access={loyaltyAccess} currentAccess={account.currentAccess}
+      {readingLoyalty && loyaltyAccess && slug && view && <CustomerLoyalty slug={slug} access={loyaltyAccess} currentAccess={account.currentAccess}
         restaurantName={restaurantName} profileName={view.profile.name} onBack={leaveLoyalty} onProfile={completeProfile} showHeading={presentation !== 'page'} showBack={presentation !== 'page'} onBusyChange={setLoyaltyBusy}
-        profileEditor={<Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} forLoyalty />} />
-        : readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} onCatalogVerified={onCatalogVerified} onNavigationLockedChange={setOrdersBusy} /> : <>
+        profileEditor={<Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} forLoyalty />} />}
+      {readingOrders && ordersAccess && slug && <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} onCatalogVerified={onCatalogVerified} onNavigationLockedChange={setOrdersBusy} />}
+      {loyaltyContext && loyaltyCard && <details className="sm-account-card-access" open={!view ? true : undefined}>
+        <summary hidden={!view} className="cf-press"><Icon name="qr" size={21} /><span>Afficher une carte avec son QR</span><Icon name="down" size={18} className="sm-account-card-chevron" /></summary>
+        {loyaltyCard}
+      </details>}
+      {!readingLoyalty && !readingOrders && <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
       {view ? <><nav aria-label="Votre espace personnel" className="sm-account-destinations">{slug && <Tap ref={ordersTrigger} className="sm-account-destination" disabled={navigationBusy} onClick={() => { if (onOrders) { onOrders(); return; } const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><span className="sm-account-destination-icon"><Icon name="ticket" size={21} /></span><span className="min-w-0 flex-1 text-left"><b>Mes commandes</b><small>Historique et suivi</small></span><Icon name="arrow" size={16} /></Tap>}
         {loyaltyEnabled && <Tap ref={loyaltyTrigger} className="sm-account-destination" disabled={navigationBusy} onClick={() => { if (onLoyalty) { onLoyalty(); return; } const access = account.currentAccess?.(); if (access) setLoyaltyAccess(access); }}><span className="sm-account-destination-icon"><Icon name="gift" size={21} /></span><span className="min-w-0 flex-1 text-left"><b>Ma carte fidélité</b><small>Carte, solde et avantages</small></span><Icon name="arrow" size={16} /></Tap>}</nav>
@@ -179,7 +187,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           {state.message && <p className="mt-3 text-sm leading-6 text-mut">{state.message}</p>}
           <div aria-hidden className="mt-5 space-y-3"><div className="h-4 w-1/2 rounded bg-ink/10" /><div className="h-11 rounded-ctrl bg-ink/5" /><div className="h-4 w-3/4 rounded bg-ink/10" /></div>
         </div> : state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)
-          ? <p role="status" className="text-sm leading-6 text-mut">Vous naviguez en invité. La commande reste possible sans créer de compte.</p>
+          ? <p role="status" className="text-sm leading-6 text-mut">{loyaltyContext ? 'Votre compte permet de retrouver votre carte sur vos appareils. Une carte déjà en votre possession peut être rattachée après connexion.' : 'Retrouvez vos commandes et votre profil dans votre compte. Vous pouvez aussi commander sans vous connecter.'}</p>
           : <section role="status" aria-live="polite" aria-atomic="true" className="sm-account-card sm-account-intro">
           <div className="flex items-start gap-3">
             <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
@@ -187,12 +195,12 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           </div>
           <p className="mt-3 text-sm leading-6 text-mut">{message}</p>
         </section>}
-      {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)) && <Tap className={secondary + ' w-full'} disabled={navigationBusy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
+      {!enrollmentActive && !loading && state.status !== 'offline' && (Boolean(view) || needsRetry) && <Tap className={secondary + ' w-full'} disabled={navigationBusy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
       {/* A mutation clears the private view before releasing its Web Lock and
           notifying other forms. Do not mount a new credential flow in that gap. */}
       {open && !view && !state.busy && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
         smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={authenticated} onActivity={activity} onBusyChange={setEnrollmentBusy} />}
-      {!view && !loading && loyaltyEnabled && <p className="text-xs leading-5 text-mut">Un seul compte pour vos commandes et votre fidélité. Une carte déjà remise par le restaurant peut être rattachée après connexion.</p>}
+      {!view && !loading && loyaltyEnabled && !loyaltyContext && <p className="text-xs leading-5 text-mut">Votre carte fidélité reste utilisable avec son QR. Vous pourrez la rattacher à ce compte après connexion.</p>}
       {(onDeviceOrders || (loyaltyHref && !view && presentation === 'sheet') || onDevicePreferences) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
         <h3 className="mb-3 text-sm font-bold">Autres accès</h3>
         {onDeviceOrders && <Tap disabled={navigationBusy} onClick={() => { onClose(); onDeviceOrders(); }}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { planProductionPhoneVerification, PRODUCTION_ATTESTATION_MAX_AGE_MS,
-  PRODUCTION_OBSERVATION_MAX_AGE_MS, ProductionVerificationEvidenceSchema, ProductionVerificationPolicySchema } from './production-verification-policy';
+  PRODUCTION_OBSERVATION_MAX_AGE_MS, ProductionVerificationEvidenceSchema, ProductionVerificationPolicySchema,
+  productionVerificationReserve } from './production-verification-policy';
 
 const now = Date.UTC(2026, 8, 12, 12);
 const day = 86_400_000;
@@ -31,6 +32,17 @@ function fixture() {
     },
     request: { tenantRef, phone: '+33600000001' },
   };
+}
+
+function publishedFixture() {
+  const input = fixture();
+  return { ...input, evidence: { ...input.evidence, costs: {
+    model: 'published_rates_operator_reserve_v1', reference: 'cost-fixture', accountSid, serviceSid, tenantRef,
+    currency: 'USD', publishedRatesReference: 'published-rates-fixture', publishedRatesObservedAt: now - 3 * day,
+    publishedSmsSegmentMicrousd: 31, publishedSuccessfulVerificationMicrousd: 8,
+    operatorReservePerSendMicrousd: 90, operatorReserveDecisionReference: 'operator-decision-fixture',
+    attestedAt: now - 3 * day, expiresAt: now + 4 * day,
+  } } };
 }
 
 describe('production paid verification — pure observation and SQL funding reference', () => {
@@ -240,6 +252,147 @@ describe('production paid verification — pure observation and SQL funding refe
       expect(result.kind).toBe('reservation_required'); expect(planProductionPhoneVerification(input)).toEqual(result);
       expect(input).toEqual(before); expect(clock).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
       expect(JSON.stringify(result)).not.toMatch(/authorizedSpend|balance|remaining|trial|maxSendReservations/);
+    } finally { clock.mockRestore(); fetch.mockRestore(); }
+  });
+});
+
+describe('published prices and explicit operator reservation — no invoice or funding guarantee', () => {
+  it('preserves every legacy limit and the SQL grant reference while using exactly the chosen reserve', () => {
+    const legacy = planProductionPhoneVerification(fixture());
+    const published = planProductionPhoneVerification(publishedFixture());
+    expect(legacy.kind).toBe('reservation_required'); expect(published.kind).toBe('reservation_required');
+    if (legacy.kind !== 'reservation_required' || published.kind !== 'reservation_required') throw new Error('Fixture should reserve');
+    expect(published).toEqual({ ...legacy, limits: { ...legacy.limits,
+      productionBudget: { ...legacy.limits.productionBudget, reservePerSendMicrousd: 90 } } });
+    expect(JSON.stringify(published)).not.toMatch(/allFeesIncluded|authorizedSpend|balance|remaining|maxSendReservations/);
+  });
+
+  it.each([70, 71, Number.MAX_SAFE_INTEGER])('retains an explicit sufficient reservation of %s without rounding or a default margin', reserve => {
+    const input = publishedFixture(); input.evidence.costs.operatorReservePerSendMicrousd = reserve;
+    expect(planProductionPhoneVerification(input)).toMatchObject({ kind: 'reservation_required', limits: {
+      productionBudget: { authorizationRef: input.policy.authorizationRef, costEvidenceReference: input.policy.costEvidenceReference,
+        reservePerSendMicrousd: reserve } } });
+  });
+
+  it.each([
+    { model: undefined }, { model: 'published_rates_operator_reserve_v2' }, { reference: 'other-cost' },
+    { accountSid: `AC${'d'.repeat(32)}` }, { serviceSid: `VA${'e'.repeat(32)}` }, { tenantRef: 'foreign-tenant' },
+    { currency: 'EUR' }, { operatorReservePerSendMicrousd: 69 },
+    { publishedRatesObservedAt: now + 1 }, { publishedRatesObservedAt: now - 3 * day + 1 },
+    { publishedRatesObservedAt: now - 7 * day }, { publishedRatesObservedAt: now - 7 * day - 1 },
+    { publishedRatesObservedAt: -1 }, { publishedRatesObservedAt: now - 3 * day + 0.5 },
+    { publishedRatesObservedAt: Number.MAX_SAFE_INTEGER },
+    { attestedAt: now + 1 }, { expiresAt: now }, { attestedAt: now - 3 * day - 1 },
+    { allFeesIncluded: true }, { allFeesIncluded: false }, { smsSegmentUpperBoundMicrousd: 31 },
+    { successfulVerificationUpperBoundMicrousd: 8 }, { authorizedSpendMicrousd: 1_000_000 },
+    { maxSendReservations: 10 }, { grant: true }, { source: 'provider' },
+  ])('refuses inconsistent, stale, mixed or injected published-price evidence (%#)', patch => {
+    const input = publishedFixture();
+    expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+      costs: { ...input.evidence.costs, ...patch } } })).toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+
+  it.each(['model', 'reference', 'accountSid', 'serviceSid', 'tenantRef', 'currency', 'publishedRatesReference',
+    'publishedRatesObservedAt', 'publishedSmsSegmentMicrousd', 'publishedSuccessfulVerificationMicrousd',
+    'operatorReservePerSendMicrousd', 'operatorReserveDecisionReference', 'attestedAt', 'expiresAt'])(
+    'requires %s explicitly with no fallback to the legacy branch', field => {
+      for (const value of [undefined, null]) {
+        const input = publishedFixture();
+        expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+          costs: { ...input.evidence.costs, [field]: value } } })).toEqual({ kind: 'denied', reason: 'evidence' });
+      }
+    });
+
+  it.each(['publishedRatesReference', 'operatorReserveDecisionReference'] as const)('uses existing reference bounds for %s', field => {
+    for (const value of ['', 'with spaces', 'https://example.test/rates', 'x'.repeat(121), 42]) {
+      const input = publishedFixture();
+      expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+        costs: { ...input.evidence.costs, [field]: value } } })).toEqual({ kind: 'denied', reason: 'evidence' });
+    }
+    const input = publishedFixture(); input.evidence.costs[field] = 'x'.repeat(120);
+    expect(planProductionPhoneVerification(input).kind).toBe('reservation_required');
+  });
+
+  it.each(['publishedSmsSegmentMicrousd', 'publishedSuccessfulVerificationMicrousd', 'operatorReservePerSendMicrousd'] as const)(
+    'requires positive safe integer microUSD for %s', field => {
+      for (const value of [0, -1, 0.1, '31', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        const input = publishedFixture();
+        expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+          costs: { ...input.evidence.costs, [field]: value } } })).toEqual({ kind: 'denied', reason: 'evidence' });
+      }
+    });
+
+  it('accepts a publication observed at the attestation/server time and preserves the strict seven-day boundary', () => {
+    const input = publishedFixture(); input.evidence.costs.publishedRatesObservedAt = now; input.evidence.costs.attestedAt = now;
+    expect(planProductionPhoneVerification(input).kind).toBe('reservation_required');
+    input.evidence.costs.publishedRatesObservedAt = now - PRODUCTION_ATTESTATION_MAX_AGE_MS + 1;
+    expect(planProductionPhoneVerification(input)).toMatchObject({ kind: 'reservation_required', expiresAt: now + 1 });
+    input.evidence.costs.publishedRatesObservedAt--;
+    expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+
+  it('does not renew stale prices by refreshing the service or signing a newer cost attestation', () => {
+    const input = publishedFixture(); input.evidence.costs.publishedRatesObservedAt = now - 7 * day;
+    input.evidence.costs.attestedAt = now; input.evidence.costs.expiresAt = now + 7 * day;
+    input.evidence.serverObservation.observedAt = now; input.evidence.serverObservation.reference = 'fresh-service-read';
+    expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+
+  it('includes every declared segment and the success fee, using BigInt at the safe-integer boundary', () => {
+    const input = publishedFixture(); input.evidence.safeguards.maxSmsSegmentsPerSend = 10;
+    input.evidence.costs.operatorReservePerSendMicrousd = 318;
+    expect(planProductionPhoneVerification(input)).toMatchObject({ limits: { productionBudget: { reservePerSendMicrousd: 318 } } });
+    input.evidence.costs.operatorReservePerSendMicrousd--;
+    expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
+    input.evidence.costs.operatorReservePerSendMicrousd = Number.MAX_SAFE_INTEGER;
+    input.evidence.costs.publishedSmsSegmentMicrousd = Number.MAX_SAFE_INTEGER - 8;
+    expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
+    input.evidence.safeguards.maxSmsSegmentsPerSend = 1;
+    expect(planProductionPhoneVerification(input)).toMatchObject({ limits: {
+      productionBudget: { reservePerSendMicrousd: Number.MAX_SAFE_INTEGER } } });
+    input.evidence.costs.publishedSmsSegmentMicrousd++;
+    expect(planProductionPhoneVerification(input)).toEqual({ kind: 'denied', reason: 'evidence' });
+  });
+
+  it('does not accept legacy cost bounds with a published-rate discriminator or additional fields', () => {
+    const input = fixture();
+    for (const patch of [{ model: 'published_rates_operator_reserve_v1' }, { publishedRatesReference: 'published-fixture' }]) {
+      expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence,
+        costs: { ...input.evidence.costs, ...patch } } })).toEqual({ kind: 'denied', reason: 'evidence' });
+    }
+  });
+
+  it('keeps existing plans intact when the configured grant changes, requiring a new SQL reservation for each plan', () => {
+    const input = publishedFixture(); const planA = planProductionPhoneVerification(input); const savedA = structuredClone(planA);
+    const next = structuredClone(input); next.policy.authorizationRef = 'next-sql-authorization-fixture';
+    next.policy.costEvidenceReference = 'next-cost-fixture'; next.evidence.costs.reference = 'next-cost-fixture';
+    next.evidence.costs.operatorReserveDecisionReference = 'next-operator-decision-fixture';
+    next.evidence.costs.operatorReservePerSendMicrousd = 100;
+    const planB = planProductionPhoneVerification(next);
+    expect(planA).toEqual(savedA);
+    expect(planA).toMatchObject({ kind: 'reservation_required', limits: { productionBudget: {
+      authorizationRef: 'sql-authorization-fixture', costEvidenceReference: 'cost-fixture', reservePerSendMicrousd: 90 } } });
+    expect(planB).toMatchObject({ kind: 'reservation_required', limits: { productionBudget: {
+      authorizationRef: 'next-sql-authorization-fixture', costEvidenceReference: 'next-cost-fixture', reservePerSendMicrousd: 100 } } });
+  });
+
+  it('exports one pure reserve calculation usable before any provider observation exists', () => {
+    const published = ProductionVerificationEvidenceSchema.parse(publishedFixture().evidence).costs;
+    const legacy = ProductionVerificationEvidenceSchema.parse(fixture().evidence).costs;
+    Object.freeze(published); Object.freeze(legacy);
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => { throw new Error('Ambient clock forbidden'); });
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => { throw new Error('Provider call forbidden'); });
+    try {
+      expect(productionVerificationReserve(published, 2, now)).toBe(90);
+      expect(productionVerificationReserve(legacy, 2, now)).toBe(70);
+      for (const segments of [0, 11, 1.5, NaN, Infinity]) {
+        expect(productionVerificationReserve(published, segments, now)).toBeNull();
+      }
+      for (const invalidNow of [-1, now + 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) {
+        expect(productionVerificationReserve(published, 2, invalidNow)).toBeNull();
+      }
+      expect(productionVerificationReserve(published, 2, now + 4 * day)).toBeNull();
+      expect(clock).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
     } finally { clock.mockRestore(); fetch.mockRestore(); }
   });
 });

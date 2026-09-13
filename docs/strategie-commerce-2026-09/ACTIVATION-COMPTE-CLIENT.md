@@ -7,7 +7,7 @@ privées. `customer.loyalty_memberships` rattache ce compte au membre fidélité
 restaurant. Le solde reste dans `loyalty.wallets`, ses mouvements dans
 `loyalty.ledger_entries` : le lien ne crée pas un second solde.
 
-Une ancienne carte QR reste une preuve limitée utilisable en caisse. Le QR seul
+Une carte QR remise par le restaurant reste une preuve limitée utilisable en caisse. Le QR seul
 ne devient pas une connexion au profil ou à l'historique privé. Le rattachement
 en ligne conserve le membre, ses points et ses mouvements, avec un nouveau QR,
 après contrôle de la carte et concordance du téléphone déjà vérifié. Un téléphone
@@ -16,7 +16,7 @@ oriente maintenant vers ce rattachement au lieu de renvoyer inutilement au resta
 
 La recommandation produit est un compte principal avec une adhésion par
 restaurant, conditionnée à son programme et à ses droits commerciaux. Les
-anciennes cartes restent compatibles. Cette séparation rejoint le modèle
+cartes déjà remises restent compatibles. Cette séparation rejoint le modèle
 [Square, profil client et compte de fidélité](https://developer.squareup.com/docs/loyalty-api/loyalty-accounts) ;
 elle ne justifie pas deux portefeuilles indépendants pour la même carte.
 
@@ -211,6 +211,45 @@ seule que SMS et Fraud Guard sont activés ni la durée maximale du code : ces
 protections sont attestées séparément dans `safeguards`. L’empreinte des sept
 paramètres exposés doit encore correspondre au service réellement lu.
 
+### Tarif publié et réserve opérateur
+
+Le contrat de coût accepte deux preuves distinctes. La forme historique avec
+`allFeesIncluded: true` exige toujours une véritable borne tous frais inclus.
+Un tarif public Twilio ne suffit pas à la remplir : les prix affichés peuvent
+exclure taxes et surcharges. Aucun booléen de garantie n'est déduit d'un tarif.
+
+La forme `model: "published_rates_operator_reserve_v1"` conserve les références,
+portées, devise USD et dates de l'attestation, puis exige :
+
+- `publishedRatesReference` et `publishedRatesObservedAt` : référence de la
+  preuve tarifaire et date de sa lecture, non future et au plus sept jours ;
+- `publishedSmsSegmentMicrousd` et
+  `publishedSuccessfulVerificationMicrousd` : prix documentés, sans marge cachée ;
+- `operatorReservePerSendMicrousd` et `operatorReserveDecisionReference` :
+  réserve interne explicitement décidée et référence de cette décision.
+
+La réserve doit couvrir au minimum le prix publié des segments autorisés et
+celui d'une vérification réussie. Le calcul utilise des entiers `BigInt` et
+refuse les dépassements. Aucune marge, enveloppe ou reconduction n'est fournie
+par défaut. Le diagnostic nomme cette base
+`operator_reserve_not_invoice_guarantee` : c'est une réserve de gestion, **pas
+une garantie de facture fournisseur**.
+
+Le budget SQL reste indépendant : même référence tarifaire, même service et
+montant réservé exact, nombre maximal d'envois, expiration, révocation et
+réservation atomique avant tout appel. Les prix et la décision opérateur ne
+créent aucun financement. Après la recette, rapprocher les envois de la
+facturation fournisseur, incluant les vérifications réussies, taxes et
+surcharges applicables ; suspendre le financement si la réserve ne couvre plus
+les charges observées. Le prix d'un SMS dans l'API Attempts peut se stabiliser
+après 24 heures et exclut le prix d'une vérification réussie : ce relevé seul
+n'est pas la facture complète.
+
+Références : [tarifs Verify](https://www.twilio.com/en-us/verify/pricing),
+[tarifs SMS](https://assets.cdn.prod.twilio.com/pricing-csv/SMSPricing.csv),
+[conditions tarifaires](https://www.twilio.com/en-us/legal/tos),
+[prix des tentatives Verify](https://www.twilio.com/docs/verify/api/attempts).
+
 Les attestations `account`, `safeguards` et `costs` ont chacune une validité explicite d’au
 plus **sept jours**. Le rafraîchissement automatique de l’observation technique
 ne modifie jamais leur date, leur contenu ou leur portée. Leur renouvellement
@@ -292,43 +331,45 @@ Références : [identité et financement Verify](IDENTITE-CLIENT-VERIFY.md),
 [passkeys et récupération](COMPTE-CLES-ACCES.md),
 [compte et fidélité unifiés](REPRISE-COMPTE-FIDELITE-2026-09-12.md).
 
-## État de vérification au 12 septembre 2026
+## État de vérification au 13 septembre 2026
 
-Le code local du plan `production_paid` passe **111 tests** et le préflight
-opérateur **66 tests**, avec typage strict ciblé ; le plan passe aussi le lint
-ciblé. Ce sont des contrôles locaux, pas une preuve d’ouverture du service.
+La version `4d8525615924aa701a4b92b9ae3709bbd0dd6607` est déployée en staging :
+[livraison du 12 septembre](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34723612463).
+La révision est servie par l'API. Pour le web, la preuve relie le checkout et
+l'upload du pipeline au déploiement Railway actif et à son image ; aucun SHA
+HTTP web n'est supposé depuis celui de l'API.
 
-Le relevé staging communiqué par l’opérateur de cette recette, en lecture seule
-(transaction PostgreSQL `READ ONLY`, Mongo primaire/majorité et Redis `PING`),
-constate : Classfood actif en Boost, identité de cible concordante, aucun compte
-client sur cette cible, neuf migrations du module customer présentes et Redis
-joignable. Le rôle PostgreSQL runtime n’a ni privilège superutilisateur, ni droit
-de créer rôles/bases, ni contournement RLS. Ce dernier constat ne remplace pas
-l’audit complet des privilèges des nouvelles tables.
+Après déploiement : onze migrations client avec empreintes vérifiées, quatre
+tables opérateur présentes avec RLS forcée et lecture sans écriture au niveau
+table pour le runtime. Le bootstrap du pipeline vérifie le manifeste complet
+des privilèges. Classfood est actif en Boost en staging, sans compte client,
+financement ni politique d'admission de production lors de ce relevé.
 
-Les tables `production_budget_authorizations` et
-`production_admission_policies` sont absentes de ce staging : les deux nouvelles
-migrations portant le module à onze ne sont pas encore déployées. Le mode, la
-politique et les attestations Verify sont également absents du dernier relevé
-de configuration. Aucune variable distante n’a été modifiée lors de ce relevé.
-**Activation staging et production non acquises à ce stade.** La révision servie,
-les migrations, le financement explicite et les recettes réelles restent à
-consigner après leur exécution.
+La recette publique a passé huit contrôles de santé, puis navigation, retour,
+rechargement et conservation du panier sur Chromium/WebKit, deux domaines et
+les largeurs 320/390/820/1440, sans écriture distante. Le
+[workflow E2E](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34724586085)
+a réellement checkouté cette même révision dans les deux jobs : 45 scénarios de
+démonstration réussis ; quatre parcours du parc réel ignorés faute d'identifiants.
+Ces résultats ne constituent pas une recette SMS ou passkey.
 
-Contrôles complémentaires locaux : web **2 998/2 998**, contrats **693/693**,
-module API identité **949 réussis** (89 tests conditionnels absents de cette
-passe), customer **421/421**, bootstrap **128/128**, et frontières API/store
-**83/83** sur les passages PostgreSQL/Mongo locaux complémentaires, plus **6/6**
-tests de quotas sur Redis local. Le correctif de
-date de révocation a ensuite passé **15 tests PostgreSQL ciblés**. Les séries
-se recouvrent : aucun total cumulé n'est une mesure de couverture. Typage, lint
-et compilation des packages concernés : **25 tâches réussies** sur la dernière
-passe. Le CLI opérateur passe **132 tests**, son typage strict ciblé et son lint.
-La CI doit encore recevoir le commit final.
+Le relevé en lecture seule du 13 septembre confirme que le mode compte reste
+absent en staging et en production. La collection `tenants` de production est
+vide, et l'hôte Turnstile autorisé est `snackmanager.fr`. Il faut donc préparer
+l'établissement et ses origines de production avant de prétendre y activer son
+compte client. Le service Verify observé précédemment est dédié au staging.
 
-La lecture Mongo de production par slug `classfood` ne trouve aucun établissement.
-La création de cet établissement n'est pas déduite de son existence en staging.
-La recette réelle reste suspendue au numéro contrôlé par le testeur, à la
-reconnexion Console, au financement explicite et aux protections fournisseur
-vérifiées. Aucun SMS ni création de compte distant n'a été effectué lors de ces
-contrôles.
+L'opérateur a autorisé la configuration Twilio, la recette sur son numéro
+contrôlé et la préparation de production. La session Console a depuis expiré ;
+l'autorisation de modifier la clé ne remplace pas une session authentifiée.
+La durée effective du code reste à vérifier : les dix minutes par défaut
+peuvent être modifiées via Support. Ne pas supprimer cette preuve au motif que
+le challenge SQL dure dix minutes : après une réponse d'envoi perdue, un code
+fournisseur plus ancien pourrait encore être retourné lors d'un nouvel envoi.
+
+La nouvelle présentation de la carte et la preuve de réserve opérateur sont
+un lot distinct de la révision déployée ci-dessus. Leur livraison et les
+résultats d'activation réels seront consignés après exécution. Aucun état
+`configuration_valid`, test simulé ni numéro autorisé ne signifie à lui seul
+qu'un SMS a été reçu, qu'une clé d'accès a été créée ou que la production est
+ouverte.
