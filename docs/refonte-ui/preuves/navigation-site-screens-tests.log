@@ -1,0 +1,28 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/app/admin/site/SiteScope.browser.test.tsx (15 tests) 6036ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > le dépôt de logo vérifie encore sa session après lecture du fichier (changement=false)  449ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > le dépôt de logo vérifie encore sa session après lecture du fichier (changement=true)  412ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > réagit à un vrai événement storage provenant d’un autre onglet de même rôle  329ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > refuse le brouillon A avec un jeton B avant même storage/focus : brand  372ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > refuse le brouillon A avec un jeton B avant même storage/focus : card  345ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : brand  370ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : name  350ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un ACK A retardé ne remplace ni ne confirme l’écran B : card  487ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > garde le brouillon A dans son restaurant et ne l’applique jamais automatiquement à B  422ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > un retour manuel à la valeur initiale ne ressuscite pas le brouillon au reload  479ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > bloque les liens avant ACK et conserve les choix après réponse incertaine : name  384ms
+   ✓ pilotage BO — autorité du tenant et réponses tardives > bloque les liens avant ACK et conserve les choix après réponse incertaine : card  440ms
+ ✓ src/lib/demo/screen-preview.test.ts (9 tests) 30ms
+ ✓ src/app/admin/settings/marque.test.ts (35 tests) 23ms
+ ✓ src/app/admin/screens/apparence/use-screen-preview.test.ts (5 tests) 10ms
+ ✓ src/app/admin/screens/apparence/preview-session.test.ts (6 tests) 7ms
+ ✓ src/app/admin/site/pilotage-drafts.test.ts (11 tests) 5ms
+ ✓ src/app/admin/screens/apparence/appearance-draft.test.ts (9 tests) 3ms
+ ✓ src/app/admin/screens/apparence/gallery-preview.test.ts (4 tests) 2ms
+
+ Test Files  8 passed (8)
+      Tests  94 passed (94)
+   Start at  13:48:36
+   Duration  8.19s (transform 223ms, setup 0ms, collect 1.05s, tests 6.12s, environment 1ms, prepare 242ms)

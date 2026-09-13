@@ -1,6 +1,20 @@
 # Reprise de la refonte UI Snack Manager
 
-## État courant — seconde passe et compatibilité PR 178
+## État courant — navigation du back-office restaurateur, 13 septembre 2026
+
+Branche **`feat/admin-section-navigation`**, worktree `/Users/limameghassene/development/SnackManager-refonte-ui`, base `origin/develop` **`4d8525615924aa701a4b92b9ae3709bbd0dd6607`** (PR 178 à 182 incluses). La tête distante a été vérifiée à nouveau pendant ce lot et correspond toujours à cette base. Le checkout principal `feat/fidelite-design`, ses modifications et les autres worktrees n’ont pas été modifiés. Le reçu local `e38f69e` reste conservé sur `fix/e2e-refonte-staging`. Aucun fichier AGENTS n’a été remplacé.
+
+Les onglets sont intégrés dans **Établissement, Livraison, Site web, Écrans de salle, Horaires, Abonnement, Équipe, Statistiques et Planning**. Encaissement reste une page courte, adaptée au mobile. Carte, Commandes et Avis conservent leurs listes/filtres ; Stocks ses trois sections, Fidélité ses quatre routes. [Audit complet et décisions](AUDIT-NAVIGATION-RESTAURATEUR.md).
+
+Les formulaires restent montés pendant les changements d’onglet. Les handlers, droits, sauvegardes, paiements, médiathèques, reprises et journaux sont conservés. Aucune dépendance, API, migration, application Expo ni logique de calcul n’est modifiée. Les améliorations communes portent sur la navigation clavier, le menu tablette et la restauration du focus des dialogues. Les champs mobiles, playlists, factures, tableaux et indicateurs ont été vérifiés dans leurs contextes réels.
+
+Les preuves finales, les fichiers modifiés et les limites de validation sont consignés dans [VALIDATION-NAVIGATION-RESTAURATEUR.md](VALIDATION-NAVIGATION-RESTAURATEUR.md). Les captures sont sous `captures/navigation-admin`, `captures/navigation-site-screens-final`, `captures/admin-navigation-delivery` et les dossiers Horaires/Abonnement référencés par l’audit. Les traces intermédiaires restent identifiées comme telles.
+
+Publication autorisée le 13 septembre 2026 (« publies cela proprement »), vers `develop` puis staging uniquement. La [PR #184](https://github.com/GLWebDevAgency/snack-manager/pull/184) porte ce lot. Sa première tête `a732a063fdf31ecad2dce470f085a8ebf53d1f9b` a réussi la CI complète et le balayage des secrets.
+
+Avant fusion, la nouvelle PR #183 compte client/fidélité a fait avancer `develop` à `453697af074b828215196023e0e80df9a249ac53`. Cette base est intégrée sans conflit dans la branche dédiée, sans réécriture d’historique. Les preuves locales ci-dessus portent sur la base initiale ; une nouvelle CI valide l’arbre combiné. Prochaine étape précise : attendre ses contrôles, fusionner la PR #184, suivre le déploiement automatique puis vérifier le SHA effectivement servi et les parcours staging. Aucun changement vers `main` ni activation de compte client en production.
+
+## Historique — seconde passe et compatibilité PR 178
 
 La livraison est suivie depuis la branche **`fix/e2e-refonte-staging`**, créée depuis le commit fusionné ; `refactor/ui-handoff-fidelity` conserve le lot livré. Les déploiements web/POS/KDS sont tous `SUCCESS` et reliés aux identifiants du workflow ; les 5 pages et 13 assets contrôlés répondent 200 avec les MIME attendus, et les empreintes ont changé sur les trois interfaces. Voir `preuves/v2-staging-fronts-{apres,comparaison}.json`.
 

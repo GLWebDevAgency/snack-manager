@@ -35,6 +35,7 @@ import { apexSuggestion, type DomainView, type SiteAddresses } from "./types";
 import { WebsitePanel } from "./WebsitePanel";
 import { useSitePermissions } from "./site-access";
 import { MarqueDuSite } from "./MarqueDuSite";
+import { AdminSections } from "@/components/admin/AdminSections";
 import { SiteEditScopeContext, useAdminScopeToken, useSiteEditScope } from "./site-scope";
 
 /** Lien externe stylé en bouton fantôme (les `Btn` sont des `<button>`). */
@@ -45,7 +46,7 @@ function OpenLink({ url, label }: { url: string; label: string }) {
       target="_blank"
       rel="noreferrer noopener"
       aria-label={label}
-      className="inline-flex shrink-0 items-center justify-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-transparent px-3.5 py-[9px] text-xs font-semibold tracking-[-0.2px] text-white transition-colors duration-200 ease-sm hover:bg-white/6 active:translate-y-px"
+      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-transparent px-3.5 py-[9px] text-xs font-semibold tracking-[-0.2px] text-ink transition-colors duration-200 ease-sm hover:bg-white/6 active:translate-y-px"
     >
       Ouvrir
       <Icon name="arrow" size={15} />
@@ -221,7 +222,7 @@ function SiteAddressesPanel() {
     );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
+    <div className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
       <div className="flex min-w-0 flex-col gap-4">
         <WebsitePanel />
         {/* ── Carte « Votre adresse » : toujours active ── */}
@@ -231,10 +232,9 @@ function SiteAddressesPanel() {
           actions={<Pill className="bg-ok text-white">Active</Pill>}
         >
           <div className="flex flex-wrap items-center gap-3 rounded-card border border-line2 bg-surface2 px-3.5 py-3">
-            {/* Minimum de 200 px : l'adresse est l'information no 1 — sur un
-                téléphone, les boutons passent dessous plutôt que la tronquer. */}
-            <div className="min-w-[200px] flex-1">
-              <div className="truncate font-mono text-[17px] font-extrabold tracking-[-0.02em] text-ink">
+            {/* L'adresse reste entière ; sur téléphone les boutons passent dessous. */}
+            <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
+              <div className="break-all font-mono text-[17px] font-extrabold tracking-[-0.02em] text-ink">
                 {data.subdomain.hostname}
               </div>
               <div className="mt-0.5 text-[13px] text-mut">
@@ -273,14 +273,14 @@ function SiteAddressesPanel() {
                   className="rounded-card border border-line2 bg-surface p-3.5"
                 >
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="min-w-[180px] flex-1">
+                    <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="truncate font-mono text-[15px] font-bold text-ink">
+                        <span className="break-all font-mono text-[15px] font-bold text-ink">
                           {d.hostname}
                         </span>
                         {d.isPrimary && <Pill variant="out">Principal</Pill>}
                       </div>
-                      <div className="mt-0.5 truncate text-[13px] text-mut">
+                      <div className="mt-0.5 break-words text-[13px] text-mut">
                         {d.detail ??
                           (d.lastCheckedAt
                             ? `Dernière vérification ${timeAgo(d.lastCheckedAt)}`
@@ -310,7 +310,7 @@ function SiteAddressesPanel() {
                       onClick={() => setToDelete(d)}
                       aria-label={`Détacher « ${d.hostname} »`}
                       title="Détacher"
-                      className="grid size-8 shrink-0 place-items-center rounded-ctrl text-mut transition-colors duration-200 hover:text-alertt"
+                      className="grid size-11 shrink-0 place-items-center rounded-ctrl text-mut transition-colors duration-200 hover:text-alertt"
                     >
                       <Icon name="trash" size={15} />
                     </button>
@@ -354,7 +354,7 @@ function SiteAddressesPanel() {
                     if (e.key === "Enter") void addDomain();
                   }}
                   placeholder="commander.mon-restaurant.fr"
-                  className="min-w-[240px] flex-1 font-mono"
+                  className="min-w-0 basis-full font-mono sm:flex-1 sm:basis-auto"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -372,7 +372,7 @@ function SiteAddressesPanel() {
             {/* Domaine racine saisi : on explique et on corrige d'un clic. */}
             {suggestion && (
               <div className="flex flex-wrap items-center gap-2.5 rounded-card border border-line2 bg-surface2 px-3.5 py-3">
-                <p className="min-w-[240px] flex-1 text-[13px] text-mut">
+                <p className="min-w-0 basis-full break-words text-[13px] text-mut sm:flex-1 sm:basis-auto">
                   Un domaine racine comme{" "}
                   <span className="font-semibold text-ink">{draft.trim()}</span>{" "}
                   ne peut pas être redirigé vers un hébergeur sans casser vos
@@ -381,6 +381,7 @@ function SiteAddressesPanel() {
                 <Btn
                   variant="ink"
                   size="sm"
+                  className="min-h-11 max-w-full whitespace-normal break-all text-left"
                   onClick={() => {
                     setDraft(suggestion);
                     setFormError(null);
@@ -478,11 +479,12 @@ export default function SitePage() {
   const permissions = useSitePermissions();
   const online = permissions.online;
   if (!online) return <SiteEditScopeContext.Provider value={scope}><div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel key={scope} /></div></SiteEditScopeContext.Provider>;
-  return <SiteEditScopeContext.Provider value={scope}><div className="flex min-w-0 flex-col gap-8 p-4 md:p-[26px]">
-    <MarqueDuSite />
-    <details className="rounded-panel border border-line bg-surface">
-      <summary className="cf-press flex min-h-16 cursor-pointer flex-col justify-center gap-1 px-5 py-4 text-sm font-semibold"><span>Adresses et mise en ligne</span><span className="text-xs font-normal text-mut">Lien public, site vitrine et nom de domaine personnalisé</span></summary>
-      {permissions.brand ? <SiteAddressesPanel key={scope} /> : <p className="px-5 pb-5 text-sm text-mut">La configuration des adresses est réservée au gérant et au propriétaire.</p>}
-    </details>
+  return <SiteEditScopeContext.Provider value={scope}><div className="min-w-0 p-4 md:p-[26px]">
+    <AdminSections label="Rubriques du site web" defaultSection="commande" sections={[
+      { id: "commande", label: "Commande en ligne", icon: "bag", content: <MarqueDuSite /> },
+      { id: "adresses", label: "Adresses", icon: "globe", content: permissions.brand
+        ? <SiteAddressesPanel key={scope} />
+        : <p className="rounded-panel border border-line bg-surface p-5 text-sm text-mut">La configuration des adresses est réservée au gérant et au propriétaire.</p> },
+    ]} />
   </div></SiteEditScopeContext.Provider>;
 }

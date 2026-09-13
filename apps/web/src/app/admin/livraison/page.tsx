@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DeliverySettingsSchema, type DeliverySettings } from "@sm/contracts";
 import { api } from "@/lib/api";
+import { AdminSections } from "@/components/admin/AdminSections";
 import { Btn, EmptyState, Field, Input, Panel, Pill, Skeleton, Textarea, Toggle, useToast } from "@/components/ui";
 import { newDeliveryZone, parseDeliveryDraft, toDeliveryDraft, type DeliveryDraft, type DeliveryZoneDraft } from "./delivery-draft";
 import { ZonePricingFields } from "./ZonePricingFields";
@@ -17,6 +18,10 @@ export default function DeliveryPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const zonesDirty = JSON.stringify(draft?.zones) !== JSON.stringify(saved?.zones);
+  const capacityDirty = draft?.enabled !== saved?.enabled
+    || draft?.leadTimeMin !== saved?.leadTimeMin
+    || draft?.slotCapacity !== saved?.slotCapacity;
 
   const load = useCallback(async () => {
     setLoadError(false);
@@ -60,21 +65,22 @@ export default function DeliveryPage() {
   if (!draft) return <div className="space-y-4 p-4 md:p-[26px]"><Skeleton className="h-40" /><Skeleton className="h-72" /></div>;
 
   return (
-    <div className="mx-auto flex max-w-[1120px] flex-col gap-5 p-4 pb-28 md:p-[26px]">
+    <div className="mx-auto flex min-w-0 max-w-[1120px] flex-col gap-5 p-4 pb-8 md:p-[26px]">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">Commande en ligne</p><h1 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-ink">Votre livraison, à vos conditions.</h1><p className="mt-2 max-w-[640px] text-sm leading-relaxed text-mut">Définissez où vous livrez, à quel prix et combien de commandes votre équipe peut prendre en charge.</p></div>
         <Pill variant="out">Livraison par votre restaurant</Pill>
       </header>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <AdminSections label="Réglages de livraison" defaultSection="zones" sections={[
+        { id: "zones", label: "Zones et tarifs", modified: zonesDirty, content: (
         <Panel title="Zones de livraison" sub="Chaque code postal couvre toute la commune ou le secteur postal correspondant." actions={<Btn variant="ghost" size="sm" icon="plus" disabled={draft.zones.length >= 30 || saving} onClick={() => {
           const zone = newDeliveryZone(`zone-${crypto.randomUUID().slice(0, 8)}`);
           setDraft(current => current ? { ...current, zones: [...current.zones, zone] } : current);
         }}>Ajouter</Btn>}>
           {draft.zones.length === 0 ? <EmptyState icon="home" title="Commencez par votre première zone" hint="Ajoutez un ou plusieurs codes postaux, puis choisissez vos frais et votre minimum de commande." /> : (
-            <div className="flex flex-col gap-4">
+            <div className="grid items-start gap-4 lg:grid-cols-2">
               {draft.zones.map((zone, index) => (
-                <fieldset key={zone.id} disabled={saving} className="min-w-0 rounded-card border border-line bg-surface2 p-4">
+                <fieldset key={zone.id} disabled={saving} className="min-w-0 rounded-card border border-line bg-surface2 p-3 sm:p-4">
                   <legend className="px-1 text-xs font-semibold text-mut">Zone {index + 1}</legend>
                   <div className="flex flex-col gap-3">
                     <Field label="Nom de la zone" htmlFor={`${zone.id}-name`}><Input id={`${zone.id}-name`} value={zone.name} maxLength={60} placeholder="Centre-ville" onChange={(event) => updateZone(zone.id, { name: event.target.value })} /></Field>
@@ -87,7 +93,9 @@ export default function DeliveryPage() {
             </div>
           )}
         </Panel>
-        <div className="flex flex-col gap-4">
+        ) },
+        { id: "capacite", label: "Capacité et ouverture", modified: capacityDirty, content: (
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           <Panel title="Capacité de votre équipe" sub="Des délais réalistes pour chaque commande.">
             <div className="flex flex-col gap-4">
               <Field label="Délai minimum avant livraison (min)" htmlFor="delivery-lead" hint="Préparation et trajet compris. Entre 20 et 180 minutes."><Input id="delivery-lead" type="number" min={20} max={180} step={5} value={draft.leadTimeMin} disabled={saving} onChange={(event) => setDraft({ ...draft, leadTimeMin: Number(event.target.value) })} /></Field>
@@ -96,19 +104,20 @@ export default function DeliveryPage() {
               <p className="text-[13px] leading-relaxed text-mut">Les créneaux sont préparés à partir de vos horaires et de vos fermetures exceptionnelles. <Link href="/admin/hours" className="font-semibold text-ink underline underline-offset-4">Gérer les horaires</Link></p>
             </div>
           </Panel>
-          <Panel title="Ouvrir la livraison">
+          <div className="flex min-w-0 flex-col gap-4"><Panel title="Ouvrir la livraison">
             <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-ink">Proposer la livraison</p><p className="mt-1 text-[13px] text-mut">Le retrait reste disponible.</p></div><Toggle label="Proposer la livraison" on={draft.enabled} disabled={saving || draft.zones.length === 0} onChange={(enabled) => setDraft({ ...draft, enabled })} /></div>
             <p className="mt-4 text-[13px] leading-relaxed text-mut">La livraison s’affiche lorsque vos réglages sont enregistrés et votre encaissement en ligne est actif. Vos clients paient en ligne avant le départ du livreur.</p>
           </Panel>
           <div className="rounded-card border border-line bg-surface2 p-4 text-[13px] leading-relaxed text-mut"><p className="font-semibold text-ink">Votre équipe assure la livraison.</p><p className="mt-1">Aucun transporteur externe ni suivi GPS n’est inclus. Affectez les missions depuis Commandes. Le départ et la remise avec le code du client se confirment depuis Commandes ou sur le téléphone associé du livreur. En cas d’incident, le responsable décide de la suite depuis Commandes.</p></div>
+          </div>
         </div>
-      </div>
+        ) },
+        { id: "livreurs", label: "Livreurs", content: <DeliveryOperatorsPanel /> },
+      ]} />
 
-      <DeliveryOperatorsPanel />
-
-      <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line bg-surface p-4 shadow-card">
-        <div aria-live="polite"><p className="text-sm font-semibold text-ink">{dirty ? "Modifications à enregistrer" : "Vos réglages sont à jour"}</p>{error && <p role="alert" className="mt-1 text-[13px] text-alertt">{error}</p>}</div>
-        <div className="flex gap-2">{dirty && <Btn variant="ghost" disabled={saving} onClick={() => { setDraft(saved); setError(null); }}>Annuler</Btn>}<Btn disabled={!dirty || saving} aria-busy={saving} icon="check" onClick={() => void save()}>{saving ? "Enregistrement…" : "Enregistrer et publier"}</Btn></div>
+      <div className="z-10 flex min-w-0 flex-col gap-3 rounded-panel border border-line bg-surface p-4 shadow-card sm:sticky sm:bottom-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1" aria-live="polite"><p className="text-sm font-semibold text-ink">{dirty ? "Modifications à enregistrer" : "Vos réglages sont à jour"}</p><p className="mt-1 text-xs leading-relaxed text-mut">Zones, tarifs, capacité et ouverture sont publiés ensemble. Les accès livreurs sont enregistrés séparément.</p>{error && <p role="alert" className="mt-1 break-words text-[13px] text-alertt">{error}</p>}</div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">{dirty && <Btn variant="ghost" disabled={saving} onClick={() => { setDraft(saved); setError(null); }}>Annuler</Btn>}<Btn disabled={!dirty || saving} aria-busy={saving} icon="check" onClick={() => void save()}>{saving ? "Enregistrement…" : "Enregistrer et publier"}</Btn></div>
       </div>
     </div>
   );

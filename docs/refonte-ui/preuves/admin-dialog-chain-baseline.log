@@ -1,0 +1,86 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ❯ src/components/ui/useDialogLayer.browser.test.tsx (4 tests | 3 failed) 4475ms
+   × restaure le déclencheur de page lorsque la confirmation et le Drawer sont démontés ensemble 1462ms
+     → Matcher did not succeed in time.
+   ✓ restaure le déclencheur du parent qui reste ouvert et garde son isolation clavier 234ms
+   × retrouve le déclencheur du grand-parent quand deux niveaux enfants ferment ensemble 1211ms
+     → Matcher did not succeed in time.
+   × garde l’enfant actif pendant le retrait du parent puis retrouve le déclencheur survivant 1226ms
+     → Matcher did not succeed in time.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ui/useDialogLayer.browser.test.tsx > restaure le déclencheur de page lorsque la confirmation et le Drawer sont démontés ensemble
+Error: Matcher did not succeed in time.
+ ❯ focused src/components/ui/useDialogLayer.browser.test.tsx:36:128
+     34| afterAll(async () => { await browser?.close(); await new Promise<void>…
+     35| const button = (name: string) => page.getByRole("button", { name, exac…
+     36| async function focused(name: string) { await expect.poll(() => button(…
+       |                                                                                                                                ^
+     37| async function openConfirmation() { await button("Composer la boucle")…
+     38|
+ ❯ src/components/ui/useDialogLayer.browser.test.tsx:40:76
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/ui/useDialogLayer.browser.test.tsx > retrouve le déclencheur du grand-parent quand deux niveaux enfants ferment ensemble
+Error: Matcher did not succeed in time.
+ ❯ focused src/components/ui/useDialogLayer.browser.test.tsx:36:128
+     34| afterAll(async () => { await browser?.close(); await new Promise<void>…
+     35| const button = (name: string) => page.getByRole("button", { name, exac…
+     36| async function focused(name: string) { await expect.poll(() => button(…
+       |                                                                                                                                ^
+     37| async function openConfirmation() { await button("Composer la boucle")…
+     38|
+ ❯ src/components/ui/useDialogLayer.browser.test.tsx:58:9
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/components/ui/useDialogLayer.browser.test.tsx > garde l’enfant actif pendant le retrait du parent puis retrouve le déclencheur survivant
+Error: Matcher did not succeed in time.
+ ❯ focused src/components/ui/useDialogLayer.browser.test.tsx:36:128
+     34| afterAll(async () => { await browser?.close(); await new Promise<void>…
+     35| const button = (name: string) => page.getByRole("button", { name, exac…
+     36| async function focused(name: string) { await expect.poll(() => button(…
+       |                                                                                                                                ^
+     37| async function openConfirmation() { await button("Composer la boucle")…
+     38|
+ ❯ src/components/ui/useDialogLayer.browser.test.tsx:67:50
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  14:01:50
+   Duration  4.85s (transform 27ms, setup 0ms, collect 196ms, tests 4.47s, environment 0ms, prepare 47ms)
+
+undefined
+/Users/limameghassene/development/SnackManager-refonte-ui/apps/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/ui/useDialogLayer.browser.test.tsx --no-file-parallelism

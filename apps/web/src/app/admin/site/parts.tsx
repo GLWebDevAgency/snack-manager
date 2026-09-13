@@ -58,7 +58,7 @@ export function CopyBtn({
       icon={done ? "check" : "grid"}
       aria-label={`Copier ${what}`}
       onClick={() => void copy()}
-      className={cx(compact && "px-3 py-[7px]", done && "text-okt")}
+      className={cx("min-h-11", compact && "px-3 py-[7px]", done && "text-okt")}
     >
       {done ? "Copié" : "Copier"}
     </Btn>
@@ -117,18 +117,17 @@ function DnsRow({
   copy?: string;
 }) {
   return (
-    // `flex-wrap` + minimum de 160 px : dans la fiche imbriquée d'un
-    // téléphone, la valeur passe SOUS l'étiquette au lieu de s'écraser à
-    // quelques caractères — c'est elle que le restaurateur doit recopier.
+    // Sur téléphone, la valeur entière passe sous l'étiquette. Aucune largeur
+    // minimale forcée dans cette fiche imbriquée : elle tient aussi à 320 px.
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line2 py-2.5 first:border-t-0 first:pt-0">
       <div className="w-[92px] shrink-0 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
         {label}
       </div>
-      <div className="min-w-[160px] flex-1">
-        <div className="truncate font-mono text-[15px] font-bold text-ink">
+      <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
+        <div className="break-all font-mono text-[15px] font-bold text-ink">
           {value}
         </div>
-        {hint && <div className="mt-0.5 text-xs text-mut">{hint}</div>}
+        {hint && <div className="mt-0.5 break-words text-xs text-mut">{hint}</div>}
       </div>
       {copy && <CopyBtn value={value} what={copy} compact />}
     </div>

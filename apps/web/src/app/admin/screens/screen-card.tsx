@@ -57,7 +57,7 @@ export function ScreenCard({
             onClick={onDelete}
             aria-label={`Supprimer l'écran « ${screen.name} »`}
             title="Supprimer cet écran"
-            className="cf-press -mr-1 -mt-1 grid size-8 shrink-0 place-items-center rounded-ctrl text-mut hover:text-alertt"
+            className="cf-press -mr-1 -mt-1 grid size-11 shrink-0 place-items-center rounded-ctrl text-mut hover:text-alertt"
           >
             <Icon name="trash" size={15} />
           </button>

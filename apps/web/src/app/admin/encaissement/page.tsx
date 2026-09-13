@@ -101,8 +101,13 @@ export default function EncaissementPage() {
   const actif = fiche.etat === "actif";
 
   return (
-    <div className="flex max-w-[760px] flex-col gap-4 p-[26px] max-md:p-4">
-      <Card className="p-5">
+    <div className="mx-auto flex min-w-0 max-w-[760px] flex-col gap-4 p-[26px] max-md:p-4">
+      <header>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">Commande en ligne</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-ink">Encaissement en ligne</h1>
+        <p className="mt-2 text-sm leading-relaxed text-mut">Votre compte Stripe et vos paiements en ligne.</p>
+      </header>
+      <Card className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3 max-md:flex-col">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -130,7 +135,7 @@ export default function EncaissementPage() {
 
           {fiche.disponible ? (
             !actif && (
-              <Btn variant="primary" size="sm" disabled={busy} onClick={() => void raccorder()}>
+              <Btn variant="primary" size="sm" className="min-h-11 w-full sm:w-auto" disabled={busy} aria-busy={busy} onClick={() => void raccorder()}>
                 {busy
                   ? "Ouverture…"
                   : fiche.etat === "absent"
@@ -147,7 +152,7 @@ export default function EncaissementPage() {
       {/* La clause qui rend la promesse vérifiable — et qui dit aussi la
           contrepartie honnête des charges directes : les litiges sont débités
           du compte du restaurateur, puisque c'est lui qui a encaissé. */}
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <h3 className="text-[15px] font-bold text-ink">Ce que ça veut dire, précisément</h3>
         <ul className="mt-3 flex flex-col gap-2.5 text-[13.5px] leading-[1.5] text-mut">
           <li>

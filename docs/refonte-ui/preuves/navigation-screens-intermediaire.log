@@ -1,0 +1,25 @@
+FAIL screens-320-light: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+FAIL screens-320-dark: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+FAIL screens-768-light: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+FAIL screens-768-dark: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+FAIL screens-1440-light: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+FAIL screens-1440-dark: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+false !== true
+
+0/6 passed; 24 captures

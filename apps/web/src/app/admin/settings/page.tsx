@@ -25,7 +25,7 @@
  *    chemins de dépôt s'appuient sur le MÊME magasin d'objets (`IMAGE_STORE`) :
  *    retirer l'ancien ne ferme donc aucune porte qui serait restée ouverte.
  *
- * 3. LE REGISTRE et « ce qui ne s'édite pas ici » restent en pied de page :
+ * 3. LE REGISTRE a sa rubrique ; « ce qui ne s'édite pas ici » accompagne l’enseigne :
  *    ce sont les deux choses qu'on vient relire, pas celles qu'on vient
  *    changer.
  *
@@ -42,6 +42,8 @@ import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
 import { EditeurDeMarque, EditeurDeMarqueEnAttente } from "./EditeurDeMarque";
 import { phraseDuGeste, signatureDeLAuteur } from "./journal";
 import { Salle } from "./Salle";
+import { peutLireSalle } from "./salle-operation";
+import { AdminSections, type AdminSection } from "@/components/admin/AdminSections";
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -172,10 +174,9 @@ export default function SettingsPage() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-4 p-4 md:p-[26px]">
-      <Salle identite={identite} capacites={me === null ? null : me.capacites ?? []} />
-      <Panel
+  const sections: AdminSection[] = [
+    { id: "enseigne", label: "Enseigne", icon: "store", modified: dirty, content: <div className="flex min-w-0 flex-col gap-4">
+<Panel
         title="L'identité de l'enseigne"
         sub="Le nom s'applique partout : caisse, cuisine, tickets, page de commande."
         className="max-w-[720px]"
@@ -212,7 +213,7 @@ export default function SettingsPage() {
               </div>
             </Field>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Btn
                 variant="ink"
                 icon="check"
@@ -226,8 +227,48 @@ export default function SettingsPage() {
           </>
         )}
       </Panel>
-
-      <Panel
+<Panel title="Ce qui ne s'édite pas ici" className="max-w-[720px]" bodyClassName="flex flex-col gap-2">
+        <p className="text-[13px] leading-relaxed text-mut">
+          <b className="text-ink">L&apos;adresse publique</b> ({me ? `${me.slug}.snackmanager.app` : "votre-slug.snackmanager.app"})
+          ne se change pas seul : elle casse la fiche Google et les QR imprimés. Un appel, et on
+          la migre proprement avec vous.
+        </p>
+      </Panel>
+    </div> },
+    ...(identite === null || peutLireSalle(identite.role) ? [{ id: "salle", label: "Salle", icon: "table" as const,
+      content: <Salle identite={identite} capacites={me === null ? null : me.capacites ?? []} /> }] : []),
+    { id: "identite-visuelle", label: "Identité visuelle", icon: "edit", content: <>
+{/*
+        L'ÉDITEUR DE MARQUE — ce que voient VOS clients, et rien de ce que voit
+        votre équipe. Le back-office garde sa peau grise : un équipier ne doit
+        pas rechercher ses repères parce que le patron a changé sa vitrine.
+      */}
+      <div>
+        <h2 className="mb-1 text-lg font-semibold tracking-[-0.03em] text-ink">
+          Votre identité visuelle
+        </h2>
+        <p className="mb-3 max-w-[720px] text-[13px] leading-relaxed text-mut">
+          Elle habille ce que voient vos clients : page de commande, suivi, carte de fidélité,
+          écran de salle. Votre back-office, lui, ne change pas — vos équipiers gardent leurs
+          repères.
+        </p>
+        {me === null ? (
+          <EditeurDeMarqueEnAttente />
+        ) : (
+          <EditeurDeMarque
+            me={me}
+            onEnregistre={(t) => {
+              setMe(t);
+              toast("Identité visuelle enregistrée — vos clients la verront à leur prochaine visite", {
+                icon: "check",
+              });
+            }}
+          />
+        )}
+      </div>
+    </> },
+    { id: "compte", label: "Mon compte", icon: "user", modified: nomDirty, content: <>
+<Panel
         title="Votre compte"
         sub="Le nom de la personne connectée — celui qui s'affiche sous votre pastille, en bas de la barre. Ce n'est pas le nom de l'enseigne."
         className="max-w-[720px]"
@@ -267,7 +308,7 @@ export default function SettingsPage() {
                 required
               />
             </Field>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Btn
                 variant="ink"
                 icon="check"
@@ -285,37 +326,9 @@ export default function SettingsPage() {
           </>
         )}
       </Panel>
-
-      {/*
-        L'ÉDITEUR DE MARQUE — ce que voient VOS clients, et rien de ce que voit
-        votre équipe. Le back-office garde sa peau grise : un équipier ne doit
-        pas rechercher ses repères parce que le patron a changé sa vitrine.
-      */}
-      <div>
-        <h2 className="mb-1 text-lg font-semibold tracking-[-0.03em] text-ink">
-          Votre identité visuelle
-        </h2>
-        <p className="mb-3 max-w-[720px] text-[13px] leading-relaxed text-mut">
-          Elle habille ce que voient vos clients : page de commande, suivi, carte de fidélité,
-          écran de salle. Votre back-office, lui, ne change pas — vos équipiers gardent leurs
-          repères.
-        </p>
-        {me === null ? (
-          <EditeurDeMarqueEnAttente />
-        ) : (
-          <EditeurDeMarque
-            me={me}
-            onEnregistre={(t) => {
-              setMe(t);
-              toast("Identité visuelle enregistrée — vos clients la verront à leur prochaine visite", {
-                icon: "check",
-              });
-            }}
-          />
-        )}
-      </div>
-
-      {/*
+    </> },
+    { id: "journal", label: "Journal", icon: "shield", content: <>
+{/*
         LE REGISTRE, ENFIN COMPLET.
 
         Il ne montrait que trois gestes parce que le produit n'en écrivait que
@@ -354,14 +367,9 @@ export default function SettingsPage() {
           ))
         )}
       </Panel>
-
-      <Panel title="Ce qui ne s'édite pas ici" className="max-w-[720px]" bodyClassName="flex flex-col gap-2">
-        <p className="text-[13px] leading-relaxed text-mut">
-          <b className="text-ink">L&apos;adresse publique</b> ({me ? `${me.slug}.snackmanager.app` : "votre-slug.snackmanager.app"})
-          ne se change pas seul : elle casse la fiche Google et les QR imprimés. Un appel, et on
-          la migre proprement avec vous.
-        </p>
-      </Panel>
-    </div>
-  );
+    </> },
+  ];
+  return <div className="min-w-0 p-4 md:p-[26px]">
+    <AdminSections label="Rubriques de l’établissement" sections={sections} hashSections={{ salle: "salle" }} />
+  </div>;
 }

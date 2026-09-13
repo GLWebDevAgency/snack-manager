@@ -74,7 +74,7 @@ export function WeekGrid({
   const minWidth = COL_STAFF + COL_SERVICE + 7 * COL_DAY_MIN;
 
   return (
-    <div className="cf-scroll -mx-1 overflow-x-auto px-1 pb-1">
+    <div className="cf-scroll relative -mx-1 overflow-x-auto px-1 pb-1" tabIndex={0} role="region" aria-label="Planning hebdomadaire — défilement horizontal">
       <div
         role="table"
         aria-label="Planning de la semaine — équipe en lignes, jours en colonnes"

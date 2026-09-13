@@ -1,0 +1,13 @@
+PASS site-320-light
+PASS screens-320-light
+PASS site-320-dark
+PASS screens-320-dark
+PASS site-768-light
+PASS screens-768-light
+PASS site-768-dark
+PASS screens-768-dark
+PASS site-1440-light
+PASS screens-1440-light
+PASS site-1440-dark
+PASS screens-1440-dark
+12/12 passed; 42 captures

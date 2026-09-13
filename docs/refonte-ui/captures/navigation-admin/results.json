@@ -1,0 +1,778 @@
+[
+  {
+    "route": "settings",
+    "width": 320,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-320-light-zoom1-0.png",
+      "settings-320-light-zoom1-1.png",
+      "settings-320-light-zoom1-2.png",
+      "settings-320-light-zoom1-3.png",
+      "settings-320-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 390,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-390-light-zoom1-0.png",
+      "settings-390-light-zoom1-1.png",
+      "settings-390-light-zoom1-2.png",
+      "settings-390-light-zoom1-3.png",
+      "settings-390-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 768,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-768-light-zoom1-0.png",
+      "settings-768-light-zoom1-1.png",
+      "settings-768-light-zoom1-2.png",
+      "settings-768-light-zoom1-3.png",
+      "settings-768-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 1024,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-1024-light-zoom1-0.png",
+      "settings-1024-light-zoom1-1.png",
+      "settings-1024-light-zoom1-2.png",
+      "settings-1024-light-zoom1-3.png",
+      "settings-1024-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 1440,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-1440-light-zoom1-0.png",
+      "settings-1440-light-zoom1-1.png",
+      "settings-1440-light-zoom1-2.png",
+      "settings-1440-light-zoom1-3.png",
+      "settings-1440-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 320,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "team-320-light-zoom1-0.png",
+      "team-320-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 390,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "team-390-light-zoom1-0.png",
+      "team-390-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 768,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "team-768-light-zoom1-0.png",
+      "team-768-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 1024,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "team-1024-light-zoom1-0.png",
+      "team-1024-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 1440,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "team-1440-light-zoom1-0.png",
+      "team-1440-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 320,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "stats-320-light-zoom1-0.png",
+      "stats-320-light-zoom1-1.png",
+      "stats-320-light-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 390,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "stats-390-light-zoom1-0.png",
+      "stats-390-light-zoom1-1.png",
+      "stats-390-light-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 768,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "stats-768-light-zoom1-0.png",
+      "stats-768-light-zoom1-1.png",
+      "stats-768-light-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 1024,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "stats-1024-light-zoom1-0.png",
+      "stats-1024-light-zoom1-1.png",
+      "stats-1024-light-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 1440,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "stats-1440-light-zoom1-0.png",
+      "stats-1440-light-zoom1-1.png",
+      "stats-1440-light-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 320,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "planning-320-light-zoom1-0.png",
+      "planning-320-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 390,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "planning-390-light-zoom1-0.png",
+      "planning-390-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 768,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "planning-768-light-zoom1-0.png",
+      "planning-768-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 1024,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "planning-1024-light-zoom1-0.png",
+      "planning-1024-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 1440,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "planning-1440-light-zoom1-0.png",
+      "planning-1440-light-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 390,
+    "theme": "dark",
+    "zoom": 1,
+    "shots": [
+      "settings-390-dark-zoom1-0.png",
+      "settings-390-dark-zoom1-1.png",
+      "settings-390-dark-zoom1-2.png",
+      "settings-390-dark-zoom1-3.png",
+      "settings-390-dark-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "team",
+    "width": 390,
+    "theme": "dark",
+    "zoom": 1,
+    "shots": [
+      "team-390-dark-zoom1-0.png",
+      "team-390-dark-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "stats",
+    "width": 390,
+    "theme": "dark",
+    "zoom": 1,
+    "shots": [
+      "stats-390-dark-zoom1-0.png",
+      "stats-390-dark-zoom1-1.png",
+      "stats-390-dark-zoom1-2.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "planning",
+    "width": 390,
+    "theme": "dark",
+    "zoom": 1,
+    "shots": [
+      "planning-390-dark-zoom1-0.png",
+      "planning-390-dark-zoom1-1.png"
+    ],
+    "checks": [
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 844,
+    "theme": "light",
+    "zoom": 1,
+    "shots": [
+      "settings-844-light-zoom1-0.png",
+      "settings-844-light-zoom1-1.png",
+      "settings-844-light-zoom1-2.png",
+      "settings-844-light-zoom1-3.png",
+      "settings-844-light-zoom1-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  },
+  {
+    "route": "settings",
+    "width": 1280,
+    "theme": "light",
+    "zoom": 2,
+    "shots": [
+      "settings-1280-light-zoom2-0.png",
+      "settings-1280-light-zoom2-1.png",
+      "settings-1280-light-zoom2-2.png",
+      "settings-1280-light-zoom2-3.png",
+      "settings-1280-light-zoom2-4.png"
+    ],
+    "checks": [
+      "independent drafts survive tabs/back/forward; identity PATCH from original handler",
+      "all panels visible by named tab; 44px targets; main has no horizontal overflow; other query preserved"
+    ],
+    "requests": [
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/auth/me"
+      ],
+      [
+        "GET",
+        "/audit"
+      ],
+      [
+        "GET",
+        "/tenants/me"
+      ],
+      [
+        "GET",
+        "/orders/count"
+      ],
+      [
+        "GET",
+        "/dining/room"
+      ],
+      [
+        "GET",
+        "/medias"
+      ],
+      [
+        "PATCH",
+        "/tenants/me/identity"
+      ]
+    ],
+    "errors": [],
+    "blocked": [],
+    "passed": true
+  }
+]

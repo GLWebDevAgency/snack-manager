@@ -26,6 +26,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { MaxLinesNote } from "./parts";
+import styles from "./navigation.module.css";
 import {
   categoryName,
   DURATION_CHOICES,
@@ -63,8 +64,8 @@ function RowBtn({
       aria-label={label}
       title={label}
       className={cx(
-        "cf-press grid size-7 shrink-0 place-items-center rounded-ctrl border border-line2 text-mut",
-        "hover:border-white/25 hover:bg-white/8 hover:text-white",
+        "cf-press grid size-11 shrink-0 place-items-center rounded-ctrl border border-line2 text-mut",
+        "hover:border-line hover:bg-surface2 hover:text-ink",
         "disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:border-line2 disabled:hover:bg-transparent disabled:hover:text-mut",
         danger && "hover:border-alert/50 hover:text-alertt",
       )}
@@ -191,15 +192,15 @@ export function PlaylistDrawer({
       title={screen.name}
       width={580}
       footer={
-        <div className="flex items-center justify-between gap-3">
-          <span className="min-w-0 truncate text-[13px] text-mut">
+        <div className={styles.playlistFooter}>
+          <span className={styles.playlistFooterStatus}>
             {draft.length === 0
               ? "Ajoutez au moins une scène"
               : dirty
                 ? "Modifications non enregistrées"
                 : "Boucle à jour"}
           </span>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className={styles.playlistFooterActions}>
             <Btn variant="ghost" size="sm" onClick={requestClose}>
               Fermer
             </Btn>
@@ -258,8 +259,9 @@ export function PlaylistDrawer({
               return (
                 <li
                   key={`${scene.kind}-${scene.categoryId ?? scene.title ?? "x"}-${i}`}
-                  className="flex items-center gap-2.5 rounded-card border border-line2 bg-[image:var(--cf-elev-gradient)] py-2 pl-2.5 pr-2"
+                  className={styles.scene}
                 >
+                  <div className={styles.sceneHeading}>
                   <span
                     className="cf-fig grid size-6 shrink-0 place-items-center rounded-xs bg-white/8 text-xs font-extrabold text-mut"
                     aria-hidden
@@ -268,10 +270,10 @@ export function PlaylistDrawer({
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-ink">
+                    <strong>
                       {title}
-                    </div>
-                    <div className="truncate text-xs text-mut">
+                    </strong>
+                    <div className="break-words text-xs text-mut">
                       {SCENE_KIND_LABELS[scene.kind]}
                       {scene.kind === "promo" && " · résolues à l'affichage"}
                       {orphan && (
@@ -282,6 +284,7 @@ export function PlaylistDrawer({
                       )}
                     </div>
                   </div>
+                  </div>
 
                   <Select
                     aria-label={`Durée d'affichage de « ${title} »`}
@@ -289,7 +292,7 @@ export function PlaylistDrawer({
                     onChange={(e) =>
                       patch(i, { durationMs: Number(e.target.value) })
                     }
-                    className="w-[84px] shrink-0 px-2.5 py-1.5 pr-7 text-xs"
+                    className={cx(styles.sceneDuration, "shrink-0 px-2.5 py-1.5 pr-7 text-xs")}
                   >
                     {/* Une durée hors liste (venue de l'API) reste sélectionnable. */}
                     {(DURATION_CHOICES.includes(scene.durationMs)
@@ -302,6 +305,7 @@ export function PlaylistDrawer({
                     ))}
                   </Select>
 
+                  <div className={styles.sceneActions}>
                   <RowBtn
                     icon="arrow"
                     rotate="up"
@@ -322,6 +326,7 @@ export function PlaylistDrawer({
                     label={`Retirer « ${title} » de la boucle`}
                     onClick={() => setDraft((p) => p.filter((_, j) => j !== i))}
                   />
+                  </div>
                 </li>
               );
             })}
@@ -339,7 +344,7 @@ export function PlaylistDrawer({
               value={pending}
               onChange={(e) => setPending(e.target.value)}
               disabled={addable.length === 0}
-              className="min-w-[200px] flex-1"
+              className="min-w-0 basis-full sm:flex-1 sm:basis-auto"
             >
               <option value="">
                 {menu === null
@@ -367,7 +372,7 @@ export function PlaylistDrawer({
 
           {!hasPromo && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2.5 border-t border-line2 pt-2.5">
-              <p className="min-w-[200px] flex-1 text-[13px] text-mut">
+              <p className="min-w-0 basis-full text-[13px] text-mut sm:flex-1 sm:basis-auto">
                 Aucune scène « offres » dans cette boucle&nbsp;: vos promotions
                 actives ne seront jamais affichées.
               </p>

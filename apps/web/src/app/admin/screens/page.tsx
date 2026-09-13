@@ -67,6 +67,8 @@ import { ApparenceDrawer } from "./apparence/ApparenceDrawer";
 import { PlaylistDrawer } from "./playlist-drawer";
 import { ScreenCard } from "./screen-card";
 import type { MenuData, ScreenView } from "./types";
+import { AdminSections } from "@/components/admin/AdminSections";
+import styles from "./navigation.module.css";
 
 /** Cadence de rafraîchissement de la liste — l'état reste juste sans action. */
 const REFRESH_MS = 30_000;
@@ -358,10 +360,10 @@ export default function ScreensPage() {
   return (
     <div
       ref={rootRef}
-      className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]"
+      className="min-w-0 p-4 md:p-[26px]"
     >
-      {/* ── Colonne principale : les écrans ── */}
-      <section className="flex min-w-0 flex-col gap-3.5">
+      <AdminSections label="Rubriques des écrans de salle" defaultSection="ecrans" sections={[
+        { id: "ecrans", label: "Vos écrans", icon: "tv", content: <section className="flex min-w-0 flex-col gap-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-[-0.03em] text-ink">
@@ -388,7 +390,7 @@ export default function ScreensPage() {
             />
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={styles.screenGrid}>
             {screens.map((screen) => (
               <ScreenCard
                 key={screen.id}
@@ -406,10 +408,9 @@ export default function ScreensPage() {
             ))}
           </div>
         )}
-      </section>
+      </section> },
 
-      {/* ── Colonne d'aide ── */}
-      <div className="flex flex-col gap-4">
+      { id: "installation", label: "Installation et services", icon: "info", content: <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
         <Panel
           title="Installer un écran"
           sub="Trois gestes devant le téléviseur"
@@ -428,7 +429,8 @@ export default function ScreensPage() {
         >
           <DaypartNote menu={menu} />
         </Panel>
-      </div>
+      </div> },
+      ]} />
 
       {/* ── Création ── */}
       <Modal

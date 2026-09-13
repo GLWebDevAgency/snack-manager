@@ -1,0 +1,239 @@
+{
+  "base": "http://127.0.0.1:3092",
+  "localBuildId": "Kws_-Jw8xTKQB-BO0WFhd",
+  "collectedAt": "2026-09-13T12:13:59.771Z",
+  "results": [
+    {
+      "name": "hours-320-light",
+      "width": 320,
+      "theme": "light",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-320-light-ouverture.png",
+        "hours-320-light-fermetures.png",
+        "hours-320-light-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-320-light",
+      "width": 320,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-320-light-apercu.png",
+        "abonnement-320-light-factures.png",
+        "abonnement-320-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-320-dark",
+      "width": 320,
+      "theme": "dark",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-320-dark-ouverture.png",
+        "hours-320-dark-fermetures.png",
+        "hours-320-dark-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-320-dark",
+      "width": 320,
+      "theme": "dark",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-320-dark-apercu.png",
+        "abonnement-320-dark-factures.png",
+        "abonnement-320-dark-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-768-light",
+      "width": 768,
+      "theme": "light",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-768-light-ouverture.png",
+        "hours-768-light-fermetures.png",
+        "hours-768-light-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-768-light",
+      "width": 768,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-768-light-apercu.png",
+        "abonnement-768-light-factures.png",
+        "abonnement-768-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-768-dark",
+      "width": 768,
+      "theme": "dark",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-768-dark-ouverture.png",
+        "hours-768-dark-fermetures.png",
+        "hours-768-dark-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-768-dark",
+      "width": 768,
+      "theme": "dark",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-768-dark-apercu.png",
+        "abonnement-768-dark-factures.png",
+        "abonnement-768-dark-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-1440-light",
+      "width": 1440,
+      "theme": "light",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-1440-light-ouverture.png",
+        "hours-1440-light-fermetures.png",
+        "hours-1440-light-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-1440-light",
+      "width": 1440,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-1440-light-apercu.png",
+        "abonnement-1440-light-factures.png",
+        "abonnement-1440-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-1440-dark",
+      "width": 1440,
+      "theme": "dark",
+      "checks": [
+        "Weekly opening and pause-message drafts retained through sections and Back/Forward; slot editor unavailable in capability-free repository demo, separately covered by page/API fixture",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "hours-1440-dark-ouverture.png",
+        "hours-1440-dark-fermetures.png",
+        "hours-1440-dark-commande.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "abonnement-1440-dark",
+      "width": 1440,
+      "theme": "dark",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-1440-dark-apercu.png",
+        "abonnement-1440-dark-factures.png",
+        "abonnement-1440-dark-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "tablet-default-and-history",
+      "width": 768,
+      "theme": "light",
+      "checks": [
+        "Tablet starts closed without saved preference; opens explicitly; route B and browser Back to A both close it; desktop preference untouched"
+      ],
+      "shots": [
+        "tablet-default-and-history-open.png",
+        "tablet-default-and-history-back-stays-closed.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "desktop-preference-open",
+      "width": 1440,
+      "theme": "dark",
+      "checks": [
+        "Desktop open preference survives 1440→768 temporary opening→1440; tablet gesture never changes stored preference"
+      ],
+      "shots": [
+        "desktop-preference-open-desktop-restored.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "desktop-preference-closed",
+      "width": 1440,
+      "theme": "dark",
+      "checks": [
+        "Desktop closed preference survives 1440→768 temporary opening→1440; tablet gesture never changes stored preference"
+      ],
+      "shots": [
+        "desktop-preference-closed-desktop-restored.png"
+      ],
+      "faults": [],
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/components/ui/useDialogLayer.browser.test.tsx (4 tests) 1441ms
+   ✓ restaure le déclencheur de page lorsque la confirmation et le Drawer sont démontés ensemble  442ms
+ ✓ src/components/admin/AdminSections.browser.test.tsx (11 tests) 1800ms
+ ✓ src/components/ui/dialog-stack.test.ts (2 tests) 2ms
+
+ Test Files  3 passed (3)
+      Tests  17 passed (17)
+   Start at  14:03:46
+   Duration  4.04s (transform 41ms, setup 0ms, collect 370ms, tests 3.24s, environment 0ms, prepare 106ms)

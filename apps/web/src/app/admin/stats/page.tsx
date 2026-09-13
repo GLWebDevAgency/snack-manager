@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminSections } from "@/components/admin/AdminSections";
+
 /**
  * Vue « Statistiques » (spec backoffice-restaurant §10) — /admin/stats.
  * Toutes les agrégations viennent de l'API (/stats/*) : aucun calcul métier
@@ -216,7 +218,7 @@ export default function StatsPage() {
     <div className="p-4 md:p-[26px]">
       {/* ── Sélecteur de période (état local, non persisté — spec §5.1) ── */}
       <div
-        className="mb-4 flex gap-2"
+        className="mb-4 flex flex-wrap gap-2"
         role="group"
         aria-label="Période des statistiques"
       >
@@ -276,8 +278,9 @@ export default function StatsPage() {
         >
           <KpiRow overview={data.overview} period={period} />
 
-          {/* ── Rangée 1 : CA (flex 1.4) + canaux (flex 1) — spec §10 ── */}
-          <div className="flex flex-col gap-4 xl:flex-row">
+          <AdminSections label="Rubriques des statistiques" sections={[
+            { id: "ventes", label: "Ventes", icon: "chart", content: <div className="space-y-4">
+              <div className="flex flex-col gap-4 xl:flex-row">
             <Panel
               className="min-w-0 xl:flex-[1.4]"
               title="Chiffre d'affaires"
@@ -305,7 +308,6 @@ export default function StatsPage() {
                 title={`Chiffre d'affaires — ${CHART_SUB[period]}`}
               />
             </Panel>
-
             <Panel
               className="min-w-0 xl:flex-1"
               title="Répartition des canaux"
@@ -313,18 +315,7 @@ export default function StatsPage() {
             >
               <ChannelBars channels={data.channels} />
             </Panel>
-          </div>
-
-          {/* ── Rangée 2 : affluence (flex 1.4) + top ventes (flex 1) ── */}
-          <div className="flex flex-col gap-4 xl:flex-row">
-            <Panel
-              className="min-w-0 xl:flex-[1.4]"
-              title="Affluence par créneau"
-              sub="Commandes par heure · 30 derniers jours"
-            >
-              <Heatmap cells={heatmap ?? []} />
-            </Panel>
-
+              </div>
             <Panel
               className="min-w-0 xl:flex-1"
               title="Top ventes"
@@ -332,10 +323,15 @@ export default function StatsPage() {
             >
               <TopProducts top={data.top} />
             </Panel>
-          </div>
-
-          {/* ── Rangée 3 : temps de préparation + exports CSV ── */}
-          <div className="flex flex-col gap-4 xl:flex-row">
+            </div> },
+            { id: "service", label: "Service", icon: "clock", content: <div className="flex flex-col gap-4 xl:flex-row">
+            <Panel
+              className="min-w-0 xl:flex-[1.4]"
+              title="Affluence par créneau"
+              sub="Commandes par heure · 30 derniers jours"
+            >
+              <Heatmap cells={heatmap ?? []} />
+            </Panel>
             <Panel
               className="min-w-0 xl:flex-1"
               title="Temps de préparation"
@@ -343,7 +339,8 @@ export default function StatsPage() {
             >
               <PrepTimes prep={data.prep} />
             </Panel>
-
+            </div> },
+            { id: "exports", label: "Exports", icon: "download", content: <>
             <Panel
               className="min-w-0 xl:flex-1"
               title="Exports CSV"
@@ -384,7 +381,8 @@ export default function StatsPage() {
                 </div>
               </div>
             </Panel>
-          </div>
+            </> },
+          ]} />
         </div>
       )}
     </div>
@@ -413,13 +411,15 @@ function KpiRow({
       />
       <Kpi
         label="Commandes"
+        className="min-w-0 max-sm:p-3 [&>div:first-child]:max-sm:gap-1"
         value={int(overview.orders)}
         icon="ticket"
         delta={kpiDelta(overview.deltas.ordersPct, period)}
       />
       <Kpi
         label="Panier moyen"
-        value={fmtEuro(overview.avgBasketCents)}
+        className="min-w-0 max-sm:p-3 [&>div:first-child]:max-sm:gap-1"
+        value={<span className="whitespace-nowrap text-2xl sm:text-[30px]">{fmtEuro(overview.avgBasketCents)}</span>}
         icon="cart"
         delta={kpiDelta(overview.deltas.avgBasketPct, period)}
       />
@@ -473,7 +473,7 @@ function ChannelBars({ channels }: { channels: StatsChannelBucket[] }) {
       </div>
 
       {/* Données brutes pour lecteurs d'écran */}
-      <table className="sr-only">
+      <div className="sr-only"><table>
         <caption>Répartition des commandes par canal</caption>
         <thead>
           <tr>
@@ -497,7 +497,7 @@ function ChannelBars({ channels }: { channels: StatsChannelBucket[] }) {
             );
           })}
         </tbody>
-      </table>
+      </table></div>
     </>
   );
 }
@@ -519,7 +519,7 @@ function Heatmap({ cells }: { cells: StatsHeatmapCell[] }) {
 
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="Affluence par créneau — défilement horizontal">
         <div
           role="img"
           aria-label="Affluence par créneau : commandes par heure sur les 30 derniers jours — détail dans le tableau qui suit"
@@ -573,7 +573,7 @@ function Heatmap({ cells }: { cells: StatsHeatmapCell[] }) {
       </div>
 
       {/* Données brutes pour lecteurs d'écran */}
-      <table className="sr-only">
+      <div className="sr-only"><table>
         <caption>
           Affluence par créneau — commandes par heure, 30 derniers jours
         </caption>
@@ -597,7 +597,7 @@ function Heatmap({ cells }: { cells: StatsHeatmapCell[] }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </>
   );
 }
