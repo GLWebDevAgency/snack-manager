@@ -43,14 +43,47 @@ const safeguards = z.strictObject({
   maxSmsSegmentsPerSend: z.number().int().min(1).max(10), settingsFingerprint: fingerprint,
   attestedAt: timestamp, expiresAt: timestamp,
 });
-const costs = z.strictObject({
+const attestedCostBounds = z.strictObject({
   reference, ...scope, currency: z.literal('USD'), smsSegmentUpperBoundMicrousd: microusd,
   successfulVerificationUpperBoundMicrousd: microusd, allFeesIncluded: z.literal(true),
   attestedAt: timestamp, expiresAt: timestamp,
 });
+const publishedRatesOperatorReserve = z.strictObject({
+  model: z.literal('published_rates_operator_reserve_v1'), reference, ...scope, currency: z.literal('USD'),
+  publishedRatesReference: reference, publishedRatesObservedAt: timestamp,
+  publishedSmsSegmentMicrousd: microusd, publishedSuccessfulVerificationMicrousd: microusd,
+  operatorReservePerSendMicrousd: microusd, operatorReserveDecisionReference: reference,
+  attestedAt: timestamp, expiresAt: timestamp,
+});
+const costs = z.union([attestedCostBounds, publishedRatesOperatorReserve]);
 export const ProductionVerificationEvidenceSchema = z.strictObject({ serverObservation: ProductionServerObservationSchema, account, safeguards, costs });
 export type ProductionVerificationPolicy = z.infer<typeof ProductionVerificationPolicySchema>;
 export type ProductionVerificationEvidence = z.infer<typeof ProductionVerificationEvidenceSchema>;
+
+/** Internal reservation, never a funding grant or an invoice guarantee. The
+ * published-rate branch keeps the operator's explicit reserve unchanged. It
+ * must cover the nominal channel/success fees but makes no all-fees assertion.
+ * Shared by the planner and the read-only preflight, including before a fresh
+ * provider observation is available. */
+export function productionVerificationReserve(
+  costsParsed: ProductionVerificationEvidence['costs'], maxSmsSegmentsPerSend: number, now: number,
+): number | null {
+  const parsed = costs.safeParse(costsParsed);
+  if (!parsed.success || !timestamp.safeParse(now).success || !Number.isInteger(maxSmsSegmentsPerSend)
+    || maxSmsSegmentsPerSend < 1 || maxSmsSegmentsPerSend > 10) return null;
+  const c = parsed.data;
+  if (c.attestedAt > now || c.expiresAt <= now || c.expiresAt > c.attestedAt + PRODUCTION_ATTESTATION_MAX_AGE_MS) return null;
+  if ('model' in c) {
+    if (c.publishedRatesObservedAt > now || c.publishedRatesObservedAt > c.attestedAt
+      || c.publishedRatesObservedAt + PRODUCTION_ATTESTATION_MAX_AGE_MS <= now) return null;
+    const nominal = BigInt(c.publishedSmsSegmentMicrousd) * BigInt(maxSmsSegmentsPerSend)
+      + BigInt(c.publishedSuccessfulVerificationMicrousd);
+    return nominal <= BigInt(c.operatorReservePerSendMicrousd) ? c.operatorReservePerSendMicrousd : null;
+  }
+  const reserve = BigInt(c.smsSegmentUpperBoundMicrousd) * BigInt(maxSmsSegmentsPerSend)
+    + BigInt(c.successfulVerificationUpperBoundMicrousd);
+  return reserve <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(reserve) : null;
+}
 
 export type ProductionSendPlan =
   | { kind: 'denied'; reason: 'configuration' | 'evidence' | 'target' }
@@ -103,16 +136,17 @@ export function planProductionPhoneVerification(input: {
   }
   const request = z.strictObject({ tenantRef: scope.tenantRef, phone: z.string().regex(/^\+33[67]\d{8}$/) }).safeParse(input.request);
   if (!request.success || request.data.tenantRef !== p.tenantRef) return { kind: 'denied', reason: 'target' };
-  const reserve = BigInt(c.smsSegmentUpperBoundMicrousd) * BigInt(s.maxSmsSegmentsPerSend)
-    + BigInt(c.successfulVerificationUpperBoundMicrousd);
-  if (reserve > BigInt(Number.MAX_SAFE_INTEGER)) return { kind: 'denied', reason: 'evidence' };
+  const reserve = productionVerificationReserve(c, s.maxSmsSegmentsPerSend, input.now);
+  if (reserve === null) return { kind: 'denied', reason: 'evidence' };
+  const costsExpiresAt = 'model' in c
+    ? Math.min(c.expiresAt, c.publishedRatesObservedAt + PRODUCTION_ATTESTATION_MAX_AGE_MS) : c.expiresAt;
   return {
     kind: 'reservation_required', accountSid: p.accountSid, serviceSid: p.serviceSid, tenantRef: p.tenantRef,
     evidenceReference: o.reference, costEvidenceReference: c.reference,
-    expiresAt: Math.min(p.expiresAt, o.observedAt + PRODUCTION_OBSERVATION_MAX_AGE_MS, a.expiresAt, s.expiresAt, c.expiresAt),
+    expiresAt: Math.min(p.expiresAt, o.observedAt + PRODUCTION_OBSERVATION_MAX_AGE_MS, a.expiresAt, s.expiresAt, costsExpiresAt),
     limits: {
       productionBudget: { mode: 'production_paid', authorizationRef: p.authorizationRef,
-        costEvidenceReference: c.reference, currency: 'USD', reservePerSendMicrousd: Number(reserve) },
+        costEvidenceReference: c.reference, currency: 'USD', reservePerSendMicrousd: reserve },
       smsUnitsReservedPerSend: s.maxSmsSegmentsPerSend, cooldownMs: minute, windowMs: day,
       globalSendReservations: p.globalSendReservations, tenantSendReservations: p.tenantSendReservations,
       phoneSendReservations: 3, ipSendReservations: p.ipSendReservations, challengeCheckAttempts: 5, challengeTtlMs: 10 * minute,

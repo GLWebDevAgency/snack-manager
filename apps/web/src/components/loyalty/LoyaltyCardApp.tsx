@@ -630,55 +630,7 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
 
   const squelette = restauration && !carte && !instantaneLocal;
   const Content = embedded ? "div" : "main";
-
-  return (
-    <div
-      style={embedded ? undefined : masque}
-      className={cx(
-        classesPolices,
-        // `clip` et non `hidden` : l'en-tête de cette page est collante.
-        embedded ? "font-body text-ink" : "font-body min-h-dvh overflow-x-clip bg-bg pb-[max(28px,env(safe-area-inset-bottom))] text-ink",
-      )}
-    >
-      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
-          et contrôles natifs — voir `FeuilleDuMasque`. */}
-      {!embedded && <FeuilleDuMasque brand={catalog.restaurant.brand} />}
-      <p
-        className="sr-only"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        data-dialog-allow
-      >
-        {annonceLue}
-      </p>
-
-      {!embedded && <EnTeteFidelite
-        nom={catalog.restaurant.name}
-        programme={catalog.program.name}
-        logoUrl={logoMarque}
-        verrouUrl={verrouMarque}
-        aside={
-          horsLigne ? (
-            <Pill className="border-prep/30 bg-prep/10 text-prept">Hors ligne</Pill>
-          ) : null
-        }
-      />}
-
-      {/* 1080 px et non 720 : sur un ordinateur, la page s'arrêtait aux deux
-          tiers de l'écran et la colonne unique laissait deux tiers de vide.
-          La largeur est celle de la vitrine du même restaurant — les deux
-          surfaces se répondent. */}
-      <Content className={embedded ? "pb-8" : "mx-auto w-full max-w-[1080px] px-4 pt-6"}>
-        {unavailableService && <CustomerServiceNotice service={unavailableService} disabled={navigationLocked} />}
-        <div id={embedded ? undefined : panelId} role={embedded ? undefined : "tabpanel"} aria-label={embedded ? undefined : activeView === "account" ? "Compte" : "Fidélité"} tabIndex={embedded ? undefined : 0}>
-        {!legacyOnly && slug !== 'demo' && <CustomerAccountPage slug={slug} restaurantName={catalog.restaurant.name} mode={catalog.restaurant.brand.mode}
-          section={activeView === "account" ? "profile" : "loyalty"} loyaltyHref={loyaltyHref}
-          onBack={() => selectTab(activeView === "loyalty" ? "account" : "loyalty")}
-          onLoyalty={() => selectTab("loyalty")} onNavigationLockedChange={setAccountLocked} />}
-        <details className="sm-account-legacy mx-auto my-6 w-full max-w-[736px] rounded-panel border border-line2 bg-surface p-4" open={slug === "demo" ? true : undefined} hidden={activeView === "account"}>
-          <summary className="cf-press"><Icon name="qr" size={21} /><span>Carte remise par le restaurant</span><Icon name="down" size={18} className="sm-account-legacy-chevron" /></summary>
-          <p className="mb-5 text-sm leading-6 text-mut">Votre ancienne carte et son solde hors ligne restent accessibles avec son QR. Ils ne sont pas rattachés automatiquement à un compte.</p>
+  const cardAccess = <div className="mx-auto w-full max-w-[736px]">
         {erreur && (
           <div className="mb-6 rounded-card border border-alert/35 bg-alert/10 p-4">
             <p className="text-sm leading-6 text-alertt" role="alert">
@@ -741,6 +693,7 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
                 unitePluriel={unitePlurielle}
                 palier={palier}
                 progression={progression}
+                showProgress={carte.rewards.length > 0}
                 phrase={phraseDeProgression(
                   soldeReel,
                   palier,
@@ -750,15 +703,16 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
                 fete={enFete}
                 titreRef={titreRef}
                 action={
+                  <Btn block variant="primary" icon="grid" onClick={() => setQrOuvert(true)}>
+                    Présenter ma carte
+                  </Btn>
+                }
+                secondaire={
                   cheminVitrine ? <ActionCommander
                     href={cheminVitrine}
                     nomRestaurant={catalog.restaurant.name}
+                    appearance="secondary"
                   /> : null
-                }
-                secondaire={
-                  <Btn block variant="ghost" icon="grid" onClick={() => setQrOuvert(true)}>
-                    Présenter ma carte
-                  </Btn>
                 }
                 pied={
                   <PiedDeCarte
@@ -773,7 +727,7 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
             </div>
 
             <div>
-              <section>
+              {carte.rewards.length > 0 && <section>
                 <TitreSection
                   sur="Catalogue informatif"
                   note="Pendant le pilote, votre QR sert à rattacher vos achats. Aucun point n’est encore débité pour une récompense."
@@ -794,7 +748,7 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
                     />
                   ))}
                 </div>
-              </section>
+              </section>}
 
               {carte.activity.length > 0 && (
                 <section className="mt-10">
@@ -863,7 +817,8 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
                 />
               )}
 
-              <section className="mt-10 rounded-card border border-ink/8 bg-ink/[0.025] p-4">
+              <section className={cx("rounded-card border border-ink/8 bg-ink/[0.025] p-4",
+                (carte.rewards.length > 0 || carte.activity.length > 0 || invitation !== "aucune") && "mt-10")}>
                 <h2 className="font-display text-sm font-extrabold text-ink">
                   Conditions du programme
                 </h2>
@@ -872,16 +827,64 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
                     "Renseignez-vous auprès du restaurant pour connaître les conditions applicables."}
                 </p>
                 <p className="mt-3 text-[11px] leading-5 text-mut">
-                  Le secret de votre QR est conservé dans un cookie sécurisé,
-                  inaccessible au JavaScript et limité à cette carte. Une copie de
-                  votre solde reste sur cet appareil pour l’afficher hors ligne.
-                  « Retirer » efface les deux.
+                  Votre carte reste accessible sur cet appareil. Hors connexion,
+                  seul le dernier solde consulté est affiché ; son actualisation et
+                  l’affichage du QR nécessitent une connexion. « Retirer » efface
+                  cet accès et le solde enregistré sur cet appareil.
                 </p>
               </section>
             </div>
           </div>
         )}
-        </details>
+  </div>;
+
+  return (
+    <div
+      style={embedded ? undefined : masque}
+      className={cx(
+        classesPolices,
+        // `clip` et non `hidden` : l'en-tête de cette page est collante.
+        embedded ? "font-body text-ink" : "font-body min-h-dvh overflow-x-clip bg-bg pb-[max(28px,env(safe-area-inset-bottom))] text-ink",
+      )}
+    >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      {!embedded && <FeuilleDuMasque brand={catalog.restaurant.brand} />}
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-dialog-allow
+      >
+        {annonceLue}
+      </p>
+
+      {!embedded && <EnTeteFidelite
+        nom={catalog.restaurant.name}
+        programme={catalog.program.name}
+        logoUrl={logoMarque}
+        verrouUrl={verrouMarque}
+        aside={
+          horsLigne ? (
+            <Pill className="border-prep/30 bg-prep/10 text-prept">Hors ligne</Pill>
+          ) : null
+        }
+      />}
+
+      {/* 1080 px et non 720 : sur un ordinateur, la page s'arrêtait aux deux
+          tiers de l'écran et la colonne unique laissait deux tiers de vide.
+          La largeur est celle de la vitrine du même restaurant — les deux
+          surfaces se répondent. */}
+      <Content className={embedded ? "pb-8" : "mx-auto w-full max-w-[1080px] px-4 pt-6"}>
+        {unavailableService && <CustomerServiceNotice service={unavailableService} disabled={navigationLocked} />}
+        <div id={embedded ? undefined : panelId} role={embedded ? undefined : "tabpanel"} aria-label={embedded ? undefined : activeView === "account" ? "Compte" : "Fidélité"} tabIndex={embedded ? undefined : 0}>
+        {!legacyOnly && slug !== 'demo' && <CustomerAccountPage slug={slug} restaurantName={catalog.restaurant.name} mode={catalog.restaurant.brand.mode}
+          section={activeView === "account" ? "profile" : "loyalty"} loyaltyHref={loyaltyHref}
+          onBack={() => selectTab(activeView === "loyalty" ? "account" : "loyalty")}
+          onLoyalty={() => selectTab("loyalty")} onNavigationLockedChange={setAccountLocked}
+          loyaltyCard={activeView === "loyalty" ? cardAccess : undefined} />}
+        {(legacyOnly || slug === "demo") && activeView === "loyalty" && cardAccess}
         </div>
       </Content>
 
@@ -1016,13 +1019,14 @@ function CarteLocaleHorsLigne({
           <span className="text-xl tracking-normal text-mut">{unite}</span>
         </h1>
         <p className="mt-4 text-xs leading-5 text-prept" role="status">
-          Source : copie locale · solde vu {age} · {actualisationEchouee
-            ? "échec du rafraîchissement"
-            : "vérification en cours"}
+          <time dateTime={instantane.vuA}>Dernière consultation {age}.</time>
+          <span className="mt-2 block">{actualisationEchouee
+            ? `Connectez-vous au réseau pour afficher votre carte et actualiser vos ${catalog.program.unitLabelPlural}.`
+            : "Vérification de votre carte en cours…"}</span>
         </p>
         <p className="mt-3 text-xs leading-5 text-mut">
-          L’identité, l’historique et l’avancement des récompenses ne sont pas
-          conservés sur cet appareil. Ils réapparaîtront après vérification du réseau.
+          Seul ce solde est enregistré sur cet appareil. Votre identité et votre
+          historique ne sont pas conservés hors connexion.
         </p>
         <div className="mt-6 grid gap-2">
           {cheminVitrine && <ActionCommander
@@ -1038,7 +1042,7 @@ function CarteLocaleHorsLigne({
         </div>
       </section>
 
-      <section>
+      {catalog.rewards.length > 0 && <section>
         <TitreSection
           sur="Catalogue public actuel"
           note="Ces récompenses viennent du catalogue public de cette page. Leur état acquis n’est pas déduit du solde enregistré."
@@ -1058,7 +1062,7 @@ function CarteLocaleHorsLigne({
             />
           ))}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
@@ -1142,19 +1146,19 @@ function EtatSansCarte({
       <section className="relative overflow-hidden rounded-wide border border-accent/20 bg-surface p-5 shadow-card sm:p-7">
         <div className="relative">
           <Pill className="border-accent/30 bg-accentwash text-accentink">
-            Carte digitale · gratuite
+            Votre carte au restaurant
           </Pill>
-          <h1 className="font-display mt-3 max-w-[560px] text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-black leading-[1.05] tracking-[-0.05em] text-ink">
-            Vos avantages {catalog.restaurant.name}, toujours à portée de main.
-          </h1>
+          <h3 className="font-display mt-3 max-w-[560px] text-[clamp(1.5rem,1.3rem+1vw,2rem)] font-extrabold leading-tight tracking-[-0.035em] text-ink">
+            Afficher ma carte fidélité
+          </h3>
           <p className="mt-3 max-w-[520px] text-sm leading-6 text-mut">
-            Scannez le QR remis par le restaurant pour afficher cette carte. Son accès reste utilisable sans créer de compte.
+            Scannez le QR de votre carte pour l’afficher et la présenter au restaurant. Vous pouvez l’utiliser sans compte.
           </p>
           {/* Pas de `size="sm"` sur une surface CLIENT : 34 px de haut, sous la
               cible de 44 px (WCAG 2.2 · 2.5.8). La taille `sm` reste celle des
               barres d'outils denses de l'admin, à la souris. */}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Btn variant={catalog.restaurant.slug === "demo" ? "primary" : "ghost"} icon="grid" disabled={scannerDesactive} onClick={onScanner}>
+            <Btn variant="primary" icon="grid" disabled={scannerDesactive} onClick={onScanner}>
               {scannerDesactive ? "Retrait en cours…" : "Scanner mon QR"}
             </Btn>
             {/* Le lien vers la vitrine existe AUSSI sans carte : quelqu'un qui
@@ -1171,7 +1175,7 @@ function EtatSansCarte({
         </div>
       </section>
 
-      <section className="mt-10">
+      {catalog.rewards.length > 0 && <section className="mt-10">
         <TitreSection sur="À débloquer">Les récompenses du moment</TitreSection>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {catalog.rewards.map((recompense) => (
@@ -1186,7 +1190,7 @@ function EtatSansCarte({
             />
           ))}
         </div>
-      </section>
+      </section>}
     </>
   );
 }

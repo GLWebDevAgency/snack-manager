@@ -206,7 +206,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
     await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
-    await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
+    await page.getByText('La connexion et la création de compte sont indisponibles pour le moment.').waitFor();
     expect(await page.getByRole('dialog').count()).toBe(0);
     await page.getByRole('tab', { name: 'Commandes', exact: true }).click();
     await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
@@ -229,7 +229,6 @@ describe('customer entry placement — real Storefront and loyalty components', 
   });
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
-    await page.getByText('Carte remise par le restaurant', { exact: true }).click();
     await page.getByText('Solde de Camille recette', { exact: true }).waitFor();
     const panelId = await page.getByRole('main').getByRole('tabpanel', { name: 'Fidélité', exact: true }).getAttribute('id');
     expect(panelId).toBeTruthy();
@@ -264,7 +263,6 @@ describe('customer entry placement — real Storefront and loyalty components', 
   });
   it('describes the scanner before opening it, without inventing a saved card or an account', async () => {
     const requests = await navigationFixture(false); await page.goto(`${origin}/loyalty`);
-    await page.getByText('Carte remise par le restaurant', { exact: true }).click();
     const scan = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scan.waitFor();
     expect(await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).count()).toBe(0);
     expect(await page.getByRole('link', { name: 'Voir le menu du restaurant', exact: true }).getAttribute('href')).toBe('/r/recette');
@@ -314,7 +312,7 @@ describe('customer account entry — real hook and client, isolated HTTP boundar
       await page.getByText('Vérification de votre session…', { exact: true }).waitFor();
       await expect.poll(() => requests.length).toBe(4);
       expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
-      release(); await page.getByRole('heading', { name: 'Vous naviguez en invité', exact: true }).waitFor();
+      release(); await page.getByRole('heading', { name: 'Votre compte', exact: true }).waitFor();
       expect(requests.slice().sort()).toEqual(['GET capacites', 'GET capacites', 'GET session', 'GET session']);
       expect(await page.getByRole('button', { name: /inscrire|connecter|envoyer.*code/i }).count()).toBe(0);
     } finally { release(); await context.setOffline(false); }
@@ -468,7 +466,7 @@ describe('customer account panel — rendered boundaries', () => {
     expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(1);
   });
   it.each([
-    ['guest', 'Vous naviguez en invité'],
+    ['guest', 'Votre compte'],
     ['unavailable', 'Compte indisponible pour le moment'],
     ['offline', 'Vous êtes hors connexion'],
     ['error', 'Vérification interrompue'],
@@ -529,7 +527,7 @@ describe('customer account panel — rendered boundaries', () => {
     expect((await calls()).filter(call => call[0] === 'enabled').every(call => call[1] === false)).toBe(true);
     expect(await page.getByRole('dialog').count()).toBe(0); await open();
     expect((await calls()).some(call => call[0] === 'enabled' && call[1] === true)).toBe(true);
-    expect(await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').count()).toBe(1);
+    expect(await page.getByText('La connexion et la création de compte sont indisponibles pour le moment.').count()).toBe(1);
     expect(await page.getByRole('button', { name: /inscrire|connecter|envoyer.*code/i }).count()).toBe(0);
     if (evidence) await page.screenshot({ path: join(evidence, 'guest-320.png') });
     await page.getByRole('button', { name: 'Revenir au menu', exact: true }).click();
@@ -603,7 +601,7 @@ describe('customer account panel — rendered boundaries', () => {
   it('does not turn a technical available capability into an invented sign-in form', async () => {
     await page.evaluate(() => window.customerAccountUiFixture.patch({ status: 'guest', available: true }));
     await open();
-    expect(await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').count()).toBe(1);
+    expect(await page.getByText('La connexion et la création de compte sont indisponibles pour le moment.').count()).toBe(1);
     expect(await page.getByRole('textbox').count()).toBe(0);
     expect(await page.getByRole('button', { name: /inscrire|connecter|envoyer.*code/i }).count()).toBe(0);
   });

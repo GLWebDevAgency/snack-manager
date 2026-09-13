@@ -3,7 +3,8 @@ import { customerAccessConfiguration, customerSendConfiguration, customerObserva
 import { planCustomerPhoneVerification } from '../apps/api/src/modules/customer-identity/verification-plan';
 import { CustomerAccountDeploymentTargetSchema } from '../packages/contracts/src/customer-deployment';
 import { ProductionServerObservationSchema, ProductionVerificationPolicySchema, ProductionVerificationEvidenceSchema,
-  PRODUCTION_ATTESTATION_MAX_AGE_MS, PRODUCTION_OBSERVATION_MAX_AGE_MS, type ProductionVerificationEvidence } from '../apps/api/src/modules/customer-identity/production-verification-policy';
+  PRODUCTION_ATTESTATION_MAX_AGE_MS, PRODUCTION_OBSERVATION_MAX_AGE_MS, productionVerificationReserve,
+  type ProductionVerificationEvidence } from '../apps/api/src/modules/customer-identity/production-verification-policy';
 import type { CustomerProductionAdmissionPolicy } from '../packages/customer/src/production-operator';
 
 export const MAX_CUSTOMER_PREFLIGHT_BYTES = 262_144;
@@ -220,9 +221,12 @@ export function customerAccountPreflight(raw: unknown, now = Date.now()): Custom
       && v.attestedAt <= now && v.expiresAt > now && v.expiresAt <= v.attestedAt + PRODUCTION_ATTESTATION_MAX_AGE_MS;
     const accountValid = a.success && current(a.data);
     check('provider.account_attestation', accountValid, 'operator_account_attestation_invalid_or_expired', 'operator_attestation_current');
-    const attestationsValid = accountValid && s.success && c.success && current(s.data) && current(c.data)
+    const reserveValid = s.success && c.success && productionVerificationReserve(c.data, s.data.maxSmsSegmentsPerSend, now) !== null;
+    const attestationsValid = accountValid && s.success && c.success && current(s.data) && current(c.data) && reserveValid
       && parsedPolicy.success && c.data.reference === parsedPolicy.data.costEvidenceReference;
     check('funding.attestations', attestationsValid, 'operator_attestations_invalid_or_expired');
+    check('funding.cost_basis', reserveValid, 'cost_reservation_invalid', c.success && 'model' in c.data
+      ? 'operator_reserve_not_invoice_guarantee' : 'attested_all_fees_upper_bound');
     check('provider.environment', configuredShape, 'provider_observation_forbidden_in_config');
     const observer = access ? customerObservationConfiguration(reader, access) : null;
     const observerValid = observer !== null;

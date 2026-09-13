@@ -130,6 +130,7 @@ export function SoldeCarte({
   palier,
   progression,
   phrase,
+  showProgress = true,
   fete,
   titreRef,
   action,
@@ -147,12 +148,14 @@ export function SoldeCarte({
   /** 0 à 100, calculé sur le solde AFFICHÉ : la jauge monte avec le chiffre. */
   progression: number;
   phrase: string;
+  /** A programme without published rewards has no threshold to display. */
+  showProgress?: boolean;
   /** Un palier vient d'être franchi : l'onde part du solde. */
   fete: boolean;
   titreRef?: Ref<HTMLHeadingElement>;
-  /** Le geste principal — « Commander ». */
+  /** Le geste principal choisi pour cette surface. */
   action: ReactNode;
-  /** Le geste de comptoir — « Présenter ma carte ». */
+  /** Un accès complémentaire, affiché après le geste principal. */
   secondaire?: ReactNode;
   /** Fraîcheur et entretien de la carte (actualiser, retirer). */
   pied?: ReactNode;
@@ -214,7 +217,7 @@ export function SoldeCarte({
         </p>
       </div>
 
-      <div className="relative mt-6">
+      {showProgress && <div className="relative mt-6">
         {/* Une jauge est un COMPOSANT, pas une décoration : sans
             `role`/`aria-value*`, un lecteur d'écran ne rendait qu'une div vide
             et la progression n'existait que pour l'œil. Les bornes sont les
@@ -253,7 +256,7 @@ export function SoldeCarte({
           />
         </div>
         <p className="mt-3 text-[13px] leading-5 text-mut">{phrase}</p>
-      </div>
+      </div>}
 
       {/*
         LE GESTE PRINCIPAL EST ICI, ET PAS AILLEURS.
@@ -449,14 +452,17 @@ export function SqueletteCarte() {
 export function ActionCommander({
   href,
   nomRestaurant,
+  appearance = "primary",
 }: {
   href: string;
   nomRestaurant: string;
+  appearance?: "primary" | "secondary";
 }) {
   return (
     <Link
       href={href}
-      className="cf-press flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-6 py-3 text-center text-[15px] font-semibold text-onaccent"
+      className={cx("cf-press flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill px-6 py-3 text-center text-[15px] font-semibold",
+        appearance === "secondary" ? "border border-ink/15 bg-surface text-ink hover:bg-ink/5" : "bg-accent text-onaccent")}
     >
       Commander chez {nomRestaurant}
       <Icon name="arrow" size={17} stroke={2.6} />
