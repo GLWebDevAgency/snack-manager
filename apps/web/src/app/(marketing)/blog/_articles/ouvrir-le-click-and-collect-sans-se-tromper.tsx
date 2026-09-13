@@ -35,9 +35,8 @@ export function corps() {
   return (
     <>
       <p className="bl-p">
-        Le click and collect casse rarement à cause du logiciel. Il casse sur trois réglages qu'on fait en deux minutes à
-        l'ouverture du compte, sans y penser, et qu'on ne rouvre jamais : la durée des créneaux, le temps de préparation
-        annoncé, et ce qu'on met — ou pas — à la carte en ligne.
+        Avant d’ouvrir le click & collect, vérifiez trois réglages avec votre équipe : la durée des créneaux,
+        le temps de préparation annoncé et les produits proposés en ligne. Ils doivent correspondre à votre capacité réelle.
       </p>
       <p className="bl-p">
         Voici ce qu'il faut avoir décidé avant de publier le lien, et comment trouver vos propres nombres plutôt que de
@@ -107,7 +106,7 @@ export function corps() {
 
       <h2 className="bl-h2">Réglage 3 — la carte en ligne n'est pas la carte de la salle</h2>
       <p className="bl-p">
-        Même prix, oui — c'est tout l'intérêt du canal direct. Mais pas forcément les mêmes produits.
+        Vous choisissez vos prix et les produits adaptés au retrait. La carte en ligne peut être plus courte que celle de la salle.
       </p>
       <ul className="bl-liste">
         <li>
@@ -145,7 +144,7 @@ export function corps() {
         </li>
         <li>
           <strong>Sachez mettre la page en pause.</strong> Panne de friteuse, absence, salle pleine : il faut un bouton
-          qui ferme la boutique en ligne en un geste, depuis la caisse, sans appeler personne.
+          qui ferme la boutique en ligne en un geste, depuis votre espace de gestion, selon les fonctions disponibles.
         </li>
       </ul>
 
@@ -167,24 +166,23 @@ export function corps() {
           erreur qui vous attend.
         </li>
         <li>
-          <strong>Un ticket qui part en cuisine tout seul.</strong> Une commande en ligne qu'on ressaisit à la caisse
-          n'est pas une commande en ligne : c'est un appel téléphonique avec des étapes en plus.
+          <strong>Un ticket qui part en cuisine tout seul.</strong> Une transmission automatique peut éviter une ressaisie,
+          à condition que votre commande en ligne et votre écran cuisine soient reliés. Avec une caisse tierce, vérifiez l’intégration disponible.
         </li>
       </ul>
 
       <h2 className="bl-h2">Paiement en ligne ou au retrait ?</h2>
       <p className="bl-p">
-        Les deux se défendent, et le choix se fait sur un seul critère : le client qui ne vient pas.
+        Le choix dépend de votre clientèle, du risque d’absence au retrait et des frais de paiement.
       </p>
       <p className="bl-p">
-        <strong>Payé en ligne</strong>, le sac est encaissé avant d'être préparé. La caisse n'a plus qu'à le remettre, ce
-        qui libère du temps au pire moment de la soirée, et une commande abandonnée ne vous coûte plus la marchandise.
-        En contrepartie, l'encaissement carte a son coût — celui de votre prestataire de paiement, quelques dizaines de
-        centimes sur un panier de snack.
+        <strong>Payé en ligne</strong>, le règlement est confirmé avant la préparation selon le parcours configuré.
+        Cela peut simplifier le retrait et limiter le risque d’impayé en cas d’absence. Les frais de paiement,
+        annulations et éventuels remboursements restent à prendre en compte.
       </p>
       <p className="bl-p">
-        <strong>Payé au retrait</strong>, vous n'avancez rien et vous gardez les espèces. Mais vous préparez avant
-        d'être payé, et le premier samedi où trois sacs restent sur le comptoir, la question sera tranchée toute seule.
+        <strong>Payé au retrait</strong>, vous conservez le choix des moyens de paiement acceptés sur place.
+        Vous préparez toutefois avant d’être réglé et supportez le coût des commandes qui ne sont pas retirées.
       </p>
       <p className="bl-p">
         En pratique : commencez en laissant les deux, regardez un mois, et fermez le paiement au retrait si les
@@ -218,21 +216,19 @@ export function corps() {
         </li>
       </ol>
       <p className="bl-p">
-        Ouvrir petit ne fait perdre aucun client : ceux qui ne trouvent pas de créneau ce midi reviendront demain. Ouvrir
-        trop grand, en revanche, en fait perdre définitivement — et ceux-là écrivent des avis.
+        Une ouverture progressive permet d’ajuster la capacité avant d’accepter davantage de commandes.
+        Informez les clients des horaires disponibles et observez les retards, les abandons et leurs retours.
       </p>
 
       <h2 className="bl-h2">Ce que le click and collect ne règle pas</h2>
       <p className="bl-p">
-        Il ne livre pas. Notre tunnel de commande s'arrête au créneau de retrait, et c'est un choix, pas une lacune en
-        attente de correction : nous ne fournissons aucun livreur, et rien dans nos pages ne doit vous laisser croire le
-        contraire.
+        Le click & collect organise le retrait. Snack Manager propose séparément un périmètre de livraison en pilote,
+        après configuration et validation. Aucun livreur tiers n’est fourni.
       </p>
       <p className="bl-p">
-        Si vous livrez déjà, vous continuez comme aujourd'hui — vos tournées, vos horaires, personne ne s'intercale entre
-        votre cuisine et votre client. Si vous ne livrez pas et que vous voulez de la livraison, les plateformes le font,
-        et elles le font bien : le retrait ne les remplace pas, il vous rend ce que la livraison ne vous donne pas — vos
-        habitués, au prix de votre carte.
+        Si vous souhaitez organiser vos livraisons, vérifiez avec nous le périmètre du pilote, vos zones, vos tarifs
+        et vos moyens humains. Cette fonction est prévue dans Boost ou dans le module dédié ; les frais de livraison
+        et l’organisation de vos livreurs restent à votre charge. Comparez ce fonctionnement aux services des plateformes.
       </p>
       <p className="bl-p">
         Il ne remplace pas non plus le comptoir. Le retrait grignote la file, il ne la supprime pas.
@@ -244,18 +240,18 @@ export function corps() {
         <li>Chaque créneau a un plafond de commandes, et il est bas la première semaine.</li>
         <li>Le temps de préparation annoncé est celui d'un vendredi soir, pas celui d'un mardi après-midi.</li>
         <li>La carte en ligne ne contient rien qui voyage mal ou qui bloque un poste.</li>
-        <li>Les prix en ligne sont ceux de la salle. Sans exception, sinon la promesse tombe.</li>
+        <li>Les prix et les frais affichés correspondent à votre offre et sont compris avant validation.</li>
         <li>Les horaires de la page correspondent aux horaires de la cuisine, jours de fermeture compris.</li>
-        <li>Le ticket part en cuisine sans ressaisie, et le sac sort étiqueté.</li>
-        <li>Il existe un geste, depuis la caisse, pour fermer la boutique en ligne.</li>
+        <li>La réception des commandes et leur transmission en cuisine ont été vérifiées avec les outils retenus.</li>
+        <li>Votre équipe sait mettre la commande en ligne en pause depuis l’espace de gestion.</li>
         <li>Quelqu'un sait où le client attend, et comment on l'appelle.</li>
-        <li>Vous avez fait le parcours en entier, sur un téléphone, en payant pour de vrai.</li>
+        <li>Vous avez vérifié le parcours sur téléphone, y compris le paiement et le traitement d’une annulation, avant l’ouverture.</li>
       </ul>
 
       <p className="bl-p">
-        Ces réglages, nous les posons avec vous pendant la mise en route, et nous restons en cuisine le jour de
-        l'ouverture — c'est <Renvoi section="lancement">la façon dont on installe</Renvoi>. Si vous préférez en parler
-        avant, <Renvoi section="contact">laissez-nous votre numéro</Renvoi>.
+        Ces réglages sont préparés avec vous selon le périmètre de mise en service convenu. Les interventions sur site
+        sont détaillées au devis : consultez <Renvoi section="lancement">les étapes du démarrage</Renvoi> ou
+        <Renvoi section="contact">parlons de votre restaurant</Renvoi>.
       </p>
     </>
   );

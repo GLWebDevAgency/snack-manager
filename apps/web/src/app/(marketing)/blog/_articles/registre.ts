@@ -44,6 +44,8 @@ export type Article = {
   readonly chapo: string;
   /** Date de publication, en ISO 8601 — c'est aussi ce que reçoit `datePublished`. */
   readonly publieLe: string;
+  /** Date de la dernière révision éditoriale effective. */
+  readonly modifieLe?: string;
   /** Mots-clés de la page. Ils décrivent l'article, ils ne répètent pas ceux de la vitrine. */
   readonly motsCles: readonly string[];
   /**
@@ -105,6 +107,7 @@ const SOURCES: readonly Article[] = [
     chapo:
       "Sur votre fiche Google, le bouton de commande existe déjà — et il ne mène pas forcément chez vous. Vous pouvez y ajouter votre propre lien et le désigner comme préféré. Voici où cliquer, exactement.",
     publieLe: "2026-08-21",
+    modifieLe: "2026-09-13",
     motsCles: [
       "fiche Google restaurant",
       "lien de commande Google",
@@ -124,10 +127,11 @@ const SOURCES: readonly Article[] = [
   },
   {
     slug: "pourquoi-les-prix-sont-plus-chers-sur-les-applis",
-    titre: "Pourquoi le même kebab coûte plus cher sur l'appli",
+    titre: "Pourquoi un même repas peut coûter plus cher sur une appli",
     chapo:
-      "Ce n'est ni une arnaque ni une erreur de saisie : c'est une addition. Deux factures se superposent sur la même commande, et une troisième différence vient du restaurateur lui-même. Le détail, sans faire le procès de personne.",
+      "Prix des plats, commissions, paiement et livraison : distinguez les coûts pour comparer les canaux de commande de votre restaurant.",
     publieLe: "2026-08-21",
+    modifieLe: "2026-09-13",
     motsCles: [
       "commission plateforme livraison",
       "prix Uber Eats plus cher",
@@ -149,8 +153,9 @@ const SOURCES: readonly Article[] = [
     slug: "ouvrir-le-click-and-collect-sans-se-tromper",
     titre: "Ouvrir le click and collect sans se tromper",
     chapo:
-      "Le click and collect casse rarement à cause du logiciel. Il casse sur trois réglages : la durée des créneaux, le temps de préparation annoncé, et ce qu'on met — ou pas — à la carte en ligne.",
+      "Créneaux, capacité, carte en ligne et retrait : les points à préparer avec votre équipe pour démarrer progressivement.",
     publieLe: "2026-08-21",
+    modifieLe: "2026-09-13",
     motsCles: [
       "click and collect restaurant",
       "créneaux de retrait",

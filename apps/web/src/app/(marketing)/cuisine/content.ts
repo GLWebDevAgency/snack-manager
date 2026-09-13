@@ -27,23 +27,23 @@ export type CuisineSectionMeta = {
 export const CUISINE_SECTIONS: readonly CuisineSectionMeta[] = [
   {
     id: "arrivee",
-    nav: "Le coup de feu",
-    badge: "Le coup de feu",
-    title: "Chaque commande arrive à sa place. Avec le son.",
+    nav: "Les commandes",
+    badge: "Les commandes",
+    title: "Suivez les commandes de leur arrivée à leur remise.",
     lead: "Caisse, téléphone et commande en ligne selon les modules activés : une seule file, trois colonnes et un signal sonore à l’arrivée.",
   },
   {
     id: "lisible",
     nav: "Lisible",
-    badge: "Sans lunettes",
-    title: "Lisible du fond de la cuisine.",
-    lead: "Des gros caractères, et des couleurs qui veulent toujours dire la même chose : vert, c'est prêt. Personne ne réapprend les codes à chaque service.",
+    badge: "Lecture des tickets",
+    title: "Retrouvez les informations utiles à la préparation.",
+    lead: "Des caractères ajustables, des statuts et des couleurs aident l’équipe à repérer les commandes à préparer et celles qui sont prêtes.",
   },
   {
     id: "coupure",
     nav: "Sans internet",
-    badge: "Vendredi soir",
-    title: "La coupure passe, vos tickets restent.",
+    badge: "En cas de coupure",
+    title: "Les tickets déjà reçus restent consultables.",
     lead: "La cuisine conserve les tickets déjà reçus. Les nouvelles commandes attendent la reconnexion pour parvenir à l’écran.",
   },
   {
@@ -51,7 +51,7 @@ export const CUISINE_SECTIONS: readonly CuisineSectionMeta[] = [
     nav: "Chez vous",
     badge: "Votre matériel",
     title: "Une tablette, ou un moniteur au mur.",
-    lead: "L'écran s'appaire comme un téléviseur : six caractères, et il est à votre enseigne. Le matériel reste le vôtre.",
+    lead: "Associez un écran compatible à votre établissement. L’emplacement et l’équipement sont choisis selon les contraintes de votre cuisine.",
   },
 ] as const;
 
@@ -68,7 +68,7 @@ export const CUISINE_SOMMAIRE: readonly { href: string; label: string }[] = CUIS
 /* ── Les images ──────────────────────────────────────────────── */
 
 export const CUISINE_SHOTS = {
-  hero: { src: "/shots/kds.png", alt: "" },
+  hero: { src: "/shots/kds.jpg", alt: "" },
   cta: { src: "/photos/libre/blog-fenetre-service-nuit.webp", alt: "" },
 } satisfies Record<string, Shot>;
 
@@ -80,48 +80,48 @@ export const CUISINE_SHOTS = {
  */
 export const CUISINE_HERO = {
   badge: "L'écran cuisine",
-  title: "L'écran qui tient la cuisine.",
-  lead: "Fini les tickets papier qui se perdent et les commandes criées deux fois : tout arrive à l'écran, dans l'ordre, lisible de loin.",
-  price: "compris dans toutes les formules",
-  claim: `dès ${euros(PLAN_MONTHLY_CENTS.essentiel)} / mois — zéro commission`,
+  title: "Un écran pour coordonner la cuisine.",
+  lead: "Regroupez les commandes des canaux activés, consultez les détails et suivez leur préparation. Votre équipe dispose d’une vue commune du service.",
+  price: "compris dans Service, Gestion et Boost",
+  claim: `dès ${euros(PLAN_MONTHLY_CENTS.essentiel)} HT / mois / établissement — matériel distinct`,
 } as const;
 
 /* ── 1. Le coup de feu ───────────────────────────────────────── */
 
 export const ARRIVEE_POINTS: readonly string[] = [
   "Trois colonnes — Nouveau, En préparation, Prête — et un bouton par geste.",
-  "La caisse, le téléphone et la commande en ligne tombent dans la même file.",
+  "Les commandes saisies en caisse, y compris celles reçues par téléphone, rejoignent la file. La commande en ligne s’y ajoute lorsque le module est activé.",
   "Le ticket sonne à l'arrivée. Le son se coupe d'un geste quand le service le demande.",
-  "La remise archive le ticket — et nourrit les statistiques du soir.",
+  "La remise du ticket fait évoluer son statut dans le suivi du service.",
 ] as const;
 
 /* ── 2. Lisible ──────────────────────────────────────────────── */
 
 export const LISIBLE_POINTS: readonly string[] = [
-  "Vert, c'est prêt — toujours. Les couleurs de sens ne changent jamais de métier.",
-  "Les « sans oignons » et les notes du client sont sur le ticket, impossibles à rater.",
-  "Les réglages d'affichage se font à l'écran, sans redémarrer ni appeler personne.",
+  "Les statuts distinguent les commandes nouvelles, en préparation et prêtes.",
+  "Les options et les notes du client apparaissent dans le détail du ticket.",
+  "Adaptez les réglages d’affichage depuis l’écran cuisine.",
 ] as const;
 
 /* ── 3. La coupure ───────────────────────────────────────────── */
 
 export const CUISINE_COUPURE_POINTS: readonly string[] = [
-  "Les tickets restent affichés : la cuisine ne s'arrête pas parce que la box redémarre.",
-  "La pastille réseau dit l'état sans alarmer — toujours visible, jamais anxiogène.",
+  "Pendant une coupure, les tickets déjà reçus restent affichés. Les nouvelles commandes attendent la reconnexion.",
+  "Un indicateur de connexion permet de repérer une interruption du réseau.",
   "À la reconnexion, l’écran récupère l’état des commandes. Sans réseau, il ne reçoit pas de nouvelles commandes des autres tablettes.",
 ] as const;
 
 /* ── 4. Chez vous ────────────────────────────────────────────── */
 
 export const CUISINE_VOUS_POINTS: readonly string[] = [
-  "Une tablette du commerce — ou un moniteur mural déporté, à l'abri de la graisse et de la chaleur.",
-  "L'appairage tient en six caractères, comme la caisse : l'écran casse, le remplaçant reprend.",
-  "À votre enseigne : votre nom, votre couleur — pas les nôtres.",
+  "Choisissez une tablette ou un écran avec un appareil compatible, placé à distance des sources de chaleur et des projections.",
+  "Associez un appareil de remplacement, puis vérifiez la connexion et le chargement des commandes avant de reprendre le service.",
+  "Le nom et les couleurs de votre établissement identifient l’écran.",
 ] as const;
 
 /* ── L'appel final ───────────────────────────────────────────── */
 
 export const CUISINE_CTA = {
-  title: "Regardez-le tourner, sans compte.",
-  line: "L'écran cuisine est en démonstration sur la page d'accueil, à côté de la caisse : envoyez une commande, regardez-la traverser les colonnes.",
+  title: "Découvrez l’écran cuisine en démonstration.",
+  line: "Consultez l’interface et les étapes de préparation depuis la page d’accueil. La démonstration utilise des commandes fictives.",
 } as const;

@@ -45,7 +45,7 @@ import { lireReseaux } from "@/lib/reseaux";
 
 const TITRE = "Le blog — Snack Manager";
 const CHAPO =
-  "Ce qu'on a appris en faisant tourner un snack : la fiche Google, le coût réel des plateformes, et les réglages qui font tenir un service de click and collect.";
+  "Des conseils pour les restaurateurs indépendants : présenter sa carte, comparer les coûts de commande et organiser le click & collect.";
 
 export const metadata: Metadata = {
   title: TITRE,
@@ -87,7 +87,7 @@ export default async function BlogIndexPage() {
         <section className="section bl-index" id="articles">
           <div className="section-head rv">
             <span className="badge">Le blog</span>
-            <h1 className="h2">Ce qu'on a appris derrière un comptoir</h1>
+            <h1 className="h2">Des repères pour gérer votre restaurant</h1>
             <p className="subheading">{CHAPO}</p>
           </div>
 
@@ -144,9 +144,9 @@ export default async function BlogIndexPage() {
            * ancre nue qui résoudrait contre `/blog`.
            */}
           <aside className="bl-outro rv">
-            <p className="bl-outrotitre">Vous voulez voir le produit plutôt que d'en lire ?</p>
+            <p className="bl-outrotitre">Découvrez les applications Snack Manager.</p>
             <p className="bl-outroline">
-              Les quatre applications sont manipulables sur la page d'accueil, sans compte et sans rendez-vous.
+              Explorez les interfaces et leurs démonstrations avec des données d’exemple depuis la page d’accueil.
             </p>
             <div className="bl-outroctas">
               {/* Les libellés viennent de content.ts : la page en portait six pour deux destinations. */}
@@ -195,6 +195,7 @@ function donneesStructurees() {
       headline: article.titre,
       description: article.chapo,
       datePublished: article.publieLe,
+      dateModified: article.modifieLe ?? article.publieLe,
       inLanguage: "fr-FR",
       author: { "@type": "Organization", name: "Snack Manager" },
     })),

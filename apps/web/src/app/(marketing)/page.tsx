@@ -6,7 +6,9 @@ import { ContactSection } from "@/components/marketing/ContactSection";
 import { Faq } from "@/components/marketing/Faq";
 import { Founder } from "@/components/marketing/Founder";
 import { Hero } from "@/components/marketing/Hero";
-import { Jalons } from "@/components/marketing/Jalons";
+import { RestaurantJourney } from "@/components/marketing/RestaurantJourney";
+import { MenuStudio } from "@/components/marketing/MenuStudio";
+import "@/components/marketing/communication-v2.css";
 import { Materiel } from "@/components/marketing/Materiel";
 import { Pricing } from "@/components/marketing/Pricing";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
@@ -16,39 +18,7 @@ import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
 import { lireReseaux } from "@/lib/reseaux";
 
-/**
- * Landing commerciale Snack Manager (route `/`).
- *
- * DOUZE SECTIONS, ET L'ORDRE EST CELUI DES QUESTIONS QUE SE POSE UN PATRON DE
- * SNACK, dans l'ordre où il se les pose. Ce n'est plus l'ordre de la maquette
- * d'origine — elle empilait dix-sept sections, décrivait six fois la même
- * journée et rangeait la seule preuve manipulable en huitième position.
- *
- *  1. Hero ............ suis-je au bon endroit ?
- *  2. Comparison ...... est-ce que ça me parle ?
- *  3. AppsShowcase .... est-ce que ça existe vraiment ?  ← la preuve, et elle
- *                       porte l'ancre #produit, cible du lien d'évitement.
- *  4. Canaux .......... et ma présence en ligne ?  ← L'ATELIER entier : cinq
- *                       services chiffrés, la maquette en tête, le renvoi vers
- *                       /atelier en seul appel. (La « porte » séparée qui le
- *                       répétait est morte le 25/08 — deux sections pour la
- *                       même chose diluaient le message.)
- *  5. Materiel ........ est-ce que ça marche dans MA cuisine ?
- *  6. Pricing ......... combien ?
- *  7. Simulator ....... et par rapport à ce que je paie déjà ?
- *  8. Jalons .......... si je dis oui, il se passe quoi ?
- *  9. Faq ............. qu'est-ce que je risque ?
- * 10. Founder ......... à qui je donne mon numéro ?
- * 11. ContactSection .. le seul point de conversion de la page.
- *
- * Chaque question est posée UNE fois : une section qui redit le travail d'une
- * autre n'a pas sa place ici. `SECTIONS` (content.ts) porte le même ordre et
- * sert de sommaire au menu burger — les deux listes doivent rester d'accord.
- *
- * Tout ce qui peut rester statique reste un composant serveur ; seuls le deck
- * du hero, la scène de démonstration, le simulateur, la FAQ, le formulaire et
- * les deux observateurs sont des îlots clients.
- */
+/** Public V2: needs, product proof, menu services, clear offers and accompanied onboarding. */
 export default async function LandingPage() {
   // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
   // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
@@ -72,14 +42,15 @@ export default async function LandingPage() {
         <Hero reseaux={reseaux} />
         <Comparison />
         <AppsShowcase />
-        <Canaux />
-        <Materiel />
+        <MenuStudio />
         <Pricing />
         <CommerceOffers />
+        <Canaux />
+        <Materiel />
+        <RestaurantJourney />
         <Simulator />
-        <Jalons />
-        <Faq />
         <Founder />
+        <Faq />
         <ContactSection />
       </main>
 
@@ -108,7 +79,7 @@ export default async function LandingPage() {
  * et `plan.yearlyCents` existent pour ça.
  */
 function priceOf(plan: (typeof PLANS)[number]) {
-  return String(Number.parseInt(plan.price, 10));
+  return String(plan.monthlyCents / 100);
 }
 
 function structuredData() {
@@ -120,7 +91,7 @@ function structuredData() {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iPadOS, Android",
       description:
-        "Suite de gestion pour snacks et fast-foods indépendants : caisse, cuisine (KDS), commande en ligne et back-office.",
+        "Logiciels et accompagnement pour les restaurateurs indépendants : caisse, cuisine, gestion, commande directe et menus papier et TV.",
       inLanguage: "fr-FR",
       /*
        * LES TROIS PRIX SONT PUBLICS, DONC ILS SONT ICI. La page disait

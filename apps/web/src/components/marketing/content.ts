@@ -41,7 +41,7 @@ export const CONTACT_EMAIL = "contact@snackmanager.fr";
  * « sans engagement » un demi-mensonge découvert au devis.
  */
 export const ENGAGEMENT =
-  "Abonnement sans engagement, résiliable à tout moment. S'y ajoute un forfait de mise en route, non remboursable, qui couvre les journées d'installation.";
+  "Au mois, résiliable à tout moment. À l’année, douze mois payés d’avance au prix de dix. La mise en service, l’installation sur place et les prestations créatives sont des postes distincts, précisés au devis. Les conditions des contrats existants restent applicables.";
 
 /* ── Les montants — la grille, et rien qu'elle ───────────────── */
 
@@ -263,7 +263,7 @@ export const PRICE_RANGE = `${plainEuros(PLAN_MONTHLY_CENTS.essentiel)}, ${plain
  * contrat — l'abonnement, le module, et le site si le restaurateur en prend un.
  */
 export const FOUNDER_POLICY =
-  "Les dix premiers restaurants paient moitié prix pendant un an — sur tout ce qu'ils signent.";
+  "Offre fondateur : −50 % pendant un an pour les dix premiers restaurants. Prestations concernées, durée, cumul et changements de formule précisés au devis ; les contrats déjà signés restent applicables.";
 
 /* ── Appels à l'action ───────────────────────────────────────── */
 
@@ -280,7 +280,7 @@ export const FOUNDER_POLICY =
  * Ce n'est pas un appel commercial, c'est une commande de produit.
  */
 export const CTA_CALLBACK = "Être rappelé";
-export const CTA_DEMO = "Prendre une commande en démo";
+export const CTA_DEMO = "Explorer les applications";
 
 /* ── Les onze sections ───────────────────────────────────────── */
 
@@ -308,83 +308,19 @@ export type SectionMeta = {
  * citent (voir `SIM_CTA_NOTE` et `PILOTE_SIGNATURE`).
  */
 export const SECTIONS: readonly SectionMeta[] = [
-  // Le registre du hero est une décision du fondateur (23/08/2026) : dire ce
-  // que le client veut entendre, en mots de comptoir, lisible en diagonale par
-  // un lecteur dont le français n'est pas la langue forte. Trois segments,
-  // trois promesses — et « zéro commission » est un fait, pas une image.
-  { id: "hero", nav: "Accueil", badge: null, title: "Plus de commandes. Moins de galère. Zéro commission." },
-  {
-    id: "votre-service",
-    nav: "Votre service",
-    badge: "Comparatif",
-    // « Avec ou sans ? » est la question qu'un comptoir pose cent fois par
-    // jour : le titre parle la langue du lieu. Deux propositions découpées au
-    // point — les en-têtes du miroir en descendent (Comparison.tsx), le titre
-    // ne peut donc pas être une phrase unique.
-    title: "Votre journée sans. Votre journée avec.",
-  },
-  // « Ne nous croyez pas sur parole » ouvrait la section la plus forte du site
-  // par une négation (fondateur, 25/08 : communication positive partout). Le
-  // titre INVITE désormais — le lecteur se met derrière le comptoir, et une
-  // démo qu'on s'approprie vend plus fort qu'un défi qu'on relève.
-  { id: "produit", nav: "Produit", badge: "Le produit", title: "Passez derrière le comptoir. Prenez une commande." },
-  // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
-  // sans le nommer — « chez eux », c'est qui ? — et n'expliquait nulle part
-  // l'avantage qu'il y a à commander chez le restaurateur. Une préférence
-  // annoncée sans sa raison. Puis, le 25/08, le fondateur a vu le défaut
-  // suivant : cette section et la porte de l'Atelier juste après vendaient LA
-  // MÊME CHOSE en deux gabarits — une redondance qui diluait le message. Il
-  // n'y a plus qu'UNE section : l'Atelier, ses services et ses prix, et la
-  // page `/atelier` en appel à l'action pour le détail.
-  // `nav` dit « Les services » quand le badge dit « L'Atelier » : le menu et
-  // le pied de page portent AUSSI le lien vers la page /atelier — deux entrées
-  // « L'Atelier » côte à côte, l'ancre et la page, se liraient comme un bug.
-  // Le titre est LA phrase du fondateur (25/08) : l'angle n'est pas une liste
-  // de prestations, c'est ce qu'un restaurant EST — une image, une
-  // communication — et qui s'en occupe.
-  { id: "commander", nav: "Les services", badge: "L’Atelier", title: "Un restaurant, c’est aussi une image. On s’en occupe pour vous." },
-  {
-    id: "materiel",
-    nav: "Matériel",
-    badge: "Chez vous",
-    // « Rien à racheter » ne répondait qu'à moitié : le restaurateur qui n'a pas
-    // de tablette, ou qui ne veut pas s'en occuper, restait sans réponse.
-    title: "Vous avez le matériel ? Parfait. Sinon, on s'en occupe.",
-  },
-  { id: "tarifs", nav: "Tarifs", badge: "Tarifs", title: "Trois prix, affichés. Zéro commission, toujours." },
-  {
-    id: "simulateur",
-    nav: "Le calcul",
-    badge: "Le calcul",
-    // Le titre CITE le tarif de la formule la plus vendue, et il était recopié
-    // à la main : à la révision de grille, la section qui compare nos prix à
-    // ceux de l'organisation actuelle a continué d'annoncer un montant que la
-    // section juste au-dessus démentait. Il se dérive maintenant.
-    title: "Chiffrez votre organisation actuelle.",
-  },
-  {
-    id: "lancement",
-    nav: "Lancement",
-    badge: "Le lancement",
-    // Le titre disait « On date ce qu'on livre. Jamais ce que vous gagnerez. » :
-    // une précaution déguisée en promesse, qui parlait de nos scrupules au lieu
-    // de répondre à la question posée — comment ça se passe ? Vite, et
-    // accompagné. Les quatre jalons le disaient déjà ; le titre les contredisait.
-    title: "On installe vite. Et on reste après.",
-  },
-  // « Vous avez des doutes. Ils sont légitimes. » installait le doute au lieu de
-  // le lever. Un visiteur arrivé jusqu'ici n'a pas de doutes, il a des questions.
-  { id: "faq", nav: "Questions", badge: "Questions", title: "Vos questions. Nos réponses." },
-  {
-    id: "histoire",
-    nav: "Notre histoire",
-    badge: "Notre histoire",
-    // « Ce logiciel a un restaurant. Il s'appelle Class'Food. » mettait l'outil
-    // au centre au moment précis où le lecteur cherche des gens. Ce qu'il veut
-    // savoir avant de laisser son numéro, c'est à QUI il le laisse.
-    title: "Construit derrière un vrai comptoir, avec un vrai patron de snack.",
-  },
-  { id: "contact", nav: "Contact", badge: null, title: "Laissez-nous votre numéro. On rappelle sous 24 h." },
+  { id: "hero", nav: "Accueil", badge: null, title: "Gérez votre restaurant. Faites vivre votre carte." },
+  { id: "votre-service", nav: "Vos besoins", badge: "Votre point de départ", title: "Commencez par ce qui compte pour vous." },
+  { id: "produit", nav: "Applications", badge: "Les applications", title: "Chaque équipe a son écran. Vous gardez la vue d’ensemble." },
+  { id: "menus", nav: "Menus papier & TV", badge: "Votre carte, votre image", title: "Une carte qui évolue avec votre restaurant." },
+  { id: "tarifs", nav: "Abonnements", badge: "Les suites logicielles", title: "Une offre adaptée à votre façon de travailler." },
+  { id: "applications-seules", nav: "À la carte", badge: "À la carte", title: "Gardez votre caisse. Développez la commande directe." },
+  { id: "commander", nav: "L’Atelier", badge: "L’Atelier", title: "Confiez-nous aussi votre communication." },
+  { id: "materiel", nav: "Matériel", badge: "Votre équipement", title: "Partons de ce que vous avez déjà." },
+  { id: "lancement", nav: "Accompagnement", badge: "À vos côtés", title: "De votre premier besoin au premier service." },
+  { id: "simulateur", nav: "Votre organisation", badge: "Votre organisation", title: "Chiffrez votre organisation actuelle." },
+  { id: "histoire", nav: "Notre histoire", badge: "L’expérience du terrain", title: "Conçu avec un restaurateur. Amélioré avec le terrain." },
+  { id: "faq", nav: "Questions", badge: "Questions fréquentes", title: "Les réponses avant de vous lancer." },
+  { id: "contact", nav: "Contact", badge: null, title: "Parlons de votre restaurant." },
 ] as const;
 
 /** Retrouve la pastille et le titre d'une section par son ancre. */
@@ -490,12 +426,13 @@ export const NAV_PLATEFORME: readonly NavLink[] = [
   { href: "/cuisine", label: "L’écran cuisine" },
   { href: "/commande-en-ligne", label: "La commande en ligne" },
   { href: "/atelier", label: "L’Atelier" },
-  { ...ancre("produit"), label: "La démo en direct" },
+  { ...ancre("produit"), label: "Toutes les applications" },
+  ancre("menus"),
 ];
 
-export const NAV_PLATEFORME_LABEL = "Plateforme";
+export const NAV_PLATEFORME_LABEL = "Solutions";
 
-export const NAV_LEFT: readonly NavLink[] = [ancre("commander"), ancre("tarifs")];
+export const NAV_LEFT: readonly NavLink[] = [ancre("menus"), ancre("tarifs")];
 
 export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
 
@@ -636,22 +573,22 @@ export type Shot = { src: string; alt: string; portrait?: boolean };
 
 /** Deck 3D du hero : uniquement des captures paysage. */
 export const HERO_SHOTS: Shot[] = [
-  { src: "/shots/backoffice.png", alt: "Back-office Snack Manager : chiffre d'affaires du jour et commandes en direct" },
-  { src: "/shots/pos.png", alt: "Caisse Snack Manager sur tablette, en cours de prise de commande" },
-  { src: "/shots/kds.png", alt: "App cuisine Snack Manager : colonnes Nouveau, En préparation, Prêt" },
+  { src: "/shots/backoffice.jpg", alt: "Back-office Snack Manager : chiffre d'affaires du jour et commandes en direct" },
+  { src: "/shots/pos.jpg", alt: "Caisse Snack Manager sur tablette, en cours de prise de commande" },
+  { src: "/shots/kds.jpg", alt: "App cuisine Snack Manager : colonnes Nouveau, En préparation, Prêt" },
   // `menu.png` MONTRE LE BACK-OFFICE, et son texte alternatif annonçait « Commande
   // en ligne » : le deck représentait donc l'application que les CLIENTS du
   // restaurateur utilisent par une page de gestion, sur un écran d'ordinateur.
   // Le libellé dit maintenant ce que l'image montre.
-  { src: "/shots/menu.png", alt: "Back-office Snack Manager : carte et prix, disponibilités en un geste" },
+  { src: "/shots/menu.jpg", alt: "Back-office Snack Manager : carte et prix, disponibilités en un geste" },
   // Et la vraie commande en ligne entre dans le deck, en PORTRAIT — c'est le
   // seul appareil de la rangée que le client du restaurateur tient en main.
   {
-    src: "/shots/commande.png",
+    src: "/shots/commande.jpg",
     alt: "Commande en ligne Snack Manager sur téléphone : carte du restaurant et click and collect",
     portrait: true,
   },
-  { src: "/shots/board.png", alt: "Écran d'appel client Snack Manager : numéros prêts au retrait" },
+  { src: "/shots/board.jpg", alt: "Aperçu d’un menu TV dans le studio Snack Manager" },
 ];
 
 /* ── 2. Votre service — le miroir ────────────────────────────── */
@@ -714,8 +651,8 @@ export type CatalogueColumn = {
  * ailleurs : la prise de commande par téléphone (colonne Caisse) et la
  * fidélité points/tampons (colonne Commande en ligne).
  *
- * La grille est à QUATRE colonnes en dur et `demo:` pointe un index de
- * `DEMO_APPS` : on ne réordonne pas sans casser le lien vers la scène.
+ * `demo:` pointe un index de `DEMO_APPS` : les deux listes gardent le même
+ * ordre pour que chaque légende accompagne la bonne application.
  */
 export const CATALOGUE: CatalogueColumn[] = [
   {
@@ -724,7 +661,7 @@ export const CATALOGUE: CatalogueColumn[] = [
     demo: 0,
     items: [
       { strong: "Sur place, à emporter, téléphone", post: " — même écran" },
-      { pre: "Tacos sur-mesure, passage en menu (+2,50 €) en un tap" },
+      { pre: "Variantes, options et formules, selon votre carte" },
       { pre: "Totaux, rendu monnaie, CB / espèces / au retrait" },
       { strong: "Ticket cuisine + sticker sac", post: " sur matériel compatible validé" },
       { pre: "Appairage par code à six caractères, révocable" },
@@ -766,6 +703,42 @@ export const CATALOGUE: CatalogueColumn[] = [
       { pre: "Planning : ", strong: "le coût de la semaine bouge pendant que vous la posez" },
       { strong: "Ingrédients & stocks", post: " : seuils, ruptures, pertes, inventaires" },
       { pre: "Fournisseurs, ", strong: "coût matière et marge par produit" },
+    ],
+  },
+  {
+    name: "Fidélité",
+    device: "Web, côté gérant — pilote accompagné",
+    demo: 4,
+    items: [
+      { strong: "Programme de fidélité", post: " à configurer pour votre établissement" },
+      { pre: "Membres, cartes et soldes consultables depuis le back-office" },
+      { pre: "Récompenses et historique des opérations" },
+      { pre: "Démonstration avec des membres et des opérations d'exemple" },
+      { strong: "Mise en service accompagnée", post: " selon le périmètre validé avec vous" },
+    ],
+  },
+  {
+    name: "Menus TV",
+    device: "Web, côté gérant — diffusion sur écran compatible",
+    demo: 5,
+    items: [
+      { strong: "Quinze modèles", post: " pour présenter votre carte en salle" },
+      { pre: "Produits, photos et prix repris de votre catalogue" },
+      { pre: "Portrait ou paysage, aperçu avant enregistrement" },
+      { pre: "Programmation des catégories et produits à mettre en avant" },
+      { pre: "Couleurs de votre établissement, taille des prix et mouvement réglables" },
+    ],
+  },
+  {
+    name: "Application livreur",
+    device: "Téléphone du livreur — accès sur invitation, pilote accompagné",
+    demo: 6,
+    items: [
+      { strong: "Vos propres livreurs", post: " invités par votre restaurant" },
+      { pre: "Missions affectées au livreur et détail de chaque livraison" },
+      { pre: "Suivi des départs et des remises dans le parcours pilote" },
+      { pre: "Accès individuel que le restaurant peut retirer" },
+      { strong: "Ouverture après configuration", post: " et validation du parcours avec vous" },
     ],
   },
 ];
@@ -894,6 +867,8 @@ export function demoHref(origin: string): string {
 export const DEMO_PATHS = {
   bo: `/admin/dashboard${DEMO_QUERY}`,
   order: `/r/demo${DEMO_QUERY}`,
+  loyalty: `/admin/fidelite${DEMO_QUERY}`,
+  screens: `/admin/screens${DEMO_QUERY}`,
 } as const;
 
 /**
@@ -953,6 +928,8 @@ export type DemoApp = {
   lead: string;
   body: string;
   live?: DemoLive;
+  /** Présentation accompagnée quand aucun mode public de démonstration n'existe. */
+  presentation?: { note: string; href: string; cta: string };
 };
 
 /**
@@ -965,15 +942,15 @@ export type DemoApp = {
  * s'identifie immédiatement : c'est celui qu'il a devant lui toute la journée.
  *
  * L'ordre suit ensuite le trajet d'une commande — caisse, cuisine, commande
- * client — et finit par le poste du gérant. C'est aussi l'ordre des colonnes
- * de `CATALOGUE` ci-dessus ; ses `demo:` pointent ces index.
+ * client — puis présente la gestion, la fidélité, les menus TV et la livraison.
+ * C'est aussi l'ordre de `CATALOGUE` ; ses `demo:` pointent ces index.
  */
 export const DEMO_APPS: DemoApp[] = [
   {
     id: "pos",
     label: "Caisse (POS)",
     device: "tablet",
-    shot: { src: "/shots/pos.png", alt: "Caisse : catalogue, configurateur produit et ticket en cours" },
+    shot: { src: "/shots/pos.jpg", alt: "Caisse : catalogue et ticket en cours avec un article" },
     lead: "Caisse.",
     body: " Menus cadrés, totaux automatiques, suivi cuisine — avec une prise en main accompagnée sur votre carte. Impression sur matériel compatible validé.",
     live: {
@@ -991,7 +968,7 @@ export const DEMO_APPS: DemoApp[] = [
     // `DEVICE_SCREEN` — en dessous de 900 px l'app bascule en mode onglets et
     // le panneau « À lancer » disparaît, c'est-à-dire tout ce qu'on montre ici.
     device: "wall",
-    shot: { src: "/shots/kds.png", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
+    shot: { src: "/shots/kds.jpg", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
     lead: "Cuisine.",
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
     live: {
@@ -1006,9 +983,9 @@ export const DEMO_APPS: DemoApp[] = [
     id: "order",
     label: "Commande client",
     device: "phone",
-    shot: { src: "/shots/commande.png", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
+    shot: { src: "/shots/commande.jpg", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
     lead: "Commande en ligne.",
-    body: " Le client commande et paie — le ticket file droit en cuisine, déjà encaissé. La caisse ne fait que remettre le sac.",
+    body: " Le client compose sa commande et choisit son créneau. Paiement en ligne ou au retrait, selon les modes proposés par votre établissement.",
     live: {
       href: DEMO_PATHS.order,
       cta: "Essayer la commande en ligne",
@@ -1021,9 +998,9 @@ export const DEMO_APPS: DemoApp[] = [
     id: "bo",
     label: "Back-office",
     device: "wide",
-    shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
+    shot: { src: "/shots/backoffice.jpg", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
     lead: "Back-office gérant.",
-    body: " Quatorze écrans : CA du jour, menu & prix en direct, planning dont le coût s'affiche avant que vous validiez, stocks et coût matière, factures.",
+    body: " Retrouvez les commandes, la carte et les prix, les statistiques, le planning, les stocks et les factures, selon les modules de votre offre.",
     live: {
       href: DEMO_PATHS.bo,
       cta: "Essayer le back-office",
@@ -1034,6 +1011,49 @@ export const DEMO_APPS: DemoApp[] = [
       title: "Back-office Snack Manager en démonstration",
     },
   },
+  {
+    id: "loyalty",
+    label: "Fidélité",
+    device: "wide",
+    shot: { src: "/shots/fidelite.jpg", alt: "Fidélité : tableau de bord du programme, membres et opérations d'exemple" },
+    lead: "Fidélité.",
+    body: " Consultez les membres, les cartes et les opérations de votre programme. La fidélité est proposée en pilote accompagné ; les conditions de mise en service sont précisées avec vous.",
+    live: {
+      href: DEMO_PATHS.loyalty,
+      cta: "Explorer la fidélité",
+      ctaOut: "Ouvrir en plein écran",
+      hint: "Explorez le programme, les membres et les opérations avec les données d'exemple.",
+      title: "Gestion de la fidélité Snack Manager en démonstration",
+    },
+  },
+  {
+    id: "screens",
+    label: "Menus TV",
+    device: "wide",
+    shot: { src: "/shots/tv-studio.jpg", alt: "Gestion des menus TV : écrans du restaurant et aperçu des modèles de présentation" },
+    lead: "Menus TV.",
+    body: " Présentez les produits et les prix de votre carte sur vos écrans. Choisissez parmi quinze modèles et préparez votre programmation depuis le back-office.",
+    live: {
+      href: DEMO_PATHS.screens,
+      cta: "Explorer les menus TV",
+      ctaOut: "Ouvrir en plein écran",
+      hint: "Ouvrez « Apparence » sur un écran pour découvrir les modèles et leur aperçu.",
+      title: "Studio de menus TV Snack Manager en démonstration",
+    },
+  },
+  {
+    id: "delivery",
+    label: "Livreur",
+    device: "phone",
+    shot: { src: "/shots/livreur.jpg", alt: "Application SM Livreur : écran d'accès sur invitation du restaurant", portrait: true },
+    lead: "Application livreur.",
+    body: " Vos livreurs retrouvent les missions que vous leur affectez et suivent leurs livraisons depuis leur téléphone. Le parcours est ouvert en pilote accompagné, après configuration et validation avec votre établissement.",
+    presentation: {
+      note: "Aperçu de l'accès livreur. L'application s'utilise sur invitation du restaurant ; la présentation des missions se fait avec notre équipe.",
+      href: "/#contact",
+      cta: "Découvrir le parcours livreur avec nous",
+    },
+  },
 ];
 
 /**
@@ -1042,11 +1062,10 @@ export const DEMO_APPS: DemoApp[] = [
  * Le hero promet un geste (« Prendre une commande en démo ») ; sous le seuil
  * étroit, `AppsShowcase` démontait TOUTE iframe et la promesse tombait sur
  * l'appareil que le prospect tient dans la main. Or la commande client est
- * dessinée pour 390 px — et c'est en plus la seule des quatre que les clients
- * du restaurateur utiliseront vraiment.
+ * dessinée pour 390 px et utilisée par les clients du restaurateur.
  *
  * On ouvre donc la scène sur elle en dessous du seuil, et on l'épargne du
- * démontage. Les trois autres gardent l'affiche et « Ouvrir en plein écran » :
+ * démontage. Les démos de gestion gardent l'affiche et le lien plein écran :
  * une caisse de 1280 px réduite dans 340 px n'est pas une démonstration, c'est
  * une vignette illisible.
  */
@@ -1180,12 +1199,12 @@ export const SERVICES: readonly Service[] = [
   {
     id: "identite",
     title: "Votre identité visuelle",
-    lead: "Une enseigne qui a l'air de ce qu'elle vaut.",
-    line: "Logo, palette, carte remise en forme et photographiée : on reprend votre identité et on la pose partout — page de commande, écrans de salle, sacs, réseaux. Beaucoup de très bons snacks se vendent moins bien que leur cuisine, et ça se corrige.",
+    lead: "Une identité cohérente sur vos supports.",
+    line: "Logo, palette et déclinaisons définies au devis. Les créations de menus, photographies et impressions font l’objet de prestations distinctes.",
     // Le forfait de l'Atelier, pas un plancher « sur devis » : la vitrine ne
     // doit vendre l'identité visuelle qu'à UN prix, où qu'on la lise.
     price: euros(ATELIER_CENTS.identite),
-    priceNote: "forfait, une fois — déclinaisons comprises",
+    priceNote: "forfait HT, une fois · livrables précisés au devis",
   },
   {
     id: "commande",
@@ -1273,7 +1292,7 @@ export const SERVICES_BAND: Shot = { src: "/photos/libre/ambiance-salle-nuit-bok
 export const ATELIER_SERVICES: readonly Service[] = [
   {
     id: "site",
-    title: "Site vitrine clé en main",
+    title: "Site vitrine sur mesure",
     lead: "Votre site, dessiné pour vous — et la maquette est montrée avant tout engagement.",
     line: "Une vitrine simple et sur mesure : présentation, photos, horaires et contact. Ses boutons Commander ouvrent votre module personnalisé, si vous le souscrivez. Le site reste indépendant de votre choix de logiciel de caisse.",
     price: aPartirDe(ATELIER_CENTS.site),
@@ -1290,8 +1309,8 @@ export const ATELIER_SERVICES: readonly Service[] = [
   {
     id: "identite",
     title: "Identité visuelle",
-    lead: "Logo, couleurs — et toutes les déclinaisons.",
-    line: "On dessine ou on redessine votre identité, et on la décline là où vos clients la voient : les tickets, la vitrine, les réseaux.",
+    lead: "Logo, couleurs et déclinaisons définies ensemble.",
+    line: "Nous créons ou faisons évoluer votre logo et votre palette. Les déclinaisons et retours sont précisés au devis ; création de menus, shooting et impression sont des prestations distinctes.",
     price: euros(ATELIER_CENTS.identite),
     priceNote: "une fois",
   },
@@ -1317,7 +1336,7 @@ export const ATELIER_SERVICES: readonly Service[] = [
     lead: "Vous gardez votre site : on y greffe notre module, sans commission.",
     line: "Votre site reste en place : nous relions ses boutons Commander à votre page de commande personnalisée. Vous gérez carte, horaires, paiements et commandes depuis le back-office inclus, sans souscrire à notre caisse.",
     price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
-    priceNote: `+ mise en service ${euros(ATELIER_CENTS.integration)}, une fois — tout compris`,
+    priceNote: `+ mise en service ${euros(ATELIER_CENTS.integration)}, une fois — remplace la mise en service standard de 55 €`,
   },
 ];
 
@@ -1368,8 +1387,8 @@ export type HardwareItem = {
  * entière — la ligne dépasse les six mots, et c'est le prix de l'honnêteté.
  */
 export const HARDWARE: readonly HardwareItem[] = [
-  { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad — votre tablette suffit." },
-  { id: "imprimante", label: "Imprimante ticket 80 mm", line: "Requise, en réseau. Elle ouvre le tiroir-caisse." },
+  { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad — compatibilité vérifiée ensemble." },
+  { id: "imprimante", label: "Imprimante ticket 80 mm", line: "Modèle et réseau validés pour tickets et tiroir-caisse." },
   { id: "ecran", label: "Tablette pour la cuisine", line: "Ou un moniteur mural, si vous préférez." },
   { id: "reseau", label: "Connexion internet", line: "Une box suffit. Fibre non requise." },
 ] as const;
@@ -1394,17 +1413,17 @@ export const HARDWARE_PATHS = [
   {
     id: "vous",
     title: "Vous avez déjà le matériel",
-    line: "Vous branchez, vous appairez avec un code à six caractères, et vous ouvrez le service. On reste au téléphone le temps qu'il faut.",
+    line: "Nous vérifions sa compatibilité avant de configurer vos applications. Aucun achat de matériel imposé si votre équipement convient ; les prestations éventuelles sont précisées au devis.",
     // `euros(0)` et pas « 0 € » écrit à la main : c'est la même espace
     // insécable que les trois tarifs de la grille, face à laquelle ce zéro est
     // affiché.
-    price: euros(0),
+    price: "Compatibilité à vérifier",
   },
   {
     id: "nous",
-    title: "On vous équipe et on installe",
-    line: "On fournit les tablettes et l'imprimante, on les configure à votre carte et à votre façon de travailler, et on pose tout sur place. Vous ouvrez le lendemain sans rien avoir à comprendre.",
-    price: aPartirDe(INSTALL_FROM_CENTS),
+    title: "Installation sur place",
+    line: "Configuration et installation selon votre équipement et votre site. Matériel acheté séparément, déplacement et périmètre détaillés au devis. La date de mise en service est convenue avec vous.",
+    price: `${aPartirDe(INSTALL_FROM_CENTS)} HT — hors matériel`,
   },
 ] as const;
 
@@ -1500,9 +1519,9 @@ export const PLAN_MODULES = [
   // « Cuisine (KDS) » : un seul nom pour une seule chose.
   { id: "kds", label: "Cuisine (KDS)" },
   { id: "print", label: "Ticket cuisine & sticker sac" },
-  { id: "offline", label: "Mode hors-ligne" },
+  { id: "offline", label: "Continuité locale en cas de coupure*" },
   { id: "bo", label: "Back-office : CA, commandes, exports CSV" },
-  { id: "menu", label: "Menu & prix en direct" },
+  { id: "menu", label: "Carte, prix & modèles TV existants" },
   { id: "planning", label: "Planning, pointage & coût de la semaine" },
   { id: "stocks", label: "Ingrédients, stocks & coût matière" },
   { id: "online", label: "Commande en ligne & click and collect" },
@@ -1670,25 +1689,25 @@ export const FORMULES_ACCORDÉES: MêmeGrille<
 export const PLANS: Plan[] = [
   {
     id: "essentiel",
-    name: "Essentiel",
+    name: "Service",
     ...planPrices(PLAN_MONTHLY_CENTS.essentiel),
-    desc: "La caisse, la cuisine et le back-office. De quoi tenir un service.",
+    desc: "Pour organiser le service : caisse, cuisine, carte et affichage TV depuis votre back-office.",
     modules: MODULES_ESSENTIEL,
   },
   {
     id: "complet",
-    name: "Complet",
+    name: "Gestion",
     ...planPrices(PLAN_MONTHLY_CENTS.complet),
-    desc: "Tout l'Essentiel, plus ce qui fait décider : le planning et le coût matière.",
+    desc: "Tout Service, avec le planning, les stocks et le suivi du coût matière pour piloter votre activité.",
     modules: MODULES_COMPLET,
-    popular: true,
   },
   {
     id: "boost",
     name: "Boost",
     ...planPrices(PLAN_MONTHLY_CENTS.boost),
-    desc: "Tout Complet, plus le click & collect, la livraison par votre restaurant, le pilote fidélité accompagné et le support prioritaire. Livraison incluse, à configurer et valider avant ouverture.",
+    desc: "Tout Gestion, avec la commande directe, le pilote fidélité accompagné, la livraison par vos livreurs et le support prioritaire.",
     modules: MODULES_BOOST,
+    popular: true,
   },
 ];
 
@@ -1711,7 +1730,7 @@ export const MODULE_ADDON = {
    * ligne que Boost fait disparaître.
    */
   setup: `${euros(MODULE_SETUP_CENTS)} de mise en service, la première fois`,
-  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet. Commande et livraison incluses dans Boost sans supplément, mise en service comprise. Ouverture de la livraison après configuration et validation pilote, avec vos livreurs. ${LOYALTY_PILOT_NOTE}`,
+  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Service ou Gestion. Commande et livraison incluses dans Boost sans supplément, mise en service standard comprise. L’intégration à un site existant remplace la mise en service standard : 190 € une fois, selon devis. Ouverture de la livraison après configuration et validation pilote, avec vos livreurs. ${LOYALTY_PILOT_NOTE}`,
 } as const;
 
 /**
@@ -1777,9 +1796,9 @@ export type PricingMath = {
 
 export const PRICING_MATH: PricingMath = {
   stack: {
-    title: "Complet, plus le module",
+    title: "Gestion + commande en ligne",
     steps: [
-      { label: "Complet", amount: euros(PLAN_MONTHLY_CENTS.complet), note: "par mois" },
+      { label: "Gestion", amount: euros(PLAN_MONTHLY_CENTS.complet), note: "par mois" },
       { label: MODULE_ADDON.name, amount: euros(MODULE_MONTHLY_CENTS), note: "par mois" },
       { label: "Mise en service du module", amount: euros(MODULE_SETUP_CENTS), note: "une seule fois" },
     ],
@@ -1789,17 +1808,17 @@ export const PRICING_MATH: PricingMath = {
   boost: {
     title: "Boost",
     steps: [
-      { label: "Tout Complet, le click & collect, la livraison restaurant et le pilote fidélité compris", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
+      { label: "Gestion, commande directe, livraison restaurant et pilote fidélité", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
       // La ligne qui fait tout le travail : en face des 55 €, un mot au lieu
       // d'un montant. C'est le seul endroit de la page où l'absence de chiffre
       // vaut mieux qu'un chiffre.
-      { label: "Mise en service", amount: "Comprise", note: "rien à régler la première fois" },
+      { label: "Mise en service", amount: "Comprise", note: "standard uniquement, hors prestations et matériel" },
     ],
     firstMonth: { label: "Le premier mois", amount: euros(BOOST_MONTHLY_CENTS), note: "mise en service comprise" },
     everyMonth: { label: "Puis chaque mois", amount: euros(BOOST_MONTHLY_CENTS) },
   },
   gaps: {
-    title: "Ce que Boost vous fait économiser",
+    title: "Quand Boost devient pertinent",
     items: [
       {
         label: "Le premier mois",
@@ -1818,7 +1837,7 @@ export const PRICING_MATH: PricingMath = {
       },
     ],
   },
-  line: `Au-delà du Complet, Boost coûte ${euros(STACK_FIRST_MONTH_CENTS - BOOST_MONTHLY_CENTS)} de moins le premier mois, puis ${euros(STACK_MONTHLY_CENTS - BOOST_MONTHLY_CENTS)} chaque mois — ${euros(STACK_YEAR_CENTS - BOOST_YEAR_CENTS)} sur douze mois.`,
+  line: `Si vous avez besoin de Gestion et de la commande directe, Boost coûte ${euros(STACK_FIRST_MONTH_CENTS - BOOST_MONTHLY_CENTS)} de moins le premier mois, puis ${euros(STACK_MONTHLY_CENTS - BOOST_MONTHLY_CENTS)} chaque mois — ${euros(STACK_YEAR_CENTS - BOOST_YEAR_CENTS)} sur douze mois.`,
 };
 
 /**
@@ -1960,8 +1979,28 @@ export const MILESTONES: readonly Milestone[] = [
  */
 export const FAQ = [
   {
+    q: "Puis-je vous confier uniquement mes menus ?",
+    a: "Oui. La création papier peut être commandée sans abonnement logiciel. Adaptation à partir de 149 € HT ; trivolet guidé à 290 € HT ; préparation de deux compositions TV à 290 € HT ; ensemble papier + TV à 590 € HT. Le périmètre et les retours inclus sont détaillés dans l’Atelier. La diffusion sur vos écrans nécessite une suite Snack Manager incluant les menus TV et un équipement compatible.",
+  },
+  {
+    q: "Les impressions sont-elles comprises ?",
+    a: "Les prix de création correspondent à la maquette. Impression et livraison sont facturées séparément, après votre accord sur le devis de l’imprimeur. Toute coordination supplémentaire est annoncée avant validation. Vous pouvez aussi remettre votre fichier final à votre propre imprimeur.",
+  },
+  {
+    q: "Les menus TV sont-ils déjà inclus dans mon offre ?",
+    a: "Les modèles TV existants sont inclus dans Service, Gestion et Boost. La préparation graphique par notre Atelier est une prestation distincte. L’éditeur guidé papier et TV avancé est en préparation : il n’est pas inclus dans les fonctions disponibles aujourd’hui. Vos droits existants restent acquis.",
+  },
+  {
+    q: "Une modification de carte est-elle incluse dans l’abonnement ?",
+    a: "Vous pouvez modifier votre catalogue et utiliser les réglages des modèles TV existants dans votre suite. Une intervention graphique de notre équipe reste une prestation distincte : retouche à 75 € HT pour un lot de dix changements simples maximum sur une maquette existante, dans la limite de 45 minutes de production et coordination au total, avec un retour consolidé. Une refonte complète fait l’objet d’un nouveau devis.",
+  },
+  {
+    q: "Comment utilisez-vous mes statistiques pour améliorer ma carte ?",
+    a: "Nous examinons les ventes disponibles pour proposer les produits à mettre en avant et des pistes à tester. Le diagnostic est réalisé par notre équipe. Un produit populaire n’est pas nécessairement le plus rentable : l’analyse de marge nécessite des coûts matière fiables. Aucun gain de ventes n’est garanti.",
+  },
+  {
     q: "C'est adapté à quel type de restaurant ?",
-    a: "Pensé pour les fast-foods et snacks indépendants — sur place, à emporter ou en click & collect.",
+    a: "Snack Manager accompagne les restaurants indépendants : restauration rapide, japonais, thaï, pizzeria, brasserie… Le choix des outils dépend de votre organisation — sur place, à emporter ou en livraison — et du parcours validé avec vous.",
   },
   {
     q: "Vous avez combien de clients ?",
@@ -2089,8 +2128,8 @@ export const CALLBACK_SLOTS = [
  */
 export const CONTACT_POINTS = [
   "On vous rappelle sous 24 h ouvrées",
-  "On repart avec vos chiffres du simulateur",
-  FOUNDER_POLICY,
+  "Une démonstration adaptée à votre besoin",
+  "Un devis qui sépare logiciel, création et frais externes",
 ] as const;
 
 /**

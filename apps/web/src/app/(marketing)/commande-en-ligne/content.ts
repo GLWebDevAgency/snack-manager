@@ -36,8 +36,8 @@ export const COMMANDE_SECTIONS: readonly CommandeSectionMeta[] = [
     id: "direct",
     nav: "En direct",
     badge: "Chez vous",
-    title: "Vos clients commandent chez vous. Au prix de la carte.",
-    lead: "Une page à vos couleurs, sur votre nom de domaine si vous en avez un. Zéro commission à absorber : vos prix restent les vôtres, et le client aussi.",
+    title: "Proposez votre propre page de commande.",
+    lead: "Présentez votre carte à vos couleurs et choisissez vos prix. Snack Manager ne prélève pas de commission sur les commandes ; les frais de paiement restent distincts.",
   },
   {
     id: "cuisine",
@@ -58,7 +58,7 @@ export const COMMANDE_SECTIONS: readonly CommandeSectionMeta[] = [
     nav: "Sur Google",
     badge: "La visibilité",
     title: "Votre lien de commande, sur votre fiche Google.",
-    lead: "À côté de ceux des plateformes, et marqué « préféré par l'établissement ». Elles continuent d'apporter des clients ; votre page retient ceux qui reviennent.",
+    lead: "Ajoutez un accès à votre commande directe sur votre fiche d’établissement. Vos autres canaux peuvent rester disponibles selon votre organisation.",
   },
 ] as const;
 
@@ -95,18 +95,18 @@ export const COMMANDE_SHOTS = {
  */
 export const COMMANDE_HERO = {
   badge: "La commande en ligne",
-  title: "La commande en ligne sans commission.",
+  title: "Recevez vos commandes en direct.",
   lead: "Le click & collect à vos couleurs : commande, créneau et paiement. Le back-office inclus vous permet de traiter les commandes, même sans notre caisse. La fidélité est incluse en pilote accompagné.",
-  price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
-  claim: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, une fois — les deux compris dans Boost`,
+  price: `${euros(MODULE_MONTHLY_CENTS)} HT / mois / établissement`,
+  claim: `+ ${euros(MODULE_SETUP_CENTS)} HT de mise en service standard — abonnement et mise en service compris dans Boost. Frais de paiement distincts.`,
 } as const;
 
 /* ── 1. En direct ────────────────────────────────────────────── */
 
 export const DIRECT_POINTS: readonly string[] = [
-  "Votre page, à vos couleurs, sur votre nom de domaine — ou branchée sur votre site actuel.",
-  "Le prix affiché en ligne est celui de la salle : rien à gonfler pour absorber une commission.",
-  "Le client est le vôtre : son numéro, son historique, ses habitudes restent chez vous.",
+  "Votre page reprend votre identité. L’utilisation de votre nom de domaine ou l’intégration à un site existant sont précisées au devis.",
+  "Vous définissez vos prix de vente. L’abonnement est distinct des frais de votre prestataire de paiement.",
+  "Consultez les informations nécessaires au traitement des commandes et les données clients disponibles, selon les consentements recueillis.",
   "La livraison par votre restaurant est incluse dans Boost sans supplément, ou proposée dans le module à la carte dédié. Ouverture après configuration et validation pilote. Aucun livreur tiers n’est fourni.",
 ] as const;
 
@@ -114,7 +114,7 @@ export const DIRECT_POINTS: readonly string[] = [
 
 export const CUISINE_LIEN_POINTS: readonly string[] = [
   "Des horaires et une capacité par créneau pour limiter le nombre de commandes acceptées.",
-  "Ça déborde ? Vous mettez la commande en ligne en pause d'un geste, avec un mot à vos clients.",
+  "Mettez la commande en ligne en pause lorsque votre capacité de service est atteinte, avec un message destiné aux clients.",
   "Paiement en ligne ou au retrait : c'est vous qui décidez ce que la page propose.",
   "Le client suit les statuts de sa commande sur son téléphone et retrouve son créneau de retrait.",
 ] as const;
@@ -124,21 +124,21 @@ export const CUISINE_LIEN_POINTS: readonly string[] = [
 export const FIDELITE_POINTS: readonly string[] = [
   "Vous choisissez points ou tampons, seuils et récompenses avec notre accompagnement. L’utilisation sécurisée des récompenses reste à finaliser ; elle n’est pas disponible dans ce pilote.",
   "L’attribution automatique de points après une commande en ligne n’est pas disponible. Les opérations assistées et leurs limites sont précisées avant ouverture du programme.",
-  "Les codes promo, quand vous voulez pousser une offre — créés depuis le back-office.",
+  "Créez vos codes promotionnels depuis le back-office pour une opération définie.",
   "Le back-office permet de gérer les membres et leurs cartes, avec les informations et consentements du programme.",
 ] as const;
 
 /* ── 4. Sur Google ───────────────────────────────────────────── */
 
 export const GOOGLE_POINTS: readonly string[] = [
-  "Votre lien de commande est ajouté à votre fiche Google, marqué « préféré par l'établissement ».",
-  "Les plateformes restent : elles vous apportent des clients que vous n'auriez pas eus, et portent les sacs.",
-  "L'ajout du lien est compris dans la mise en route — c'est nous qui le faisons.",
+  "L’ajout du lien à votre fiche Google est préparé avec vous, sous réserve des accès et options disponibles pour votre établissement.",
+  "Conservez les canaux qui vous sont utiles et comparez leur coût complet, y compris la livraison lorsqu’elle est proposée.",
+  "L’accompagnement à l’ajout du lien est compris dans la mise en service standard, avec votre autorisation d’accès à la fiche.",
 ] as const;
 
 /* ── L'appel final ───────────────────────────────────────────── */
 
 export const COMMANDE_CTA = {
   title: "Essayez le parcours de commande en démonstration.",
-  line: "Le tunnel de commande est en démonstration sur la page d'accueil : composez un menu, choisissez un créneau — personne ne vous demandera votre e-mail.",
+  line: "Découvrez la carte, les options et le choix du créneau depuis la page d’accueil. La démonstration utilise des données d’exemple, sans paiement réel.",
 } as const;

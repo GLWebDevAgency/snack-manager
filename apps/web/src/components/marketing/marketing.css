@@ -1244,6 +1244,20 @@ html:has(.mk) {
   justify-content: center;
   gap: 8px;
 }
+.mk .demo-presentation {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  color: var(--gray);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mk .demo-presentation .demo-tryout {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
 .mk .demo-pill {
   font-size: 13.5px;
   font-weight: 500;
@@ -7283,3 +7297,10 @@ html:has(.mk) {
     transition: none;
   }
 }
+
+/* V2: expose the primary navigation at rest; retain the branded notch. */
+.mk .hd-mid { width: var(--hd-open-w, 740px); max-width: calc(100vw - 80px); }
+.mk .hd-links { opacity: 1; filter: none; transform: none; }
+/* Non-included functions remain readable when comparing plans. */
+.mk .pr-module.off { opacity: 1; color: #aaa; }
+.mk .pr-module.off .pr-dot { border-color: #aaa; }
