@@ -73,8 +73,20 @@ on:
       serie:
         description: 'Séries à jouer'
         type: choice
-        options: [tout, demo, reel]
+        options: [tout, demo, reel, operateur-compte-staging]
         default: tout
+      expected_sha:
+        description: 'Opérateur staging uniquement : SHA complet relu en tête de develop'
+        type: string
+        default: ''
+      request:
+        description: 'Opérateur staging uniquement : JSON strict {action,target,input}, sans secret ni donnée client'
+        type: string
+        default: ''
+      apply:
+        description: 'Opérateur staging uniquement : appliquer explicitement après examen du dry-run'
+        type: boolean
+        default: false
 
   workflow_call:
     inputs:
@@ -87,6 +99,15 @@ on:
         type: string
         default: tout
     secrets:
+      # Déclarations nécessaires au typage d'un workflow également réutilisable.
+      # Elles ne transmettent rien : seul le job manuel staging ci-dessous les
+      # passe, nom par nom, après sa garde. Les parcours E2E ne les utilisent pas.
+      RAILWAY_TOKEN_STAGING:
+        required: false
+      SM_DATABASE_MIGRATION_URL_STAGING:
+        required: false
+      SM_DATABASE_ROOT_CA_STAGING:
+        required: false
       # Déclarés FACULTATIFS à dessein. Absents, les scénarios « parc réel »
       # s'annoncent IGNORÉS avec leur raison et le job reste vert : un dépôt
       # sans ces secrets doit pouvoir jouer les démonstrations, qui n'en ont
@@ -109,6 +130,55 @@ permissions:
   contents: read
 
 jobs:
+  # Ce fichier est déjà lançable depuis main. --ref develop sélectionne sa
+  # version relue et le workflow appelé DU MÊME COMMIT, sans promotion main.
+  # Le groupe de concurrence extérieur reste différent de deploiement-develop
+  # porté par le workflow appelé : aucun verrou parent/enfant circulaire.
+  operateur-garde:
+    name: Autoriser la demande opérateur staging
+    if: inputs.serie == 'operateur-compte-staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Refuser toute cible, révision ou origine de déclenchement ambiguë
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environnement }}
+          INPUT_SERIES: ${{ inputs.serie }}
+          INPUT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          INPUT_REQUEST: ${{ inputs.request }}
+          INPUT_APPLY: ${{ inputs.apply }}
+        run: |
+          node <<'NODE'
+          // BEGIN CUSTOMER_OPERATOR_STAGING_BRIDGE_GUARD
+          const env = process.env;
+          let valid = env.GITHUB_REPOSITORY === 'GLWebDevAgency/snack-manager'
+            && env.GITHUB_EVENT_NAME === 'workflow_dispatch'
+            && env.GITHUB_WORKFLOW_REF === 'GLWebDevAgency/snack-manager/.github/workflows/e2e.yml@refs/heads/develop'
+            && env.GITHUB_REF === 'refs/heads/develop' && env.INPUT_ENVIRONMENT === 'staging'
+            && env.INPUT_SERIES === 'operateur-compte-staging'
+            && /^[a-f0-9]{40}$/.test(env.INPUT_EXPECTED_SHA ?? '') && env.GITHUB_SHA === env.INPUT_EXPECTED_SHA
+            && ['true', 'false'].includes(env.INPUT_APPLY) && Buffer.byteLength(env.INPUT_REQUEST ?? '') <= 65536;
+          try { const value = JSON.parse(env.INPUT_REQUEST); valid = valid && value?.target?.environment === 'staging'; }
+          catch { valid = false; }
+          if (!valid) { process.stdout.write('operator_staging_dispatch_invalid\n'); process.exitCode = 2; }
+          // END CUSTOMER_OPERATOR_STAGING_BRIDGE_GUARD
+          NODE
+
+  operateur-compte-staging:
+    name: Opérateur compte client — staging uniquement
+    needs: operateur-garde
+    if: inputs.serie == 'operateur-compte-staging' && needs.operateur-garde.result == 'success'
+    uses: ./.github/workflows/customer-account-operator.yml
+    with:
+      environment: staging
+      expected_sha: ${{ inputs.expected_sha }}
+      request: ${{ inputs.request }}
+      apply: ${{ inputs.apply }}
+    secrets:
+      RAILWAY_TOKEN_STAGING: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+      SM_DATABASE_MIGRATION_URL_STAGING: ${{ secrets.SM_DATABASE_MIGRATION_URL_STAGING }}
+      SM_DATABASE_ROOT_CA_STAGING: ${{ secrets.SM_DATABASE_ROOT_CA_STAGING }}
+
   # ───────────────────────────────────────────────────────────────────────────
   # 1 · La cible
   #
@@ -128,7 +198,7 @@ jobs:
     name: Cible des parcours
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.repository == 'GLWebDevAgency/snack-manager'
+    if: github.repository == 'GLWebDevAgency/snack-manager' && inputs.serie != 'operateur-compte-staging'
     outputs:
       environnement: ${{ steps.resoudre.outputs.environnement }}
       serie: ${{ steps.resoudre.outputs.serie }}
@@ -209,7 +279,7 @@ jobs:
   demonstrations:
     name: Parcours sur démonstration
     needs: cible
-    if: needs.cible.outputs.jouable == 'oui' && needs.cible.outputs.serie != 'reel'
+    if: inputs.serie != 'operateur-compte-staging' && needs.cible.outputs.jouable == 'oui' && needs.cible.outputs.serie != 'reel'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -297,6 +367,7 @@ jobs:
     needs: [cible, demonstrations]
     if: |
       always()
+      && inputs.serie != 'operateur-compte-staging'
       && needs.cible.outputs.jouable == 'oui'
       && needs.cible.outputs.environnement == 'staging'
       && needs.cible.outputs.serie != 'demo'

@@ -63,6 +63,8 @@
   font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 25px;
 }
 .tab:focus-visible { outline: 2px solid var(--sm-ink); outline-offset: -2px; }
+/* Keep the native click on the stable button when focus redraws decorative SVG paths. */
+.tab > * { pointer-events: none; }
 .glyph { position: relative; width: 24px; height: 24px; flex: none; }
 .glyph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .off, .on { position: absolute; inset: 0; }

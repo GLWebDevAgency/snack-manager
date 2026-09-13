@@ -22,7 +22,7 @@ beforeAll(async () => {
   globals.walkRules(rule => { if (rule.selector === ':root') rule.walkDecls(declaration => { declarations.push(declaration.toString()); }); });
   const bundle = await build({ stdin: { sourcefile: 'tabbar-fixture.tsx', resolveDir: directory, loader: 'tsx', contents: `
     import React,{useEffect,useRef,useState}from'react';import{createRoot}from'react-dom/client';
-    import{SMTabBar,SMTabBarSpacer,useSMTabTransition}from'./SMTabBar';
+    import{SMTabBar,SMTabBarSpacer,useSMTabTransition}from'./SMTabBar';import{Icon}from'./icons';
     const root=createRoot(document.getElementById('root'));
     window.tabFixture={selections:[],ticks:0,active:'one',configure:()=>{},unmount:()=>root.unmount()};
     const keys=['one','two','three','four','five'], labels=['Carte','Recherche','Commandes','Fidélité','Compte'];
@@ -30,7 +30,7 @@ beforeAll(async () => {
       useEffect(()=>{const pop=()=>setActive(new URLSearchParams(location.search).get('tab')||'one');window.addEventListener('popstate',pop);return()=>window.removeEventListener('popstate',pop)},[]);
       const scroll=useRef(null);window.tabFixture.configure=patch=>setConfig(c=>({...c,...patch}));window.tabFixture.active=active;
       const {selectTab,contentProps}=useSMTabTransition({activeKey:active,reduceMotion:config.reduceMotion,onSelect:key=>{window.tabFixture.selections.push(key);history.pushState(null,'','?tab='+key);setActive(key)},scrollRef:config.refScroll?scroll:undefined});
-      const items=keys.slice(0,config.count).map((key,index)=>({key,label:labels[index],badge:index===2?3:null,icon:color=><svg viewBox="0 0 24 24" fill="none" stroke={color}><circle cx="12" cy="12" r="8"/></svg>}));
+      const items=keys.slice(0,config.count).map((key,index)=>({key,label:labels[index],badge:index===2?3:null,icon:color=><Icon name="ticket" size={24} style={{color}}/>}));
       return <><button id="outside">Hors navigation</button><div ref={scroll} id="scroller" style={config.refScroll?{height:420,overflow:'auto'}:{}}>
         <section {...contentProps} id="content" style={{height:2200}}><h1>Écran {active}</h1><button id="content-action">Action du contenu</button><SMTabBarSpacer/></section></div>
         <SMTabBar items={items} activeKey={active} onSelect={selectTab} scrollRef={config.refScroll?scroll:undefined} theme={config.theme} reduceMotion={config.reduceMotion} reduceTransparency={config.reduceTransparency} hidden={config.hidden} disabled={config.disabled} minimizable={config.minimizable} onTick={()=>window.tabFixture.ticks++}/></>;
@@ -75,6 +75,23 @@ describe('SMTabBar — navigation partagée sans état métier', () => {
     await expect.poll(() => selected().getAttribute('aria-label')).toBe('Commandes');
     expect(await page.getByRole('tab', { name: 'Commandes', exact: true }).evaluate(element => document.getElementById(element.getAttribute('aria-describedby')!)?.textContent)).toBe('3 notifications');
     expect(await page.evaluate(() => window.tabFixture.selections)).toEqual(['two', 'five', 'one', 'three']);
+  });
+
+  it.each([320, 390, 820])('sélectionne au premier clic sur une vraie icône minimisée à %ipx', async width => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await expect.poll(() => bar().getAttribute('data-sm-tabbar-minimized')).toBe('true');
+    const orders = page.getByRole('tab', { name: 'Commandes', exact: true });
+    // The collapsed tab's centre hits the real SVG. Expanding on pointer focus
+    // can redraw its paths between down/up; the native button must retain the click.
+    await orders.click();
+    await expect.poll(() => selected().getAttribute('aria-label')).toBe('Commandes');
+    expect(await page.evaluate(() => window.tabFixture.selections)).toEqual(['three']);
+    expect(new URL(page.url()).searchParams.get('tab')).toBe('three');
+    expect(await orders.evaluate(element => element === document.activeElement)).toBe(true);
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => selected().getAttribute('aria-label')).toBe('Fidélité');
+    expect(await page.evaluate(() => window.tabFixture.selections)).toEqual(['three', 'four']);
   });
 
   it('se replie sur document et sur une ref, remonte au retap et respecte le rebond', async () => {

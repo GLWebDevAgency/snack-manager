@@ -1,16 +1,48 @@
 name: Opérateur compte client
 
-# Amorçage : workflow_dispatch doit d'abord être enregistré sur main, branche
-# par défaut. Promouvoir ce fichier par PR relue ; sa présence sur develop
-# seule ne garantit pas qu'il soit déclenchable. Ne jamais utiliser une branche
-# de travail pour contourner ce garde. Le code opérateur doit aussi être présent
-# sur la branche choisie : develop pour staging, main pour production.
+# Le lancement direct workflow_dispatch exige ce fichier sur main, branche
+# par défaut. Pour valider staging sans promouvoir main, e2e.yml déjà enregistré
+# appelle la version relue de ce workflow sur develop via workflow_call.
+# Ce pont ne transmet que les secrets staging et refuse toute autre cible.
+# Le code opérateur doit être présent sur la branche choisie : develop pour
+# staging, main pour un éventuel lancement direct de production distinct.
 # Le JSON est visible dans les entrées Actions : aucune clé, URL PostgreSQL,
 # donnée client ni numéro de téléphone. Les quatre actions ne contactent pas
 # Twilio, ne changent pas les variables et ne créent aucun rôle/migration.
 # Un résultat unconfirmed nécessite une inspection avant toute nouvelle action.
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      expected_sha:
+        type: string
+        required: true
+      request:
+        type: string
+        required: true
+      apply:
+        type: boolean
+        default: false
+    # Le pont staging ne reçoit jamais les identifiants de production.
+    # Facultatifs pour qu'un dry-run ne dépende d'aucun identifiant opérateur.
+    secrets:
+      RAILWAY_TOKEN_STAGING:
+        required: false
+      SM_DATABASE_MIGRATION_URL_STAGING:
+        required: false
+      SM_DATABASE_ROOT_CA_STAGING:
+        required: false
+      # Le lancement direct existant référence aussi ces noms. Les déclarer ne
+      # les transmet pas : le pont E2E ne passe que les trois secrets staging.
+      RAILWAY_TOKEN_PRODUCTION:
+        required: false
+      SM_DATABASE_MIGRATION_URL_PRODUCTION:
+        required: false
+      SM_DATABASE_ROOT_CA_PRODUCTION:
+        required: false
   workflow_dispatch:
     inputs:
       environment:

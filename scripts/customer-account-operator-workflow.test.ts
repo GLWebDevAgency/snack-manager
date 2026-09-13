@@ -6,12 +6,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rootCertificates } from 'node:tls';
 import { randomUUID } from 'node:crypto';
 import { runInNewContext } from 'node:vm';
+import { parse } from 'yaml';
 import { customerAccountOperator } from './customer-account-operator';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const workflow = readFileSync(join(root, '.github/workflows/customer-account-operator.yml'), 'utf8');
-function block(name: string) {
-  const source = workflow.split(`// BEGIN ${name}\n`)[1]?.split(`// END ${name}`)[0];
+function block(name: string, definition = workflow) {
+  const source = definition.split(`// BEGIN ${name}\n`)[1]?.split(`// END ${name}`)[0];
   if (!source) throw new Error(`Missing executable workflow block: ${name}`);
   return source.split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
 }
@@ -236,5 +237,140 @@ describe('workflow opérateur : autorité et séparation des secrets', () => {
     expect(runner.projectReport({ ...plan, secret: 'PRIVATE', target: { ...plan.target, password: 'PRIVATE' },
       details: { ...plan.details, databaseUrl: 'PRIVATE' } })).toEqual(plan);
     expect(() => runner.projectReport({ ...plan, code: 'PRIVATE_UNKNOWN_CODE' })).toThrow('operator_report_invalid');
+  });
+});
+
+
+const dispatcher = readFileSync(join(root, '.github/workflows/e2e.yml'), 'utf8');
+type Workflow = {
+  on: Record<string, { inputs?: Record<string, { default?: unknown }>; secrets?: Record<string, unknown> }>;
+  permissions: Record<string, string>;
+  concurrency: { group: string; 'cancel-in-progress': boolean };
+  jobs: Record<string, { if: string; needs?: string | string[]; uses?: string; with?: Record<string, unknown>;
+    secrets?: Record<string, string>; steps?: { env?: Record<string, string> }[] }>;
+};
+const caller = parse(dispatcher) as Workflow;
+const called = parse(workflow) as Workflow;
+const operatorSeries = 'operateur-compte-staging';
+const operatorJob = caller.jobs[operatorSeries]!;
+const guardJob = caller.jobs['operateur-garde']!;
+function bridgeFixture() {
+  const f = fixture();
+  f.env.GITHUB_WORKFLOW_REF = 'GLWebDevAgency/snack-manager/.github/workflows/e2e.yml@refs/heads/develop';
+  const inputs = { environnement: 'staging', serie: operatorSeries, expected_sha: f.env.GITHUB_SHA!, request: f.env.INPUT_REQUEST!, apply: false };
+  return { ...f, inputs };
+}
+/** Execute the actual YAML input mappings, not a second bridge implementation. */
+function expressionValue(value: unknown, inputs: Record<string, unknown>) {
+  if (typeof value !== 'string') return value;
+  const match = /^\$\{\{ inputs\.([a-z_]+) \}\}$/.exec(value);
+  return match ? inputs[match[1]!] : value;
+}
+function bridgeGuard(f: ReturnType<typeof bridgeFixture>) {
+  const bindings = guardJob.steps![0]!.env!;
+  const env = { ...f.env, ...Object.fromEntries(Object.entries(bindings).map(([name, value]) => [name, String(expressionValue(value, f.inputs))])) };
+  const process = { env, exitCode: 0, stdout: { write: vi.fn() } };
+  runInNewContext(block('CUSTOMER_OPERATOR_STAGING_BRIDGE_GUARD', dispatcher), { process, Buffer });
+  return process;
+}
+function childEnvironment(f: ReturnType<typeof bridgeFixture>): Env {
+  const inputs = Object.fromEntries(Object.entries(operatorJob.with!).map(([name, value]) => [name, expressionValue(value, f.inputs)]));
+  return { ...f.env, INPUT_ENVIRONMENT: String(inputs.environment), INPUT_EXPECTED_SHA: String(inputs.expected_sha),
+    INPUT_REQUEST: String(inputs.request), INPUT_APPLY: String(inputs.apply) };
+}
+function jobAllowed(name: string, serie?: string, guardResult = 'success') {
+  // The repository-owned expressions below use only these simple GH operators.
+  // A malformed or broadened expression fails this executable test.
+  const expression = caller.jobs[name]!.if.replaceAll('needs.operateur-garde', 'needs["operateur-garde"]');
+  return runInNewContext(expression, {
+    github: { repository: 'GLWebDevAgency/snack-manager' }, inputs: { serie }, always: () => true,
+    needs: { 'operateur-garde': { result: guardResult }, cible: { outputs: { jouable: 'oui', environnement: 'staging', serie } }, demonstrations: { result: 'success' } },
+  });
+}
+
+describe('pont opérateur staging : dispatcher E2E enregistré, sans promotion main', () => {
+  it('appelle le même commit avec trois secrets staging nommés, après une garde sans identifiants', () => {
+    expect(operatorJob.uses).toBe('./.github/workflows/customer-account-operator.yml');
+    expect(operatorJob.needs).toBe('operateur-garde');
+    expect(operatorJob.with?.environment).toBe('staging');
+    expect(operatorJob.secrets).toEqual({
+      RAILWAY_TOKEN_STAGING: '${{ secrets.RAILWAY_TOKEN_STAGING }}',
+      SM_DATABASE_MIGRATION_URL_STAGING: '${{ secrets.SM_DATABASE_MIGRATION_URL_STAGING }}',
+      SM_DATABASE_ROOT_CA_STAGING: '${{ secrets.SM_DATABASE_ROOT_CA_STAGING }}',
+    });
+    for (const name of Object.keys(operatorJob.secrets!)) {
+      expect(called.on.workflow_call!.secrets![name]).toEqual({ required: false });
+      expect(caller.on.workflow_call!.secrets![name]).toEqual({ required: false });
+    }
+    // The child's direct production mode still needs declarations for GH's
+    // reusable-workflow type checker, but the staging caller never passes them.
+    for (const name of ['RAILWAY_TOKEN_PRODUCTION', 'SM_DATABASE_MIGRATION_URL_PRODUCTION', 'SM_DATABASE_ROOT_CA_PRODUCTION']) {
+      expect(called.on.workflow_call!.secrets![name]).toEqual({ required: false });
+      expect(operatorJob.secrets).not.toHaveProperty(name);
+      expect(caller.on.workflow_call!.secrets).not.toHaveProperty(name);
+    }
+    expect(JSON.stringify(guardJob)).not.toContain('secrets.');
+    expect(caller.on.workflow_dispatch!.inputs!.apply!.default).toBe(false);
+    expect(called.on.workflow_call!.inputs!.apply!.default).toBe(false);
+    expect(caller.permissions).toEqual({ contents: 'read' }); expect(called.permissions).toEqual({ contents: 'read' });
+    expect(caller.concurrency.group).toBe('bout-en-bout-${{ inputs.environnement || github.event.workflow_run.head_branch || github.ref }}');
+    expect(called.concurrency.group).toBe('deploiement-${{ github.ref }}');
+    expect(caller.concurrency['cancel-in-progress']).toBe(false); expect(called.concurrency['cancel-in-progress']).toBe(false);
+  });
+  it('exclut tous les parcours E2E lors de l’opération, même si leurs autres prérequis sont verts', () => {
+    expect(jobAllowed('operateur-garde', operatorSeries)).toBe(true);
+    expect(jobAllowed(operatorSeries, operatorSeries)).toBe(true);
+    for (const job of ['cible', 'demonstrations', 'parc-reel']) expect(jobAllowed(job, operatorSeries), job).toBe(false);
+    for (const result of ['failure', 'cancelled', 'skipped']) expect(jobAllowed(operatorSeries, operatorSeries, result)).toBe(false);
+  });
+  it.each(['tout', 'demo', 'reel', undefined])('ne déclenche aucune opération pour la série normale/automatique %s', serie => {
+    expect(jobAllowed('operateur-garde', serie)).toBe(false); expect(jobAllowed(operatorSeries, serie)).toBe(false);
+    expect(jobAllowed('cible', serie)).toBe(true);
+    expect(jobAllowed('demonstrations', serie)).toBe(serie !== 'reel');
+    expect(jobAllowed('parc-reel', serie)).toBe(serie !== 'demo');
+  });
+  it.each([
+    { GITHUB_REPOSITORY: 'fork/snack-manager' }, { GITHUB_EVENT_NAME: 'push' }, { GITHUB_EVENT_NAME: 'workflow_run' },
+    { GITHUB_EVENT_NAME: 'pull_request' }, { GITHUB_EVENT_NAME: 'schedule' },
+    { GITHUB_REF: 'refs/heads/main' }, { GITHUB_REF: 'refs/heads/feature' }, { GITHUB_REF: 'refs/tags/staging' },
+    { GITHUB_WORKFLOW_REF: 'GLWebDevAgency/snack-manager/.github/workflows/e2e.yml@refs/heads/main' },
+    { GITHUB_WORKFLOW_REF: 'GLWebDevAgency/snack-manager/.github/workflows/other.yml@refs/heads/develop' },
+    { GITHUB_SHA: 'b'.repeat(40) },
+  ])('refuse réellement la provenance native invalide %# sans divulgation', changes => {
+    const f = bridgeFixture(); Object.assign(f.env, changes);
+    const guard = bridgeGuard(f); expect(guard.exitCode).toBe(2);
+    expect(guard.stdout.write.mock.calls).toEqual([['operator_staging_dispatch_invalid\n']]);
+  });
+  it.each([
+    { environnement: 'production' }, { environnement: '' }, { serie: 'tout' }, { expected_sha: '4d85256' },
+    { expected_sha: 'a'.repeat(39) + 'G' }, { expected_sha: 'b'.repeat(40) }, { apply: 'yes' }, { apply: undefined },
+    { request: '{"broken"' }, { request: 'null' }, { request: '{"target":{"environment":"production"}}' },
+    { request: JSON.stringify({ target: { environment: 'staging' }, padding: 'é'.repeat(33000) }) },
+  ])('refuse réellement l’entrée staging ambiguë %#', changes => {
+    const f = bridgeFixture(); Object.assign(f.inputs, changes); expect(bridgeGuard(f).exitCode).toBe(2);
+  });
+  it.each([false, true])('transmet au vrai runner la demande staging relue (apply=%s)', async applyRequested => {
+    const f = bridgeFixture(); f.inputs.apply = applyRequested;
+    expect(bridgeGuard(f).exitCode).toBe(0);
+    const h = harness(f), env = childEnvironment(f);
+    env.OPERATOR_PHASE = applyRequested ? 'apply' : 'validate';
+    expect(await runner.runOperatorWorkflow(env, h.io)).toBe(0);
+    expect(h.state.calls.map(call => call.apply)).toEqual(applyRequested ? [false, true] : [false]);
+    expect(h.emit).toHaveBeenCalledWith(expect.objectContaining({ target: { environment: 'staging', slug: 'operator-fixture', tenantRef: f.request.target.tenantRef } }));
+    if (!applyRequested) { expect(h.writeFile).not.toHaveBeenCalled(); expect(h.execute.mock.calls.map(call => call[0])).toEqual(['gh']); }
+  });
+  it('exécute le CLI réel en dry-run via la demande transmise et refuse un schéma secret inconnu avant toute lecture distante', async () => {
+    const f = bridgeFixture(); expect(bridgeGuard(f).exitCode).toBe(0);
+    const h = harness(f); const { invokeCli: _unused, ...io } = h.io;
+    expect(await runner.runOperatorWorkflow(childEnvironment(f), io)).toBe(0);
+    expect(h.emit).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'planned', code: 'validated_only' }));
+    f.inputs.request = JSON.stringify({ ...f.request, password: 'PRIVATE_REJECTED_FIELD' });
+    f.inputs.apply = true; expect(bridgeGuard(f).exitCode).toBe(0);
+    const refused = harness(f), env = childEnvironment(f); env.OPERATOR_PHASE = 'apply';
+    const { invokeCli: _unusedRefused, ...refusedIo } = refused.io;
+    expect(await runner.runOperatorWorkflow(env, refusedIo)).toBe(2);
+    expect(refused.execute).not.toHaveBeenCalled(); expect(refused.writeFile).not.toHaveBeenCalled();
+    expect(refused.emit).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'invalid_input', code: 'input_invalid' }));
+    expect(JSON.stringify(refused.emit.mock.calls)).not.toContain('PRIVATE');
   });
 });

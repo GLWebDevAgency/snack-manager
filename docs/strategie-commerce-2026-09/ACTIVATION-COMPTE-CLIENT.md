@@ -291,6 +291,45 @@ tables opérateur, sans écriture, délégation ni privilège de colonne parasit
 La commande ne crée aucun rôle, ne répare aucun privilège et ne migre aucun
 schéma. Le bootstrap déployé conserve ses deux rôles existants.
 
+### Opérateur staging depuis GitHub
+
+Le workflow [`Bout en bout`](../../.github/workflows/e2e.yml), déjà présent sur
+la branche par défaut, propose la série manuelle `operateur-compte-staging`.
+Lancer sa version **develop** après fusion et vérification de la révision revue.
+Cette série appelle le [workflow opérateur](../../.github/workflows/customer-account-operator.yml)
+du même commit et ne lance aucun parcours E2E. Elle ne nécessite ni promotion
+sur `main`, ni configuration ou établissement en production. GitHub permet de
+[sélectionner une autre branche d’un workflow déjà enregistré](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+et [résout l’appel relatif au même commit](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
+
+Préparer un fichier d’entrées Actions contenant `environnement: "staging"`,
+`serie: "operateur-compte-staging"`, `expected_sha` (40 caractères), `request`
+(le document opérateur sérialisé en chaîne JSON) et `apply: false`. Aucun secret,
+URL PostgreSQL ou renseignement client dans ce fichier : ces entrées sont
+visibles dans Actions. Le document opérateur est limité à 64 Kio par ce pont.
+
+```sh
+gh workflow run e2e.yml --ref develop --json < /chemin/operateur-staging.json
+```
+
+Examiner le résultat `planned` avant de transmettre le même document avec
+`apply: true`. Aucune somme ni limite n’est fournie par défaut. La garde refuse
+`main`, la production, les branches de travail, un déclenchement automatique ou
+un SHA différent. La tête de `develop` est relue avant toute application ; si
+elle a avancé, revoir la nouvelle révision et refaire le dry-run.
+
+Seuls `RAILWAY_TOKEN_STAGING`, `SM_DATABASE_MIGRATION_URL_STAGING` et
+`SM_DATABASE_ROOT_CA_STAGING` sont transmis explicitement. Le CLI valide d’abord
+le document sans identifiants opérateur ; l’application relit la cible Railway
+native et utilise le migrateur staging existant, avec les contrôles TLS,
+migrations et privilèges décrits ci-dessus. Aucun DDL, élargissement de droits,
+changement de variable ou appel Twilio n’est exécuté. Les verrous E2E et
+déploiement restent distincts et n’annulent pas une opération en cours.
+
+Un résultat `unconfirmed` impose une relecture du registre avant toute suite,
+sans répétition automatique. Le succès de cette commande SQL prépare le budget
+ou les admissions ; il ne prouve pas encore la recette SMS/clé d’accès.
+
 Tous les montants, plafonds et dates d'un budget sont explicites. Autoriser une
 enveloppe et la sélectionner sont deux actions distinctes ; `activate-budget`
 exige `expectedActiveAuthorizationRef`, y compris `null` pour la première.
