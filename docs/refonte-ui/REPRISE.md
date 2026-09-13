@@ -10,7 +10,9 @@ Les formulaires restent montés pendant les changements d’onglet. Les handlers
 
 Les preuves finales, les fichiers modifiés et les limites de validation sont consignés dans [VALIDATION-NAVIGATION-RESTAURATEUR.md](VALIDATION-NAVIGATION-RESTAURATEUR.md). Les captures sont sous `captures/navigation-admin`, `captures/navigation-site-screens-final`, `captures/admin-navigation-delivery` et les dossiers Horaires/Abonnement référencés par l’audit. Les traces intermédiaires restent identifiées comme telles.
 
-Ce lot est local : aucune publication, fusion ni mise en staging n’a été réalisée pour cette nouvelle navigation. Prochaine tranche précise : relire le commit dédié puis, après GO pour sa livraison, ouvrir la PR vers `develop`, attendre les contrôles, fusionner et vérifier la révision effectivement servie sur staging avant recette restaurateur.
+Publication autorisée le 13 septembre 2026 (« publies cela proprement »), vers `develop` puis staging uniquement. La [PR #184](https://github.com/GLWebDevAgency/snack-manager/pull/184) porte ce lot. Sa première tête `a732a063fdf31ecad2dce470f085a8ebf53d1f9b` a réussi la CI complète et le balayage des secrets.
+
+Avant fusion, la nouvelle PR #183 compte client/fidélité a fait avancer `develop` à `453697af074b828215196023e0e80df9a249ac53`. Cette base est intégrée sans conflit dans la branche dédiée, sans réécriture d’historique. Les preuves locales ci-dessus portent sur la base initiale ; une nouvelle CI valide l’arbre combiné. Prochaine étape précise : attendre ses contrôles, fusionner la PR #184, suivre le déploiement automatique puis vérifier le SHA effectivement servi et les parcours staging. Aucun changement vers `main` ni activation de compte client en production.
 
 ## Historique — seconde passe et compatibilité PR 178
 
