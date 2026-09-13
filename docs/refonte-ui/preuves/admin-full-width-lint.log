@@ -1,0 +1,2 @@
+ESLint exécuté sur les six fichiers applicatifs modifiés, via pnpm --filter @sm/web exec eslint.
+Code de sortie : 0. Aucun diagnostic.

@@ -268,7 +268,7 @@ function BrandEditor({
 
   if (!scope.valid) return <p role="status" className="p-4 text-sm text-mut">La session a changé. Rechargez la page pour personnaliser le restaurant courant.</p>;
   return (
-    <div className={commande ? "flex min-w-0 flex-col gap-4" : "flex max-w-[1040px] flex-col gap-4"}>
+    <div className="flex min-w-0 flex-col gap-4">
       {navigation}
       {restored && dirty && <p role="status" className="rounded-card border border-line p-3 text-sm text-mut">Votre brouillon a été retrouvé dans cet onglet. Il n’est pas encore publié.</p>}
       {recovery && <Panel title="Un brouillon a été retrouvé" sub="La marque en ligne a changé depuis sa création. Reprendre ce brouillon remplace toute l’apparence, y compris les couleurs, images et polices modifiées depuis. Rien n’est publié sans enregistrement."><div className="flex flex-wrap gap-2">
@@ -1170,7 +1170,7 @@ function BarreEnregistrement({
 /** Le squelette de l'éditeur, le temps que `GET /tenants/me` réponde. */
 export function EditeurDeMarqueEnAttente() {
   return (
-    <div className="flex max-w-[1040px] flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <Skeleton className="h-[220px]" />
       <Skeleton className="h-[320px]" />
     </div>

@@ -1,6 +1,14 @@
 # Reprise de la refonte UI Snack Manager
 
-## État courant — navigation du back-office restaurateur, 13 septembre 2026
+## État courant — panneaux sur toute la largeur, 13 septembre 2026
+
+Le retour utilisateur sur Mac est corrigé sur la branche **`fix/admin-panels-full-width`**, issue de `origin/develop` **`8c7721ef05cec6057cd16fb4d8a67a19009c0b06`**. Les panneaux Établissement et Livraison utilisent toute la largeur utile ; Encaissement et Site sans commande en ligne reçoivent la même correction. Une zone de livraison remplit sa grille, plusieurs zones se répartissent selon l’espace. Les marges mobile/tablette sont conservées. Six fichiers applicatifs changent uniquement des classes CSS ; aucun comportement métier n’est modifié.
+
+Tests web **3 086/3 086**, typecheck, lint et build réussis. Détails, fichiers et preuves : [LOT-PANNEAUX-PLEINE-LARGEUR.md](LOT-PANNEAUX-PLEINE-LARGEUR.md). La recette du vrai Next compilé passe **22/22 contextes**, **82 captures**, **197 mesures de largeur avec écart maximal de 0 px**, de 320 à 2 560 px, clair/sombre, avec conservation des brouillons et publication Livraison simulée. Prochaine étape précise : publier le correctif vers `develop`, attendre les contrôles puis vérifier sa révision et ses panneaux effectivement servis sur staging, dans la continuité de l’autorisation de livraison. Aucun changement en production.
+
+La PR #184 précédente est fusionnée et livrée sur staging en `8c7721ef` ; ses reçus et la revue visuelle compte/fidélité PR #183 restent conservés localement sur **`docs/admin-navigation-staging-receipt`**, commit **`d31e2d4`**. Le checkout principal, ses modifications concurrentes et tous les autres worktrees sont préservés. Aucun AGENTS n’a été remplacé.
+
+## Lot précédent — navigation du back-office restaurateur
 
 Branche **`feat/admin-section-navigation`**, worktree `/Users/limameghassene/development/SnackManager-refonte-ui`, base `origin/develop` **`4d8525615924aa701a4b92b9ae3709bbd0dd6607`** (PR 178 à 182 incluses). La tête distante a été vérifiée à nouveau pendant ce lot et correspond toujours à cette base. Le checkout principal `feat/fidelite-design`, ses modifications et les autres worktrees n’ont pas été modifiés. Le reçu local `e38f69e` reste conservé sur `fix/e2e-refonte-staging`. Aucun fichier AGENTS n’a été remplacé.
 

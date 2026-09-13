@@ -65,7 +65,7 @@ export default function DeliveryPage() {
   if (!draft) return <div className="space-y-4 p-4 md:p-[26px]"><Skeleton className="h-40" /><Skeleton className="h-72" /></div>;
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-[1120px] flex-col gap-5 p-4 pb-8 md:p-[26px]">
+    <div className="flex min-w-0 flex-col gap-5 p-4 pb-8 md:p-[26px]">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">Commande en ligne</p><h1 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-ink">Votre livraison, à vos conditions.</h1><p className="mt-2 max-w-[640px] text-sm leading-relaxed text-mut">Définissez où vous livrez, à quel prix et combien de commandes votre équipe peut prendre en charge.</p></div>
         <Pill variant="out">Livraison par votre restaurant</Pill>
@@ -78,7 +78,7 @@ export default function DeliveryPage() {
           setDraft(current => current ? { ...current, zones: [...current.zones, zone] } : current);
         }}>Ajouter</Btn>}>
           {draft.zones.length === 0 ? <EmptyState icon="home" title="Commencez par votre première zone" hint="Ajoutez un ou plusieurs codes postaux, puis choisissez vos frais et votre minimum de commande." /> : (
-            <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
               {draft.zones.map((zone, index) => (
                 <fieldset key={zone.id} disabled={saving} className="min-w-0 rounded-card border border-line bg-surface2 p-3 sm:p-4">
                   <legend className="px-1 text-xs font-semibold text-mut">Zone {index + 1}</legend>
