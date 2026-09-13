@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
   CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CustomerAccountDeploymentTargetSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
   CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit, customerAccountResponseLimit,
+  CUSTOMER_VERIFICATION_TIMING, customerAccountRequestTimeoutMs,
   type CustomerEnrollment, type CustomerAccountAction } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 import { parseCustomerOrdersPage, parseCustomerOrderDetail, parseCustomerOrderReorder } from '../../../../components/customer-account/orders-response';
@@ -14,7 +15,6 @@ export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SECRET = /^[A-Za-z0-9_-]{43}$/;
-const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
 const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
   check: 'confirmation', recover: 'resultat', protection: 'protection', passkey: 'cle-acces', recovery: 'secours', session: 'session', name: 'profil', logout: 'session',
@@ -186,9 +186,13 @@ function validEnrollment(enrollment: CustomerEnrollment, selected: { operationId
 }
 
 export async function customerAccount(request: NextRequest, context: CustomerContext, action: Action): Promise<NextResponse> {
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(TIMEOUT_MS)]);
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(customerAccountRequestTimeoutMs(action, 'bff'))]);
+  // Reserve the upstream API budget: a slow body/domain resolution must not
+  // dispatch a new SMS request just before this relay's own deadline.
+  const admissionSignal = action === 'start' || action === 'check'
+    ? AbortSignal.any([signal, AbortSignal.timeout(CUSTOMER_VERIFICATION_TIMING.relayPreflightMs)]) : signal;
   try {
-    const { slug } = await within(context.params, signal);
+    const { slug } = await within(context.params, admissionSignal);
     if (slug.length > 63 || !SLUG.test(slug) || request.nextUrl.search
       || request.nextUrl.pathname !== `/r/${slug}/compte/${PATHS[action]}` || request.method !== METHODS[action]) return invalid();
     const origin = requestOrigin(request);
@@ -204,8 +208,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (!ip) return action === 'status' ? closed() : unavailable();
     let browserRequest: unknown = {};
     try {
-      if (request.method !== 'GET') browserRequest = await boundedJson(request, signal, customerAccountRequestLimit(action));
-    } catch { return signal.aborted ? unavailable() : invalid(); }
+      if (request.method !== 'GET') browserRequest = await boundedJson(request, admissionSignal, customerAccountRequestLimit(action));
+    } catch { return admissionSignal.aborted ? unavailable() : invalid(); }
     const apiAction = action;
     const parsed = CustomerAccountBrowserRequests[apiAction].safeParse(browserRequest);
     if (!parsed.success) return invalid();
@@ -251,10 +255,10 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (config.production) platforms.add('https://snackmanager.fr');
     if (!platforms.has(origin)) {
       const resolution = await within(fetch(`${config.apiOrigin}/public/resolve?host=${encodeURIComponent(new URL(origin).host)}`, {
-        cache: 'no-store', redirect: 'error', signal, headers: { Accept: 'application/json' },
-      }), signal);
+        cache: 'no-store', redirect: 'error', signal: admissionSignal, headers: { Accept: 'application/json' },
+      }), admissionSignal);
       if (resolution.status !== 200) { discard(resolution); return action === 'status' ? closed() : unavailable(); }
-      const resolved = await boundedJson(resolution, signal, 1_024);
+      const resolved = await boundedJson(resolution, admissionSignal, 1_024);
       if (!resolved || typeof resolved !== 'object' || !('slug' in resolved) || resolved.slug !== slug) {
         return failure(403, 'CUSTOMER_RELAY_REFUSED', 'Ce domaine ne correspond pas au restaurant.');
       }
@@ -274,6 +278,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const validated = CustomerAccountEnvelopes[apiAction].safeParse(envelope);
     if (!validated.success) return invalid();
     const body = JSON.stringify(validated.data);
+    admissionSignal.throwIfAborted();
     const response = await within(fetch(`${config.apiOrigin}/public/customer/${slug}/${apiAction}`, {
       method: 'POST', body, cache: 'no-store', redirect: 'error', signal,
       headers: { Accept: 'application/json', 'Content-Type': 'application/json',

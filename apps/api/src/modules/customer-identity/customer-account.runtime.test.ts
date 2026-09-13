@@ -5,7 +5,7 @@ import { ConflictException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import type { Tenant } from '@sm/db';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository, type CustomerSession } from '@sm/customer';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerAccountRuntime } from './customer-account.runtime';
 import type { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
@@ -13,6 +13,9 @@ import { customerPaidTestEnvironment, customerTestEnvironment } from './customer
 import { customerProductionFixture } from './customer-production.test-fixture';
 import type { TwilioProductionObserver } from './twilio-production-observer';
 import type { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
+import { CustomerVerificationDeadline } from './customer-verification.deadline';
+
+afterEach(() => vi.useRealTimers());
 
 function fixture(paid: boolean | 'production' = false) {
   const browserRef = randomUUID(), operationId = randomUUID();
@@ -695,5 +698,45 @@ describe('published rates with an explicit operator reserve', () => {
     await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
     expect(f.provider.start).not.toHaveBeenCalled();
     expect(f.repository.settleSend).toHaveBeenCalledWith(expect.objectContaining({ verificationSid: null }));
+  });
+});
+
+describe('customer runtime — finite provider operation across delayed reads', () => {
+  it('never sends after the preflight expired while its tenant read was queued', async () => {
+    vi.useFakeTimers(); const f = fixture(); let release!: () => void;
+    f.query.exec.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(f.row); }));
+    const result = f.runtime.execute(f.relay, f.start).catch(error => error);
+    await vi.advanceTimersByTimeAsync(10_000); expect(await result).toMatchObject({ status: 503 });
+    release(); await vi.advanceTimersByTimeAsync(1);
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it('settles the original reservation when preflight expires after SQL reserved its spend', async () => {
+    vi.useFakeTimers(); const f = fixture('production'); let release!: () => void;
+    f.repository.revalidateProductionFunding.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(true); }));
+    const result = f.runtime.execute(f.relay, f.start).catch(error => error);
+    await vi.waitFor(() => expect(f.repository.revalidateProductionFunding).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(10_000); expect(await result).toMatchObject({ status: 503 });
+    release(); await vi.advanceTimersByTimeAsync(1);
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.repository.reserve).toHaveBeenCalledTimes(1);
+    expect(f.repository.settleSend).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ verificationSid: null }));
+  });
+  it('accepts a provider acknowledgement at fifteen seconds with one reservation and one send', async () => {
+    vi.useFakeTimers(); const f = fixture(); let release!: () => void;
+    f.provider.start.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ verificationSid: f.pending.verificationSid }); }));
+    const result = f.runtime.execute(f.relay, f.start);
+    await vi.waitFor(() => expect(f.provider.start).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(15_000); release();
+    expect(await result).toEqual({ challengeId: f.pending.challengeId, expiresAt: f.pending.expiresAt });
+    expect(f.repository.reserve).toHaveBeenCalledTimes(1); expect(f.repository.settleSend).toHaveBeenCalledTimes(1);
+  });
+  it('persists a sent response after client abandonment without a new provider call', async () => {
+    vi.useFakeTimers(); const f = fixture(); let release!: () => void;
+    const deadline = new CustomerVerificationDeadline('start');
+    f.provider.start.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ verificationSid: f.pending.verificationSid }); }));
+    const result = f.runtime.execute(f.relay, f.start, deadline).catch(error => error);
+    await vi.waitFor(() => expect(f.provider.start).toHaveBeenCalledTimes(1));
+    deadline.abort(); expect(await result).toMatchObject({ status: 503 }); release();
+    await vi.waitFor(() => expect(f.repository.settleSend).toHaveBeenCalledWith(expect.objectContaining({ verificationSid: f.pending.verificationSid })));
+    expect(f.provider.start).toHaveBeenCalledTimes(1); expect(f.repository.reserve).toHaveBeenCalledTimes(1);
   });
 });

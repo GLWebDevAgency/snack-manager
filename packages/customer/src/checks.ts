@@ -28,10 +28,30 @@ export async function settleVerification(client: PoolClient, input: Parameters<C
       FROM customer.provider_verifications WHERE parent_ref=$1 AND service_sid=$2 AND verification_sid=$3`,
     [input.parentRef, row.service_sid, input.verificationSid])).rows[0];
     if (owner?.challenge_id === row.id && owner.tenant_ref === input.tenantRef) {
+      // Both timestamps originate in the authenticated provider response. Their
+      // difference needs no alignment of provider/SQL clocks; it does assume
+      // the provider's own UTC timestamps are coherent at their stated precision.
+      // Both dates have second precision: reserve one second per timestamp,
+      // without assuming identical rounding directions in provider components.
+      // The SQL anchor predates the HTTP request, so neither network/lock delay
+      // nor a lost acknowledgement can give an old code a new ten-minute life.
+      const dated = input.providerCreatedAt !== undefined && input.providerObservedAt !== undefined;
+      const age = dated ? input.providerObservedAt! - input.providerCreatedAt! : null;
+      if ((row.funding_kind === 'production_paid' && !dated) || (age !== null && age >= 598_000)) {
+        await client.query(`UPDATE customer.challenges SET state=$4,verification_sid=$5
+          WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3`,
+        [input.parentRef, input.tenantRef, row.id, dated ? 'expired' : 'uncertain', input.verificationSid]);
+        return null;
+      }
       const updated = await client.query<ChallengeRow>(`UPDATE customer.challenges
-        SET state=CASE WHEN expires_at>clock_timestamp() THEN 'pending' ELSE 'expired' END,verification_sid=$4
+        SET state=CASE WHEN LEAST(expires_at,created_at+COALESCE($7::bigint,600000)*interval '1 millisecond')>clock_timestamp()
+          THEN 'pending' ELSE 'expired' END,verification_sid=$4,
+          expires_at=LEAST(expires_at,created_at+COALESCE($7::bigint,600000)*interval '1 millisecond'),
+          provider_created_at=$5,provider_observed_at=$6
         WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 RETURNING *`,
-      [input.parentRef, input.tenantRef, row.id, input.verificationSid]);
+      [input.parentRef, input.tenantRef, row.id, input.verificationSid,
+        dated ? new Date(input.providerCreatedAt!) : null, dated ? new Date(input.providerObservedAt!) : null,
+        age === null ? null : 598_000 - age]);
       return updated.rows[0]?.state === 'pending' && await currentChallenge(client, row)
         ? pendingView((await challenge(client, input, row.id))!) : null;
     }
@@ -129,9 +149,10 @@ export async function completeVerification(client: PoolClient, input: Completion
       browser_ref,browser_hash,browser_generation,phone_hash,encrypted_phone,verified_at,expires_at)
       SELECT $1,$2,$3,$4,$5,$6,$7,i.browser_generation,$8,$9,clock_timestamp(),i.expires_at
       FROM customer.verification_intents i WHERE i.parent_ref=$1 AND i.tenant_ref=$2 AND i.operation_id=$4
-        AND i.proof_hash=$10 AND i.state='open' AND i.expires_at>clock_timestamp()`,
+        AND i.proof_hash=$10 AND i.state='open' AND i.expires_at>clock_timestamp()
+        AND $11::timestamptz>clock_timestamp()`,
     [input.parentRef, input.tenantRef, input.checkId, input.operationId, input.challengeId,
-      input.browserRef, input.browserHash, row.phone_hash, row.encrypted_phone, input.proofHash]);
+      input.browserRef, input.browserHash, row.phone_hash, row.encrypted_phone, input.proofHash, row.expires_at]);
     if (created.rowCount !== 1) throw new CustomerRepositoryError('unavailable');
     await client.query(`UPDATE customer.check_attempts SET state='verified',enrollment_id=id,completed_at=clock_timestamp()
       WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 AND state='checking'`, [input.parentRef, input.tenantRef, input.checkId]);

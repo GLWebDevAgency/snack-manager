@@ -13,7 +13,7 @@ export class CustomerAccountController {
   @Post(':slug/:action')
   async action(@Req() request: CustomerAccountRequest, @Res() response: Response): Promise<void> {
     if (!request.customerRelay) throw customerHttpError('relay');
-    const result = await this.runtime.execute(request.customerRelay, request.body);
+    const result = await this.runtime.execute(request.customerRelay, request.body, request.customerDeadline);
     if (request.customerRelay.action === 'logout') { response.status(204).end(); return; }
     response.status(200).json(result);
   }

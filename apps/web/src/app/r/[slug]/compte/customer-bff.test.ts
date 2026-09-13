@@ -757,3 +757,72 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 });
+
+describe('verification relay budgets', () => {
+  function clock() {
+    vi.useFakeTimers();
+    return vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const abort = new AbortController(); setTimeout(() => abort.abort(), ms); return abort.signal;
+    });
+  }
+  function invoke(action: 'start' | 'check', requestOrigin = origin) {
+    return action === 'start'
+      ? start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'challenge' }, { cookie: boundCookies }, requestOrigin), context)
+      : check(req('confirmation', 'POST', { operationId, challengeId, checkId, code: '123456' }, { cookie: boundCookies }, requestOrigin), context);
+  }
+  it.each(['start', 'check'] as const)('accepts a delayed %s response after the old ten-second cutoff without retrying', async action => {
+    clock(); let resolve!: (response: Response) => void;
+    mockFetch.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const pending = invoke(action);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(mockFetch.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+    resolve(Response.json(action === 'start' ? { challengeId, expiresAt: Date.now() + 60_000 }
+      : { state: 'authenticated', token: sessionToken, view: view() }));
+    const response = await pending;
+    expect(response.status).toBe(200); privateHeaders(response);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    if (action === 'check') expect(response.headers.get('set-cookie')).toContain(sessionCookie);
+  });
+  it.each([
+    ['start', 60_000, 'headers'], ['start', 60_000, 'body'],
+    ['check', 40_000, 'headers'], ['check', 40_000, 'body'],
+  ] as const)('bounds %s %s ms through silent %s without publishing credentials or retrying', async (action, budget, phase) => {
+    const timeout = clock(); const cancelled = vi.fn();
+    mockFetch.mockImplementation(() => phase === 'headers' ? new Promise(() => undefined)
+      : Promise.resolve(new Response(new ReadableStream({ cancel: cancelled }), { headers: { 'Content-Type': 'application/json' } })));
+    const pending = invoke(action); let finished = false; void pending.then(() => { finished = true; });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    // The separate five-second admission timer must not cut off an already-dispatched request.
+    await vi.advanceTimersByTimeAsync(30_000); expect(finished).toBe(false);
+    await vi.advanceTimersByTimeAsync(budget - 30_000);
+    const response = await pending;
+    expect(timeout).toHaveBeenCalledWith(budget);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull(); privateHeaders(response);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    expect(cancelled).toHaveBeenCalledTimes(phase === 'body' ? 1 : 0);
+  });
+  it('never dispatches a start after a domain lookup exceeds its five-second admission budget', async () => {
+    clock(); const custom = 'https://restaurant.example.test';
+    vi.stubEnv('SM_CUSTOMER_PILOT_ORIGINS', JSON.stringify([origin, custom]));
+    let resolve!: (response: Response) => void;
+    mockFetch.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const pending = invoke('start', custom);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/resolve?host=restaurant.example.test`);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect((await pending).status).toBe(503);
+    resolve(Response.json({ slug: 'classfood' })); await vi.advanceTimersByTimeAsync(0);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+  it('never dispatches after route admission itself is delayed beyond five seconds', async () => {
+    clock(); let resolve!: (value: { slug: string }) => void;
+    const pending = start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'challenge' },
+      { cookie: boundCookies }), { params: new Promise(done => { resolve = done; }) });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect((await pending).status).toBe(503);
+    resolve({ slug: 'classfood' }); await vi.advanceTimersByTimeAsync(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});

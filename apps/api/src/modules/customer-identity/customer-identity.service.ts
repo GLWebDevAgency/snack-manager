@@ -265,6 +265,7 @@ export class CustomerIdentityService {
       if (reserved.kind !== 'reserved') throw new CustomerIdentityError('unavailable');
 
       let sid: string;
+      let started: Awaited<ReturnType<PhoneVerificationTransport['start']>>;
       try {
         await this.beforeProvider();
         await this.requireIntent(this.intentBinding(input));
@@ -282,13 +283,15 @@ export class CustomerIdentityService {
           throw new CustomerIdentityError('unavailable');
         }
         // No automatic retry, even if the provider sent but its answer was lost.
-        sid = (await this.transport.start({ phone: input.phone, serviceSid: plan.serviceSid })).verificationSid;
+        started = await this.transport.start({ phone: input.phone, serviceSid: plan.serviceSid });
+        sid = started.verificationSid;
       } catch {
         await this.repository.settleSend({ ...scope, challengeId: reserved.challengeId, verificationSid: null, now: this.now() });
         throw new CustomerIdentityError('unavailable');
       }
       const pending = await this.repository.settleSend({
         ...scope, challengeId: reserved.challengeId, verificationSid: sid, now: this.now(),
+        providerCreatedAt: started?.providerCreatedAt, providerObservedAt: started?.providerObservedAt,
       });
       if (!pending) throw new CustomerIdentityError('unavailable');
       await this.requireIntent(this.intentBinding(input));
