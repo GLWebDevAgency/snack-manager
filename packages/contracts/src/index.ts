@@ -697,6 +697,7 @@ export const WS_EVENTS = {
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 export * from './staff-order-attempt';
 export * from './customer-account';
+export * from './customer-account-timing';
 export * from './customer-sale-attribution';
 
 /** Canal Redis pub/sub par tenant. */

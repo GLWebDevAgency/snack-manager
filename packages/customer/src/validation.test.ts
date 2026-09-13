@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { reservationSchema, sessionSchema, nameSchema, revocationSchema, browserPreparationSchema, browserBindingSchema, browserIssueSchema,
-  intentBindingSchema, intentCloseSchema, intentResultSchema, claimSchema } from './validation';
+  intentBindingSchema, intentCloseSchema, intentResultSchema, claimSchema, settlementSchema } from './validation';
 
 const common = { smsUnitsReservedPerSend: 1, cooldownMs: 60_000, windowMs: 86_400_000,
   globalSendReservations: 10, tenantSendReservations: 10, phoneSendReservations: 3,
@@ -9,11 +9,41 @@ const trial = { ...common, trialSendReservations: 50, freeSmsUnitsRemainingAtObs
 const paidBudget = { mode: 'paid', authorizationRef: 'fixture', costEvidenceReference: 'cost_fixture', currency: 'USD', authorizedSpendMicrousd: 1000,
   reservePerSendMicrousd: 600, expiresAt: 2_000_000_000_000 };
 const paid = { ...common, maxSendReservations: 50, paidBudget };
+const production = { ...common, productionBudget: { mode: 'production_paid', authorizationRef: 'fixture',
+  costEvidenceReference: 'cost_fixture', currency: 'USD', reservePerSendMicrousd: 600 } };
+describe('provider timestamp settlement boundary', () => {
+  const input = { parentRef: 'parent', tenantRef: 'tenant', now: 1,
+    challengeId: '11111111-1111-4111-8111-111111111111', verificationSid: `VE${'a'.repeat(32)}` };
+  it('retains the legacy port shape but requires a complete pair when dates are supplied', () => {
+    expect(settlementSchema.safeParse(input).success).toBe(true);
+    expect(settlementSchema.safeParse({ ...input, providerCreatedAt: 1000, providerObservedAt: 2000 }).success).toBe(true);
+    expect(settlementSchema.safeParse({ ...input, providerCreatedAt: 1000 }).success).toBe(false);
+    expect(settlementSchema.safeParse({ ...input, providerObservedAt: 2000 }).success).toBe(false);
+  });
+  it.each([NaN, Infinity, -1, 1000.1, 1001, null, '1000'])('refuses unsafe dates %s', value => {
+    expect(settlementSchema.safeParse({ ...input, providerCreatedAt: value, providerObservedAt: 2000 }).success).toBe(false);
+    expect(settlementSchema.safeParse({ ...input, providerCreatedAt: 1000, providerObservedAt: value }).success).toBe(false);
+  });
+  it('refuses creation after observation and dates without a correlated SID', () => {
+    expect(settlementSchema.safeParse({ ...input, providerCreatedAt: 3000, providerObservedAt: 2000 }).success).toBe(false);
+    expect(settlementSchema.safeParse({ ...input, verificationSid: null, providerCreatedAt: 1000, providerObservedAt: 2000 }).success).toBe(false);
+  });
+});
 describe('verification funding input boundaries', () => {
   const limits = reservationSchema.shape.limits;
   it('accepts the original Trial shape and a separate Paid shape without free credits', () => {
     expect(limits.safeParse(trial).success).toBe(true);
     expect(limits.safeParse(paid).success).toBe(true);
+  });
+  it.each([1, 5, 6, 1000])('accepts an explicit production IP limit of %i', ipSendReservations => {
+    expect(limits.safeParse({ ...production, ipSendReservations }).success).toBe(true);
+  });
+  it.each([0, 1001, 1.5, undefined])('rejects an invalid production IP limit %s', ipSendReservations => {
+    expect(limits.safeParse({ ...production, ipSendReservations }).success).toBe(false);
+  });
+  it.each([trial, paid])('keeps the pilot IP ceiling at five', input => {
+    for (const ipSendReservations of [1, 5]) expect(limits.safeParse({ ...input, ipSendReservations }).success).toBe(true);
+    for (const ipSendReservations of [6, 1000]) expect(limits.safeParse({ ...input, ipSendReservations }).success).toBe(false);
   });
   it.each([
     { ...trial, paidBudget }, { ...paid, freeSmsUnitsRemainingAtObservation: 1 },

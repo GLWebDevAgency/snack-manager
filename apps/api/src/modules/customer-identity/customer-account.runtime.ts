@@ -19,6 +19,7 @@ import { customerCommerce } from './customer-commerce';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
 import { CustomerSaleAttributionService } from './customer-sale-attribution.service';
 import { CustomerOrderAuthorityLost } from '../orders/order-admission.errors';
+import { customerVerificationDeadline, type CustomerVerificationDeadline } from './customer-verification.deadline';
 
 export const CUSTOMER_IDENTITY_REPOSITORY = Symbol('CUSTOMER_IDENTITY_REPOSITORY');
 export const CUSTOMER_VERIFICATION_TRANSPORT_FACTORY = Symbol('CUSTOMER_VERIFICATION_TRANSPORT_FACTORY');
@@ -40,8 +41,13 @@ export class CustomerAccountRuntime {
     @Optional() @Inject(CustomerSaleAttributionService) private readonly saleAttribution?: CustomerSaleAttributionService,
     @Optional() @Inject(TwilioProductionObserver) private readonly observer?: TwilioProductionObserver) {}
 
-  async execute(relay: CustomerRelay, raw: unknown): Promise<unknown> {
-    try {
+  async execute(relay: CustomerRelay, raw: unknown,
+    deadline = customerVerificationDeadline(relay.action)): Promise<unknown> {
+    try { return await (deadline ? deadline.run(() => this.executeWithin(relay, raw, deadline)) : this.executeWithin(relay, raw)); }
+    catch (error) { throw customerSafeError(error); }
+  }
+
+  private async executeWithin(relay: CustomerRelay, raw: unknown, deadline?: CustomerVerificationDeadline): Promise<unknown> {
       const access = this.access(relay); await this.tenant(access);
       const spends = relay.action === 'start' || relay.action === 'check';
       let observation: unknown;
@@ -71,11 +77,17 @@ export class CustomerAccountRuntime {
           registrationAvailable: true, accessAvailable: true };
       }
       if (spends && !send) throw new CustomerIdentityError('unavailable');
-      const transport = spends && send ? this.transportFactory(send.transport) : closedTransport;
+      const provider = spends && send ? this.transportFactory(send.transport) : closedTransport;
+      const transport: PhoneVerificationTransport = deadline ? {
+        start: input => deadline.provider(() => provider.start(input)),
+        check: input => deadline.provider(() => provider.check(input)),
+      } : provider;
       const beforeProvider = async () => {
+        deadline?.assertPreflight();
         // A PG lock wait must not preserve permission to spend for a tenant
         // suspended while waiting. Check again at the last controllable boundary.
         await observe(); await this.tenant(access); this.access(relay, access);
+        deadline?.assertPreflight();
         // The core revalidates its plan and immutable funding synchronously
         // after this await, immediately before the provider. A check may use a
         // fresh cost attestation only when its original reservation covers it.
@@ -111,9 +123,11 @@ export class CustomerAccountRuntime {
         case 'start': {
           const input = this.input('start', raw);
           await core.requireIntent({ ...binding!, operationId: input.request.operationId, intentProof: input.intentProof });
+          deadline?.assertPreflight();
           const verified = await this.human.verify({ secret: send!.turnstileSecret, token: input.request.turnstileToken,
             origin: relay.origin, slug: relay.slug, operationId: input.request.operationId });
           if (!verified) throw new CustomerIdentityError('invalid_request');
+          deadline?.assertPreflight();
           this.access(relay, access); await this.tenant(access);
           result = await core.start({ ...binding!, intentProof: input.intentProof, phone: input.request.phone, operationId: input.request.operationId,
             clientIp: `relay:${relay.client}`, humanVerified: true });
@@ -236,7 +250,6 @@ export class CustomerAccountRuntime {
         if (expiresAt !== null && expiresAt <= Date.now()) throw new CustomerIdentityError('unauthorized');
       }
       return response;
-    } catch (error) { throw customerSafeError(error); }
   }
 
   private input<A extends CustomerAccountAction>(action: A, raw: unknown): CustomerAccountEnvelope<A> {

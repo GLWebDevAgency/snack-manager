@@ -197,7 +197,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationsTable: '__drizzle_customer_migrations',
       };
       const customerMigrations = readMigrationFiles(customerMigrationConfig);
-      expect(customerMigrations).toHaveLength(11);
+      expect(customerMigrations).toHaveLength(12);
       const customerDialect = new PgDialect();
       const customerDriver = new NodePgDriver(freshMigrationPool, customerDialect);
       // Rejoue les trois SQL historiques inchangés avec le vrai migrateur :
@@ -392,7 +392,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       });
       expect(protectedReport.issues).toEqual([]);
       // The manifest includes future objects; the 0008 bridge is still absent.
-      expect(protectedReport.objects).toHaveLength(106);
+      expect(protectedReport.objects).toHaveLength(107);
       for (const name of protectedTables) {
         await expect(freshMigrationPool.query(
           `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
@@ -464,7 +464,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationRole, runtimeRole,
       });
       expect(accessReport.issues).toEqual([]);
-      expect(accessReport.objects).toHaveLength(106);
+      expect(accessReport.objects).toHaveLength(107);
       expect((await freshMigrationPool.query(`SELECT 1 FROM pg_catalog.pg_constraint
         WHERE conrelid='customer.passkey_credentials'::regclass
           AND conname='passkey_credentials_parent_ref_tenant_ref_account_id_key'`)).rows).toEqual([]);
@@ -519,7 +519,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       const loyaltyJournalBefore = (await freshMigrationPool.query(
         'SELECT hash,created_at FROM drizzle.__drizzle_loyalty_migrations ORDER BY created_at',
       )).rows;
-      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      await customerDialect.migrate(customerMigrations.slice(0, 11), customerDriver.createSession(undefined), customerMigrationConfig);
       await grantCustomerRuntimeRole(freshMigrationPool, runtimeRole);
       await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
         migrationRole, runtimeRole,
@@ -543,10 +543,48 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       expect(afterMemberships).toHaveLength(11);
       expect(afterMemberships.slice(0, 8)).toEqual(afterAccess.rows);
       expect(afterMemberships[8]).toEqual({ hash: customerMigrations[8]!.hash, created_at: '1788930000000' });
+      expect((await freshMigrationPool.query(
+        "SELECT pg_catalog.to_regprocedure('customer.guard_provider_freshness()') AS guard",
+      )).rows).toEqual([{ guard: null }]);
+      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      const afterFreshness = (await freshMigrationPool.query(
+        'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      )).rows;
+      expect(afterFreshness).toHaveLength(12);
+      expect(afterFreshness.slice(0, 11)).toEqual(afterMemberships);
+      expect(afterFreshness[11]).toEqual({ hash: customerMigrations[11]!.hash, created_at: '1788951600000' });
+      // The trigger function belongs to the migrator, executes with invoker
+      // rights and grants neither PUBLIC nor runtime standalone EXECUTE.
+      expect((await freshMigrationPool.query(`SELECT pg_catalog.pg_get_userbyid(p.proowner) AS owner,
+        p.prorettype='trigger'::regtype AS returns_trigger,p.prosecdef AS security_definer,
+        p.proconfig AS configuration,has_function_privilege($1,p.oid,'EXECUTE') AS runtime_execute,
+        has_function_privilege($2,p.oid,'EXECUTE') AS migrator_execute,
+        EXISTS(SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a
+          WHERE a.grantee<>p.proowner) AS external_acl
+        FROM pg_catalog.pg_proc p WHERE p.oid='customer.guard_provider_freshness()'::regprocedure`,
+      [runtimeRole,migrationRole])).rows).toEqual([{
+        owner:migrationRole,returns_trigger:true,security_definer:false,
+        configuration:['search_path=pg_catalog, pg_temp'],runtime_execute:false,migrator_execute:true,external_acl:false,
+      }]);
+      expect((await freshMigrationPool.query(`SELECT t.tgenabled AS enabled,t.tgtype::int AS type,
+        c.relrowsecurity AS rls,c.relforcerowsecurity AS forced_rls
+        FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
+        WHERE t.tgname='provider_freshness_guard' AND t.tgrelid='customer.challenges'::regclass
+          AND t.tgfoid='customer.guard_provider_freshness()'::regprocedure AND NOT t.tgisinternal`)).rows)
+        .toEqual([{ enabled:'O',type:23,rls:true,forced_rls:true }]);
       await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
       expect((await freshMigrationPool.query(
         'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
-      )).rows).toEqual(afterMemberships);
+      )).rows).toEqual(afterFreshness);
+      await freshMigrationPool.query('ALTER FUNCTION customer.guard_provider_freshness() RENAME TO provider_freshness_drift_probe');
+      try {
+        await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), { migrationRole,runtimeRole }))
+          .rejects.toMatchObject({ report:{ issues:expect.arrayContaining([
+            expect.objectContaining({ code:'missing_object',target:'customer.guard_provider_freshness()' }),
+          ]) } });
+      } finally {
+        await freshMigrationPool.query('ALTER FUNCTION customer.provider_freshness_drift_probe() RENAME TO guard_provider_freshness');
+      }
       expect((await freshMigrationPool.query(
         'SELECT hash,created_at FROM drizzle.__drizzle_loyalty_migrations ORDER BY created_at',
       )).rows).toEqual(loyaltyJournalBefore);
@@ -720,7 +758,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       ).resolves.toMatchObject({ rows: [{ count: 0 }] });
       await expect(
         runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
-      ).resolves.toMatchObject({ rows: [{ count: 11 }] });
+      ).resolves.toMatchObject({ rows: [{ count: 12 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont

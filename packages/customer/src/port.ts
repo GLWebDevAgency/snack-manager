@@ -147,6 +147,8 @@ export interface CustomerIdentityRepository extends CustomerEnrollmentRepository
   settleSend(input: CustomerScope & {
     challengeId: string;
     verificationSid: string | null;
+    providerCreatedAt?: number;
+    providerObservedAt?: number;
     now: number;
   }): Promise<PendingChallenge | null>;
   claimCheck(input: CheckClaim): Promise<PendingChallenge | null>;

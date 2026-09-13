@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from 'playwright';
 import { NextRequest } from 'next/server';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerAccountActionSchema, CustomerAccountEnvelopes, type CustomerAccountView } from '@sm/contracts';
+import { CustomerAccountActionSchema, CustomerAccountEnvelopes, customerAccountRequestTimeoutMs, type CustomerAccountView } from '@sm/contracts';
 import { customerAccount } from '../../app/r/[slug]/compte/customer-bff';
 import type { CustomerBrowserJournal } from './browser-journal';
 import type { CustomerBrowserPreparationResult } from './browser-preparation';
@@ -32,6 +32,9 @@ const refB = '20000000-0000-4000-8000-000000000002';
 const browserCookie = '__Host-sm_customer_browser_classfood';
 const sessionCookie = '__Host-sm_customer_session_classfood';
 const intentCookie = (id: string) => `__Host-sm_customer_intent_classfood_${id}`;
+const startRequestTimeoutMs = customerAccountRequestTimeoutMs('start', 'browser');
+// Harness scheduling/IPC allowance; never replaces the native request timer.
+const deadlineObservationMarginMs = 5_000;
 type BrowserRow = { browserRef: string; secret: string | null; confirmed: boolean; admissionExpiresAt: number; expiresAt: number };
 type IntentRow = { operationId: string; browserRef: string; proof: string; expiresAt: number; closed: boolean;
   challengeId: string | null; checkId: string | null; result: 'unresolved' | 'code_required' | 'incorrect' | 'approved';
@@ -275,16 +278,26 @@ describe('Customer verification — native browser continuity through the real B
 
   it('a real native fetch deadline keeps the admitted start uncertain until a result read, never a second send', async () => {
     await begin(); holdAction = 'start';
-    const sending = page.evaluate(() => window.verificationFixture.start());
+    const sending = page.evaluate(async () => {
+      const began = performance.now();
+      const outcome = await window.verificationFixture.start();
+      return { outcome, elapsedMs: performance.now() - began };
+    });
     await expect.poll(() => held !== null).toBe(true);
-    // Real AbortSignal.timeout(12_000), no fake clock or replaced fetch. The
-    // simulated upstream has admitted the send; its BFF response stays held.
-    expect(await sending).toEqual({ kind: 'uncertain' });
+    // Real AbortSignal.timeout from the shared browser budget, no fake clock
+    // or replaced native fetch. The simulated upstream admitted the send;
+    // its BFF response stays held until the browser itself cancels the request.
+    const { outcome, elapsedMs } = await sending;
+    expect(outcome).toEqual({ kind: 'uncertain' });
+    // Allow only timer quantization below the budget, and bounded scheduling
+    // overhead above it. An old twelve-second deadline must fail this recipe.
+    expect(elapsedMs).toBeGreaterThanOrEqual(startRequestTimeoutMs - 100);
+    expect(elapsedMs).toBeLessThanOrEqual(startRequestTimeoutMs + deadlineObservationMarginMs);
     expect((await page.evaluate(() => window.verificationFixture.journal()))!.verification!.phase).toBe('starting');
     expect(await page.evaluate(() => window.verificationFixture.start())).toEqual({ kind: 'blocked' });
     expect(await page.evaluate(() => window.verificationFixture.resume())).toEqual({ kind: 'code_required' });
     expect(calls.filter(call => call === 'start')).toHaveLength(1);
-  }, 20_000);
+  }, startRequestTimeoutMs + 2 * deadlineObservationMarginMs);
 
   it.each(['headers', 'body'] as const)('lost check %s and lost result remain checking, then recover without another OTP check', async mode => {
     await start(); losses.push({ action: 'check', mode }, { action: 'recover', mode });

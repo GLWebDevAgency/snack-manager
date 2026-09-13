@@ -207,9 +207,47 @@ L’adaptateur relit uniquement le service Verify en GET authentifié, conserve 
 cache de cinq minutes et effectue une nouvelle lecture au besoin après cette durée.
 La validité technique maximale du plan est de quinze minutes. Un échec de
 lecture ne rajeunit pas l’ancien succès. L’API de service ne prouve pas à elle
-seule que SMS et Fraud Guard sont activés ni la durée maximale du code : ces
-protections sont attestées séparément dans `safeguards`. L’empreinte des sept
+seule que SMS et Fraud Guard sont activés : ces protections sont attestées
+séparément dans `safeguards`. L’empreinte des sept
 paramètres exposés doit encore correspondre au service réellement lu.
+
+### Ancienneté du code et délais d'attente
+
+Les protections acceptent soit l'attestation historique
+`maxTokenValiditySeconds` (au plus 600 secondes réellement vérifiées), soit
+`codeValidityModel: "local_provider_age_v1"`. Cette seconde forme ne prétend
+pas connaître la durée configurée chez Twilio. Les deux variantes sont
+exclusives ; l'ancien runtime refuse la nouvelle configuration.
+
+La nouvelle forme exige la migration `0011` et les dates `date_created` et
+HTTP `Date` de la réponse authentifiée d'envoi. Toute réponse avec un en-tête
+`Age`, même nul, ou une paire de dates absente/incohérente est refusée. SQL
+calcule une échéance au plus tard à la date de réservation initiale plus
+598 secondes, moins l'ancienneté fournisseur. Les deux secondes couvrent la
+précision des dates ; la cohérence des horloges internes du fournisseur reste
+une hypothèse explicite, pas une garantie apportée par TLS. Aucun délai réseau
+ou acquittement perdu ne renouvelle l'ancre SQL. La migration expire les
+tentatives de production encore actives sans cette preuve, conserve leurs
+débits/reçus et bloque les anciens écrivains dépourvus de dates.
+
+Une réponse perdue peut encore laisser un code actif chez Twilio. Le prochain
+envoi peut alors être refusé localement pour ancienneté sans rendre son coût
+remboursable. Aucune annulation fournisseur, nouvelle tentative automatique
+ou restitution de quota n'est ajoutée.
+
+Les budgets d'attente sont partagés par les clients web et les futurs clients
+Expo, indépendamment de la durée du code et de l'autorisation de dépenser :
+
+| Opération | Transport fournisseur | API totale | Relais web | Navigateur |
+|---|---:|---:|---:|---:|
+| Envoi SMS | 30 s | 50 s | 60 s | 70 s |
+| Vérification du code | 10 s | 30 s | 40 s | 50 s |
+
+Le préflight API dispose de 10 secondes et la finalisation de 10 secondes.
+Une continuation tardive du préflight ne peut plus démarrer d'appel fournisseur.
+Une fois cet appel engagé, sa finalisation SQL continue même si l'attente HTTP
+expire ou si le client se déconnecte. L'exclusion temporaire d'un même téléphone
+dure 650 secondes et n'allonge jamais la validité du challenge.
 
 ### Tarif publié et réserve opérateur
 
@@ -302,18 +340,22 @@ sur `main`, ni configuration ou établissement en production. GitHub permet de
 [sélectionner une autre branche d’un workflow déjà enregistré](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 et [résout l’appel relatif au même commit](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
 
-Préparer un fichier d’entrées Actions contenant `environnement: "staging"`,
-`serie: "operateur-compte-staging"`, `expected_sha` (40 caractères), `request`
-(le document opérateur sérialisé en chaîne JSON) et `apply: false`. Aucun secret,
-URL PostgreSQL ou renseignement client dans ce fichier : ces entrées sont
-visibles dans Actions. Le document opérateur est limité à 64 Kio par ce pont.
+Préparer un objet JSON pour `gh workflow run --json` dont **toutes les valeurs
+sont des chaînes** : `"environnement": "staging"`,
+`"serie": "operateur-compte-staging"`, `"expected_sha": "…"` (40 caractères),
+`"request": "…"` (le document opérateur sérialisé en chaîne JSON) et
+`"apply": "false"`. Le CLI `gh` refuse le booléen JSON `false` à cet endroit ;
+l’entrée `apply` du workflow reste bien de type booléen. Aucun secret, URL
+PostgreSQL ou renseignement client dans ce fichier : ces entrées sont visibles
+dans Actions. Le document opérateur est limité à 64 Kio par ce pont.
 
 ```sh
 gh workflow run e2e.yml --ref develop --json < /chemin/operateur-staging.json
 ```
 
 Examiner le résultat `planned` avant de transmettre le même document avec
-`apply: true`. Aucune somme ni limite n’est fournie par défaut. La garde refuse
+`"apply": "true"` dans le fichier destiné à `gh`. Aucune somme ni limite n’est
+fournie par défaut. La garde refuse
 `main`, la production, les branches de travail, un déclenchement automatique ou
 un SHA différent. La tête de `develop` est relue avant toute application ; si
 elle a avancé, revoir la nouvelle révision et refaire le dry-run.
@@ -398,17 +440,31 @@ vide, et l'hôte Turnstile autorisé est `snackmanager.fr`. Il faut donc prépar
 l'établissement et ses origines de production avant de prétendre y activer son
 compte client. Le service Verify observé précédemment est dédié au staging.
 
-L'opérateur a autorisé la configuration Twilio, la recette sur son numéro
-contrôlé et la préparation de production. La session Console a depuis expiré ;
-l'autorisation de modifier la clé ne remplace pas une session authentifiée.
-La durée effective du code reste à vérifier : les dix minutes par défaut
-peuvent être modifiées via Support. Ne pas supprimer cette preuve au motif que
-le challenge SQL dure dix minutes : après une réponse d'envoi perdue, un code
-fournisseur plus ancien pourrait encore être retourné lors d'un nouvel envoi.
+### Mise à jour du 13 septembre — recette limitée au staging
 
-La nouvelle présentation de la carte et la preuve de réserve opérateur sont
-un lot distinct de la révision déployée ci-dessus. Leur livraison et les
-résultats d'activation réels seront consignés après exécution. Aucun état
+L'opérateur a confirmé que les restaurants de production seront créés par lui
+ultérieurement : la validation actuelle porte uniquement sur Classfood staging.
+Après reconnexion, la permission de lecture du service Verify a été enregistrée
+et l'observateur serveur a obtenu une réponse authentifiée. La Console exige
+encore un Primary Compliance Profile approuvé pour les destinataires non
+vérifiés. La validation vocale du numéro contrôlé est une préparation du compte
+de test ; elle ne fait pas partie de l'inscription fidélité des clients.
+
+Un SMS de diagnostic est confirmé livré par le fournisseur et reçu par
+l'opérateur. Sa requête HTTP avait expiré après dix secondes : la livraison a
+été rapprochée ensuite en lecture seule par service, destinataire et fenêtre
+temporelle. Ce code n'a servi ni à créer un compte ni à valider une passkey.
+Ce constat motive les délais d'attente et la preuve d'ancienneté décrits plus
+haut. Il ne confirme toujours pas la durée configurée du code chez Twilio.
+
+La présentation de la carte et les outils opérateur ont été livrés par la
+[PR 183](https://github.com/GLWebDevAgency/snack-manager/pull/183), révision
+`453697af074b828215196023e0e80df9a249ac53`. Son
+[déploiement staging](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34757293020)
+a réussi, avec huit contrôles de santé et onze migrations client vérifiées.
+À ce relevé, le mode compte est toujours absent et aucun compte client n'est
+créé. La nouvelle migration d'ancienneté et les délais sont un lot suivant ;
+leur livraison et la recette d'inscription restent à établir. Aucun état
 `configuration_valid`, test simulé ni numéro autorisé ne signifie à lui seul
 qu'un SMS a été reçu, qu'une clé d'accès a été créée ou que la production est
 ouverte.

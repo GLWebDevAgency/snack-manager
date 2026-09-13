@@ -148,6 +148,15 @@ describe('private customer identity orchestration', () => {
     expect(JSON.stringify(stored)).not.toContain(BROWSER);
     expect(f.transport.start).toHaveBeenCalledExactlyOnceWith({ phone: PHONE, serviceSid: SERVICE });
   });
+  it('forwards authenticated provider dates only to durable settlement, never to the browser', async () => {
+    const f = fixture();
+    vi.mocked(f.transport.start).mockResolvedValue({ verificationSid: SID,
+      providerCreatedAt: 1_800_000_000_000, providerObservedAt: 1_800_000_002_000 });
+    expect(await f.service.start(f.start)).toEqual({ challengeId: pending.challengeId, expiresAt: pending.expiresAt });
+    expect(f.repository.settleSend).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      verificationSid: SID, providerCreatedAt: 1_800_000_000_000, providerObservedAt: 1_800_000_002_000,
+    }));
+  });
   it.each(['denied', 'uncertain'] as const)('does not send when durable reservation is %s', async kind => {
     const f = fixture(); f.repository.reserve.mockResolvedValue({ kind });
     await expect(f.service.start(f.start)).rejects.toMatchObject({ reason: 'unavailable' });

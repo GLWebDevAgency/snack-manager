@@ -14,6 +14,7 @@ import {
   CUSTOMER_INITIAL_MIGRATION,
   CUSTOMER_PAID_BUDGET_MIGRATION,
   CUSTOMER_BROWSER_CONTINUITY_MIGRATION,
+  CUSTOMER_PROVIDER_FRESHNESS_MIGRATION,
   LOYALTY_EARN_RECEIPTS_MIGRATION,
   LOYALTY_INITIAL_MIGRATION,
   POSTGRES_MANAGED_OBJECTS,
@@ -512,11 +513,14 @@ function parseCallableHeader(
   keyword: 'FUNCTION' | 'PROCEDURE' | 'AGGREGATE',
 ): { schema: string; name: string; arguments: string } | null {
   const replace = keyword === 'AGGREGATE' ? '' : '(?:OR\\s+REPLACE\\s+)?';
+  const identifier = '(?:"(?:[^"]|"")+"|[a-z_][a-z0-9_$]*)';
   const prefix = new RegExp(
-    `^CREATE\\s+${replace}${keyword}\\s+(?:"([^"]+)"\\.)?"([^"]+)"\\s*\\(`,
+    `^CREATE\\s+${replace}${keyword}\\s+(?:(${identifier})\\s*\\.\\s*)?(${identifier})\\s*\\(`,
     'i',
   ).exec(sql);
   if (!prefix) return null;
+  const name = (value: string) => value.startsWith('"')
+    ? value.slice(1, -1).replaceAll('""', '"') : value.toLowerCase();
   const opening = prefix[0].lastIndexOf('(');
   let depth = 1;
   let quoted = false;
@@ -535,8 +539,8 @@ function parseCallableHeader(
     if (character === ')' || character === ']') depth -= 1;
     if (depth === 0) {
       return {
-        schema: prefix[1] ?? 'public',
-        name: prefix[2]!,
+        schema: prefix[1] ? name(prefix[1]) : 'public',
+        name: name(prefix[2]!),
         arguments: sql.slice(opening + 1, index),
       };
     }
@@ -719,14 +723,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 106 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(106);
+  it('énumère exactement les 107 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(107);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(54);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(25);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(106);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(26);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(107);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -791,6 +795,14 @@ describe('manifeste PostgreSQL versionné', () => {
     for (const object of publications) {
       expect(object).toMatchObject({ journal: 'customer', introducedAt: sessionPublicationsMigration });
     }
+  });
+
+  it('rattache la garde de fraîcheur fournisseur exclusivement à customer 0011', () => {
+    const objects = POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === CUSTOMER_PROVIDER_FRESHNESS_MIGRATION);
+    expect(objects).toEqual([{
+      kind: 'function', schema: 'customer', name: 'guard_provider_freshness', identityArguments: '',
+      journal: 'customer', introducedAt: 1_788_951_600_000,
+    }]);
   });
 
   it('rattache exhaustivement chaque CREATE autonome à son fichier et journal Drizzle', () => {
@@ -914,6 +926,22 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(protectedAccessMigration);
     expect(customer.entries.find((entry) => entry.tag === '0008_customer_loyalty_memberships')?.when)
       .toBe(loyaltyMembershipsMigration);
+    expect(customer.entries.find((entry) => entry.tag === '0011_customer_provider_freshness')?.when)
+      .toBe(CUSTOMER_PROVIDER_FRESHNESS_MIGRATION);
+  });
+
+  it.each([
+    ['CREATE FUNCTION customer.guard_provider_freshness()', 'customer', 'guard_provider_freshness'],
+    ['CREATE FUNCTION CUSTOMER.Guard_Provider_Freshness()', 'customer', 'guard_provider_freshness'],
+    ['CREATE OR REPLACE FUNCTION "Customer".guard_provider_freshness()', 'Customer', 'guard_provider_freshness'],
+    ['CREATE FUNCTION guard_provider_freshness()', 'public', 'guard_provider_freshness'],
+    ['CREATE FUNCTION "Cus""tomer"."Guard""Freshness"()', 'Cus"tomer', 'Guard"Freshness'],
+  ])('inventorie aussi une signature non citée ou mixte : %s', (header, schema, name) => {
+    expect(discoverCreatedObject(`${header} RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$`,
+      'customer', CUSTOMER_PROVIDER_FRESHNESS_MIGRATION)).toEqual({
+      kind: 'function', schema, name, identityArguments: '', journal: 'customer',
+      introducedAt: CUSTOMER_PROVIDER_FRESHNESS_MIGRATION,
+    });
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {

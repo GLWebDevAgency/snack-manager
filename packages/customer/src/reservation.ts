@@ -84,9 +84,12 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
     funding.mode !== 'trial' ? new Date(funding.expiresAt) : null, 'paidBudget' in l ? l.paidBudget.costEvidenceReference
       : 'productionBudget' in l ? l.productionBudget.costEvidenceReference : null, funding.mode==='production_paid' ? funding.authorizationRef : null]);
   // Provider exclusion is independent of a shorter application/evidence expiry.
-  // Pilot prerequisite: provider validity is attested at 10 min; 5 s covers transport.
+  // Legacy pilots additionally attest provider validity at 10 min. In production
+  // this exclusion does NOT establish provider expiry: settlement independently
+  // bounds age from the authenticated resource/HTTP dates and original SQL time.
+  // Fifty seconds also cover the complete API send envelope, not only HTTP.
   await client.query(`INSERT INTO customer.phone_guards(parent_ref,global_phone_hash,active_until)
-    VALUES($1,$2,clock_timestamp()+interval '10 minutes 5 seconds')
+    VALUES($1,$2,clock_timestamp()+interval '10 minutes 50 seconds')
     ON CONFLICT(parent_ref,global_phone_hash) DO UPDATE SET active_until=GREATEST(customer.phone_guards.active_until,EXCLUDED.active_until)`,
   [input.parentRef, input.globalPhoneHash]);
   await client.query(`UPDATE customer.parent_budgets SET reserved_sends=reserved_sends+1,
