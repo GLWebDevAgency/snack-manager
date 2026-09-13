@@ -1,7 +1,8 @@
 import { createContext, Script } from 'node:vm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadOrderPwa } from '@/components/order/order-pwa';
-import { GET, orderWorkerSource } from './route';
+import { GET } from './route';
+import { orderWorkerSource } from './worker';
 
 vi.mock('@/components/order/order-pwa', () => ({ loadOrderPwa: vi.fn() }));
 

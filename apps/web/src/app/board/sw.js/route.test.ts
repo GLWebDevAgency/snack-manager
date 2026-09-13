@@ -1,12 +1,12 @@
 import { createContext, Script } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { GET } from "./route";
 import {
-  GET,
   NOMS_CACHES_ECRAN,
   actifsReferences,
   estCheminCoquilleEcran,
   estReponseCoquilleEcranCacheable,
-} from "./route";
+} from "./worker";
 
 describe("Le service worker de l'écran de salle — ses règles pures", () => {
   it("nomme ses deux caches sous un préfixe commun, versionné", () => {
