@@ -31,14 +31,14 @@ const CAISSE_PATH = "/caisse";
  * révision de tarifs ne peut pas laisser ce fichier annoncer l'ancien montant
  * (la leçon du 21/08/2026, apprise sur la description de la landing).
  */
-const PRIX_ENTREE = `${PLAN_MONTHLY_CENTS.essentiel / 100} €/mois`;
+const PRIX_ENTREE = `${PLAN_MONTHLY_CENTS.essentiel / 100} € HT/mois`;
 
 export const metadata: Metadata = {
-  title: "Logiciel de caisse pour snack — Snack Manager",
-  description: `La caisse des snacks et fast-foods indépendants : commande, envoi cuisine, encaissement — espèces, carte, titre-restaurant. Fonctionne sans internet. Dès ${PRIX_ENTREE}, zéro commission.`,
+  title: "Logiciel de caisse pour restaurant — Snack Manager",
+  description: `Caisse pour restaurant indépendant : saisie des commandes, transmission cuisine et suivi des règlements. Dès ${PRIX_ENTREE}. Saisie locale en cas de coupure, transmission à la reconnexion.`,
   keywords: [
-    "logiciel caisse snack",
-    "caisse enregistreuse fast-food",
+    "logiciel caisse restaurant",
+    "caisse restaurant indépendant",
     "caisse kebab",
     "logiciel caisse sans commission",
     "caisse tactile restaurant tablette",
@@ -49,13 +49,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: CAISSE_PATH,
     siteName: "Snack Manager",
-    title: "Logiciel de caisse pour snack — Snack Manager",
-    description: `Commande, cuisine, encaissement — même sans internet. Dès ${PRIX_ENTREE}, zéro commission.`,
+    title: "Logiciel de caisse pour restaurant — Snack Manager",
+    description: `Organisez les commandes et les règlements. Dès ${PRIX_ENTREE}. La saisie reste locale en cas de coupure ; la transmission cuisine reprend à la reconnexion.`,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Logiciel de caisse pour snack — Snack Manager",
-    description: "La caisse qui tient le rush : commande, cuisine, encaissement, même sans internet.",
+    title: "Logiciel de caisse pour restaurant — Snack Manager",
+    description: "Caisse pour restaurant indépendant : commandes, cuisine et règlements. Saisie locale pendant une coupure, transmission au retour du réseau.",
   },
   robots: { index: true, follow: true },
 };

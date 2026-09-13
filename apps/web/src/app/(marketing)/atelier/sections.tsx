@@ -1,268 +1,88 @@
 import Link from "next/link";
 import { Photo } from "@/components/marketing/Photo";
-import { ATELIER_SERVICES, CTA_CALLBACK, CTA_DEMO, ancre } from "@/components/marketing/content";
-import {
-  AGENCE_ROWS,
-  ATELIER_CTA,
-  ATELIER_HERO,
-  ATELIER_SHOTS,
-  ATELIER_SOMMAIRE,
-  MAQUETTE_POINTS,
-  PARCOURS_STEPS,
-  atelierSection,
-} from "./content";
+import { ATELIER_SERVICES, ancre, euros } from "@/components/marketing/content";
+import { MENUS_OFFERS, MENU_PRINT_NOTE, type MenuOffer } from "@/components/marketing/menu-offers";
+import { ATELIER_FAQ, ATELIER_SECTIONS, ATELIER_SHOTS, ATELIER_SOMMAIRE, PARCOURS_STEPS } from "./content";
+import styles from "../offres/offers.module.css";
 
-/**
- * Les blocs de la page Atelier — tous rendus au SERVEUR, comme `/caisse`.
- *
- * Rien ici n'a d'état : les seules pincées de client de la route sont
- * `RevealObserver` (le `.in` des `.rv`) et `Photo` (le repli d'image), tous
- * deux importés de la landing tels quels.
- *
- * ═══ AUCUNE CLASSE NOUVELLE, ET C'EST LE CONTRAT DES PAGES FILLES ═══
- *
- * Bandes `of-band`, grille `of-checks`, rangées de devis `of-rows`, tableau
- * `pr-commissions` : tout vient de la feuille commune. La seule retouche que
- * cette page a coûtée à `marketing.css` est un changement de sélecteur — la
- * démotion du premier prix des `of-rows` suit désormais la classe
- * `is-compris` au lieu du rang, parce qu'ici la première rangée porte un vrai
- * montant.
- *
- * Le rythme alterne les gabarits, deux de même forme ne se suivent jamais :
- * bande photographique → frise → rangées de devis → grille de faits → tableau
- * → bande.
- */
+function SectionHead({ id }: { id: typeof ATELIER_SECTIONS[number]["id"] }) {
+  const meta = ATELIER_SECTIONS.find((section) => section.id === id)!;
+  return <div className="of-sechead rv"><span className="badge">{meta.badge}</span><h2 className="h2" id={`${id}-title`}>{meta.title}</h2><p className="subheading of-seclead">{meta.lead}</p></div>;
+}
 
-/* ── En-tête — la bande d'ouverture ──────────────────────────── */
+function Price({ offer }: { offer: MenuOffer }) {
+  return <p className={styles.menuPrice}>{offer.priceFrom ? <span>À partir de</span> : null}<strong>{euros(offer.priceCents)}</strong><small>HT, une fois</small></p>;
+}
 
 function PageHead() {
+  const firstOffer = MENUS_OFFERS[0];
   return (
-    <header className="of-band of-hero">
-      {/* Le comptoir sous ses lampes, voilé : la page vend l'artisan derrière
-          le comptoir, pas une plateforme — l'image pose l'ambiance, le texte
-          dit tout. Décorative, donc `alt` vide. */}
-      <span className="of-bandmedia of-heromedia">
-        <Photo shot={ATELIER_SHOTS.hero} decorative eager sizes="100vw" />
-      </span>
-      <span className="of-bandveil" aria-hidden="true" />
-
+    <header className={`of-band of-hero ${styles.hero}`}>
+      <span className="of-bandmedia of-heromedia"><Photo shot={ATELIER_SHOTS.hero} decorative eager sizes="100vw" /></span><span className="of-bandveil" aria-hidden="true" />
       <div className="of-bandinner of-heroinner">
-        <span className="badge">{ATELIER_HERO.badge}</span>
-        <h1 className="h1 of-title">{ATELIER_HERO.title}</h1>
-        <p className="subheading of-lead">{ATELIER_HERO.lead}</p>
-
-        {/* LE renversement de risque, épinglé dès l'ouverture, avec le pouls
-            doré des pastilles du hero de la landing : rien d'autre sur la
-            page ne bouge en continu — une seule chose vivante, la bonne. */}
-        <p className="of-herochip">
-          <span className="hero-chipdot gold" aria-hidden="true" />
-          {ATELIER_HERO.chip}
-        </p>
-
-        {/* Le doré du hero est la promesse de transparence, pas un montant :
-            les prix arrivent tous ensemble, deux écrans plus bas. */}
-        <p className="of-heroprice">
-          <span className="of-heroamt">{ATELIER_HERO.price}</span>
-        </p>
-        <p className="of-heroclaim">{ATELIER_HERO.claim}</p>
-
-        <nav className="of-toc" aria-label="Sommaire de la page">
-          {ATELIER_SOMMAIRE.map((item) => (
-            <a className="of-tocitem" href={item.href} key={item.href}>
-              {item.label}
-            </a>
-          ))}
-        </nav>
+        <span className="badge">L’Atelier — Menus & communication</span>
+        <h1 className="h1 of-title">Faites vivre votre carte.<br />Sur papier et sur écran.</h1>
+        <p className="subheading of-lead">Une nouvelle carte, des prix à mettre à jour ou des menus TV à préparer : confiez-nous un travail précis, adapté à votre restaurant. Vous validez le résultat et gardez un budget clair.</p>
+        <p className={styles.heroPrice}>Création dès <strong>{euros(firstOffer.priceCents)}</strong><span> HT · impression et livraison distinctes</span></p>
+        <nav className="of-toc" aria-label="Sommaire de l’Atelier">{ATELIER_SOMMAIRE.map((item) => <a className="of-tocitem" href={item.href} key={item.href}>{item.label}</a>)}</nav>
       </div>
     </header>
   );
 }
 
-/* ── 1. La maquette ──────────────────────────────────────────── */
-
-function Maquette() {
-  const meta = atelierSection("maquette");
+function MenuCard({ offer }: { offer: MenuOffer }) {
   return (
-    <section className="section" id={meta.id}>
-      <span className="badge">{meta.badge}</span>
-      <h2 className="h2 center-h2" style={{ maxWidth: 760 }}>
-        {meta.title}
-      </h2>
-      <p className="subheading" style={{ maxWidth: 680 }}>
-        {meta.lead}
-      </p>
-
-      <ul className="of-checks rv">
-        {MAQUETTE_POINTS.map((line) => (
-          <li className="of-check" key={line}>
-            <span className="of-tick" aria-hidden="true" />
-            <span>{line}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <article className={`${styles.menuCard} rv`} id={offer.id} data-featured={offer.id === "ensemble"} aria-labelledby={`${offer.id}-title`}>
+      <span className={styles.eyebrow}>{offer.category === "tv" ? "Menus sur écran" : offer.category === "ensemble" ? "Papier + TV + conseil" : "Menus papier"}</span>
+      <div className={styles.menuTop}><h3 id={`${offer.id}-title`}>{offer.title}</h3><Price offer={offer} /></div>
+      <p className={styles.menuSummary}>{offer.summary}</p>
+      <ul className={styles.menuPoints}>{offer.included.map((point) => <li key={point}>{point}</li>)}</ul>
+      <div className={styles.menuDetail}><p>{offer.note}</p><p><strong>Hors forfait : </strong>{offer.exclusions.join(". ")}.</p></div>
+      <Link className={`btn ${offer.id === "ensemble" ? "light" : "dark"}`} href={ancre("contact").href}>{offer.cta}</Link>
+    </article>
   );
 }
 
-/* ── 1 bis. La démarche — la frise en trois étapes ───────────── */
-
-/**
- * LE GABARIT DE LA FRISE DES JALONS (`jl-`), APPLIQUÉ À LA DÉMARCHE : le rail,
- * les nœuds dorés, l'étagement — le type visuel le plus premium du site, et
- * une démarche EST une frise. Trois colonnes au lieu de quatre (`.trois`),
- * tous les nœuds pleins : rien n'est « à venir », chaque étape existe.
- */
-function Parcours() {
-  const meta = atelierSection("parcours");
+function Menus() {
   return (
-    <section className="section jl-section" id={meta.id}>
-      <span className="badge">{meta.badge}</span>
-      <h2 className="h2 center-h2" style={{ maxWidth: 760 }}>
-        {meta.title}
-      </h2>
-      <p className="subheading" style={{ maxWidth: 680 }}>
-        {meta.lead}
-      </p>
-
-      <ol className="jl-track trois">
-        {PARCOURS_STEPS.map((step) => (
-          <li className="jl-step rv" key={step.when}>
-            <span className="jl-node" aria-hidden="true" />
-            <p className="jl-when">{step.when}</p>
-            <h3 className="jl-title">{step.title}</h3>
-            <div className="jl-lines">
-              <p className="jl-line">{step.line}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-/* ── 2. Les services, et leurs prix ──────────────────────────── */
-
-/**
- * SIX RANGÉES DE DEVIS, JAMAIS SIX CARTES — même arbitrage que la section
- * services d'`/offres`, dont c'est le gabarit : les six prix forment une
- * colonne qu'on lit sans lire les rangées, ce qui est exactement ce qu'on fait
- * devant un devis. Et c'est bien ce que cette page est : le devis, affiché
- * d'avance.
- *
- * `ATELIER_SERVICES` est LU depuis la vitrine — le même objet que la bande
- * d'`/offres`, jamais un texte réécrit.
- */
-function Services() {
-  const meta = atelierSection("services");
-  return (
-    <section className="section of-section" id={meta.id}>
+    <section className="section of-section" id="menus-atelier" aria-labelledby="menus-atelier-title">
       <div className="of-wrap">
-        <div className="of-sechead rv">
-          <span className="badge">{meta.badge}</span>
-          <h2 className="h2">{meta.title}</h2>
-          <p className="subheading of-seclead">{meta.lead}</p>
-        </div>
-
-        <ol className="of-rows">
-          {ATELIER_SERVICES.map((s, i) => (
-            <li className="of-row rv" key={s.id} style={{ transitionDelay: `${i * 0.08}s` }}>
-              <div className="of-rowhead">
-                <h3 className="of-rowtitle">{s.title}</h3>
-                <p className="of-rowlead">{s.lead}</p>
-              </div>
-              <p className="of-rowline">{s.line}</p>
-              <p className="of-rowprice">
-                {s.price}
-                {s.priceNote ? <span className="of-rowpricenote">{s.priceNote}</span> : null}
-              </p>
-            </li>
-          ))}
-        </ol>
+        <SectionHead id="menus-atelier" />
+        <div className={styles.menuGrid}>{MENUS_OFFERS.filter((offer) => offer.category !== "accompagnement").map((offer) => <MenuCard offer={offer} key={offer.id} />)}</div>
+        <div className={`${styles.printNote} rv`}><h3>La conception d’un côté.<br />La fabrication de l’autre.</h3><div><p>{MENU_PRINT_NOTE}</p><p>Le fichier est préparé selon le format, les plis et les spécifications de l’imprimeur retenu. Une carte déjà imprimée nécessite un nouveau tirage pour afficher vos changements. Les téléviseurs, lecteurs et installations physiques se chiffrent également à part.</p></div></div>
       </div>
     </section>
   );
 }
 
-/* ── 3. Et pas une agence ────────────────────────────────────── */
-
-/**
- * QUATRE RANGÉES, UNE RAISON PAR RANGÉE — le gabarit du tableau de la page
- * Caisse (`pr-commissions`), pas une grille : la dernière rangée porte
- * l'argument que personne d'autre ne peut écrire (« une seule facture ») et
- * mérite sa largeur de lecture entière.
- */
-function Agence() {
-  const meta = atelierSection("agence");
+function Accompagnement() {
   return (
-    <section className="section" id={meta.id}>
-      <span className="badge">{meta.badge}</span>
-      <h2 className="h2 center-h2" style={{ maxWidth: 720 }}>
-        {meta.title}
-      </h2>
-      <p className="subheading" style={{ maxWidth: 680 }}>
-        {meta.lead}
-      </p>
-
-      <dl className="pr-commissions rv">
-        {AGENCE_ROWS.map((row) => (
-          <div className="pr-commission" key={row.label}>
-            <dt className="pr-cwho">{row.label}</dt>
-            <dd className="pr-cnote">{row.line}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-/* ── L'appel final ───────────────────────────────────────────── */
-
-function AppelFinal() {
-  return (
-    <section className="of-band of-ctaband">
-      <span className="of-bandmedia of-ctamedia">
-        <Photo shot={ATELIER_SHOTS.cta} decorative sizes="100vw" />
-      </span>
-      <span className="of-bandveil" aria-hidden="true" />
-
-      <div className="of-bandinner of-ctainner rv">
-        <h2 className="h2 of-ctatitle">{ATELIER_CTA.title}</h2>
-        <p className="subheading of-ctaline">{ATELIER_CTA.line}</p>
-        <div className="of-ctabtns">
-          {/* Le rappel d'abord : la maquette commence par une conversation.
-              `ancre()` et pas `#contact` : ces deux liens visent la LANDING
-              depuis une autre route — la règle de tout le site. */}
-          <Link className="btn light" href={ancre("contact").href}>
-            {CTA_CALLBACK}
-          </Link>
-          <Link className="btn dark" href={ancre("produit").href}>
-            {CTA_DEMO}
-          </Link>
-        </div>
-        {/* La preuve au moment de demander le numéro — un fait du site, pas
-            un chiffre inventé. */}
-        <p className="of-ctaproof">{ATELIER_CTA.proof}</p>
+    <section className="section of-section is-tinted" id="mises-a-jour" aria-labelledby="mises-a-jour-title">
+      <div className="of-wrap"><SectionHead id="mises-a-jour" /><div className={styles.supportRows}>{MENUS_OFFERS.filter((offer) => offer.category === "accompagnement").map((offer) => <article className={`${styles.supportRow} rv`} id={offer.id} key={offer.id}><h3>{offer.title}</h3><div><p>{offer.summary}</p><ul className={styles.menuPoints}>{offer.included.map((point) => <li key={point}>{point}</li>)}</ul><p>{offer.note}</p><p className={styles.note}>Hors forfait : {offer.exclusions.join(". ")}.</p><Link className={styles.textLink} href={ancre("contact").href}>{offer.cta} <span aria-hidden="true">↗</span></Link></div><Price offer={offer} /></article>)}</div>
+        <div className={`${styles.scopeGrid} rv`}><article><span className={styles.eyebrow}>Vos choix, vos données</span><h3>Les meilleures ventes ne disent pas tout.</h3><p>Les coûts renseignés, la disponibilité et le temps de préparation complètent l’analyse. Nous expliquons les recommandations et vous choisissez les produits à mettre en avant.</p></article><article><span className={styles.eyebrow}>Votre rythme</span><h3>Une intervention quand elle est utile.</h3><p>Une carte stable n’a pas besoin de changer chaque mois. Une analyse saisonnière ou une correction ponctuelle peut suffire. Vous choisissez la prestation adaptée à votre besoin.</p></article></div>
       </div>
     </section>
   );
 }
 
-/**
- * La page, dans l'ordre d'une mise en confiance : la démarche (neutre — aucun
- * service n'y est une étape) → la grille → la garantie du site (la maquette,
- * À SA PLACE : celle d'un service parmi d'autres, jamais le centre) → la
- * comparaison → le geste. On ne demande le numéro qu'après avoir tout montré,
- * prix compris.
- */
+function Process() {
+  return <section className="section of-section" id="parcours" aria-labelledby="parcours-title"><div className="of-wrap"><SectionHead id="parcours" /><ol className={styles.process}>{PARCOURS_STEPS.map((step) => <li className="rv" key={step.when}><span>{step.when}</span><h3>{step.title}</h3><p>{step.line}</p></li>)}</ol><p className={styles.note}>Au comptoir, à emporter ou à table : la présentation suit votre identité et votre mode de service. Nous examinons la longueur de la carte, ses variantes et la fréquence des changements avant de confirmer le forfait.</p></div></section>;
+}
+
+function OtherServices() {
+  return (
+    <section className="section of-section is-tinted" id="services" aria-labelledby="services-title"><div className="of-wrap"><SectionHead id="services" /><div className={styles.otherRows}>{ATELIER_SERVICES.filter((service) => service.id !== "integration").map((service) => <article className="rv" key={service.id}><h3>{service.title}</h3><div><p>{service.lead}</p><p>{service.line}</p></div><p className={styles.otherPrice}>{service.price}<small>HT · {service.priceNote}</small></p></article>)}</div><p className={styles.note}>Domaine, hébergement, maintenance, contenus, retours et calendrier sont précisés au devis. Shooting, vidéo originale et budget publicitaire restent distincts. L’intégration de votre commande sur un site existant figure dans les frais de mise en service.</p><Link className="btn dark" href="/offres#demarrage">Voir les frais de mise en service</Link></div></section>
+  );
+}
+
+function Questions() {
+  return <section className="section of-section" id="questions" aria-labelledby="questions-title"><div className="of-wrap"><SectionHead id="questions" /><div className={styles.faq}>{ATELIER_FAQ.map((item) => <details key={item.q}><summary>{item.q}<span aria-hidden="true">+</span></summary><p>{item.a}</p></details>)}</div><aside className={`${styles.printNote} rv`}><div><span className={styles.eyebrow}>En préparation</span><h3>Le Studio autonome papier & TV.</h3></div><div><p>Nous préparons un espace guidé pour décliner votre catalogue sur vos supports. Cet éditeur papier n’est pas encore disponible à la souscription. Les fonctions TV existantes restent comprises dans les trois suites.</p><Link className={styles.textLink} href="/offres#studio-a-venir">Lire les évolutions prévues <span aria-hidden="true">↗</span></Link></div></aside></div></section>;
+}
+
+function FinalCta() {
+  return <section className="of-band of-ctaband"><span className="of-bandmedia of-ctamedia"><Photo shot={ATELIER_SHOTS.cta} decorative sizes="100vw" /></span><span className="of-bandveil" aria-hidden="true" /><div className="of-bandinner of-ctainner rv"><h2 className="h2 of-ctatitle">Votre prochaine carte commence ici.</h2><p className="subheading of-ctaline">Papier, TV ou les deux : parlons de vos supports et de votre prochain changement. Vous recevez une proposition écrite avant de décider.</p><div className="of-ctabtns"><Link className="btn light" href={ancre("contact").href}>Faire le point sur ma carte</Link><Link className="btn dark" href={ancre("produit").href}>Voir les applications</Link></div></div></section>;
+}
+
 export function AtelierBody() {
-  return (
-    <>
-      <PageHead />
-      <Parcours />
-      <Services />
-      <Maquette />
-      <Agence />
-      <AppelFinal />
-    </>
-  );
+  return <div className={styles.root}><PageHead /><Menus /><Accompagnement /><Process /><OtherServices /><Questions /><FinalCta /></div>;
 }

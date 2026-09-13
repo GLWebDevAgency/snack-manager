@@ -85,6 +85,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: article.titre,
       description: article.chapo,
       publishedTime: article.publieLe,
+      modifiedTime: article.modifieLe ?? article.publieLe,
     },
     twitter: { card: "summary_large_image", title: article.titre, description: article.chapo },
     robots: { index: true, follow: true },
@@ -161,6 +162,7 @@ export default async function ArticlePage({ params }: Props) {
             </Link>
             <p className="bl-meta">
               <time dateTime={article.publieLe}>{dateEnClair(article.publieLe)}</time>
+              {article.modifieLe ? <> · Mis à jour le <time dateTime={article.modifieLe}>{dateEnClair(article.modifieLe)}</time></> : null}
               <span aria-hidden="true"> · </span>
               <span>{article.minutes} min de lecture</span>
             </p>
@@ -179,10 +181,10 @@ export default async function ArticlePage({ params }: Props) {
            * même raison — la page en portait six pour deux destinations.
            */}
           <aside className="bl-outro rv">
-            <p className="bl-outrotitre">Plus de commandes. Moins de galère. Zéro commission.</p>
+            <p className="bl-outrotitre">Gérez votre restaurant. Faites vivre votre carte.</p>
             <p className="bl-outroline">
-              Caisse, cuisine, commande en ligne et back-office, réunis. Les quatre applications sont manipulables sur la
-              page d'accueil, sans compte et sans rendez-vous.
+              Caisse, cuisine, gestion et commande directe : découvrez les outils adaptés à votre restaurant.
+              Les démonstrations utilisent des données d’exemple, sans paiement réel.
             </p>
             <div className="bl-outroctas">
               <Link className="btn light" href={ancre("produit").href}>
@@ -252,7 +254,7 @@ function donneesStructurees(article: ArticlePublie) {
       headline: article.titre,
       description: article.chapo,
       datePublished: article.publieLe,
-      dateModified: article.publieLe,
+      dateModified: article.modifieLe ?? article.publieLe,
       inLanguage: "fr-FR",
       keywords: [...article.motsCles],
       wordCount: article.mots,
