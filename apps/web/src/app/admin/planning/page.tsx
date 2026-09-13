@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminSections } from "@/components/admin/AdminSections";
+
 /**
  * Planning des services — l'écran où le gérant décide qui travaille quand.
  *
@@ -495,17 +497,8 @@ export default function PlanningPage() {
           </Card>
         )}
 
-        {/* Une semaine finie ne se pose plus : ce qui compte, c'est l'écart. */}
-        {position === "passee" && (
-          <ComparisonPanel
-            comparison={bundle?.comparison ?? null}
-            payrollVisible={payrollVisible}
-            payrollMessage={week.payroll.message}
-            position={position}
-            onRetry={refresh}
-          />
-        )}
-
+        <AdminSections label="Rubriques du planning" defaultSection={position === "passee" ? "bilan" : "planning"} sections={[
+          { id: "planning", label: "Planning", icon: "calendar", content: <>
         {/* ── La grille ── */}
         <Panel
           title="Services de la semaine"
@@ -562,6 +555,8 @@ export default function PlanningPage() {
           )}
         </Panel>
 
+          </> },
+          { id: "bilan", label: "Charge et bilan", icon: "chart", content: <div className="space-y-4">
         {/* ── Constats et rappels, côte à côte ── */}
         {/* `items-start` : chacun prend sa hauteur. Étirer le plus court
             creuserait un vide dans une carte, ce qui se lit comme un manque. */}
@@ -570,7 +565,6 @@ export default function PlanningPage() {
           <RemindersPanel week={week} />
         </div>
 
-        {position !== "passee" && (
           <ComparisonPanel
             comparison={bundle?.comparison ?? null}
             payrollVisible={payrollVisible}
@@ -578,7 +572,8 @@ export default function PlanningPage() {
             position={position}
             onRetry={refresh}
           />
-        )}
+          </div> },
+        ]} />
       </div>
 
       {/* ── Modales ── */}

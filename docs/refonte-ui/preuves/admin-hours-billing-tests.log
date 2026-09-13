@@ -1,0 +1,17 @@
+
+ RUN  v3.2.7 /Users/limameghassene/development/SnackManager-refonte-ui/apps/web
+
+ ✓ src/app/admin/hours/hours-billing-navigation.browser.test.tsx (7 tests) 7366ms
+   ✓ conserve les horaires en brouillon entre sections et historique, puis sauvegarde le même contenu après erreur  564ms
+   ✓ préserve capacité et message quand on consulte ailleurs ou active la pause, sans sauvegarde implicite  630ms
+   ✓ ajoute une fermeture avec la semaine enregistrée sans publier le brouillon hebdomadaire  371ms
+   ✓ conserve l’identité et sa validation entre les sections puis après un échec de sauvegarde  534ms
+   ✓ ouvre les factures au retour de paiement, garde les avertissements et utilise les actions réelles à 320 px  367ms
+   ✓ rend les sections sans débordement global aux quatre largeurs en clair et sombre  4322ms
+ ✓ src/app/admin/hours/SlotSettingsPanel.test.ts (1 test) 7ms
+ ✓ src/app/admin/abonnement/checkout-ui.test.ts (2 tests) 2ms
+
+ Test Files  3 passed (3)
+      Tests  10 passed (10)
+   Start at  13:54:49
+   Duration  8.59s (transform 215ms, setup 0ms, collect 725ms, tests 7.37s, environment 0ms, prepare 130ms)

@@ -1,0 +1,20 @@
+PASS livraison-320-light
+PASS livraison-390-light
+PASS livraison-768-light
+PASS livraison-1440-light
+PASS encaissement-absent-320-light
+PASS encaissement-en_cours-390-light
+PASS encaissement-restreint-768-light
+PASS encaissement-actif-1440-light
+PASS livraison-320-dark
+PASS livraison-390-dark
+PASS livraison-768-dark
+PASS livraison-1440-dark
+PASS encaissement-absent-320-dark
+PASS encaissement-en_cours-390-dark
+PASS encaissement-restreint-768-dark
+PASS encaissement-actif-1440-dark
+PASS livraison-publication-refusee-390-dark
+PASS encaissement-indisponible-320-light
+PASS encaissement-erreur-390-dark
+{"pass":true,"scenarios":19,"buildId":"Kws_-Jw8xTKQB-BO0WFhd","proof":"/Users/limameghassene/development/SnackManager-refonte-ui/docs/refonte-ui/preuves/admin-navigation-delivery.json","captures":"/Users/limameghassene/development/SnackManager-refonte-ui/docs/refonte-ui/captures/admin-navigation-delivery"}

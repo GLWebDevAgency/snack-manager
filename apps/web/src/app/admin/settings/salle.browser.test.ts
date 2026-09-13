@@ -109,7 +109,7 @@ afterEach(async (ctx) => {
   await context.close(); expect(errors).toEqual([]);
 });
 afterAll(async () => { await browser?.close(); await new Promise<void>(resolve => server?.close(() => resolve())); });
-async function visit() { await page.goto(origin + "/admin/settings"); await page.getByRole("heading", { name: "L'identité de l'enseigne" }).waitFor(); }
+async function visit() { await page.goto(origin + "/admin/settings"); await page.getByRole("heading", { name: "L'identité de l'enseigne" }).waitFor(); if (actor.role !== "comptable") await page.getByRole("tab", { name: "Salle", exact: true }).click(); }
 async function add(name = "Salle 2") {
   await section().getByRole("button", { name: "Ajouter une table", exact: true }).click();
   await page.getByRole("textbox", { name: "Nom de la table" }).fill(name);
@@ -200,7 +200,7 @@ describe("Salle dans les vrais réglages restaurant", () => {
   it("verrouille une deuxième fenêtre pendant un enregistrement en cours", async () => {
     await visit();
     const other = await context.newPage();
-    await other.goto(origin + "/admin/settings");
+    await other.goto(origin + "/admin/settings?section=salle");
     const otherSection = other.getByRole("region", { name: "Configuration de la salle" });
     await otherSection.getByRole("button", { name: "Ajouter une table", exact: true }).click();
     await page.route("**/api/dining/tables", async route => {

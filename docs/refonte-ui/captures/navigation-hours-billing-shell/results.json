@@ -1,0 +1,142 @@
+{
+  "base": "http://127.0.0.1:3092",
+  "localBuildId": "jmPy-hN2KP_NSd0YoxvDu",
+  "collectedAt": "2026-09-13T12:09:57.267Z",
+  "results": [
+    {
+      "name": "hours-320-light",
+      "width": 320,
+      "theme": "light",
+      "checks": [],
+      "shots": [
+        "hours-320-light-failure.png"
+      ],
+      "faults": [],
+      "failure": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })\u001b[22m\n\n    at /Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:73:71\n    at async scenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:49:9)\n    at async pageScenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:62:3)\n    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:109:125"
+    },
+    {
+      "name": "abonnement-320-light",
+      "width": 320,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-320-light-apercu.png",
+        "abonnement-320-light-factures.png",
+        "abonnement-320-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-320-dark",
+      "width": 320,
+      "theme": "dark",
+      "checks": [],
+      "shots": [
+        "hours-320-dark-failure.png"
+      ],
+      "faults": [],
+      "failure": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })\u001b[22m\n\n    at /Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:73:71\n    at async scenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:49:9)\n    at async pageScenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:62:3)\n    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:109:125"
+    },
+    {
+      "name": "abonnement-320-dark",
+      "width": 320,
+      "theme": "dark",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-320-dark-apercu.png",
+        "abonnement-320-dark-factures.png",
+        "abonnement-320-dark-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-768-light",
+      "width": 768,
+      "theme": "light",
+      "checks": [],
+      "shots": [
+        "hours-768-light-failure.png"
+      ],
+      "faults": [],
+      "failure": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })\u001b[22m\n\n    at /Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:73:71\n    at async scenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:49:9)\n    at async pageScenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:62:3)\n    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:109:125"
+    },
+    {
+      "name": "abonnement-768-light",
+      "width": 768,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-768-light-apercu.png",
+        "abonnement-768-light-factures.png",
+        "abonnement-768-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-768-dark",
+      "width": 768,
+      "theme": "dark",
+      "checks": [],
+      "shots": [
+        "hours-768-dark-failure.png"
+      ],
+      "faults": [],
+      "failure": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })\u001b[22m\n\n    at /Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:73:71\n    at async scenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:49:9)\n    at async pageScenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:62:3)\n    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:109:125"
+    },
+    {
+      "name": "abonnement-768-dark",
+      "width": 768,
+      "theme": "dark",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-768-dark-apercu.png",
+        "abonnement-768-dark-factures.png",
+        "abonnement-768-dark-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    },
+    {
+      "name": "hours-1440-light",
+      "width": 1440,
+      "theme": "light",
+      "checks": [],
+      "shots": [
+        "hours-1440-light-failure.png"
+      ],
+      "faults": [],
+      "failure": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Commandes par créneau', { exact: true })\u001b[22m\n\n    at /Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:73:71\n    at async scenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:49:9)\n    at async pageScenario (/Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:62:3)\n    at async file:///Users/limameghassene/development/SnackManager-refonte-ui/e2e/local/admin-navigation-shell.mjs:109:125"
+    },
+    {
+      "name": "abonnement-1440-light",
+      "width": 1440,
+      "theme": "light",
+      "checks": [
+        "Billing identity draft retained through history; original invoice download actions; mobile invoice cards",
+        "All sections, 44px targets, no document/main overflow, theme, direct URL/query preservation and Home/End focus"
+      ],
+      "shots": [
+        "abonnement-1440-light-apercu.png",
+        "abonnement-1440-light-factures.png",
+        "abonnement-1440-light-informations.png"
+      ],
+      "faults": [],
+      "passed": true
+    }
+  ]
+}

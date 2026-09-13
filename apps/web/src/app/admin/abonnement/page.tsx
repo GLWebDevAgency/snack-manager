@@ -45,6 +45,7 @@ import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
+import { AdminSections } from "@/components/admin/AdminSections";
 import { sessionAdmin } from "../session";
 import { canPayInvoice, safeCheckoutUrl } from "./checkout-ui";
 import {
@@ -206,6 +207,55 @@ export default function AbonnementPage() {
   const totalDuTtc = outstanding.totalDueTtcCents ?? outstanding.totalDueCents;
   const enRetardTtc = outstanding.overdueTtcCents ?? outstanding.overdueCents;
 
+  function invoiceStatus(f: CrmInvoice) {
+    return <>
+<span
+                        className={cx(
+                          "inline-flex items-center rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-bold uppercase tracking-[0.06em]",
+                          STATUT[f.status],
+                        )}
+                      >
+                        {f.statusLabel}
+                      </span>
+                      {f.status === "payee" && f.methodLabel && (
+                        <span className="ml-2 text-[12px] text-mut">
+                          {fmtJour(f.paidAt)} · {f.methodLabel}
+                        </span>
+                      )}
+                      {f.status === "en_retard" && (
+                        <span className="ml-2 text-[12px] text-alertt">
+                          {f.overdueDays} jour(s)
+                        </span>
+                      )}
+    </>;
+  }
+
+  function invoiceActions(f: CrmInvoice) {
+    return <>
+{cardPayment && canPayInvoice(f) && (
+                        <Btn
+                          variant="primary"
+                          size="sm"
+                          disabled={paying !== null}
+                          onClick={() => void payer(f)}
+                          aria-label={`Payer par carte ${fmtEuro(ttc(f))} TTC — facture ${f.number}`}
+                        >
+                          {paying === f._id ? "Ouverture…" : "Payer par carte"}
+                        </Btn>
+                      )}
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        icon="print"
+                        disabled={downloading === f._id}
+                        onClick={() => void telecharger(f)}
+                        aria-label={`Télécharger la facture ${f.number} en PDF`}
+                      >
+                        {downloading === f._id ? "…" : "PDF"}
+                      </Btn>
+    </>;
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 md:p-[26px]">
       <div>
@@ -247,7 +297,8 @@ export default function AbonnementPage() {
         </div>
       )}
 
-      {/* ── Les trois chiffres ── */}
+      <AdminSections label="Sections de l’abonnement" defaultSection={paymentReturn || sub.accessBlocked ? "factures" : "apercu"} sections={[
+        { id: "apercu", label: "Vue d’ensemble", icon: "grid", content: (
       <div className="flex flex-col gap-4 md:flex-row">
         <Card className="flex-1 p-[18px]">
           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
@@ -350,9 +401,9 @@ export default function AbonnementPage() {
           </p>
         </Card>
       </div>
-
-      {/* ── L'historique ── */}
-      <Panel
+        ) },
+        { id: "factures", label: "Factures", icon: "ticket", content: (
+<Panel
         title="Vos factures"
         sub={
           invoices.length > 0
@@ -368,7 +419,24 @@ export default function AbonnementPage() {
             hint="Vos factures d’abonnement apparaîtront ici dès la première échéance."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="divide-y divide-line md:hidden">
+            {invoices.map((f) => <article key={f._id} aria-label={`Facture ${f.number}`} className="min-w-0 space-y-3 p-[18px]">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="cf-fig break-words text-sm font-bold text-ink">{f.number}</p>
+                <div className="text-right">{invoiceStatus(f)}</div>
+              </div>
+              <div><p className="text-sm text-ink">{f.label || f.kindLabel}</p><p className="text-xs text-mut">{f.period.label}</p></div>
+              <p className="text-xs text-mut">Échéance : <span className="cf-fig">{fmtJour(f.dueAt)}</span></p>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div><dt className="text-xs text-mut">Montant HT</dt><dd className="cf-fig font-semibold">{fmtEuro(ht(f))}</dd></div>
+                <div><dt className="text-xs text-mut">TVA {f.totals?.rateLabel}</dt><dd className="cf-fig font-semibold">{fmtEuro(f.totals?.vatCents ?? 0)}</dd></div>
+                <div className="col-span-2 flex items-center justify-between gap-2 border-t border-line pt-3"><dt className="font-semibold">Total TTC</dt><dd className="cf-fig font-bold">{fmtEuro(ttc(f))}</dd></div>
+              </dl>
+              <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11">{invoiceActions(f)}</div>
+            </article>)}
+          </div>
+          <div className="relative hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] border-collapse text-left">
               <thead>
                 <tr className="border-y border-line text-[11px] uppercase tracking-[0.06em] text-mut">
@@ -412,24 +480,7 @@ export default function AbonnementPage() {
                       {fmtJour(f.dueAt)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3">
-                      <span
-                        className={cx(
-                          "inline-flex items-center rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-bold uppercase tracking-[0.06em]",
-                          STATUT[f.status],
-                        )}
-                      >
-                        {f.statusLabel}
-                      </span>
-                      {f.status === "payee" && f.methodLabel && (
-                        <span className="ml-2 text-[12px] text-mut">
-                          {fmtJour(f.paidAt)} · {f.methodLabel}
-                        </span>
-                      )}
-                      {f.status === "en_retard" && (
-                        <span className="ml-2 text-[12px] text-alertt">
-                          {f.overdueDays} jour(s)
-                        </span>
-                      )}
+                      {invoiceStatus(f)}
                     </td>
                     <td className="cf-fig whitespace-nowrap px-3 py-3 text-right text-sm text-mut">
                       {fmtEuro(ht(f))}
@@ -446,37 +497,20 @@ export default function AbonnementPage() {
                       {fmtEuro(ttc(f))}
                     </td>
                     <td className="whitespace-nowrap px-[18px] py-3 text-right">
-                      {cardPayment && canPayInvoice(f) && (
-                        <Btn
-                          variant="primary"
-                          size="sm"
-                          disabled={paying !== null}
-                          onClick={() => void payer(f)}
-                          aria-label={`Payer par carte ${fmtEuro(ttc(f))} TTC — facture ${f.number}`}
-                        >
-                          {paying === f._id ? "Ouverture…" : "Payer par carte"}
-                        </Btn>
-                      )}
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        icon="print"
-                        disabled={downloading === f._id}
-                        onClick={() => void telecharger(f)}
-                        aria-label={`Télécharger la facture ${f.number} en PDF`}
-                      >
-                        {downloading === f._id ? "…" : "PDF"}
-                      </Btn>
+                      {invoiceActions(f)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Panel>
-
-      <PanelIdentite
+        ) },
+        { id: "informations", label: "Informations", icon: "user", content: (
+          <div className="space-y-4">
+<PanelIdentite
         identity={data.identity ?? EMPTY_BILLING_IDENTITY}
         editable={data.identityEditable !== false}
         onSaved={() => void load()}
@@ -497,6 +531,9 @@ export default function AbonnementPage() {
           obligatoire par une valeur approchée.
         </p>
       )}
+          </div>
+        ) },
+      ]} />
     </div>
   );
 }

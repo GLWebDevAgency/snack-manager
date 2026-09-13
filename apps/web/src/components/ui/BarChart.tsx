@@ -91,7 +91,7 @@ export function BarChart({
       </div>
 
       {/* Données brutes pour lecteurs d'écran */}
-      <table className="sr-only">
+      <div className="sr-only"><table>
         <caption>{title}</caption>
         <thead>
           <tr>
@@ -107,7 +107,7 @@ export function BarChart({
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

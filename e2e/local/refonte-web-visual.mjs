@@ -183,6 +183,7 @@ async function scenario(surface, viewport, theme = 'default') {
       checks.push('real admin dashboard and team navigation with repository demo transport', 'member form fields and keyboard focus, Escape returns focus; no save');
       if (viewport.width === 1440) {
         await page.goto(base + '/admin/settings?demo=1', { waitUntil: 'networkidle' });
+        await page.getByRole('tab', { name: 'Identité visuelle', exact: true }).click();
         const previews = page.locator('[style*="--cf-font-body"]');
         await previews.first().waitFor();
         const readPreviews = () => previews.evaluateAll(elements => elements.map(element => {
