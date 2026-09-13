@@ -160,7 +160,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   // changes; availability is never used to infer a missing or invalid session.
   const message = state.message ?? (state.status === 'guest'
     ? state.accessAvailable ? 'Connectez-vous pour retrouver votre accès personnel.' : state.registrationAvailable ? 'Créez votre accès personnel pour retrouver votre carte et vos commandes.'
-      : loyaltyContext && loyaltyCard ? 'La connexion au compte est indisponible pour le moment. Vous pouvez utiliser votre carte avec son QR.' : 'La connexion et la création de compte sont indisponibles pour le moment.'
+      : loyaltyContext && loyaltyCard ? 'La connexion au compte est indisponible pour le moment.' : 'La connexion et la création de compte sont indisponibles pour le moment.'
     : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
       : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
   return <AccountSurface presentation={presentation} compact={initialSection === 'loyalty'} open={open} onClose={closePanel}

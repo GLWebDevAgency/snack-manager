@@ -164,7 +164,7 @@ describe('application client — navigation commune et cartes existantes', () =>
     await page.setViewportSize({ width, height: 1000 }); await page.goto(origin + '/?order=1');
     await tab('Fidélité').click();
     const scanner = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scanner.waitFor();
-    const notice = page.getByText('La connexion au compte est indisponible pour le moment. Vous pouvez utiliser votre carte avec son QR.', { exact: true });
+    const notice = page.getByText('La connexion au compte est indisponible pour le moment.', { exact: true });
     await notice.waitFor();
     expect(await qrAccess().isVisible()).toBe(false);
     expect(await page.getByRole('button', { name: /Actualiser mon compte|Réessayer|Commencer mon inscription/ }).count()).toBe(0);
@@ -212,7 +212,10 @@ describe('application client — navigation commune et cartes existantes', () =>
     await context.addInitScript(() => localStorage.setItem('sm_fidelite_recette', JSON.stringify({ version: 2, solde: 12, vuA: new Date(Date.now() - 60_000).toISOString() })));
     await page.goto(origin);
     await page.getByRole('heading', { name: /Dernier solde connu : 12 points/ }).waitFor();
-    await page.getByText(/Source : copie locale.*échec du rafraîchissement/).waitFor();
+    await page.getByText('Connectez-vous au réseau pour afficher votre carte et actualiser vos points.', { exact: true }).waitFor();
+    expect(await page.getByText('Dernière consultation il y a 1 min.', { exact: true }).count()).toBe(1);
+    expect(await page.getByText('Seul ce solde est enregistré sur cet appareil. Votre identité et votre historique ne sont pas conservés hors connexion.', { exact: true }).count()).toBe(1);
+    expect(await page.getByText(/Vous pouvez utiliser votre carte avec son QR|Source : copie locale|échec du rafraîchissement/).count()).toBe(0);
     expect(cardFailures).toEqual(['net::ERR_INTERNET_DISCONNECTED']);
     expect(await page.getByRole('button', { name: /Présenter ma carte|Afficher ma carte|Scanner mon QR/ }).count()).toBe(0);
     expect(await page.getByRole('img', { name: /QR/ }).count()).toBe(0);

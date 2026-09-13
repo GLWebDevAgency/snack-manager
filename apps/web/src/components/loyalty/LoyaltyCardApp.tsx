@@ -1019,13 +1019,14 @@ function CarteLocaleHorsLigne({
           <span className="text-xl tracking-normal text-mut">{unite}</span>
         </h1>
         <p className="mt-4 text-xs leading-5 text-prept" role="status">
-          Source : copie locale · solde vu {age} · {actualisationEchouee
-            ? "échec du rafraîchissement"
-            : "vérification en cours"}
+          <time dateTime={instantane.vuA}>Dernière consultation {age}.</time>
+          <span className="mt-2 block">{actualisationEchouee
+            ? `Connectez-vous au réseau pour afficher votre carte et actualiser vos ${catalog.program.unitLabelPlural}.`
+            : "Vérification de votre carte en cours…"}</span>
         </p>
         <p className="mt-3 text-xs leading-5 text-mut">
-          L’identité, l’historique et l’avancement des récompenses ne sont pas
-          conservés sur cet appareil. Ils réapparaîtront après vérification du réseau.
+          Seul ce solde est enregistré sur cet appareil. Votre identité et votre
+          historique ne sont pas conservés hors connexion.
         </p>
         <div className="mt-6 grid gap-2">
           {cheminVitrine && <ActionCommander

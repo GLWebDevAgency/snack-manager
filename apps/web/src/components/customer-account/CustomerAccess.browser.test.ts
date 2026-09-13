@@ -202,7 +202,7 @@ describe('customer credential access — native rendered browser', () => {
   });
   it('remains a storage-free guest without access capability', async () => {
     available = false; await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
-    await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.', { exact: true }).waitFor();
+    await page.getByText('La connexion et la création de compte sont indisponibles pour le moment.', { exact: true }).waitFor();
     expect(await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).count()).toBe(0);
     expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0); expect(steps).toEqual([]);
   });
