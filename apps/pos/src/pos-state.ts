@@ -29,6 +29,8 @@ export const KEYS = {
   phoneOrderAttempt: 'sm.pos.phone-order-attempt.v1',
   /** Intention de salle non acquittée ; bloque la purge jusqu'à résolution. */
   diningOperation: 'sm.pos.dining-operation.v1',
+  /** Affectations directes à vérifier, protégées avant purge. */
+  deliveryAssignments: DELIVERY_ASSIGNMENT_STORAGE_KEY,
 } as const;
 
 /**
@@ -40,6 +42,7 @@ export const KEYS = {
  * même que la file offline.
  */
 import {
+  DELIVERY_ASSIGNMENT_STORAGE_KEY,
   mutateStoreItem,
   uuid,
   type CartLine,

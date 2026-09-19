@@ -34,6 +34,16 @@ export function legacy0006TestPool(pool: Pool): Pool {
               } else if (text.includes('SELECT c.*,r.funding_kind')) {
                 text = text.replace(',r.production_authorization_ref,\n    a.expires_at AS production_expiry,a.revoked_at AS production_revoked,a.service_sid AS production_service,', ',')
                   .replace('    LEFT JOIN customer.production_budget_authorizations a ON (a.parent_ref,a.tenant_ref,a.authorization_ref)\n      =(r.parent_ref,r.tenant_ref,r.production_authorization_ref)\n', '');
+              } else if (text.includes('UPDATE customer.challenges') && text.includes('provider_created_at=$5')) {
+                if (values.length !== 7 || values.slice(4).some(value => value !== null)) {
+                  throw new Error('Provider freshness evidence does not belong to historical schema 0006');
+                }
+                // Exact legacy Trial settlement; the historical schema predates
+                // production and the new timestamp columns. Keep real SQL/CAS.
+                text = `UPDATE customer.challenges
+                  SET state=CASE WHEN expires_at>clock_timestamp() THEN 'pending' ELSE 'expired' END,verification_sid=$4
+                  WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 RETURNING *`;
+                values = values.slice(0,4);
               }
               if (text.includes('production_')) throw new Error('An unreviewed new storage operation reached the historical 0006 fixture');
               return connection.query(text, values);

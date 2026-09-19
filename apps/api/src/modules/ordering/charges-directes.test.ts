@@ -180,7 +180,7 @@ describe('adaptateur charges directes — protocole durable', () => {
       intent: await provider.retrieve(INTENT.id, 'acct_original'), accountId: 'acct_original', amountCents: 1250,
     }));
     expect(await service.createIntent(ORDER_ID, TOKEN)).toMatchObject({ unavailable: false, stripeAccount: 'acct_original' });
-    expect(stripe.paymentIntents.retrieve).toHaveBeenCalledWith(INTENT.id, { stripeAccount: 'acct_original' });
+    expect(stripe.paymentIntents.retrieve).toHaveBeenCalledWith(INTENT.id, {}, { stripeAccount: 'acct_original' });
     expect(encaissement.compteActifDe).not.toHaveBeenCalled();
     expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
   });

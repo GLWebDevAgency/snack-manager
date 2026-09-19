@@ -35,6 +35,7 @@ const fundingLimits = z.union([
   }) }),
   z.strictObject({ ...sharedLimits,
     globalSendReservations: bounded(100_000), tenantSendReservations: bounded(100_000),
+    ipSendReservations: bounded(1000),
     productionBudget: z.strictObject({ mode: z.literal('production_paid'),
       authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), currency: z.literal('USD'),
       costEvidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), reservePerSendMicrousd: bounded(Number.MAX_SAFE_INTEGER),
@@ -52,7 +53,10 @@ export const reservationSchema = scopeSchema.extend({ operationId: uuid, request
   planExpiresAt: time, expiresAt: time, limits: fundingLimits,
 });
 export const settlementSchema = scopeSchema.extend({ challengeId: uuid,
-  verificationSid: z.string().regex(/^VE[0-9a-fA-F]{32}$/).nullable() });
+  verificationSid: z.string().regex(/^VE[0-9a-fA-F]{32}$/).nullable(),
+  providerCreatedAt: time.multipleOf(1000).optional(), providerObservedAt: time.multipleOf(1000).optional(),
+}).refine(value => (value.providerCreatedAt === undefined) === (value.providerObservedAt === undefined)
+  && (value.providerCreatedAt === undefined || (value.verificationSid !== null && value.providerCreatedAt <= value.providerObservedAt!)));
 export const claimSchema = scopeSchema.extend({ challengeId: uuid, browserRef: uuid, browserHash: hash, checkId: uuid,
   operationId: uuid, proofHash: hash, requestHash: hash });
 export const sessionSchema = scopeSchema.extend({ sessionHash: hash, browserRef: uuid, browserHash: hash,

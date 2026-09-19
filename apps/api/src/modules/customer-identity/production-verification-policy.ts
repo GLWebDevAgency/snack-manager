@@ -28,8 +28,8 @@ export const ProductionVerificationPolicySchema = z.strictObject({
 
 /** The runtime observer reads only the Verify Service. Its account SID binds
  * the service's ownership, not the account's commercial type or status.
- * Account state, SMS, Fraud Guard and token validity require separate operator
- * attestations; they are not established by this technical observation. */
+ * Account state, SMS and Fraud Guard require separate operator attestations.
+ * Provider token validity is attested only in the legacy safeguard model. */
 export const ProductionServerObservationSchema = z.strictObject({
   reference, ...scope, codeLength: z.literal(6), observedAt: timestamp, settingsFingerprint: fingerprint,
 });
@@ -37,12 +37,18 @@ const account = z.strictObject({
   reference, ...scope, accountType: z.literal('Full'), accountStatus: z.literal('active'),
   attestedAt: timestamp, expiresAt: timestamp,
 });
-const safeguards = z.strictObject({
+const commonSafeguards = {
   reference, ...scope, smsEnabled: z.literal(true), fraudGuardEnabled: z.literal(true),
-  maxTokenValiditySeconds: z.number().int().min(1).max(600),
   maxSmsSegmentsPerSend: z.number().int().min(1).max(10), settingsFingerprint: fingerprint,
   attestedAt: timestamp, expiresAt: timestamp,
-});
+};
+const safeguards = z.union([
+  z.strictObject({ ...commonSafeguards, maxTokenValiditySeconds: z.number().int().min(1).max(600) }),
+  // Explicit opt-in: old strict schemas reject this model. No provider TTL is
+  // claimed. Activation also requires migration 0011, which rejects an old
+  // writer settling production without durable provider-age evidence.
+  z.strictObject({ ...commonSafeguards, codeValidityModel: z.literal('local_provider_age_v1') }),
+]);
 const attestedCostBounds = z.strictObject({
   reference, ...scope, currency: z.literal('USD'), smsSegmentUpperBoundMicrousd: microusd,
   successfulVerificationUpperBoundMicrousd: microusd, allFeesIncluded: z.literal(true),

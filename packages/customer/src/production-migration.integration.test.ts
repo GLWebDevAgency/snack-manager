@@ -25,6 +25,64 @@ async function seedChallenge(admin: Pool, s: ReturnType<typeof scope>, challenge
 }
 
 integration('production additive upgrade and legacy writer fences — native PostgreSQL', () => {
+  it('expires only unmeasured active production challenges across upgrade and fences a rolled-back writer', async () => {
+    const s = scope(); const legacy = scope();
+    const entries: { id: string; state: string; sid: string }[] = [];
+    let receipts: unknown[] = []; let providerReceipts: unknown[] = []; let budget: unknown;
+    let hashes: unknown[] = []; let grantExpiry = 0;
+    const f = await customerTestFixture(process.env.CUSTOMER_TEST_DATABASE_URL, {
+      beforeUpgradeMigrations: 11,
+      beforeUpgrade: async admin => {
+        const op = new PostgresCustomerProductionOperator(admin);
+        grantExpiry = Date.now()+600_000;
+        await op.authorizeBudget({ ...s, serviceSid: 'VA11111111111111111111111111111111', authorizationRef: 'A',
+          currency: 'USD', costEvidenceReference: 'cost-A', reservePerSendMicrousd: 600,
+          authorizedSpendMicrousd: 6000, maxSendReservations: 10, notBefore: Date.now()-1000, expiresAt: grantExpiry });
+        await op.activateBudget({ ...s, authorizationRef: 'A', expectedActiveAuthorizationRef: null });
+        for (const state of ['reserved','pending','checking','consumed','uncertain']) {
+          const id = await seedChallenge(admin, s); const sid = `VE${randomUUID().replaceAll('-', '')}`;
+          await admin.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,
+            evidence_reference,sms_units,funding_kind,production_authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)
+            VALUES($1,$2,$3,$4,$5,$5,'observed',1,'production_paid','A',600,$6,'cost-A')`,
+          [randomUUID(),s.parentRef,s.tenantRef,id,hash(),new Date(grantExpiry)]);
+          await admin.query('UPDATE customer.challenges SET state=$2,verification_sid=$3,check_id=$4 WHERE id=$1',
+            [id,state,sid,randomUUID()]);
+          await admin.query(`INSERT INTO customer.provider_verifications(parent_ref,tenant_ref,challenge_id,service_sid,verification_sid)
+            VALUES($1,$2,$3,'VA11111111111111111111111111111111',$4)`, [s.parentRef,s.tenantRef,id,sid]);
+          entries.push({ id, state, sid });
+        }
+        const legacyId = await seedChallenge(admin, legacy);
+        await admin.query("UPDATE customer.challenges SET state='pending',verification_sid=$2 WHERE id=$1",
+          [legacyId, `VE${randomUUID().replaceAll('-', '')}`]);
+        receipts = (await admin.query('SELECT * FROM customer.reservations WHERE parent_ref=$1 ORDER BY id', [s.parentRef])).rows;
+        providerReceipts = (await admin.query('SELECT * FROM customer.provider_verifications WHERE parent_ref=$1 ORDER BY verification_sid', [s.parentRef])).rows;
+        budget = (await admin.query('SELECT * FROM customer.production_budget_authorizations WHERE parent_ref=$1', [s.parentRef])).rows[0];
+        hashes = (await admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
+      },
+    });
+    try {
+      for (const entry of entries) {
+        expect((await f.admin.query('SELECT state,verification_sid FROM customer.challenges WHERE id=$1', [entry.id])).rows[0])
+          .toEqual({ state: ['reserved','pending','checking'].includes(entry.state) ? 'expired' : entry.state,
+            verification_sid: entry.sid });
+      }
+      expect((await f.admin.query('SELECT state FROM customer.challenges WHERE parent_ref=$1', [legacy.parentRef])).rows[0].state).toBe('pending');
+      expect((await f.admin.query('SELECT * FROM customer.reservations WHERE parent_ref=$1 ORDER BY id', [s.parentRef])).rows).toEqual(receipts);
+      expect((await f.admin.query('SELECT * FROM customer.provider_verifications WHERE parent_ref=$1 ORDER BY verification_sid', [s.parentRef])).rows).toEqual(providerReceipts);
+      expect((await f.admin.query('SELECT * FROM customer.production_budget_authorizations WHERE parent_ref=$1', [s.parentRef])).rows[0]).toEqual(budget);
+      const current = (await f.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
+      expect(current).toHaveLength(12); expect(current.slice(0,11)).toEqual(hashes);
+      await migrateCustomer(f.admin); await assertCustomerMigrationsCurrent(f.app);
+      expect((await f.admin.query(`SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class
+        WHERE oid IN ('customer.challenges'::regclass,'customer.reservations'::regclass) ORDER BY relname`)).rows)
+        .toEqual(['challenges','reservations'].map(relname => ({ relname, relrowsecurity: true, relforcerowsecurity: true })));
+      await expect(withCustomerScope(f.app, s, c => c.query("UPDATE customer.challenges SET state='pending' WHERE id=$1", [entries[0]!.id])))
+        .rejects.toThrow('Identité client indisponible');
+      expect((await f.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [entries[0]!.id])).rows[0].state).toBe('expired');
+      expect((await f.admin.query('SELECT * FROM customer.production_budget_authorizations WHERE parent_ref=$1', [s.parentRef])).rows[0]).toEqual(budget);
+    } finally { await f.close(); }
+  }, 20_000);
+
   it('preserves original migration hashes, pilot receipts/caps, 128 admissions and tombstones', async () => {
     const s = scope(); const browserRef = randomUUID(); const browserHash = hash(); const operationId = randomUUID();
     let history: unknown[] = []; let receipt: unknown;
@@ -60,7 +118,7 @@ integration('production additive upgrade and legacy writer fences — native Pos
       expect((await f.admin.query('SELECT send_limit,sms_limit,verification_limit,reserved_sends FROM customer.parent_budgets WHERE parent_ref=$1', [s.parentRef])).rows[0])
         .toEqual({ send_limit: '5', sms_limit: '20', verification_limit: '10', reserved_sends: '0' });
       const current = (await f.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-      expect(current).toHaveLength(11); expect(current.slice(0,9)).toEqual(history);
+      expect(current).toHaveLength(12); expect(current.slice(0,9)).toEqual(history);
       await migrateCustomer(f.admin); await assertCustomerMigrationsCurrent(f.app);
       expect((await f.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(current);
       expect((await f.admin.query('SELECT count(*)::int AS n FROM customer.browser_preparations WHERE parent_ref=$1', [s.parentRef])).rows[0].n).toBe(129);

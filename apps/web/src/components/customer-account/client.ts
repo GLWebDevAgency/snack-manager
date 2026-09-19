@@ -1,7 +1,7 @@
 import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
   CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema,
   CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER,
-  customerAccountResponseLimit, type CustomerAccountAction, type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
+  customerAccountResponseLimit, customerAccountRequestTimeoutMs, type CustomerAccountAction, type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
 import { selectedCustomerBrowser, selectedCustomerPublication } from './browser-journal';
 
 type Action = CustomerAccountAction;
@@ -55,7 +55,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
     };
     const response = await fetch(`/r/${slug}/compte/${paths[action]}`, {
       method: methods[action], credentials: "same-origin", cache: "no-store", redirect: "error",
-      referrerPolicy: "no-referrer", signal: AbortSignal.timeout(12_000),
+      referrerPolicy: "no-referrer", signal: AbortSignal.timeout(customerAccountRequestTimeoutMs(action, 'browser')),
       headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(browserRef === null ? {} : { [CUSTOMER_ACCOUNT_BROWSER_REF_HEADER]: browserRef }),
         ...(expected === null ? {} : { [CUSTOMER_ACCOUNT_OPERATION_HEADER]: expected.expectedOperationId, [CUSTOMER_ACCOUNT_CHECK_HEADER]: expected.expectedCheckId }) },

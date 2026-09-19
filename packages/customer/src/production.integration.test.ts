@@ -102,11 +102,154 @@ integration('production storage — real PostgreSQL with separate operator/runti
     expect(await available(input)).toBe(false);
   });
 
+  it('admits six distinct customers on one production IP and refuses the seventh without a debit', async () => {
+    const input = reservation(); input.limits.ipSendReservations = 6;
+    await fund(input, { maxSendReservations: 10, authorizedSpendMicrousd: 6000 });
+    for (let index = 0; index < 7; index++) {
+      const next = reservation({ parentRef: input.parentRef, tenantRef: input.tenantRef,
+        ipHash: input.ipHash, limits: input.limits });
+      await prepare(next);
+      expect((await repo.reserve(next)).kind).toBe(index < 6 ? 'reserved' : 'denied');
+    }
+    expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 6, spent: 3600 }]);
+  });
+
+  const dates = (age = 0) => ({ providerCreatedAt: 1_800_000_000_000,
+    providerObservedAt: 1_800_000_000_000 + age });
+  const settle = (input: ProductionVerificationReservation, age = 0) => repo.settleSend({ ...input,
+    verificationSid: `VE${hash().slice(0,32)}`, ...dates(age) });
+
+  it.each([0, 1000, 597_000])('persists a conservative provider age of %i ms from the original SQL anchor', async age => {
+    const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input);
+    const before = (await f.admin.query('SELECT created_at,expires_at FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0];
+    const guard = (await f.admin.query(`SELECT extract(epoch FROM (g.active_until-c.created_at))*1000 AS duration
+      FROM customer.phone_guards g JOIN customer.challenges c ON c.parent_ref=g.parent_ref
+      WHERE c.id=$1 AND g.global_phone_hash=$2`, [input.challengeId,input.globalPhoneHash])).rows[0];
+    expect(Number(guard.duration)).toBeGreaterThanOrEqual(650_000);
+    const pending = await settle(input, age); expect(pending).not.toBeNull();
+    const row = (await f.admin.query(`SELECT created_at,expires_at,provider_created_at,provider_observed_at,
+      extract(epoch FROM (expires_at-created_at))*1000 AS duration FROM customer.challenges WHERE id=$1`, [input.challengeId])).rows[0];
+    expect(row.created_at).toEqual(before.created_at); expect(Number(row.duration)).toBe(598_000-age);
+    expect(row.expires_at.getTime()).toBeLessThanOrEqual(before.expires_at.getTime());
+    expect(row.provider_created_at.getTime()).toBe(dates(age).providerCreatedAt);
+    expect(row.provider_observed_at.getTime()).toBe(dates(age).providerObservedAt);
+    const replay = await repo.settleSend({ ...input, verificationSid: pending!.verificationSid, ...dates(0) });
+    expect(replay?.expiresAt).toBe(pending!.expiresAt);
+    expect((await f.admin.query('SELECT expires_at,provider_observed_at FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0])
+      .toEqual({ expires_at: row.expires_at, provider_observed_at: row.provider_observed_at });
+  });
+
+  it.each([598_000, 599_000, 600_000, 86_400_000])('never publishes a provider resource already %i ms old', async age => {
+    const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input);
+    expect(await settle(input, age)).toBeNull();
+    expect((await f.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('expired');
+    expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 1, spent: 600 }]);
+  });
+
+  it('keeps a missing acknowledgement uncertain and refuses an old writer without date evidence', async () => {
+    const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input);
+    const sid = `VE${hash().slice(0,32)}`;
+    await expect(f.admin.query("UPDATE customer.challenges SET state='pending',verification_sid=$2 WHERE id=$1",
+      [input.challengeId, sid])).rejects.toMatchObject({ code: '23514' });
+    expect(await repo.settleSend({ ...input, verificationSid: sid })).toBeNull();
+    expect((await f.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('uncertain');
+    expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 1, spent: 600 }]);
+  });
+
+  it('cannot rewrite the original SQL anchor, date evidence or deadline after settlement', async () => {
+    const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input); await settle(input);
+    for (const assignment of ["created_at=created_at+interval '1 second'", "expires_at=expires_at+interval '1 millisecond'",
+      "provider_observed_at=provider_observed_at+interval '1 second'", 'provider_created_at=NULL,provider_observed_at=NULL']) {
+      await expect(f.admin.query(`UPDATE customer.challenges SET ${assignment} WHERE id=$1`, [input.challengeId])).rejects.toMatchObject({ code: '23514' });
+    }
+  });
+
+  it('rejects the unobserved SID of an old uncertain send after its phone guard has elapsed', async () => {
+    const input = reservation(); const grant = await fund(input);
+    const oldId = randomUUID(); const oldOperation = randomUUID();
+    // Historical ACK-lost evidence is inserted at its original time. No journal
+    // is rewritten, clock mocked, guard disabled or provider contacted.
+    await f.admin.query(`WITH stamp AS (SELECT clock_timestamp()-interval '11 minutes' AS at)
+      INSERT INTO customer.challenges(id,parent_ref,tenant_ref,operation_id,request_hash,browser_hash,phone_hash,encrypted_phone,
+        service_sid,max_checks,created_at,expires_at,state)
+      SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,5,at,at+interval '10 minutes','uncertain' FROM stamp`,
+    [oldId,input.parentRef,input.tenantRef,oldOperation,hash(),hash(),input.phoneHash,input.encryptedPhone,input.serviceSid]);
+    await f.admin.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,
+      sms_units,reserved_at,funding_kind,production_authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)
+      VALUES($1,$2,$3,$4,$5,$6,'observed',2,clock_timestamp()-interval '11 minutes','production_paid','A',600,$7,'cost-A')`,
+    [oldOperation,input.parentRef,input.tenantRef,oldId,input.globalPhoneHash,input.ipHash,new Date(grant.expiresAt)]);
+    await f.admin.query(`INSERT INTO customer.phone_guards(parent_ref,global_phone_hash,active_until)
+      VALUES($1,$2,clock_timestamp()-interval '10 seconds')`, [input.parentRef,input.globalPhoneHash]);
+    await prepare(input); expect((await repo.reserve(input)).kind).toBe('reserved');
+    const sid = `VE${hash().slice(0,32)}`;
+    expect(await repo.settleSend({ ...input, verificationSid: sid, ...dates(660_000) })).toBeNull();
+    expect((await f.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [oldId])).rows[0].state).toBe('uncertain');
+    expect((await f.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('expired');
+    expect(await repo.claimCheck({ ...input, checkId: randomUUID() })).toBeNull();
+    expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 2, spent: 1200 }]);
+  });
+
+  async function claimedShortChallenge() {
+    const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input);
+    expect(await settle(input, 597_000)).not.toBeNull();
+    const check = { ...input, checkId: randomUUID(), requestHash: hash() };
+    expect(await repo.claimCheck(check)).not.toBeNull();
+    return { ...check, result: 'approved' as const, accountId: randomUUID(), sessionId: randomUUID(),
+      sessionHash: hash(), sessionExpiresAt: Date.now()+600_000, existingSessionHash: null };
+  }
+
+  it('refuses a provider approval after the local age deadline while waiting on the SQL parent lock', async () => {
+    const input = await claimedShortChallenge(); const blocker = await f.admin.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT parent_ref FROM customer.parent_budgets WHERE parent_ref=$1 FOR UPDATE', [input.parentRef]);
+      const waiting = repo.completeCheck(input);
+      await blocker.query('SELECT pg_sleep(1.05)'); await blocker.query('COMMIT');
+      expect(await waiting).toBeNull();
+      expect((await f.admin.query('SELECT id FROM customer.registration_enrollments WHERE parent_ref=$1', [input.parentRef])).rowCount).toBe(0);
+      expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 1, spent: 600 }]);
+    } finally { await blocker.query('ROLLBACK'); blocker.release(); }
+  });
+
+  it('rolls back enrollment inserted after its final time predicate when the code expires during the SQL statement', async () => {
+    await f.admin.query(`CREATE SEQUENCE customer.fixture_phone_enrollment_hits;
+      GRANT USAGE ON SEQUENCE customer.fixture_phone_enrollment_hits TO "${f.role}";
+      CREATE FUNCTION customer.fixture_delay_phone_enrollment() RETURNS trigger LANGUAGE plpgsql AS $$
+      DECLARE remaining double precision;
+      BEGIN
+        SELECT extract(epoch FROM (expires_at-clock_timestamp())) INTO remaining
+          FROM customer.challenges WHERE id=NEW.challenge_id;
+        IF remaining IS NULL OR remaining<=0 OR remaining>1.1 THEN RAISE EXCEPTION 'Fixture checkpoint not reached'; END IF;
+        PERFORM nextval('customer.fixture_phone_enrollment_hits');
+        PERFORM pg_sleep(remaining+0.03);
+        PERFORM nextval('customer.fixture_phone_enrollment_hits');
+        RETURN NEW;
+      END; $$;
+      CREATE TRIGGER fixture_delay_phone_enrollment BEFORE INSERT ON customer.registration_enrollments
+      FOR EACH ROW EXECUTE FUNCTION customer.fixture_delay_phone_enrollment()`);
+    try {
+      const input = await claimedShortChallenge();
+      await expect(repo.completeCheck(input)).rejects.toThrow('Identité client indisponible');
+      // Sequences survive transaction rollback: the test must actually cross
+      // the deadline, not pass due to a setup/checkpoint failure before INSERT.
+      expect((await f.admin.query('SELECT last_value,is_called FROM customer.fixture_phone_enrollment_hits')).rows[0])
+        .toEqual({ last_value: '2', is_called: true });
+      expect((await f.admin.query('SELECT id FROM customer.registration_enrollments WHERE parent_ref=$1', [input.parentRef])).rowCount).toBe(0);
+      expect((await f.admin.query('SELECT id FROM customer.accounts WHERE parent_ref=$1', [input.parentRef])).rowCount).toBe(0);
+      expect((await f.admin.query('SELECT state FROM customer.check_attempts WHERE id=$1', [input.checkId])).rows[0].state).toBe('checking');
+      expect(await spent(input)).toEqual([{ authorization_ref: 'A', sends: 1, spent: 600 }]);
+    } finally {
+      await f.admin.query(`DROP TRIGGER fixture_delay_phone_enrollment ON customer.registration_enrollments;
+        DROP FUNCTION customer.fixture_delay_phone_enrollment(); DROP SEQUENCE customer.fixture_phone_enrollment_hits`);
+    }
+  });
+
   it('rotates A→B without refunding A or moving its pending/check funding to B', async () => {
     const input = reservation(); const a = await fund(input, { authorizedSpendMicrousd: 600 }); await prepare(input);
     expect((await repo.reserve(input)).kind).toBe('reserved');
     const pending = await repo.settleSend({ parentRef: input.parentRef, tenantRef: input.tenantRef, challengeId: input.challengeId,
-      now: Date.now(), verificationSid: `VE${hash().slice(0,32)}` });
+      now: Date.now(), verificationSid: `VE${hash().slice(0,32)}`,
+      providerCreatedAt: 1_800_000_000_000, providerObservedAt: 1_800_000_000_000 });
     const b = { ...a, authorizationRef: 'B', costEvidenceReference: 'cost-B', authorizedSpendMicrousd: 1200 };
     await operator.authorizeBudget(b);
     expect(await operator.activateBudget({ parentRef: input.parentRef, tenantRef: input.tenantRef,
@@ -220,7 +363,8 @@ integration('production storage — real PostgreSQL with separate operator/runti
   it('rechecks revoked original authorization after a check claim, preserving the receipt and prohibiting SQL check bypass', async () => {
     const input = reservation(); await fund(input); await prepare(input); await repo.reserve(input);
     await repo.settleSend({ parentRef: input.parentRef, tenantRef: input.tenantRef, challengeId: input.challengeId,
-      now: Date.now(), verificationSid: `VE${hash().slice(0,32)}` });
+      now: Date.now(), verificationSid: `VE${hash().slice(0,32)}`,
+      providerCreatedAt: 1_800_000_000_000, providerObservedAt: 1_800_000_000_000 });
     const check = { parentRef: input.parentRef, tenantRef: input.tenantRef, challengeId: input.challengeId,
       operationId: input.operationId, proofHash: input.proofHash, requestHash: input.requestHash, browserRef: input.browserRef,
       browserHash: input.browserHash, checkId: randomUUID(), now: Date.now() };

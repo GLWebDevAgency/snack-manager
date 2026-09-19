@@ -1,0 +1,3793 @@
+{
+  "startedAt": "2026-09-13T13:31:00.340Z",
+  "updatedAt": "2026-09-13T13:33:32.547Z",
+  "buildId": "2ugXm_7GX89t7a7B1qhfR",
+  "base": "http://127.0.0.1:3092",
+  "api": "http://127.0.0.1:3094",
+  "browser": "151.0.7922.34",
+  "initialHarnessAttempt": "initial-harness-attempt.json (four temporary selector errors: direct section child expected as div; same build, passing initial contexts retained)",
+  "limits": "Chromium sur Next compilé local ; fixtures du dépôt et mutations mémoire seulement. Aucun compte, API, paiement, base ou serveur externe. Pas de Safari matériel.",
+  "results": [
+    {
+      "name": "settings-320-light",
+      "surface": "settings",
+      "width": 320,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Identity card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Identity information card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Dining room",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Brand save bar",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Brand editor",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Account card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Audit card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-320-light-enseigne.png",
+        "settings-320-light-salle.png",
+        "settings-320-light-identité-visuelle.png",
+        "settings-320-light-mon-compte.png",
+        "settings-320-light-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-768-light",
+      "surface": "settings",
+      "width": 768,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Identity card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Identity information card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Dining room",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Brand save bar",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Brand editor",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Account card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Audit card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-768-light-enseigne.png",
+        "settings-768-light-salle.png",
+        "settings-768-light-identité-visuelle.png",
+        "settings-768-light-mon-compte.png",
+        "settings-768-light-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-1440-light",
+      "surface": "settings",
+      "width": 1440,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Identity card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Identity information card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Dining room",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Brand save bar",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Brand editor",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Account card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Audit card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-1440-light-enseigne.png",
+        "settings-1440-light-salle.png",
+        "settings-1440-light-identité-visuelle.png",
+        "settings-1440-light-mon-compte.png",
+        "settings-1440-light-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-1920-light",
+      "surface": "settings",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identity card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identity information card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Dining room",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand save bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand editor",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Account card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Audit card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-1920-light-enseigne.png",
+        "settings-1920-light-salle.png",
+        "settings-1920-light-identité-visuelle.png",
+        "settings-1920-light-mon-compte.png",
+        "settings-1920-light-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-2560-light",
+      "surface": "settings",
+      "width": 2560,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Identity card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Identity information card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Dining room",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Brand save bar",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Brand editor",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Account card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Audit card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-2560-light-enseigne.png",
+        "settings-2560-light-salle.png",
+        "settings-2560-light-identité-visuelle.png",
+        "settings-2560-light-mon-compte.png",
+        "settings-2560-light-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-390-dark",
+      "surface": "settings",
+      "width": 390,
+      "theme": "dark",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Identity card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Identity information card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Dining room",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Brand save bar",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Brand editor",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Account card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Audit card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-390-dark-enseigne.png",
+        "settings-390-dark-salle.png",
+        "settings-390-dark-identité-visuelle.png",
+        "settings-390-dark-mon-compte.png",
+        "settings-390-dark-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "settings-1920-dark",
+      "surface": "settings",
+      "width": 1920,
+      "theme": "dark",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Enseigne tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identity card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identity information card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Salle tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Dining room",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Identité visuelle tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand save bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand editor",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Brand grid including preview",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Mon compte tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Account card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Journal tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Audit card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Two independent drafts survive tabs and browser back/forward without writes",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "settings-1920-dark-enseigne.png",
+        "settings-1920-dark-salle.png",
+        "settings-1920-dark-identité-visuelle.png",
+        "settings-1920-dark-mon-compte.png",
+        "settings-1920-dark-journal.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/audit"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/dining/room"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-320-light",
+      "surface": "livraison",
+      "width": 320,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 285,
+            "width": 250
+          },
+          "columns": "250px",
+          "items": [
+            {
+              "left": 35,
+              "right": 285,
+              "top": 642.34375,
+              "width": 250
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Capacity grid",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Drivers card",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 285,
+            "width": 250
+          },
+          "columns": "250px",
+          "items": [
+            {
+              "left": 35,
+              "right": 285,
+              "top": 605.34375,
+              "width": 250
+            },
+            {
+              "left": 35,
+              "right": 285,
+              "top": 1569,
+              "width": 250
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 285,
+            "width": 250
+          },
+          "columns": "250px",
+          "items": [
+            {
+              "left": 35,
+              "right": 285,
+              "top": 642.34375,
+              "width": 250
+            },
+            {
+              "left": 35,
+              "right": 285,
+              "top": 1606,
+              "width": 250
+            },
+            {
+              "left": 35,
+              "right": 285,
+              "top": 2569.65625,
+              "width": 250
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-320-light-zones-et-tarifs.png",
+        "livraison-320-light-capacité-et-ouverture.png",
+        "livraison-320-light-livreurs.png",
+        "livraison-320-light-2-zones.png",
+        "livraison-320-light-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-768-light",
+      "surface": "livraison",
+      "width": 768,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 111,
+            "right": 723,
+            "width": 612
+          },
+          "columns": "612px",
+          "items": [
+            {
+              "left": 111,
+              "right": 723,
+              "top": 460,
+              "width": 612
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Capacity grid",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Drivers card",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 92,
+          "right": 742,
+          "width": 650,
+          "mainLeft": 66,
+          "mainRight": 768,
+          "padding": 26,
+          "targetLeft": 92,
+          "targetRight": 742
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 111,
+            "right": 723,
+            "width": 612
+          },
+          "columns": "612px",
+          "items": [
+            {
+              "left": 111,
+              "right": 723,
+              "top": 460,
+              "width": 612
+            },
+            {
+              "left": 111,
+              "right": 723,
+              "top": 1214.625,
+              "width": 612
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 111,
+            "right": 723,
+            "width": 612
+          },
+          "columns": "612px",
+          "items": [
+            {
+              "left": 111,
+              "right": 723,
+              "top": 460,
+              "width": 612
+            },
+            {
+              "left": 111,
+              "right": 723,
+              "top": 1214.625,
+              "width": 612
+            },
+            {
+              "left": 111,
+              "right": 723,
+              "top": 1969.25,
+              "width": 612
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-768-light-zones-et-tarifs.png",
+        "livraison-768-light-capacité-et-ouverture.png",
+        "livraison-768-light-livreurs.png",
+        "livraison-768-light-2-zones.png",
+        "livraison-768-light-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-1440-light",
+      "surface": "livraison",
+      "width": 1440,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1395,
+            "width": 1118
+          },
+          "columns": "1118px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1395,
+              "top": 401.5,
+              "width": 1118
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Capacity grid",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Drivers card",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1414,
+          "width": 1156,
+          "mainLeft": 232,
+          "mainRight": 1440,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1414
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1395,
+            "width": 1118
+          },
+          "columns": "551px 551px",
+          "items": [
+            {
+              "left": 277,
+              "right": 828,
+              "top": 401.5,
+              "width": 551
+            },
+            {
+              "left": 844,
+              "right": 1395,
+              "top": 401.5,
+              "width": 551
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1395,
+            "width": 1118
+          },
+          "columns": "551px 551px",
+          "items": [
+            {
+              "left": 277,
+              "right": 828,
+              "top": 401.5,
+              "width": 551
+            },
+            {
+              "left": 844,
+              "right": 1395,
+              "top": 401.5,
+              "width": 551
+            },
+            {
+              "left": 277,
+              "right": 828,
+              "top": 1172.125,
+              "width": 551
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-1440-light-zones-et-tarifs.png",
+        "livraison-1440-light-capacité-et-ouverture.png",
+        "livraison-1440-light-livreurs.png",
+        "livraison-1440-light-2-zones.png",
+        "livraison-1440-light-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-1920-light",
+      "surface": "livraison",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "1598px 0px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1875,
+              "top": 401.5,
+              "width": 1598
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Capacity grid",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Drivers card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "791px 791px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1068,
+              "top": 401.5,
+              "width": 791
+            },
+            {
+              "left": 1084,
+              "right": 1875,
+              "top": 401.5,
+              "width": 791
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "522px 522px 522px",
+          "items": [
+            {
+              "left": 277,
+              "right": 799,
+              "top": 401.5,
+              "width": 522
+            },
+            {
+              "left": 815,
+              "right": 1337,
+              "top": 401.5,
+              "width": 522
+            },
+            {
+              "left": 1353,
+              "right": 1875,
+              "top": 401.5,
+              "width": 522
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-1920-light-zones-et-tarifs.png",
+        "livraison-1920-light-capacité-et-ouverture.png",
+        "livraison-1920-light-livreurs.png",
+        "livraison-1920-light-2-zones.png",
+        "livraison-1920-light-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-2560-light",
+      "surface": "livraison",
+      "width": 2560,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 2515,
+            "width": 2238
+          },
+          "columns": "2238px 0px 0px 0px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 2515,
+              "top": 401.5,
+              "width": 2238
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Capacity grid",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Drivers card",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 2534,
+          "width": 2276,
+          "mainLeft": 232,
+          "mainRight": 2560,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 2534
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 2515,
+            "width": 2238
+          },
+          "columns": "1111px 1111px 0px 0px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1388,
+              "top": 401.5,
+              "width": 1111
+            },
+            {
+              "left": 1404,
+              "right": 2515,
+              "top": 401.5,
+              "width": 1111
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 2515,
+            "width": 2238
+          },
+          "columns": "735.328px 735.328px 735.328px 0px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1012.328125,
+              "top": 401.5,
+              "width": 735.328125
+            },
+            {
+              "left": 1028.328125,
+              "right": 1763.65625,
+              "top": 401.5,
+              "width": 735.328125
+            },
+            {
+              "left": 1779.65625,
+              "right": 2514.984375,
+              "top": 401.5,
+              "width": 735.328125
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-2560-light-zones-et-tarifs.png",
+        "livraison-2560-light-capacité-et-ouverture.png",
+        "livraison-2560-light-livreurs.png",
+        "livraison-2560-light-2-zones.png",
+        "livraison-2560-light-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-390-dark",
+      "surface": "livraison",
+      "width": 390,
+      "theme": "dark",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 355,
+            "width": 320
+          },
+          "columns": "320px",
+          "items": [
+            {
+              "left": 35,
+              "right": 355,
+              "top": 543.5,
+              "width": 320
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Capacity grid",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Drivers card",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 16,
+          "right": 374,
+          "width": 358,
+          "mainLeft": 0,
+          "mainRight": 390,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 374
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 355,
+            "width": 320
+          },
+          "columns": "320px",
+          "items": [
+            {
+              "left": 35,
+              "right": 355,
+              "top": 538.5,
+              "width": 320
+            },
+            {
+              "left": 35,
+              "right": 355,
+              "top": 1450.65625,
+              "width": 320
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 35,
+            "right": 355,
+            "width": 320
+          },
+          "columns": "320px",
+          "items": [
+            {
+              "left": 35,
+              "right": 355,
+              "top": 543.5,
+              "width": 320
+            },
+            {
+              "left": 35,
+              "right": 355,
+              "top": 1455.65625,
+              "width": 320
+            },
+            {
+              "left": 35,
+              "right": 355,
+              "top": 2367.8125,
+              "width": 320
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-390-dark-zones-et-tarifs.png",
+        "livraison-390-dark-capacité-et-ouverture.png",
+        "livraison-390-dark-livreurs.png",
+        "livraison-390-dark-2-zones.png",
+        "livraison-390-dark-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "livraison-1920-dark",
+      "surface": "livraison",
+      "width": 1920,
+      "theme": "dark",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery zones card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "1 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "1598px 0px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1875,
+              "top": 401.5,
+              "width": 1598
+            }
+          ]
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Capacité et ouverture tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Capacity grid",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Livreurs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Drivers card",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Delivery publication bar",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Zones et tarifs tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "2 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "791px 791px 0px",
+          "items": [
+            {
+              "left": 277,
+              "right": 1068,
+              "top": 401.5,
+              "width": 791
+            },
+            {
+              "left": 1084,
+              "right": 1875,
+              "top": 401.5,
+              "width": 791
+            }
+          ]
+        },
+        {
+          "label": "3 delivery zones",
+          "grid": {
+            "left": 277,
+            "right": 1875,
+            "width": 1598
+          },
+          "columns": "522px 522px 522px",
+          "items": [
+            {
+              "left": 277,
+              "right": 799,
+              "top": 401.5,
+              "width": 522
+            },
+            {
+              "left": 815,
+              "right": 1337,
+              "top": 401.5,
+              "width": 522
+            },
+            {
+              "left": 1353,
+              "right": 1875,
+              "top": 401.5,
+              "width": 522
+            }
+          ]
+        }
+      ],
+      "checks": [
+        "Delivery draft survives three sections and browser back/forward; publication bar full width in every section",
+        "Original publication handler sends both hidden capacity and zone changes to schema-validated in-memory PATCH",
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "livraison-1920-dark-zones-et-tarifs.png",
+        "livraison-1920-dark-capacité-et-ouverture.png",
+        "livraison-1920-dark-livreurs.png",
+        "livraison-1920-dark-2-zones.png",
+        "livraison-1920-dark-3-zones.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/delivery/operators"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "PATCH",
+          "path": "/delivery/settings"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "encaissement-320-light",
+      "surface": "encaissement",
+      "width": 320,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Payment card 1",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Payment card 2",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "encaissement-320-light-cards.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "encaissement-1920-light",
+      "surface": "encaissement",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Payment card 1",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Payment card 2",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "encaissement-1920-light-cards.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "POST",
+          "path": "/encaissement/me/synchroniser"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "site-320-light-sans-online",
+      "surface": "site",
+      "width": 320,
+      "theme": "light",
+      "noOnline": true,
+      "measurements": [
+        {
+          "label": "Website without online capability",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "site-320-light-sans-online-vitrine.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "site-1920-light-sans-online",
+      "surface": "site",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": true,
+      "measurements": [
+        {
+          "label": "Website without online capability",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "site-1920-light-sans-online-vitrine.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "site-320-light",
+      "surface": "site",
+      "width": 320,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Commande en ligne tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Commande en ligne content",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Adresses tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Adresses content",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "site-320-light-commande-en-ligne.png",
+        "site-320-light-adresses.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/site/domains"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/site"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "site-1920-light",
+      "surface": "site",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Commande en ligne tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Commande en ligne content",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Adresses tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Adresses content",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "site-1920-light-commande-en-ligne.png",
+        "site-1920-light-adresses.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/site/domains"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/medias"
+        },
+        {
+          "method": "GET",
+          "path": "/public/tenants/le-comptoir/site"
+        },
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "screens-320-light",
+      "surface": "screens",
+      "width": 320,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Vos écrans tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Vos écrans content",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Installation et services tabpanel",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        },
+        {
+          "label": "Installation et services content",
+          "left": 16,
+          "right": 304,
+          "width": 288,
+          "mainLeft": 0,
+          "mainRight": 320,
+          "padding": 16,
+          "targetLeft": 16,
+          "targetRight": 304
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "screens-320-light-vos-écrans.png",
+        "screens-320-light-installation-et-services.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/screens"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/menu"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    },
+    {
+      "name": "screens-1920-light",
+      "surface": "screens",
+      "width": 1920,
+      "theme": "light",
+      "noOnline": false,
+      "measurements": [
+        {
+          "label": "Vos écrans tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Vos écrans content",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Installation et services tabpanel",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        },
+        {
+          "label": "Installation et services content",
+          "left": 258,
+          "right": 1894,
+          "width": 1636,
+          "mainLeft": 232,
+          "mainRight": 1920,
+          "padding": 26,
+          "targetLeft": 258,
+          "targetRight": 1894
+        }
+      ],
+      "checks": [
+        "Exact main-content left/right alignment; no horizontal overflow; named tabs meet 44px targets"
+      ],
+      "shots": [
+        "screens-1920-light-vos-écrans.png",
+        "screens-1920-light-installation-et-services.png"
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/tenants/me"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me"
+        },
+        {
+          "method": "GET",
+          "path": "/screens"
+        },
+        {
+          "method": "GET",
+          "path": "/orders/count"
+        },
+        {
+          "method": "GET",
+          "path": "/menu"
+        }
+      ],
+      "blocked": [],
+      "unknown": [],
+      "errors": [],
+      "pass": true
+    }
+  ]
+}

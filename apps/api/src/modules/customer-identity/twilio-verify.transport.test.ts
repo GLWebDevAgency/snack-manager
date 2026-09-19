@@ -1,16 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhoneVerificationTransportError, type PhoneVerificationFailure } from './phone-verification.port';
 import { TwilioVerifyTransport } from './twilio-verify.transport';
+import { CUSTOMER_VERIFICATION_TIMING } from '@sm/contracts';
 
 // Invented fixtures only. No credential, provider or network is used by this suite.
 const config = { accountSid: `AC${'1'.repeat(32)}`, apiKeySid: `SK${'2'.repeat(32)}`, apiKeySecret: 'invented-provider-secret' };
 const start = { phone: '+33601020304', serviceSid: `VA${'3'.repeat(32)}` };
 const check = { ...start, verificationSid: `VE${'4'.repeat(32)}`, code: '028491' };
+const providerCreatedAt = Date.parse('2026-09-13T10:00:00Z');
+const providerObservedAt = providerCreatedAt + 2000;
 const response = { sid: check.verificationSid, service_sid: start.serviceSid,
-  account_sid: config.accountSid, to: start.phone, channel: 'sms', status: 'pending' };
+  account_sid: config.accountSid, to: start.phone, channel: 'sms', status: 'pending', date_created: '2026-09-13T10:00:00Z' };
 const markers = [config.apiKeySecret, config.apiKeySid, config.accountSid, start.phone, start.serviceSid,
   check.verificationSid, check.code, 'provider-raw-detail'];
-const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
+  status, headers: { Date: new Date(providerObservedAt).toUTCString() },
+});
 const setup = (value: Response = json(response, 201)) => {
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(value);
   return { fetcher, transport: new TwilioVerifyTransport(config, fetcher) };
@@ -31,16 +36,18 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(
 describe('Twilio Verify closed transport', () => {
   it('sends one SMS through the fixed endpoint, with explicit fraud protection and API-key Basic auth', async () => {
     const { transport, fetcher } = setup();
-    expect(await transport.start(start)).toEqual({ verificationSid: check.verificationSid });
+    expect(await transport.start(start)).toEqual({ verificationSid: check.verificationSid, providerCreatedAt, providerObservedAt });
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [url, init] = fetcher.mock.calls[0]!;
     expect(url === `https://verify.twilio.com/v2/Services/${start.serviceSid}/Verifications`).toBe(true);
     expect(init?.method).toBe('POST');
     expect(init?.redirect).toBe('error');
+    expect(init?.cache).toBe('no-store');
     expect(init?.signal instanceof AbortSignal).toBe(true);
     const headers = new Headers(init?.headers);
     expect(headers.get('Authorization') === `Basic ${Buffer.from(`${config.apiKeySid}:${config.apiKeySecret}`).toString('base64')}`).toBe(true);
     expect(headers.get('Content-Type')).toBe('application/x-www-form-urlencoded');
+    expect(headers.get('Cache-Control')).toBe('no-store');
     const body = new URLSearchParams(String(init?.body));
     expect([...body.keys()].sort()).toEqual(['Channel', 'Locale', 'RiskCheck', 'To']);
     expect(body.get('To') === start.phone).toBe(true);
@@ -48,6 +55,35 @@ describe('Twilio Verify closed transport', () => {
     expect(body.get('Locale')).toBe('fr');
     expect(body.get('RiskCheck')).toBe('enable');
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, null, 0, NaN, '', 'tomorrow', '2026-02-30T10:00:00Z',
+    '2026-09-13T10:00:00.123Z', '2026-09-13T10:00:00+00:00', '2026-09-13T10:00:03Z'])
+  ('refuses missing, malformed, fractional or future resource creation %s without retry', async date_created => {
+    const f = setup(json({ ...response, date_created }, 201));
+    await refused(f.transport.start(start), 'uncertain'); expect(f.fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([null, '', 'NaN', '2026-02-30T10:00:00Z', '2026-09-13T10:00:02Z', 'Mon, 13 Sep 2026 10:00:02 GMT'])
+  ('refuses absent or noncanonical authenticated HTTP Date %s', async date => {
+    const result = new Response(JSON.stringify(response), { status: 201,
+      headers: date === null ? {} : { Date: date } });
+    await refused(setup(result).transport.start(start), 'uncertain');
+  });
+  it.each(['2026-09-13T10:00:00.000Z', 'Sun, 13 Sep 2026 10:00:00 GMT'])
+  ('accepts the documented whole-second resource date representation %s', async date_created => {
+    expect(await setup(json({ ...response, date_created }, 201)).transport.start(start))
+      .toEqual({ verificationSid: check.verificationSid, providerCreatedAt, providerObservedAt });
+  });
+
+  it('preserves both provider dates despite a different application clock, without inventing freshness', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2040-01-01T00:00:00Z'));
+    expect(await setup().transport.start(start)).toEqual({ verificationSid: check.verificationSid, providerCreatedAt, providerObservedAt });
+  });
+  it.each(['0', '1', '600', 'invalid'])('refuses cached start evidence with Age=%s without retry', async age => {
+    const value = json(response, 201); value.headers.set('Age', age);
+    const f = setup(value); await refused(f.transport.start(start), 'uncertain');
+    expect(f.fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('checks the exact verification SID, never authorizes by To, and ignores deprecated valid', async () => {
@@ -157,16 +193,20 @@ describe('Twilio Verify closed transport', () => {
     await refused(setup(new Response(new Uint8Array([0xff, 0xfe]))).transport.check(check), 'uncertain');
   });
 
-  it.each(['headers', 'body'])('enforces the total five-second deadline while awaiting %s, even if the injected fetch ignores abort', async stage => {
+  it.each([
+    ['headers', 'start'], ['body', 'start'], ['headers', 'check'], ['body', 'check'],
+  ] as const)('enforces the complete provider deadline awaiting %s for %s even if fetch ignores abort', async (stage, action) => {
     vi.useFakeTimers();
     const cancel = vi.fn();
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => stage === 'headers'
       ? new Promise<Response>(() => {}) : new Response(new ReadableStream<Uint8Array>({ cancel })));
-    const promise = new TwilioVerifyTransport(config, fetcher).check(check);
+    const transport = new TwilioVerifyTransport(config, fetcher);
+    const promise = action === 'start' ? transport.start(start) : transport.check(check);
+    const timeoutMs = CUSTOMER_VERIFICATION_TIMING[action].providerMs;
     const assertion = refused(promise, 'uncertain');
     let settled = false;
     void promise.then(() => { settled = true; }, () => { settled = true; });
-    await vi.advanceTimersByTimeAsync(4999);
+    await vi.advanceTimersByTimeAsync(timeoutMs - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await assertion;
@@ -176,7 +216,7 @@ describe('Twilio Verify closed transport', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('keeps the original five-second deadline when headers arrive after four seconds and the body remains pending', async () => {
+  it('keeps the original check deadline when headers arrive after four seconds and the body remains pending', async () => {
     vi.useFakeTimers();
     const cancel = vi.fn();
     let body: ReadableStream<Uint8Array> | undefined;
@@ -193,7 +233,7 @@ describe('Twilio Verify closed transport', () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(body?.locked).toBe(true);
     expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(999);
+    await vi.advanceTimersByTimeAsync(CUSTOMER_VERIFICATION_TIMING.check.providerMs - 4000 - 1);
     expect(settled).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
     expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
@@ -214,7 +254,7 @@ describe('Twilio Verify closed transport', () => {
     const assertion = refused(promise, 'uncertain');
     const approved = vi.fn();
     void promise.then(approved, () => {});
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(CUSTOMER_VERIFICATION_TIMING.check.providerMs);
     await assertion;
     expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     await vi.advanceTimersByTimeAsync(1);
@@ -232,6 +272,18 @@ describe('Twilio Verify closed transport', () => {
     await refused(promise, 'uncertain');
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('accepts one correlated start after fifteen seconds within its thirty-second budget', async () => {
+    vi.useFakeTimers();
+    let finish!: (value: Response) => void;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const promise = new TwilioVerifyTransport(config, fetcher).start(start);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+    finish(json(response, 201));
+    expect(await promise).toEqual({ verificationSid: check.verificationSid, providerCreatedAt, providerObservedAt });
+    expect(fetcher).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
   });
 
   it('snapshots validated input and configuration rather than accepting a mutation during the request', async () => {

@@ -46,6 +46,21 @@ function publishedFixture() {
 }
 
 describe('production paid verification — pure observation and SQL funding reference', () => {
+  it('opts into durable local age without claiming any provider token lifetime or changing funding', () => {
+    const input = fixture(); const { maxTokenValiditySeconds: _ttl, ...common } = input.evidence.safeguards;
+    const local = { ...input, evidence: { ...input.evidence, safeguards: { ...common, codeValidityModel: 'local_provider_age_v1' } } };
+    expect(planProductionPhoneVerification(local)).toEqual(planProductionPhoneVerification(input));
+    expect(ProductionVerificationEvidenceSchema.parse(local.evidence).safeguards).not.toHaveProperty('maxTokenValiditySeconds');
+    expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence, safeguards: common } }).kind).toBe('denied');
+    for (const patch of [{ codeValidityModel: 'default600' }, { codeValidityModel: 'local_provider_age_v2' },
+      { codeValidityModel: 'local_provider_age_v1', maxTokenValiditySeconds: 600 },
+      { codeValidityModel: 'local_provider_age_v1', maxTokenValiditySeconds: 86_400 },
+      { codeValidityModel: 'local_provider_age_v1', smsEnabled: false },
+      { codeValidityModel: 'local_provider_age_v1', fraudGuardEnabled: false },
+      { codeValidityModel: 'local_provider_age_v1', expiresAt: now }]) {
+      expect(planProductionPhoneVerification({ ...input, evidence: { ...input.evidence, safeguards: { ...common, ...patch } } }).kind).toBe('denied');
+    }
+  });
   it('requires the complete worst-case reservation without granting any funding or lifetime send allowance', () => {
     expect(planProductionPhoneVerification(fixture())).toEqual({
       kind: 'reservation_required', accountSid, serviceSid, tenantRef,

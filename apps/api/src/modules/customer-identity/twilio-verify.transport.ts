@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CUSTOMER_VERIFICATION_TIMING } from '@sm/contracts';
 import { PhoneVerificationTransportError, type PhoneVerificationCheck,
   type PhoneVerificationStart, type PhoneVerificationTransport } from './phone-verification.port';
 
@@ -9,10 +10,22 @@ const startRequest = z.strictObject({ phone: z.string().regex(/^\+[1-9]\d{7,14}$
 const checkRequest = startRequest.extend({ verificationSid: sid('VE'), code: z.string().regex(/^\d{6}$/) });
 const verification = z.object({ sid: sid('VE'), service_sid: sid('VA'), account_sid: sid('AC'),
   to: z.string(), channel: z.literal('sms'),
+  date_created: z.unknown().optional(),
   status: z.enum(['pending', 'approved', 'canceled', 'max_attempts_reached', 'deleted', 'failed', 'expired']) });
 const providerError = z.object({ code: z.number().int() });
 const uncertain = () => new PhoneVerificationTransportError('uncertain');
 const maxBodyBytes = 16 * 1024;
+
+/** Provider dates have second precision. Reject permissive Date.parse coercions,
+ * calendar normalization, non-GMT offsets and missing/fractional evidence. */
+function providerDate(value: unknown, http = false): number | null {
+  if (typeof value !== 'string') return null;
+  const parsed = Date.parse(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed % 1000 !== 0) return null;
+  const date = new Date(parsed);
+  return date.toUTCString() === value || (!http &&
+    (date.toISOString() === value || date.toISOString().replace('.000Z', 'Z') === value)) ? parsed : null;
+}
 
 /** Not registered in Nest: activating this transport requires durable challenge
  * authority and pre-reserved send budgets. A timeout must NEVER auto-retry. */
@@ -26,7 +39,7 @@ export class TwilioVerifyTransport implements PhoneVerificationTransport {
     this.config = parsed.data;
   }
 
-  async start(input: PhoneVerificationStart): Promise<{ verificationSid: string }> {
+  async start(input: PhoneVerificationStart) {
     const parsed = startRequest.safeParse(input);
     if (!parsed.success) throw new PhoneVerificationTransportError('invalid_request');
     const target = parsed.data;
@@ -36,8 +49,13 @@ export class TwilioVerifyTransport implements PhoneVerificationTransport {
     this.classifyError(result, false);
     if (result.status !== 201) throw uncertain();
     const record = this.correlate(result.value, target);
-    if (record.status !== 'pending') throw uncertain();
-    return { verificationSid: record.sid };
+    // A cached response's Date could predate the durable local reservation.
+    // It cannot establish the time anchor used for a fresh POST response.
+    if (record.status !== 'pending' || result.age !== null) throw uncertain();
+    const providerCreatedAt = providerDate(record.date_created);
+    const providerObservedAt = providerDate(result.date, true);
+    if (providerCreatedAt === null || providerObservedAt === null || providerCreatedAt > providerObservedAt) throw uncertain();
+    return { verificationSid: record.sid, providerCreatedAt, providerObservedAt };
   }
 
   async check(input: PhoneVerificationCheck): Promise<'approved' | 'pending' | 'expired' | 'locked'> {
@@ -88,14 +106,16 @@ export class TwilioVerifyTransport implements PhoneVerificationTransport {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let completed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutMs = endpoint === 'Verifications' ? CUSTOMER_VERIFICATION_TIMING.start.providerMs
+      : CUSTOMER_VERIFICATION_TIMING.check.providerMs;
     const deadline = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(uncertain()); }, 5000);
+      timer = setTimeout(() => { controller.abort(); reject(uncertain()); }, timeoutMs);
     });
     const work = async () => {
       const response = await this.fetcher(`https://verify.twilio.com/v2/Services/${serviceSid}/${endpoint}`, {
-        method: 'POST', redirect: 'error', signal: controller.signal,
+        method: 'POST', redirect: 'error', cache: 'no-store', signal: controller.signal,
         headers: { Authorization: `Basic ${Buffer.from(`${this.config.apiKeySid}:${this.config.apiKeySecret}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+          'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'Cache-Control': 'no-store' },
         body: new URLSearchParams(form).toString(),
       });
       if (controller.signal.aborted) {
@@ -104,7 +124,8 @@ export class TwilioVerifyTransport implements PhoneVerificationTransport {
       }
       reader = response.body?.getReader();
       if (Number(response.headers.get('Content-Length')) > maxBodyBytes) throw uncertain();
-      if (!reader) { completed = true; return { status: response.status, value: null }; }
+      if (!reader) { completed = true; return { status: response.status, value: null,
+        date: response.headers.get('Date'), age: response.headers.get('Age') }; }
       const chunks: Uint8Array[] = [];
       let size = 0;
       while (true) {
@@ -117,7 +138,7 @@ export class TwilioVerifyTransport implements PhoneVerificationTransport {
       const raw = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, size));
       let value: unknown = null;
       try { value = JSON.parse(raw); } catch { /* No provider body in errors. */ }
-      return { status: response.status, value };
+      return { status: response.status, value, date: response.headers.get('Date'), age: response.headers.get('Age') };
     };
     try { return await Promise.race([work(), deadline]); }
     catch { throw uncertain(); }

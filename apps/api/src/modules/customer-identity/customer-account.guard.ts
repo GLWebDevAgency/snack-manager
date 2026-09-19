@@ -6,9 +6,10 @@ import type { Request, Response } from 'express';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { customerAccessConfiguration } from './customer-account.config';
 import { customerHttpError } from './customer-account.error';
+import { customerVerificationDeadline, type CustomerVerificationDeadline } from './customer-verification.deadline';
 
 export type CustomerRelay = { slug: string; action: CustomerAccountAction; origin: string; client: string };
-export type CustomerAccountRequest = Request & { rawBody?: Buffer; customerRelay?: CustomerRelay };
+export type CustomerAccountRequest = Request & { rawBody?: Buffer; customerRelay?: CustomerRelay; customerDeadline?: CustomerVerificationDeadline };
 const canonicalToken = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const headers = ['x-sm-customer-client', 'x-sm-customer-at', 'x-sm-customer-origin', 'x-sm-customer-proof'] as const;
 
@@ -30,6 +31,14 @@ export class CustomerAccountGuard implements CanActivate {
     const action = CustomerAccountActionSchema.safeParse(request.params.action);
     const slug = CustomerAccountSlugSchema.safeParse(request.params.slug);
     if (!action.success || !slug.success || slug.data !== config.slug) throw customerHttpError('relay');
+    const deadline = customerVerificationDeadline(action.data);
+    request.customerDeadline = deadline;
+    if (deadline) {
+      const disconnected = () => { if (!response.writableFinished) deadline.abort(); };
+      response.once('close', disconnected);
+      response.once('finish', () => response.removeListener('close', disconnected));
+      if (request.aborted || response.destroyed) deadline.abort();
+    }
     const path = `/public/customer/${slug.data}/${action.data}`;
     if (request.method !== 'POST' || request.originalUrl !== path) throw customerHttpError('relay');
     const values = headers.map(name => singletonHeader(request, name));
@@ -54,8 +63,9 @@ export class CustomerAccountGuard implements CanActivate {
     if (!CustomerAccountEnvelopes[action.data].safeParse(request.body).success) throw customerHttpError('invalid_request');
     let allowed: boolean;
     try {
-      allowed = await this.quota.reserve({ scope: 'customer-account-http', clientKey: client,
+      const reserve = () => this.quota.reserve({ scope: 'customer-account-http', clientKey: client,
         windowMs: 60_000, clientLimit: 60, globalLimit: 300 });
+      allowed = deadline ? await deadline.run(reserve) : await reserve();
     } catch { throw customerHttpError('unavailable'); }
     if (!allowed) throw customerHttpError('limited');
     request.customerRelay = { slug: slug.data, action: action.data, client, origin };

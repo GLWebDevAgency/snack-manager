@@ -4,7 +4,7 @@ const browserRef = '10000000-0000-4000-8000-000000000001';
 const selected = async () => browserRef;
 const publication = async () => ({ expectedOperationId: browserRef, expectedCheckId: browserRef });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 describe("Compte client — transport privé same-origin", () => {
   it('binds private requests to the journal selector, never adopting a cookie alone', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({ result: 'fixture' })); vi.stubGlobal('fetch', fetch);
@@ -65,5 +65,45 @@ describe("Compte client — transport privé same-origin", () => {
     Response.json({ value: "x".repeat(4_100) }), new Response("{invalid", { headers: { "content-type": "application/json" } })])("refuse contenu non JSON, surdimensionné ou invalide", async response => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
     await expect(customerAccountRequest("classfood", selected, publication)("session")).rejects.toThrow();
+  });
+});
+
+describe('verification browser budgets', () => {
+  function clock() {
+    vi.useFakeTimers();
+    return vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const abort = new AbortController(); setTimeout(() => abort.abort(), ms); return abort.signal;
+    });
+  }
+  it.each([['start', 70_000], ['check', 50_000], ['status', 12_000]] as const)(
+    'bounds a silent %s request at %s ms and never retries it', async (action, budget) => {
+      clock(); const fetch = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init.signal!.addEventListener('abort', () => reject(new Error('interrupted')), { once: true });
+      })); vi.stubGlobal('fetch', fetch);
+      const pending = customerAccountRequest('classfood', selected)(action).catch(error => error);
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(budget);
+      expect(await pending).toMatchObject({ message: 'interrupted' });
+      expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(true);
+    });
+  it.each(['start', 'check'] as const)('accepts %s beyond the former twelve seconds while keeping selection pinned', async action => {
+    clock(); let resolve!: (response: Response) => void;
+    const fetch = vi.fn(() => new Promise<Response>(done => { resolve = done; })); vi.stubGlobal('fetch', fetch);
+    const read = vi.fn().mockResolvedValue(browserRef);
+    const pending = customerAccountRequest('classfood', read)(action);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1)); await vi.advanceTimersByTimeAsync(15_000);
+    resolve(Response.json({ challengeId: browserRef, expiresAt: Date.now() + 60_000 }));
+    expect(await pending).toMatchObject({ challengeId: browserRef });
+    expect(read).toHaveBeenCalledTimes(2); expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('rejects a delayed start result if another preparation replaced its identity', async () => {
+    clock(); let resolve!: (response: Response) => void;
+    const fetch = vi.fn(() => new Promise<Response>(done => { resolve = done; })); vi.stubGlobal('fetch', fetch);
+    const read = vi.fn().mockResolvedValue(browserRef);
+    const pending = customerAccountRequest('classfood', read)('start').catch(error => error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1)); await vi.advanceTimersByTimeAsync(15_000);
+    read.mockResolvedValue('20000000-0000-4000-8000-000000000002');
+    resolve(Response.json({ challengeId: browserRef, expiresAt: Date.now() + 60_000 }));
+    expect(await pending).toMatchObject({ status: 409 }); expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

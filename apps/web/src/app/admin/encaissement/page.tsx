@@ -101,7 +101,7 @@ export default function EncaissementPage() {
   const actif = fiche.etat === "actif";
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-[760px] flex-col gap-4 p-[26px] max-md:p-4">
+    <div className="flex min-w-0 flex-col gap-4 p-[26px] max-md:p-4">
       <header>
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">Commande en ligne</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-ink">Encaissement en ligne</h1>

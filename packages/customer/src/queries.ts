@@ -7,7 +7,8 @@ export type ChallengeRow = {
   id: string; parent_ref: string; tenant_ref: string; operation_id: string; intent_operation_id: string | null; request_hash: string;
   browser_ref: string | null; browser_hash: string; browser_generation: string | null; phone_hash: string; encrypted_phone: string; service_sid: string;
   verification_sid: string | null; state: string; max_checks: number; checks_used: number;
-  check_id: string | null; expires_at: Date;
+  check_id: string | null; created_at: Date; expires_at: Date;
+  provider_created_at: Date | null; provider_observed_at: Date | null;
   funding_kind: string | null; authorization_ref: string | null; reserved_microusd: string | null; funding_expires_at: Date | null;
   production_authorization_ref?: string | null; production_expiry?: Date | null; production_revoked?: Date | null; production_service?: string | null;
   paid_parent_ref: string | null; paid_authorization_ref: string | null; paid_currency: string | null; paid_expires_at: Date | null;

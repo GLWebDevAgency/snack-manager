@@ -1,7 +1,8 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import type { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SharedPublicQuota } from '../../common/shared-public-quota';
 import { CustomerAccountGuard, type CustomerAccountRequest } from './customer-account.guard';
 import { customerTestEnvironment } from './customer-account.test-fixture';
@@ -26,13 +27,15 @@ function fixture(action = 'session') {
     request.rawHeaders = Object.entries(headers).flatMap(([name, value]) => [name, String(value)]);
   }
   sign(); const setHeader = vi.fn();
-  const context = { switchToHttp: () => ({ getRequest: () => request, getResponse: () => ({ setHeader }) }) } as ExecutionContext;
+  const response = Object.assign(new EventEmitter(), { setHeader, writableFinished: false, destroyed: false });
+  const context = { switchToHttp: () => ({ getRequest: () => request, getResponse: () => response }) } as ExecutionContext;
   const quota = { reserve: vi.fn().mockResolvedValue(true) };
   const config = new ConfigService(env);
   vi.spyOn(config, 'get').mockImplementation(name => env[String(name)]);
   const guard = new CustomerAccountGuard(config, quota as unknown as SharedPublicQuota);
-  return { env, request, sign, quota, guard, context, setHeader };
+  return { env, request, sign, quota, guard, context, setHeader, response };
 }
+afterEach(() => vi.useRealTimers());
 describe('customer dedicated signed boundary', () => {
   it('admits reorder only with its exact signed private envelope and unchanged HTTP quotas', async () => {
     const f = fixture('order-reorder'); f.request.body.request = { orderId: 'a'.repeat(24) }; f.sign();
@@ -123,5 +126,41 @@ describe('customer dedicated signed boundary', () => {
     const f = fixture(); f.env.RAILWAY_ENVIRONMENT_NAME = 'production';
     await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 503 });
     expect(f.quota.reserve).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('verification admission deadline', () => {
+  function startFixture() {
+    const f = fixture('start');
+    f.request.body = { browserRef: randomUUID(), browserSecret: Buffer.alloc(32, 20).toString('base64url'),
+      intentProof: Buffer.alloc(32, 21).toString('base64url'),
+      request: { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'fixture-proof' } };
+    f.sign(); return f;
+  }
+  it('counts queued HTTP quota in the API preflight budget and never admits a late quota result', async () => {
+    vi.useFakeTimers(); const f = startFixture(); let release!: (allowed: boolean) => void;
+    f.quota.reserve.mockImplementation(() => new Promise(done => { release = done; }));
+    const pending = f.guard.canActivate(f.context).catch(error => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toMatchObject({ status: 503 });
+    release(true); await vi.advanceTimersByTimeAsync(0);
+    expect(f.request.customerRelay).toBeUndefined();
+    expect(() => f.request.customerDeadline!.assertPreflight()).toThrow();
+    expect(f.quota.reserve).toHaveBeenCalledTimes(1);
+  });
+  it('carries admission timing into the controller and closes its final provider gate on HTTP disconnect', async () => {
+    const f = startFixture(); await expect(f.guard.canActivate(f.context)).resolves.toBe(true);
+    const deadline = f.request.customerDeadline!; expect(() => deadline.assertPreflight()).not.toThrow();
+    f.response.emit('close');
+    const send = vi.fn().mockResolvedValue('never');
+    await expect(deadline.provider(send)).rejects.toMatchObject({ reason: 'unavailable' });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it('does not mistake a normally finished HTTP response for a disconnection', async () => {
+    const f = startFixture(); await f.guard.canActivate(f.context);
+    f.response.writableFinished = true; f.response.emit('finish'); f.response.emit('close');
+    expect(f.response.listenerCount('close')).toBe(0);
+    expect(() => f.request.customerDeadline!.assertPreflight()).not.toThrow();
   });
 });

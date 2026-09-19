@@ -20,6 +20,7 @@ import { AppState, Text, View } from 'react-native';
 import type { CollectOrderPayment, OrderLoyaltyEarnStatus } from '@sm/contracts';
 import {
   POLL_POS_MS,
+  deliveryAssignmentOwner,
   SmApiError,
   cartTotal,
   creerDebounce,
@@ -47,6 +48,7 @@ import { useLayout } from './useLayout';
 import { siteConfigure } from './demo-retour';
 import { TopBar, type Vue } from './TopBar';
 import { ServicePanel } from './ServicePanel';
+import type { DeliveryAssignmentAccess } from './useDeliveryAssignment';
 import { applyConfirmedHandover, confirmCounterHandover, isCounterHandoverRole } from './service-handover';
 import { CollectPaymentModal } from './CollectPaymentModal';
 import { collectExistingOrder, collectionRecovery, pendingCollectionIds, reconcileCollectedJournal, withCollectionDeadline } from './service-payment';
@@ -181,6 +183,11 @@ export function PosScreen({
    */
   const [vue, setVue] = useState<Vue>('vente');
   const diningStaff = useMemo(() => diningOwner(session.token), [session.token]);
+  const deliveryAccess = useMemo<DeliveryAssignmentAccess | undefined>(() =>
+    ['owner', 'gerant', 'cogerant', 'caisse'].includes(session.staffRole) ? {
+      client, ownerId: DEMO ? 'demo:staff:demo' : deliveryAssignmentOwner(session.token),
+      onSessionExpired: () => onLock('Votre session a expiré. Reconnectez-vous pour vérifier l’affectation.'),
+    } : undefined, [session.staffRole, session.token, onLock]);
   const dining = useDining(vue === 'salle', offline, diningStaff, draftIdentity.current.id);
   const mutateTicket = useCallback((action: () => void) => {
     if (!dining.ready || dining.pending || dining.storageError || dining.busy) {
@@ -1604,6 +1611,7 @@ export function PosScreen({
         {vue === 'salle' ? <DiningRoomPanel dining={roomDining} brand={brand} role={session.staffRole} onCompose={composeDining}
           onCollect={(row) => setCollectionTarget({ id: row._id, number: row.number })} onHandover={confirmServiceHandover} /> : vue === 'service' ? (
           <ServicePanel
+            deliveryAccess={deliveryAccess}
             commandes={serviceCommandes}
             now={now}
             brand={brand}

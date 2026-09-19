@@ -9,6 +9,7 @@ import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { CustomerAccountController } from './customer-account.controller';
 import { CustomerAccountGuard } from './customer-account.guard';
 import { CustomerAccountRuntime } from './customer-account.runtime';
+import { CustomerVerificationDeadline } from './customer-verification.deadline';
 import { customerAccessConfiguration } from './customer-account.config';
 import { OpsExceptionFilter } from '../ops/ops-exception.filter';
 import { OpsService } from '../ops/ops.service';
@@ -126,10 +127,27 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
     execute.mockResolvedValue(result);
     const response = await post('/public/customer/classfood/browser', signed('browser', JSON.stringify(envelope)));
     expect(response.status).toBe(200); expect(await response.json()).toEqual(result);
-    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'browser' }), envelope);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'browser' }), envelope, undefined);
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(JSON.stringify(result)).not.toContain(secret);
     expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it.each(['start', 'check'] as const)('carries the signed %s envelope and its admitted deadline into the runtime', async action => {
+    const secret = randomBytes(32).toString('base64url');
+    const request = action === 'start' ? { phone: '+33612345678', operationId: randomUUID(), turnstileToken: 'fixture-human-token' }
+      : { operationId: randomUUID(), challengeId: randomUUID(), checkId: randomUUID(), code: '123456' };
+    const envelope = { browserRef: randomUUID(), browserSecret: secret, intentProof: secret, request,
+      ...(action === 'check' ? { sessionToken: null } : {}) };
+    const response = await post(`/public/customer/classfood/${action}`, signed(action, JSON.stringify(envelope)));
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({ available: false });
+    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action, origin, slug: 'classfood' }),
+      envelope, expect.any(CustomerVerificationDeadline));
+    const deadline = execute.mock.calls[0]![2] as CustomerVerificationDeadline;
+    expect(deadline.action).toBe(action);
+    // A normal response finish must not be mistaken for a caller disconnect.
+    expect(() => deadline.assertPreflight()).not.toThrow();
+    expect(record).not.toHaveBeenCalled();
   });
 
   it.each(['start', 'check', 'recover', 'session', 'name', 'logout'] as const)(
@@ -186,7 +204,7 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
     const input = signed('intent', JSON.stringify(envelope));
     const response = await post('/public/customer/classfood/intent', input);
     expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toContain('no-store');
-    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'intent' }), envelope);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'intent' }), envelope, undefined);
     const body = await response.text(); expect(body).not.toContain(secret); expect(record).not.toHaveBeenCalled();
     const tampered = await post('/public/customer/classfood/intent', { ...input,
       body: JSON.stringify({ ...envelope, request: { step, operationId: randomUUID() } }) });
