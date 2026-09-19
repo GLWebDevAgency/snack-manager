@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CALLBACK_SLOTS, CONTACT_EMAIL, CONTACT_PLATFORMS, CONTACT_POINTS, CTA_CALLBACK, section } from "./content";
 import { LogoMark } from "../brand/Logo";
 import { TickDot } from "./icons";
+import { LEAD_INTENT_EVENT, LEAD_NEEDS, needFromSearch, type LeadNeed } from "./notch/lead-intent";
 
 type Status = "idle" | "loading" | "done" | "error";
 type FieldName = "name" | "phone";
 
 const PHONE_RE = /^[+0-9][0-9\s.\-()]{7,19}$/;
+function subscribeNeed(notify: () => void) {
+  window.addEventListener(LEAD_INTENT_EVENT, notify);
+  window.addEventListener("popstate", notify);
+  return () => { window.removeEventListener(LEAD_INTENT_EVENT, notify); window.removeEventListener("popstate", notify); };
+}
+const readNeed = () => needFromSearch(window.location.search);
+const emptyNeed = () => "" as const;
 
 /**
  * Le bloc de conversion : bandeau CTA + formulaire de rappel.
@@ -35,9 +43,23 @@ export function ContactSection() {
   const [status, setStatus] = useState<Status>("idle");
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [message, setMessage] = useState("");
+  const urlNeed = useSyncExternalStore(subscribeNeed, readNeed, emptyNeed);
+  const [manualNeed, setManualNeed] = useState<LeadNeed | "" | null>(null);
+  const need = manualNeed ?? urlNeed;
   const successRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const returnToForm = useRef(false);
+  useEffect(() => {
+    const reset = () => {
+      setManualNeed(null);
+      // A new project choice must not land on a previous request's receipt.
+      // Keep an in-flight request intact; only reopen a completed form.
+      setStatus((current) => current === "done" ? "idle" : current);
+    };
+    window.addEventListener(LEAD_INTENT_EVENT, reset);
+    window.addEventListener("popstate", reset);
+    return () => { window.removeEventListener(LEAD_INTENT_EVENT, reset); window.removeEventListener("popstate", reset); };
+  }, []);
   useEffect(() => {
     if (status === "done") successRef.current?.focus();
     if (status === "idle" && returnToForm.current) {
@@ -57,7 +79,7 @@ export function ContactSection() {
       phone: String(data.get("phone") ?? "").trim(),
       email: "",
       callbackSlot: String(data.get("callbackSlot") ?? ""),
-      message: [data.get("need") ? `Besoin : ${String(data.get("need"))}` : "", String(data.get("message") ?? "").trim()].filter(Boolean).join("\n"),
+      message: [need ? `Besoin : ${LEAD_NEEDS[need]}` : "", String(data.get("message") ?? "").trim()].filter(Boolean).join("\n"),
       /*
        * Une case décochée n'apparaît pas du tout dans un `FormData` : on ne
        * peut pas lire sa valeur, seulement son absence. La normalisation en
@@ -111,7 +133,7 @@ export function ContactSection() {
             Snack Manager
           </span>
         </div>
-        <h2 className="h2 cta-heading">{title}</h2>
+        <h2 className="h2 cta-heading" tabIndex={-1}>{title}</h2>
 
         <div className="ct-card rv">
           <div className="ct-left">
@@ -155,6 +177,7 @@ export function ContactSection() {
                     autoComplete="name"
                     placeholder="Votre prénom et votre nom"
                     required
+                    maxLength={120}
                     aria-invalid={errors.name ? true : undefined}
                     aria-describedby={errors.name ? "ct-name-err" : undefined}
                   />
@@ -165,6 +188,7 @@ export function ContactSection() {
                     name="restaurant"
                     type="text"
                     autoComplete="organization"
+                    maxLength={160}
                     placeholder="Nom du restaurant et ville"
                   />
                 </Field>
@@ -180,6 +204,7 @@ export function ContactSection() {
                     autoComplete="tel"
                     placeholder="06 12 34 56 78"
                     required
+                    maxLength={32}
                     aria-invalid={errors.phone ? true : undefined}
                     aria-describedby={errors.phone ? "ct-tel-err" : undefined}
                   />
@@ -196,15 +221,9 @@ export function ContactSection() {
               </div>
 
               <Field id="ct-need" label="Votre priorité" optional>
-                <select id="ct-need" name="need" defaultValue="">
+                <select id="ct-need" name="need" value={need} onChange={(event) => setManualNeed(event.target.value as LeadNeed | "")}>
                   <option value="">Choisir un besoin</option>
-                  <option>Organiser le service et la gestion</option>
-                  <option>Refaire mon menu papier</option>
-                  <option>Préparer mes menus TV</option>
-                  <option>Réunir menus papier et TV</option>
-                  <option>Développer la commande directe</option>
-                  <option>Préparer un pilote fidélité ou livraison</option>
-                  <option>Confier mon site ou ma communication</option>
+                  {Object.entries(LEAD_NEEDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </Field>
               <Field id="ct-msg" label="Un mot sur votre besoin" optional>

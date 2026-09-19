@@ -1,0 +1,173 @@
+:global(.mk) .section { max-width: 1264px; margin: 0 auto; padding: 50px 32px 120px; color: #efeee6; scroll-margin-top: 100px; }
+:global(.mk) .heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 43px; }
+:global(.mk) .eyebrow { color: #c4c8bc; font-size: 11px; letter-spacing: .065em; text-transform: uppercase; }
+:global(.mk) .eyebrow > span { margin-right: 10px; color: #c0a476; font-variant-numeric: tabular-nums; }
+:global(.mk) .heading h2 { margin-top: 22px; font-size: clamp(36px, 4.3vw, 60px); line-height: 1.07; font-weight: 500; letter-spacing: -.055em; }
+:global(.mk) .heading h2 > span { color: #949b8c; }
+:global(.mk) .heading .introduction { max-width: 330px; padding-bottom: 4px; color: #a9aea1; font-size: 14px; line-height: 1.8; }
+:global(.mk) .story { position: relative; isolation: isolate; overflow: hidden; border: 1px solid #4a5144; border-radius: 20px; background: radial-gradient(ellipse at 35% 100%, #56604240, transparent 75%), linear-gradient(125deg, #1c221a, #141912); box-shadow: inset 0 1px 0 #ffffff0a; }
+:global(.mk) .story::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .035; background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(90deg, black, transparent); }
+:global(.mk) .topline { min-height: 52px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 12px 24px; }
+:global(.mk) .notch { position: absolute; top: -1px; left: -1px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 20px 2px 1px; background: #000; border-radius: 0 0 15px 0; color: #d6cebc; font-size: 10px; }
+:global(.mk) .notch::after { content: ""; position: absolute; left: 100%; top: 0; width: 17px; height: 17px; background: radial-gradient(circle at bottom right, transparent 16px, #000 17px); }
+:global(.mk) .notch > span { height: 5px; width: 5px; border-radius: 50%; background: #c3a56e; }
+:global(.mk) .sceneLabel { color: #b2b9a8; font-size: 10px; }
+:global(.mk) .topline .motionControl { color: #c4cab9; font-size: 10px; }
+:global(.mk) .stage { position: relative; display: grid; grid-template-columns: 23% minmax(0, 1fr); align-items: center; gap: 24px; padding: 15px 34px 30px; }
+:global(.mk) .stageAside { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 22px; padding-bottom: 4px; }
+:global(.mk) .asideCaption { color: #c2bea8; font-size: 10px; letter-spacing: .04em; }
+:global(.mk) .ticket { position: relative; width: 100%; display: flex; flex-direction: column; padding: 20px 16px 23px; color: #444d38; background: #e5e3d5; transform: rotate(-5deg); box-shadow: 5px 16px 26px #0006; animation: ticketFloat 12s ease-in-out infinite; }
+:global(.mk) .ticket::after { content: ""; position: absolute; height: 8px; left: 0; right: 0; top: calc(100% - 1px); background: linear-gradient(135deg, #e5e3d5 25%, transparent 25%) -6px 0 / 12px 12px, linear-gradient(225deg, #e5e3d5 25%, transparent 25%) -6px 0 / 12px 12px; }
+:global(.mk) .ticketTop { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: -.03em; }
+:global(.mk) .ticketRule { border-top: 1px dashed #555f3f57; margin: 14px 0; }
+:global(.mk) .ticketItem { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 10px; line-height: 1.7; padding: 4px 0; }
+:global(.mk) .ticketItem > i { width: 7px; height: 7px; border: 1px solid #6e7a5870; border-radius: 2px; }
+:global(.mk) .ticketOption { font-size: 8px; color: #728060; padding: 0 0 5px 8px; }
+:global(.mk) .ticketEnd { display: flex; justify-content: space-between; align-items: center; gap: 7px; font-size: 8px; }
+:global(.mk) .ticketEnd > span { font-size: 15px; }
+:global(.mk) .asideConnector { position: absolute; top: 50%; left: calc(100% + 4px); width: 36px; height: 1px; background: #c9b58055; }
+:global(.mk) .asideConnector > span { display: block; height: 3px; width: 8px; background: #cab880; border-radius: 5px; transform: translateY(-1px); box-shadow: 0 0 12px #c9b58099; animation: sendDetail 3s ease-in-out infinite; }
+:global(.mk) .asideConnector > i { position: absolute; top: -2px; right: -1px; width: 5px; height: 5px; border-top: 1px solid #c9b580; border-right: 1px solid #c9b580; transform: rotate(45deg); }
+:global(.mk) .asideFootnote { color: #a1ac93; font-size: 9px; line-height: 1.65; }
+:global(.mk) .display { position: relative; z-index: 1; min-width: 0; padding: 7px; overflow: hidden; border: 1px solid #777e6c; border-radius: 12px; background: linear-gradient(140deg, #3a4234, #242d20); box-shadow: 0 28px 35px #0005; }
+:global(.mk) .displayBar { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 2px 7px 8px; color: #cbd0bf; font-size: 10px; }
+:global(.mk) .displayBar > svg { color: #c6b382; }
+:global(.mk) .displayIndex { margin-left: auto; color: #dac8a4; font-variant-numeric: tabular-nums; }
+:global(.mk) .displayIndex > span { color: #939d87; }
+:global(.mk) .displayContent { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border: 1px solid #ffffff0e; border-radius: 5px; background: #171e13; }
+:global(.mk) .scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: translateY(9px) scale(.99); transition: opacity .55s, transform .75s, visibility .55s; }
+:global(.mk) .scene[data-active="true"] { visibility: visible; opacity: 1; transform: none; }
+:global(.mk) .display .displayContent .scene img { object-fit: contain; }
+:global(.mk) .displayCaption { display: flex; justify-content: space-between; gap: 10px; padding: 9px 5px 3px; color: #a8b19c; font-size: 8px; letter-spacing: .01em; }
+:global(.mk) .timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0 34px 25px; }
+:global(.mk) .timeline button { position: relative; min-width: 0; min-height: 58px; display: flex; align-items: center; justify-content: flex-start; gap: 9px; padding: 20px 8px 6px 0; color: #a4ae98; font-size: 11px; transition: color .2s; }
+:global(.mk) .timeline button:last-child { padding-right: 0; }
+:global(.mk) .timeline button[aria-pressed="true"] { color: #f0e9d4; }
+:global(.mk) .timelineTrack { position: absolute; top: 0; left: 0; right: 0; height: 1px; background: #6e79584f; }
+:global(.mk) .timelineTrack::before { content: ""; position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border: 1px solid #828c75; border-radius: 50%; background: #252e20; }
+:global(.mk) .timelineTrack > span { display: block; width: 100%; height: 1px; transform: scaleX(0); transform-origin: left; background: #d5bb83; }
+:global(.mk) .timeline button[aria-pressed="true"] .timelineTrack > span { animation: timelineProgress 6s linear both; }
+:global(.mk) .timeline button[aria-pressed="true"] .timelineTrack::before { border-color: #d5bb83; background: #d5bb83; box-shadow: 0 0 12px #d5bb8344; }
+:global(.mk) .timelineNumber { color: #a2926f; font-size: 10px; font-variant-numeric: tabular-nums; }
+:global(.mk) .explanations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; padding-top: 37px !important; }
+:global(.mk) .explanations li { display: flex; flex-direction: column; align-items: flex-start; }
+:global(.mk) .explanationNumber { color: #a79570; font-size: 10px; font-variant-numeric: tabular-nums; }
+:global(.mk) .explanations h3 { margin-top: 12px; max-width: 215px; font-weight: 500; font-size: 20px; line-height: 1.25; letter-spacing: -.035em; }
+:global(.mk) .explanations p { padding: 13px 0 20px; color: #a0a998; font-size: 12px; line-height: 1.75; }
+:global(.mk) .explanations a { display: inline-flex; align-items: center; gap: 9px; margin-top: auto; min-height: 32px; color: #d7be8d; font-size: 10px; line-height: 1.5; }
+:global(.mk) .explanations a > svg { flex-shrink: 0; width: 13px; height: 13px; }
+:global(.mk) .bottomline { display: flex; justify-content: space-between; align-items: center; gap: 30px; margin-top: 34px; padding-top: 24px; border-top: 1px solid #3b45314d; }
+:global(.mk) .bottomline p { max-width: 600px; color: #8e9a84; font-size: 10px; line-height: 1.7; }
+:global(.mk) .bottomline a { display: inline-flex; align-items: center; gap: 18px; flex-shrink: 0; min-height: 44px; font-size: 12px; color: #dedaca; }
+:global(.mk) .section a:focus-visible, :global(.mk) .section button:focus-visible { outline: 2px solid #ddc089; outline-offset: 5px; border-radius: 4px; }
+:global(.mk) .section a:hover { color: #f0d7a7; }
+:global(.mk) .story[data-playing="false"] * { animation-play-state: paused !important; }
+:global(.mk) .handoff { display: flex; flex-direction: column; align-items: center; height: 100%; padding: 6% 7% 5%; background: radial-gradient(ellipse at 50% 0, #5c62402e, transparent 60%), #1a2215; }
+:global(.mk) .handoffOrigin { display: grid; grid-template-columns: 28px auto; align-items: center; gap: 3px 10px; color: #9eaa8d; }
+:global(.mk) .handoffOrigin > svg { grid-row: span 2; color: #cdb485; }
+:global(.mk) .handoffOrigin > span { font-size: 9px; }
+:global(.mk) .handoffOrigin > strong { font-size: 13px; line-height: 1.3; font-weight: 500; color: #e2ddc9; }
+:global(.mk) .handoffLines { position: relative; flex-shrink: 0; height: 38px; width: 56%; }
+:global(.mk) .handoffLines > i { position: absolute; width: 50%; top: 14px; height: 24px; border: solid #a393695c; border-width: 1px 0 0 1px; border-radius: 8px 0 0; }
+:global(.mk) .handoffLines > i:nth-child(2) { right: 0; transform: scaleX(-1); }
+:global(.mk) .handoffLines > span { position: absolute; left: calc(50% - 1px); top: 0; height: 14px; width: 1px; background: #a39369; }
+:global(.mk) .handoffRoutes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 78%; flex: 1; min-height: 0; }
+:global(.mk) .routeCard { display: flex; flex-direction: column; align-items: center; padding: 10px 12px 15px; border: 1px solid #67754f6b; border-radius: 9px; background: #303b2560; box-shadow: 0 10px 20px #0002; text-align: center; }
+:global(.mk) .routePicture { flex: 1; display: grid; place-items: center; min-height: 0; padding-bottom: 6px; }
+:global(.mk) .routePicture > svg { height: 100%; max-height: 90px; }
+:global(.mk) .routeLabel { color: #a8b696; font-size: 9px; line-height: 1.5; }
+:global(.mk) .routeCard > strong { color: #e6e1cb; font-size: 16px; font-weight: 500; line-height: 1.2; letter-spacing: -.03em; margin-top: 5px; }
+:global(.mk) .routeTag { margin-top: 10px; padding: 4px 8px; border: 1px solid #9e8f6647; border-radius: 4px; color: #c9b788; font-size: 8px; }
+:global(.mk) .routePhone { position: relative; display: grid; place-items: center; width: 51px; height: 82px; border: 1px solid #c5b48a; border-radius: 8px; background: #343e28; transform: rotate(8deg); }
+:global(.mk) .routePhone > span { position: absolute; top: 0; left: 14px; right: 14px; height: 5px; border: 1px solid #c5b48a; border-top: 0; border-radius: 0 0 4px 4px; }
+:global(.mk) .routePhone > i { position: absolute; bottom: 5px; height: 1px; width: 15px; background: #c5b48a; }
+@keyframes ticketFloat { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(-2deg) translateY(-4px); } }
+@keyframes sendDetail { 0%, 15% { transform: translate(0, -1px); opacity: 0; } 35% { opacity: 1; } 85%, 100% { transform: translate(26px, -1px); opacity: 0; } }
+@keyframes timelineProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (max-width: 1000px) {
+  :global(.mk) .heading { gap: 28px; }
+  :global(.mk) .heading .introduction { max-width: 270px; font-size: 13px; }
+  :global(.mk) .stage { padding: 14px 24px 27px; gap: 20px; grid-template-columns: 22% minmax(0, 1fr); }
+  :global(.mk) .ticket { padding: 14px 12px 18px; }
+  :global(.mk) .ticketTop { font-size: 11px; gap: 5px; }
+  :global(.mk) .ticketItem { font-size: 8px; }
+  :global(.mk) .ticketOption { font-size: 7px; }
+  :global(.mk) .ticketEnd { font-size: 7px; }
+  :global(.mk) .ticketRule { margin: 10px 0; }
+  :global(.mk) .timeline { padding-inline: 24px; }
+  :global(.mk) .explanations { gap: 22px; }
+  :global(.mk) .explanations h3 { font-size: 18px; }
+  :global(.mk) .handoff { padding: 4% 6%; }
+  :global(.mk) .handoffLines { height: 30px; }
+  :global(.mk) .handoffLines > i { top: 10px; height: 20px; }
+  :global(.mk) .handoffLines > span { height: 10px; }
+  :global(.mk) .routeCard { padding: 6px 8px 9px; }
+  :global(.mk) .routeCard > strong { font-size: 13px; }
+  :global(.mk) .routePhone { width: 39px; height: 62px; }
+  :global(.mk) .routePhone > svg { width: 29px; }
+  :global(.mk) .routePhone > span { left: 10px; right: 10px; }
+  :global(.mk) .routePicture > svg { max-height: 64px; }
+}
+@media (max-width: 760px) {
+  :global(.mk) .section { padding: 25px 24px 80px; }
+  :global(.mk) .heading { display: grid; gap: 22px; margin-bottom: 31px; }
+  :global(.mk) .heading h2 { margin-top: 20px; font-size: clamp(36px, 6vw, 48px); }
+  :global(.mk) .heading .introduction { max-width: 470px; font-size: 14px; }
+  :global(.mk) .story { margin-inline: -12px; border-radius: 14px; }
+  :global(.mk) .topline { min-height: 52px; padding: 10px 13px; gap: 10px; }
+  :global(.mk) .sceneLabel { display: none; }
+  :global(.mk) .notch { font-size: 9px; height: 33px; padding-right: 17px; }
+  :global(.mk) .topline .motionControl { font-size: 9px; }
+  :global(.mk) .stage { display: block; padding: 7px 12px 28px; }
+  :global(.mk) .stageAside { display: none; }
+  :global(.mk) .display { padding: 5px; border-radius: 8px; }
+  :global(.mk) .displayBar { font-size: 8px; padding: 2px 4px 6px; min-height: 28px; gap: 6px; }
+  :global(.mk) .displayBar > svg { width: 15px; height: 15px; }
+  :global(.mk) .displayCaption { font-size: 7px; padding-top: 7px; }
+  :global(.mk) .timeline { padding: 0 16px 18px; }
+  :global(.mk) .timeline button { padding-top: 17px; font-size: 9px; gap: 6px; }
+  :global(.mk) .timelineNumber { font-size: 8px; }
+  :global(.mk) .explanations { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; padding-top: 30px !important; }
+  :global(.mk) .explanations h3 { max-width: 200px; font-size: 21px; }
+  :global(.mk) .explanations p { font-size: 12px; padding-bottom: 13px; }
+  :global(.mk) .explanations a { font-size: 10px; min-height: 40px; }
+  :global(.mk) .bottomline { align-items: flex-start; flex-direction: column; gap: 12px; margin-top: 28px; }
+  :global(.mk) .bottomline p { font-size: 10px; }
+  :global(.mk) .bottomline a { font-size: 12px; }
+}
+@media (max-width: 480px) {
+  :global(.mk) .displayContent { aspect-ratio: 16 / 11; }
+  :global(.mk) .display .displayContent .scene img { object-fit: contain; }
+  :global(.mk) .displayCaption { gap: 6px; font-size: 6px; }
+  :global(.mk) .timeline button { flex-direction: column; align-items: flex-start; gap: 6px; min-height: 63px; }
+  :global(.mk) .timelineNumber { font-size: 9px; }
+  :global(.mk) .timeline button > span:last-child { font-size: 9px; }
+  :global(.mk) .explanations { gap: 28px 18px; }
+  :global(.mk) .explanations h3 { font-size: 19px; }
+  :global(.mk) .explanations p { font-size: 12px; }
+  :global(.mk) .explanations a { font-size: 9px; gap: 6px; }
+  :global(.mk) .handoff { padding: 11px 10px 10px; }
+  :global(.mk) .handoffOrigin { gap: 2px 7px; }
+  :global(.mk) .handoffOrigin > span { font-size: 7px; }
+  :global(.mk) .handoffOrigin > strong { font-size: 10px; }
+  :global(.mk) .handoffOrigin > svg { width: 23px; height: 23px; }
+  :global(.mk) .handoffLines { height: 23px; }
+  :global(.mk) .handoffLines > i { height: 15px; top: 8px; }
+  :global(.mk) .handoffLines > span { height: 8px; }
+  :global(.mk) .handoffRoutes { width: 85%; gap: 12px; }
+  :global(.mk) .routeCard { padding: 6px; border-radius: 6px; }
+  :global(.mk) .routePicture { padding-bottom: 3px; }
+  :global(.mk) .routePicture > svg { max-height: 44px; }
+  :global(.mk) .routePhone { width: 29px; height: 45px; border-radius: 5px; }
+  :global(.mk) .routePhone > span { left: 8px; right: 8px; height: 3px; }
+  :global(.mk) .routePhone > svg { width: 20px; }
+  :global(.mk) .routePhone > i { width: 11px; bottom: 3px; }
+  :global(.mk) .routeLabel { font-size: 7px; }
+  :global(.mk) .routeCard > strong { margin-top: 3px; font-size: 11px; }
+  :global(.mk) .routeTag { margin-top: 6px; padding: 3px 5px; font-size: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.mk) .section * { animation: none !important; transition: none !important; }
+  :global(.mk) .timeline button[aria-pressed="true"] .timelineTrack > span { transform: scaleX(1); }
+  :global(.mk) .asideConnector > span { transform: translate(13px, -1px); opacity: 1; }
+}

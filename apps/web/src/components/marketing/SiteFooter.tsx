@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { Reseaux } from "./Reseaux";
 import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre, type ReseauPublié } from "./content";
 import { LogoMark } from "../brand/Logo";
@@ -29,8 +28,8 @@ import { SmallFillet } from "./icons";
  * site, y compris d'un article de blog : un `#tarifs` écrit ici serait un lien
  * mort partout sauf sur la landing, et muet — pas de 404, pas d'erreur, rien.
  *
- * L'inscription à la liste n'a pas de back-end : on le dit, plutôt que de faire
- * semblant — le formulaire renvoie vers le rappel téléphonique.
+ * La liste reste explicitement fermée tant qu'aucun service d'inscription
+ * n'est branché. Les classes et la structure visuelle du footer sont conservées.
  */
 /**
  * Comme `Hero`, ce pied de page est un îlot CLIENT : il reçoit les réseaux au
@@ -39,7 +38,6 @@ import { SmallFillet } from "./icons";
  * seulement, sans qu'aucune vérification ne s'en aperçoive.
  */
 export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
-  const [sent, setSent] = useState(false);
   const year = new Date().getFullYear();
 
   return (
@@ -65,22 +63,10 @@ export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
             <div className="foot-left">
               <p className="foot-tagline">Simplifier le quotidien du service</p>
               <div className="foot-newsletter">
-                <p className="subheading foot-newsletterlabel">Rejoignez la liste pour suivre le lancement</p>
-                {sent ? (
-                  <p className="foot-note" role="status">
-                    Merci — on vous écrit au prochain jalon. Pour une démo tout de suite,{" "}
-                    <Link className="faq-helplink" href={ancre("contact").href}>
-                      demandez un rappel
-                    </Link>
-                    .
-                  </p>
-                ) : (
+                <p className="subheading foot-newsletterlabel">La liste de lancement arrive bientôt</p>
                   <form
                     className="foot-form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setSent(true);
-                    }}
+                    onSubmit={(e) => e.preventDefault()}
                   >
                     <label className="ct-hp" htmlFor="foot-email">
                       Votre adresse e-mail
@@ -92,11 +78,10 @@ export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
                       placeholder="nom@email.com"
                       className="foot-input"
                       autoComplete="email"
-                      required
+                      disabled
                     />
-                    <input type="submit" value="S'inscrire" className="foot-subscribe" />
+                    <input type="submit" value="Bientôt" className="foot-subscribe" disabled />
                   </form>
-                )}
               </div>
               {/*
                * LES RÉSEAUX SONT ICI, ET C'EST L'ENDROIT ÉVIDENT — un pied de

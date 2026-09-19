@@ -320,7 +320,7 @@ export const SECTIONS: readonly SectionMeta[] = [
   { id: "simulateur", nav: "Votre organisation", badge: "Votre organisation", title: "Chiffrez votre organisation actuelle." },
   { id: "histoire", nav: "Notre histoire", badge: "L’expérience du terrain", title: "Conçu avec un restaurateur. Amélioré avec le terrain." },
   { id: "faq", nav: "Questions", badge: "Questions fréquentes", title: "Les réponses avant de vous lancer." },
-  { id: "contact", nav: "Contact", badge: null, title: "Parlons de votre restaurant." },
+  { id: "contact", nav: "Contact", badge: null, title: "De quoi votre restaurant a-t-il besoin aujourd’hui ?" },
 ] as const;
 
 /** Retrouve la pastille et le titre d'une section par son ancre. */
@@ -426,13 +426,12 @@ export const NAV_PLATEFORME: readonly NavLink[] = [
   { href: "/cuisine", label: "L’écran cuisine" },
   { href: "/commande-en-ligne", label: "La commande en ligne" },
   { href: "/atelier", label: "L’Atelier" },
-  { ...ancre("produit"), label: "Toutes les applications" },
-  ancre("menus"),
-];
+  { ...ancre("produit"), label: "La démo en direct" },
+ ];
 
-export const NAV_PLATEFORME_LABEL = "Solutions";
+export const NAV_PLATEFORME_LABEL = "Plateforme";
 
-export const NAV_LEFT: readonly NavLink[] = [ancre("menus"), ancre("tarifs")];
+export const NAV_LEFT: readonly NavLink[] = [{ ...ancre("commander"), label: "Les services" }, { ...ancre("tarifs"), label: "Tarifs" }];
 
 export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
 
@@ -448,7 +447,12 @@ export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
  * sections de la landing, et un lecteur qui les prend pour des ancres ne
  * comprend pas pourquoi la page change.
  */
-export const NAV_MOBILE: readonly NavLink[] = SECTIONS.filter((s) => s.id !== "hero").map((s) => ancre(s.id));
+/** The staging navigation stays stable while the page narrative evolves. */
+export const NAV_MOBILE: readonly NavLink[] = [
+  ["votre-service", "Votre service"], ["produit", "Produit"], ["commander", "Les services"],
+  ["materiel", "Matériel"], ["tarifs", "Tarifs"], ["simulateur", "Le calcul"],
+  ["lancement", "Lancement"], ["faq", "Questions"], ["histoire", "Notre histoire"], ["contact", "Contact"],
+].map(([id, label]) => ({ ...ancre(id), label }));
 
 /* ── Réseaux sociaux ─────────────────────────────────────────── */
 
@@ -534,10 +538,10 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
       { href: "/cuisine", label: "L'écran cuisine" },
       { href: "/commande-en-ligne", label: "La commande en ligne" },
       { href: "/atelier", label: "L’Atelier" },
-      ancre("produit"),
-      ancre("commander"),
+      { ...ancre("produit"), label: "Produit" },
+      { ...ancre("commander"), label: "Les services" },
       ancre("materiel"),
-      ancre("tarifs"),
+      { ...ancre("tarifs"), label: "Tarifs" },
     ],
   },
   {
@@ -573,22 +577,22 @@ export type Shot = { src: string; alt: string; portrait?: boolean };
 
 /** Deck 3D du hero : uniquement des captures paysage. */
 export const HERO_SHOTS: Shot[] = [
-  { src: "/shots/backoffice.jpg", alt: "Back-office Snack Manager : chiffre d'affaires du jour et commandes en direct" },
-  { src: "/shots/pos.jpg", alt: "Caisse Snack Manager sur tablette, en cours de prise de commande" },
-  { src: "/shots/kds.jpg", alt: "App cuisine Snack Manager : colonnes Nouveau, En préparation, Prêt" },
+  { src: "/shots/dark-20260919/backoffice.jpg", alt: "Back-office Snack Manager : chiffre d'affaires du jour et commandes en direct" },
+  { src: "/shots/dark-20260919/pos.jpg", alt: "Caisse Snack Manager sur tablette, en cours de prise de commande" },
+  { src: "/shots/dark-20260919/kds.jpg", alt: "App cuisine Snack Manager : colonnes Nouveau, En préparation, Prêt" },
   // `menu.png` MONTRE LE BACK-OFFICE, et son texte alternatif annonçait « Commande
   // en ligne » : le deck représentait donc l'application que les CLIENTS du
   // restaurateur utilisent par une page de gestion, sur un écran d'ordinateur.
   // Le libellé dit maintenant ce que l'image montre.
-  { src: "/shots/menu.jpg", alt: "Back-office Snack Manager : carte et prix, disponibilités en un geste" },
+  { src: "/shots/dark-20260919/menu.jpg", alt: "Back-office Snack Manager : carte et prix, disponibilités en un geste" },
   // Et la vraie commande en ligne entre dans le deck, en PORTRAIT — c'est le
   // seul appareil de la rangée que le client du restaurateur tient en main.
   {
-    src: "/shots/commande.jpg",
+    src: "/shots/dark-20260919/commande.jpg",
     alt: "Commande en ligne Snack Manager sur téléphone : carte du restaurant et click and collect",
     portrait: true,
   },
-  { src: "/shots/board.jpg", alt: "Aperçu d’un menu TV dans le studio Snack Manager" },
+  { src: "/shots/dark-20260919/board.jpg", alt: "Aperçu d’un menu TV dans le studio Snack Manager" },
 ];
 
 /* ── 2. Votre service — le miroir ────────────────────────────── */
@@ -950,7 +954,7 @@ export const DEMO_APPS: DemoApp[] = [
     id: "pos",
     label: "Caisse (POS)",
     device: "tablet",
-    shot: { src: "/shots/pos.jpg", alt: "Caisse : catalogue et ticket en cours avec un article" },
+    shot: { src: "/shots/dark-20260919/pos.jpg", alt: "Caisse : catalogue et ticket en cours avec un article" },
     lead: "Caisse.",
     body: " Menus cadrés, totaux automatiques, suivi cuisine — avec une prise en main accompagnée sur votre carte. Impression sur matériel compatible validé.",
     live: {
@@ -968,7 +972,7 @@ export const DEMO_APPS: DemoApp[] = [
     // `DEVICE_SCREEN` — en dessous de 900 px l'app bascule en mode onglets et
     // le panneau « À lancer » disparaît, c'est-à-dire tout ce qu'on montre ici.
     device: "wall",
-    shot: { src: "/shots/kds.jpg", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
+    shot: { src: "/shots/dark-20260919/kds.jpg", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
     lead: "Cuisine.",
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
     live: {
@@ -983,7 +987,7 @@ export const DEMO_APPS: DemoApp[] = [
     id: "order",
     label: "Commande client",
     device: "phone",
-    shot: { src: "/shots/commande.jpg", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
+    shot: { src: "/shots/dark-20260919/commande.jpg", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
     lead: "Commande en ligne.",
     body: " Le client compose sa commande et choisit son créneau. Paiement en ligne ou au retrait, selon les modes proposés par votre établissement.",
     live: {
@@ -998,7 +1002,7 @@ export const DEMO_APPS: DemoApp[] = [
     id: "bo",
     label: "Back-office",
     device: "wide",
-    shot: { src: "/shots/backoffice.jpg", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
+    shot: { src: "/shots/dark-20260919/backoffice.jpg", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
     lead: "Back-office gérant.",
     body: " Retrouvez les commandes, la carte et les prix, les statistiques, le planning, les stocks et les factures, selon les modules de votre offre.",
     live: {
@@ -1015,7 +1019,7 @@ export const DEMO_APPS: DemoApp[] = [
     id: "loyalty",
     label: "Fidélité",
     device: "wide",
-    shot: { src: "/shots/fidelite.jpg", alt: "Fidélité : tableau de bord du programme, membres et opérations d'exemple" },
+    shot: { src: "/shots/dark-20260919/fidelite.jpg", alt: "Fidélité : tableau de bord du programme, membres et opérations d'exemple" },
     lead: "Fidélité.",
     body: " Consultez les membres, les cartes et les opérations de votre programme. La fidélité est proposée en pilote accompagné ; les conditions de mise en service sont précisées avec vous.",
     live: {
@@ -1030,7 +1034,7 @@ export const DEMO_APPS: DemoApp[] = [
     id: "screens",
     label: "Menus TV",
     device: "wide",
-    shot: { src: "/shots/tv-studio.jpg", alt: "Gestion des menus TV : écrans du restaurant et aperçu des modèles de présentation" },
+    shot: { src: "/shots/dark-20260919/tv-studio.jpg", alt: "Gestion des menus TV : écrans du restaurant et aperçu des modèles de présentation" },
     lead: "Menus TV.",
     body: " Présentez les produits et les prix de votre carte sur vos écrans. Choisissez parmi quinze modèles et préparez votre programmation depuis le back-office.",
     live: {
@@ -1045,12 +1049,12 @@ export const DEMO_APPS: DemoApp[] = [
     id: "delivery",
     label: "Livreur",
     device: "phone",
-    shot: { src: "/shots/livreur.jpg", alt: "Application SM Livreur : écran d'accès sur invitation du restaurant", portrait: true },
+    shot: { src: "/shots/dark-20260919/livreur.jpg", alt: "Application SM Livreur : écran d'accès sur invitation du restaurant", portrait: true },
     lead: "Application livreur.",
     body: " Vos livreurs retrouvent les missions que vous leur affectez et suivent leurs livraisons depuis leur téléphone. Le parcours est ouvert en pilote accompagné, après configuration et validation avec votre établissement.",
     presentation: {
       note: "Aperçu de l'accès livreur. L'application s'utilise sur invitation du restaurant ; la présentation des missions se fait avec notre équipe.",
-      href: "/#contact",
+      href: "/?besoin=livraison#contact",
       cta: "Découvrir le parcours livreur avec nous",
     },
   },
