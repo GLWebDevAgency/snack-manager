@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ATELIER_CENTS, BILLING_CYCLES, BILLING_YEARLY_NOTE, ENGAGEMENT, FOUNDER_POLICY, MODULE_MONTHLY_CENTS, MODULE_SETUP_CENTS, PLANS, PLAN_MONTHLY_CENTS, PLAN_MODULES, euros } from "../content";
 import { COMMERCE_OFFERS, LOYALTY_PILOT_NOTE } from "../commerce-offers";
+import { NEW_QUOTE_NOTE } from "../commercial-catalog";
 import { MotionControl, useSceneMotion } from "./Motion";
 import styles from "./offers.module.css";
 
@@ -21,7 +22,7 @@ export function OffersExperience() {
     <div className={styles.heading}>
       <span className={styles.eyebrow}>05 / Votre offre</span>
       <h2 id="nl-offers-title">Le bon outil.<br /><span>Au bon moment.</span></h2>
-      <p>Commencez avec ce qui vous est utile. Ajoutez les outils qui accompagnent l’évolution de votre restaurant.</p>
+      <p>Commencez avec ce qui vous est utile. Ajoutez les outils qui accompagnent l’évolution de votre restaurant. Périmètre et configuration validés au devis.</p>
     </div>
     <div className={styles.billing}>
       <fieldset className={styles.switch}>
@@ -70,14 +71,14 @@ export function OffersExperience() {
     <div id="applications-seules" className={styles.standalone}>
       <div><span className={styles.eyebrow}>Vous gardez votre caisse ?</span><h3>Choisissez votre application.</h3><p>Chaque module comprend le back-office nécessaire à son utilisation.</p></div>
       <div className={styles.modules}>{COMMERCE_OFFERS.map((offer) => <article key={offer.id}>
-        <div><h4>{offer.title}</h4><p>{offer.id === "loyalty" ? "Pilote accompagné" : offer.id === "delivery" ? "Validation pilote avant activation" : "Fidélité en pilote incluse"}</p></div>
+        <div><h4>{offer.title}</h4><p>{offer.status}</p></div>
         <strong>{euros(offer.monthlyCents)}<small> HT / mois par établissement{offer.id === "delivery" ? " · tarif prévu" : ""}</small></strong>
         <a href={`/?besoin=${offer.id === "collect" ? "commande-directe" : offer.id === "loyalty" ? "fidelite" : "livraison"}#contact`}>Étudier mon besoin<span aria-hidden="true"> ↗</span></a>
       </article>)}</div>
       <p className={styles.fine}>Mise en service standard : {euros(MODULE_SETUP_CENTS)} une fois. Intégration sur un site existant : {euros(ATELIER_CENTS.integration)} HT en remplacement de la mise en service standard, selon devis. Livraison avec vos livreurs ; aucun livreur tiers fourni.</p>
       <p className={styles.fine}>{LOYALTY_PILOT_NOTE}</p>
     </div>
-    <div className={styles.terms}><p><strong>0 % de commission Snack Manager sur les commandes.</strong> Les frais du prestataire de paiement, les coûts de livraison, le matériel et les prestations restent distincts.</p><p>{ENGAGEMENT}</p></div>
+    <div className={styles.terms}><p><strong>0 % de commission Snack Manager sur les commandes.</strong> Les frais du prestataire de paiement, les coûts de livraison, le matériel et les prestations restent distincts.</p><p>{NEW_QUOTE_NOTE}</p><p>{ENGAGEMENT}</p></div>
     <details className={styles.founder}><summary>Les conditions de l’offre fondateur<span aria-hidden="true">+</span></summary><p>{FOUNDER_POLICY}</p></details>
     <a className={styles.fullOffers} href="/offres">Voir les offres et leurs conditions<span aria-hidden="true"> ↗</span></a>
   </section>;

@@ -14,15 +14,10 @@
  * et sert à la fois de sommaire (menu burger) et de source des titres.
  */
 
-// `import type` UNIQUEMENT : effacé à la compilation, donc zod ne descend pas
-// dans le paquet client de la page d'accueil. Voir `GRILLES_ACCORDÉES` et
-// `CATALOGUE_ACCORDÉ`.
-import type {
-  PLAN_MRR_CENTS as PlanMrrCents,
-  CAPACITES as CapacitesContrat,
-  CAPACITES_PAR_FORMULE as CatalogueContrat,
-} from "@sm/contracts";
-import { COMMERCE_PRICES } from "@sm/contracts/commerce";
+// Le contrôle des tarifs existants reste lié aux contrats de production.
+// Le catalogue V2 décrit les nouveaux devis, pas une activation automatique.
+import type { PLAN_MRR_CENTS as PlanMrrCents } from "@sm/contracts";
+import { COMMERCE_PRICES } from "./commercial-catalog";
 import { LOYALTY_PILOT_NOTE } from "./commerce-offers";
 
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
@@ -806,33 +801,17 @@ export const DEVICE_SCREEN: Record<DemoDevice, { w: number; h: number }> = {
 };
 
 /**
- * Origines des applications DE TERRAIN embarquées dans la vitrine.
- *
- * ═══ ELLES SUIVENT L'ENVIRONNEMENT, ET C'EST UNE LEÇON PAYÉE DEUX FOIS ═══
- *
- * Elles ont été codées en dur dans les deux sens en une seule journée. D'abord
- * sur STAGING, ce qui faisait embarquer des déploiements de test dans la
- * vitrine de production. Puis sur PRODUCTION pour corriger ce défaut — et la
- * vitrine de staging s'est mise à embarquer la production, ce qui est pire :
- * les compilations de production sont en retard sur le mode démonstration, si
- * bien que le visiteur tombait sur L'ÉCRAN D'APPAIRAGE au lieu d'une caisse.
- * Constaté en comptant les marqueurs de démonstration dans les paquets servis :
- * un côté production, cinq côté staging.
- *
- * Une adresse figée est fausse dans un environnement sur deux. Chaque
- * déploiement porte donc les siennes, et le repli est la PRODUCTION — parce
- * qu'un environnement mal configuré doit dégrader vers le public et jamais vers
- * un déploiement interne.
- *
- * Corollaire à assumer côté exploitation : ces démonstrations sont un SERVICE
- * à surveiller, pas une image qu'on dépose et qu'on oublie. Et un déploiement
- * de la vitrine sans déploiement correspondant du POS et du KDS laisse un cadre
- * qui ne joue plus la démonstration.
+ * Les aperçus V2 et leurs démos publiques viennent du même environnement de
+ * démonstration. La vitrine ne modifie pas les apps opérationnelles de main.
+ * Les routes explicites ?demo=1 utilisent uniquement des données fictives.
  */
+const DEMO_WEB_ORIGIN = "https://web-staging-6f5f.up.railway.app";
 export const DEMO_ORIGINS = {
-  pos: process.env.NEXT_PUBLIC_DEMO_POS_URL ?? "https://pos-production-a9d8.up.railway.app",
-  kds: process.env.NEXT_PUBLIC_DEMO_KDS_URL ?? "https://kds-production-8991.up.railway.app",
+  pos: "https://pos-staging-7f92.up.railway.app",
+  kds: "https://kds-staging-90da.up.railway.app",
 } as const;
+
+export const DEMO_PREVIEW_NOTE = "Aperçus et applications en démonstration, avec des données fictives. La version et les fonctions disponibles pour votre restaurant sont confirmées avec vous avant la mise en service.";
 
 /**
  * Le seul déclencheur du mode démonstration, côté applications de terrain
@@ -850,29 +829,12 @@ export function demoHref(origin: string): string {
   return `${origin}/${DEMO_QUERY}`;
 }
 
-/**
- * Les deux démonstrations servies par CE site — même origine que la vitrine.
- *
- * Ces adresses ne sont pas devinées, elles sont RECOPIÉES de la bascule que
- * chaque surface expose ; toucher l'une sans l'autre casserait la vitrine.
- *
- *   · back-office  → `apps/web/src/lib/demo/mode.ts`
- *     `DEMO_PARAM=demo`, `DEMO_VALUE=1`, et une borne de chemin `/admin` :
- *     le paramètre seul ne suffit pas, l'adresse doit être sous `/admin`.
- *     On vise `/admin/dashboard` et non `/admin` : la page d'index fait une
- *     redirection serveur — vers ce même tableau de bord depuis la refonte de
- *     la barre — et une redirection serveur perd la requête, donc le
- *     paramètre, donc la démonstration, remplacée par l'écran de connexion.
- *
- *   · commande en ligne → `apps/web/src/components/order/demo/mode.ts`
- *     deux verrous : `?demo=1` ET le slug réservé `demo`. Sans les deux,
- *     `/r/demo` répond 404 comme n'importe quel restaurant inconnu.
- */
+/** Démos publiques correspondant aux captures V2, sans accès au parc client. */
 export const DEMO_PATHS = {
-  bo: `/admin/dashboard${DEMO_QUERY}`,
-  order: `/r/demo${DEMO_QUERY}`,
-  loyalty: `/admin/fidelite${DEMO_QUERY}`,
-  screens: `/admin/screens${DEMO_QUERY}`,
+  bo: `${DEMO_WEB_ORIGIN}/admin/dashboard${DEMO_QUERY}`,
+  order: `${DEMO_WEB_ORIGIN}/r/demo${DEMO_QUERY}`,
+  loyalty: `${DEMO_WEB_ORIGIN}/admin/fidelite${DEMO_QUERY}`,
+  screens: `${DEMO_WEB_ORIGIN}/admin/screens${DEMO_QUERY}`,
 } as const;
 
 /**
@@ -1036,7 +998,7 @@ export const DEMO_APPS: DemoApp[] = [
     device: "wide",
     shot: { src: "/shots/dark-20260919/tv-studio.jpg", alt: "Gestion des menus TV : écrans du restaurant et aperçu des modèles de présentation" },
     lead: "Menus TV.",
-    body: " Présentez les produits et les prix de votre carte sur vos écrans. Choisissez parmi quinze modèles et préparez votre programmation depuis le back-office.",
+    body: " Présentez les produits et les prix de votre carte sur vos écrans. Explorez les modèles en démonstration ; les modèles et réglages disponibles pour votre installation sont validés avec vous.",
     live: {
       href: DEMO_PATHS.screens,
       cta: "Explorer les menus TV",
@@ -1496,25 +1458,10 @@ export const PRICING_PERIMETER =
 export type PlanModule = { id: string; label: string };
 
 /**
- * ═══ CETTE LISTE N'EST PLUS LA SOURCE — ELLE EN EST LA COPIE AFFICHABLE ═══
- *
- * Elle l'a été, et c'était le défaut : la matrice de conditionnement ne vivait
- * QUE dans ce fichier, donc rien de ce qu'elle promet n'était appliqué. Un
- * restaurant à 99 € disposait du planning, des stocks, de la commande en ligne
- * et de la fidélité — les quatre lignes que sa colonne affiche « Non inclus »,
- * sous ses yeux, sur la page qui l'a décidé à signer.
- *
- * La source est désormais `CAPACITES` dans `packages/contracts/src/capacites.ts` :
- * c'est elle que lisent les gardes de l'API et la barre du back-office. On ne
- * l'IMPORTE pas ici, et c'est le même arbitrage que pour la grille de prix —
- * `@sm/contracts` embarque zod, `content.ts` est lu par des composants clients,
- * et le paquet n'expose pas de sous-chemin.
- *
- * Les identifiants sont donc recopiés, dans le MÊME ORDRE, et l'assertion de
- * type `CATALOGUE_ACCORDÉ` casse le typecheck le jour où les deux listes
- * divergent. Les libellés, eux, n'ont pas de jumeau à tenir : le contrat les
- * reprend mot pour mot (`CAPACITE_LABELS`) pour que le refus affiché au
- * restaurateur nomme la ligne qu'il a lue avant de signer.
+ * Composition commerciale des nouveaux devis V2. Ce portage de la vitrine
+ * ne déploie pas les gardes de capacités ni les fonctions pilote de develop.
+ * La configuration effective est validée avant mise en service ; les droits
+ * et conditions des contrats existants ne sont pas modifiés ici.
  */
 export const PLAN_MODULES = [
   { id: "pos", label: "Caisse (POS)" },
@@ -1534,24 +1481,7 @@ export const PLAN_MODULES = [
   { id: "delivery", label: "Livraison par votre restaurant — validation pilote" },
 ] as const satisfies readonly PlanModule[];
 
-/**
- * Les identifiants seuls, en TUPLE — un type mappé sur `PLAN_MODULES` plutôt
- * qu'une seconde liste écrite à la main : une liste de plus serait un
- * troisième endroit où diverger, et c'est précisément ce qu'on répare.
- */
-type IdsDe<T extends readonly PlanModule[]> = { readonly [K in keyof T]: T[K]["id"] };
-type ModuleIds = IdsDe<typeof PLAN_MODULES>;
-
-/**
- * LE GARDE-FOU QUI REND LA RECOPIE HONNÊTE — jumeau de `GRILLES_ACCORDÉES`.
- *
- * Il ne coûte pas un octet à l'exécution (`import type` est effacé à la
- * compilation) et coûte une erreur de typecheck franche le jour où la grille
- * affichée cesse de décrire ce que le logiciel ouvre vraiment. C'est
- * exactement le prix qu'on veut payer : entre une promesse commerciale et une
- * garde technique, la divergence ne doit pas pouvoir passer la CI.
- */
-export const CATALOGUE_ACCORDÉ: MêmeGrille<ModuleIds, typeof CapacitesContrat> = true;
+type MarketingModuleId = typeof PLAN_MODULES[number]["id"];
 
 /**
  * LES DEUX PÉRIODICITÉS DU SÉLECTEUR — et « Par an » n'est pas une deuxième
@@ -1673,22 +1603,12 @@ function planPrices(monthlyCents: number) {
  * laissaient une ligne se perdre en silence à la première révision — le lecteur
  * ne compare pas onze identifiants trois fois.
  *
- * Elles sont accordées au catalogue du contrat par `FORMULES_ACCORDÉES` : ce
- * qu'affiche cette page et ce qu'ouvre le logiciel ne peuvent plus diverger.
+ * Chaque module doit exister dans le catalogue des nouveaux devis. Les prix
+ * existants restent vérifiés contre les contrats par `GRILLES_ACCORDÉES`.
  */
-const MODULES_ESSENTIEL = ["pos", "kds", "print", "offline", "bo", "menu"] as const;
-const MODULES_COMPLET = [...MODULES_ESSENTIEL, "planning", "stocks"] as const;
-const MODULES_BOOST = [...MODULES_COMPLET, "online", "loyalty", "priority", "delivery"] as const;
-
-/** Le jumeau de `CATALOGUE_ACCORDÉ`, pour le contenu de chaque colonne. */
-export const FORMULES_ACCORDÉES: MêmeGrille<
-  {
-    essentiel: typeof MODULES_ESSENTIEL;
-    complet: typeof MODULES_COMPLET;
-    boost: typeof MODULES_BOOST;
-  },
-  typeof CatalogueContrat
-> = true;
+const MODULES_ESSENTIEL = ["pos", "kds", "print", "offline", "bo", "menu"] as const satisfies readonly MarketingModuleId[];
+const MODULES_COMPLET = [...MODULES_ESSENTIEL, "planning", "stocks"] as const satisfies readonly MarketingModuleId[];
+const MODULES_BOOST = [...MODULES_COMPLET, "online", "loyalty", "priority", "delivery"] as const satisfies readonly MarketingModuleId[];
 
 export const PLANS: Plan[] = [
   {

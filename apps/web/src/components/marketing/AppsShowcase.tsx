@@ -6,6 +6,7 @@ import {
   DEMO_APPS,
   DEMO_FALLBACK,
   DEMO_MOBILE_ID,
+  DEMO_PREVIEW_NOTE,
   PILOTE_SIGNATURE,
   section,
 } from "./content";
@@ -562,7 +563,7 @@ export function AppsShowcase() {
        * l'EXISTENCE du restaurant ; sa VOIX reste en section 10, à l'endroit
        * où l'on se demande à qui on donne son numéro.
        */}
-      <p className="demo-signature rv">{PILOTE_SIGNATURE}</p>
+      <p className="demo-signature rv">{PILOTE_SIGNATURE} {DEMO_PREVIEW_NOTE}</p>
     </section>
   );
 }

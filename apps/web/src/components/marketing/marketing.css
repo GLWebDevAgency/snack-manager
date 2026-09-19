@@ -893,6 +893,20 @@ html:has(.mk) {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.mk .sim-ctl input[type="number"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--gray);
+  border-radius: 10px;
+  background: var(--black);
+  color: var(--white);
+  font: inherit;
+}
+.mk .sim-ctl input[type="number"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 .mk .sim-ctl input[type="range"] {
   width: 100%;
   -webkit-appearance: none;

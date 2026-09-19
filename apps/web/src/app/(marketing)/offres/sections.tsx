@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { COMPTES_PAR_FORMULE } from "@sm/contracts";
+import { NEW_QUOTE_NOTE } from "@/components/marketing/commercial-catalog";
 import { CommerceOffers } from "@/components/marketing/CommerceOffers";
 import { Photo } from "@/components/marketing/Photo";
 import { ATELIER_CENTS, BILLING_YEARLY_NOTE, ENGAGEMENT, MODULE_MONTHLY_CENTS, PLANS, PLAN_MONTHLY_CENTS, ancre, euros, yearlyCents } from "@/components/marketing/content";
@@ -56,6 +56,7 @@ function Plans() {
           <p><span className={styles.oldPrice}>{euros(PLAN_MONTHLY_CENTS.complet + MODULE_MONTHLY_CENTS)}</span><strong>{euros(PLAN_MONTHLY_CENTS.boost)}</strong><span>HT/mois, soit {euros(PLAN_MONTHLY_CENTS.complet + MODULE_MONTHLY_CENTS - PLAN_MONTHLY_CENTS.boost)} de moins que Gestion + Click & collect.</span></p>
         </div>
         <p className={styles.note}>Tarifs standards mensuels, hors promotion. La mise en service standard de la commande est comprise dans Boost. Matériel, interventions, prestations graphiques et frais de paiement restent distincts.</p>
+        <p className={styles.note}>{NEW_QUOTE_NOTE}</p>
       </div>
     </section>
   );
@@ -71,14 +72,14 @@ function Comparison() {
           <table className={styles.table}>
             <caption className={styles.sr}>Fonctions incluses dans chaque suite, prix HT par mois et par établissement.</caption>
             <thead><tr><th scope="col">Votre usage</th>{PLANS.map((plan) => <th scope="col" key={plan.id}>{plan.name}<span>{plan.price} HT/mois</span></th>)}</tr></thead>
-            <tbody><tr><th scope="row">Comptes à mot de passe, propriétaire compris</th>{PLANS.map((plan) => <td key={plan.id}>{COMPTES_PAR_FORMULE[plan.id as keyof typeof COMPTES_PAR_FORMULE]}</td>)}</tr>{COMPARISON_ROWS.map((row) => <tr key={row.label}><th scope="row">{row.label}</th>{PLANS.map((plan) => <td key={plan.id} data-included={plan.modules.includes(row.module)}>{plan.modules.includes(row.module) ? row.included : row.excluded}</td>)}</tr>)}
+            <tbody><tr><th scope="row">Comptes et droits d’accès</th>{PLANS.map((plan) => <td key={plan.id}>Configuration à valider au devis</td>)}</tr>{COMPARISON_ROWS.map((row) => <tr key={row.label}><th scope="row">{row.label}</th>{PLANS.map((plan) => <td key={plan.id} data-included={plan.modules.includes(row.module)}>{plan.modules.includes(row.module) ? row.included : row.excluded}</td>)}</tr>)}
               <tr><th scope="row">Studio autonome pour les cartes papier</th>{PLANS.map((plan) => <td key={plan.id}>En préparation</td>)}</tr>
               <tr><th scope="row">Création graphique et conseil humain</th>{PLANS.map((plan) => <td key={plan.id}>Prestations distinctes</td>)}</tr>
               <tr><th scope="row">Impression, matériel, frais de paiement et livreurs</th>{PLANS.map((plan) => <td key={plan.id}>Non compris</td>)}</tr>
             </tbody>
           </table>
         </div>
-        <p className={styles.note}>Les accès équipiers par code PIN ne sont pas décomptés comme des comptes à mot de passe. La mention « pilote » décrit un périmètre accompagné à valider avant ouverture. Les limites de la fidélité et de la livraison sont précisées ci-dessous.</p>
+        <p className={styles.note}>Les accès équipiers par code PIN sont distincts des comptes à mot de passe. Les droits et comptes nécessaires sont précisés au devis. La mention « pilote » décrit un périmètre accompagné à valider avant ouverture. Les limites de la fidélité et de la livraison sont précisées ci-dessous.</p>
       </div>
     </section>
   );
