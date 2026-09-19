@@ -46,13 +46,18 @@ export function fetchV4Of(requestFn: RequestFn = httpsRequest): typeof fetch {
           const morceaux: Buffer[] = [];
           res.on('data', (chunk: Buffer) => morceaux.push(chunk));
           res.on('end', () => {
-            // `Response` natif : `ok`, `status`, `arrayBuffer()`, `json()`
-            // dérivés d'office — exactement ce que les adaptateurs lisent.
-            resolve(
-              new Response(new Uint8Array(Buffer.concat(morceaux)), {
-                status: res.statusCode ?? 502,
-              }),
-            );
+            try {
+              // Même vide, un Uint8Array est un corps : Response le refuse
+              // pour ces statuts. Les erreurs du callback doivent rejeter la
+              // promesse, jamais devenir des exceptions hors de l'appelant.
+              const status = res.statusCode ?? 502;
+              const body = [204, 205, 304].includes(status)
+                ? null
+                : new Uint8Array(Buffer.concat(morceaux));
+              resolve(new Response(body, { status }));
+            } catch (error) {
+              reject(error);
+            }
           });
           res.on('error', reject);
         },

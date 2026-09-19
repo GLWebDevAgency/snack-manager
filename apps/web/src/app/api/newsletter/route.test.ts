@@ -48,7 +48,7 @@ describe("POST /api/newsletter", () => {
       body: JSON.stringify({ email: EMAIL, consent: true, source: "site-vitrine" }),
       signal: expect.any(AbortSignal),
     }));
-    expect(timeout).toHaveBeenCalledWith(15000);
+    expect(timeout).toHaveBeenCalledWith(25000);
   });
 
   it.each([

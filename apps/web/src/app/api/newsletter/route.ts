@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
 const FIELDS = new Set(["email", "consent", "newsletterWebsite"]);
-const UNAVAILABLE = "L’inscription est indisponible pour le moment. Réessayez un peu plus tard.";
+const UNAVAILABLE = "Le service ne peut pas confirmer votre demande pour le moment. Vérifiez votre messagerie avant toute nouvelle tentative.";
 
 function response(body: object, status: number) {
   return NextResponse.json(body, { status, headers: {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       method: "POST", cache: "no-store", redirect: "error",
       headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ email, consent: true, source: "site-vitrine" }),
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(25000)]),
     });
     if (upstream.status === 429) {
       const result = response({ ok: false, error: "Trop de demandes ont été reçues. Patientez quelques minutes avant de réessayer." }, 429);

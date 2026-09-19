@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import styles from "./newsletter.module.css";
 
 type Feedback = { kind: "error" | "pending"; message: string; field?: "email" | "consent" } | null;
-const UNAVAILABLE = "L’inscription est indisponible pour le moment. Réessayez un peu plus tard.";
+const UNAVAILABLE = "Le service ne peut pas confirmer votre demande pour le moment. Vérifiez votre messagerie avant toute nouvelle tentative.";
 
 export function NewsletterForm() {
   const id = useId();
@@ -46,7 +46,7 @@ export function NewsletterForm() {
         method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email, consent: true, newsletterWebsite: String(data.get("newsletterWebsite") ?? "") }),
-        signal: AbortSignal.timeout(18000),
+        signal: AbortSignal.timeout(28000),
       });
       const body: unknown = await result.json();
       if (result.status === 202 && body && typeof body === "object"
@@ -54,7 +54,7 @@ export function NewsletterForm() {
         setFeedback({ kind: "pending", message: "Demande reçue. Consultez votre messagerie et cliquez sur le lien de confirmation pour finaliser votre inscription. Pensez aussi aux courriers indésirables." });
       } else {
         setFeedback({ kind: "error", message: result.status === 429
-          ? "Trop de demandes ont été reçues. Patientez quelques minutes avant de réessayer."
+          ? "Trop de demandes ont été reçues. Vérifiez votre messagerie et patientez quelques minutes avant de réessayer."
           : result.status === 400 ? "Vérifiez votre adresse e-mail et votre consentement." : UNAVAILABLE });
       }
     } catch {

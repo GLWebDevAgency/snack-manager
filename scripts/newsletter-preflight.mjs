@@ -6,8 +6,14 @@ if (missing.length) {
   console.error(`Newsletter non configurée : ${missing.join(', ')}`);
   process.exit(1);
 }
-const listId = Number(process.env.SM_NEWSLETTER_LIST_ID);
-const templateId = Number(process.env.SM_NEWSLETTER_DOI_TEMPLATE_ID);
+const listRaw = process.env.SM_NEWSLETTER_LIST_ID.trim();
+const templateRaw = process.env.SM_NEWSLETTER_DOI_TEMPLATE_ID.trim();
+if (![listRaw, templateRaw].every(id => /^[1-9]\d*$/.test(id))) {
+  console.error('Identifiants Brevo invalides.');
+  process.exit(1);
+}
+const listId = Number(listRaw);
+const templateId = Number(templateRaw);
 if (![listId, templateId].every(id => Number.isSafeInteger(id) && id > 0)) {
   console.error('Identifiants Brevo invalides.');
   process.exit(1);
