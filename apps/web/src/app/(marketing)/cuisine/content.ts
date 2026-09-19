@@ -68,7 +68,7 @@ export const CUISINE_SOMMAIRE: readonly { href: string; label: string }[] = CUIS
 /* ── Les images ──────────────────────────────────────────────── */
 
 export const CUISINE_SHOTS = {
-  hero: { src: "/shots/kds.jpg", alt: "" },
+  hero: { src: "/shots/dark-20260919/kds.jpg", alt: "" },
   cta: { src: "/photos/libre/blog-fenetre-service-nuit.webp", alt: "" },
 } satisfies Record<string, Shot>;
 
