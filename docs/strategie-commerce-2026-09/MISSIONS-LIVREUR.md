@@ -6,14 +6,14 @@ Code et tests du lot réunis dans la [PR #127](https://github.com/GLWebDevAgency
 
 Le gérant prépare une affectation depuis la fiche de commande du back-office. Il choisit un **accès livreur existant**, pas un prénom libre. Il peut affecter pendant la préparation, réaffecter ou retirer l’affectation tant que le départ n’est pas confirmé. L’affectation ne prépare pas, n’encaisse pas et ne fait pas partir la commande.
 
-Dans `/livreur`, la personne associée consulte uniquement ses missions actives : **À récupérer** et **En route**. Le départ est un geste explicite, confirmé par le serveur, pour une commande prête et dont le paiement enregistré est confirmé, sans remboursement ou blocage financier connu. La caisse habilitée peut également confirmer le départ d’une mission affectée ; elle ne gère pas les habilitations ni l’affectation.
+Dans `/livreur`, la personne associée consulte uniquement ses missions actives : **À récupérer** et **En route**. Le départ est un geste explicite, confirmé par le serveur, pour une commande prête et dont le paiement enregistré est confirmé, sans remboursement ou blocage financier connu. La caisse habilitée peut également confirmer le départ d’une mission affectée ; elle ne gère pas les habilitations. Le [complément POS](AFFECTATION-LIVREUR-POS.md) lui ouvre la première affectation d’une commande prête.
 
 **Hors de ce lot L2.2 :** remise par le livreur, preuve PIN/QR, incidents, transfert après départ, tournée/GPS, fonctionnement hors réseau et validation d'une PWA installée sur un vrai téléphone. La [suite L2.3](REMISE-LIVREUR.md) ajoute preuve et incidents et ferme l'ancienne clôture manuelle ; ses preuves de déploiement sont distinctes de celles de L2.2.
 
 ## Frontières et données
 
 - Les accès livreur restent séparés des JWT professionnels. Aucun rôle cuisine/caisse n’est ajouté à une session livreur ; les règles générales de lecture des commandes ne sont pas élargies.
-- Les routes manager sont sous `/delivery/missions`. L’affectation exige owner/gérant ; lecture et départ acceptent également la caisse. La capacité livraison et le restaurant sont contrôlés côté serveur.
+- Les routes manager sont sous `/delivery/missions`. L’affectation anticipée, le retrait et le remplacement restent réservés à owner/gérant ; la caisse peut effectuer la première affectation d’une commande prête. Lecture et départ acceptent également la caisse. La capacité livraison et le restaurant sont contrôlés côté serveur.
 - Les routes API `/delivery-access/missions` exigent la session dédiée, avec quotas partagés avant authentification. Le BFF `/livreur/missions` conserve la session en cookie HttpOnly, vérifie l’origine des mutations et interdit la mise en cache.
 - La projection livreur contient numéro, horaire, état, articles/quantités, nom/téléphone et adresse/instructions utiles à la livraison. Elle exclut prix, montant payé, identifiants Stripe, QR/secret fidélité, jeton de suivi et journal interne.
 - L’affectation utilise l’identifiant pérenne de l’opérateur. Une nouvelle session de ce même opérateur ne réaffecte pas toutes ses commandes. Un accès révoqué/inactif ou un équipier lié devenu invalide bloque les requêtes suivantes.

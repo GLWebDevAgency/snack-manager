@@ -686,6 +686,7 @@ describe('les clés effacées au désappairage', () => {
     // fait que rien ne vit hors de cette table.
     expect(Object.values(KEYS).sort()).toEqual(
       [
+        'sm.delivery-assignment.v1',
         'sm.pos.collection-recovery.v1',
         'sm.pos.daylog.v1',
         'sm.pos.device.v1',

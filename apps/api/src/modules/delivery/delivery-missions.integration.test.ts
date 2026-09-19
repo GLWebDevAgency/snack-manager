@@ -13,6 +13,7 @@ const TENANT = '507f1f77bcf86cd799439011';
 const OTHER = '507f1f77bcf86cd799439022';
 const STAFF = '507f1f77bcf86cd799439033';
 const actor = { kind: 'user', role: 'owner', sub: '507f1f77bcf86cd799439044', tenantId: TENANT } as JwtPayload;
+const cashier = { ...actor, kind: 'staff', role: 'caisse', sub: STAFF } as JwtPayload;
 
 export function missionTestDatabase(raw: string): { uri: string; name: string } {
   const url = new URL(raw);
@@ -306,12 +307,152 @@ function interceptWrite(model: Model<Order>, before?: () => Promise<void>, after
     await staff.updateOne({ _id: STAFF }, { $set: { sessionVersion: 'v2' } });
     await expect(service().assign(TENANT, id, assignInput(linked.id, 2), actor)).resolves.toMatchObject({ outcome: 'rejected', refusalCode: 'DELIVERY_OPERATOR_CHANGED' });
   });
-  it('les missions exigent delivery mais pas RH, et la caisse ne peut affecter', async () => {
+  it('la caisse affecte une commande prête sans modifier son paiement, puis reprend son opération exacte', async () => {
+    const id = await seed(); const operator = await createOperator(); const input = assignInput(operator.id);
+    const before = await stored(id);
+    expect(await service().getManager(TENANT, id, cashier)).toMatchObject({ canAssign: true });
+    const lost = interceptWrite(orders, undefined, async () => { throw new Error('ACK caisse perdu'); });
+    const result = await service(lost).assign(TENANT, id, input, cashier);
+    expect(result).toMatchObject({ replay: true, outcome: 'applied', mission: { canAssign: false, orderStatus: 'ready', dispatchedAt: null } });
+    const after = await stored(id);
+    expect(after?.payment).toEqual(before?.payment); expect(after?.totals).toEqual(before?.totals);
+    expect(after?.deliveryMission?.operations).toHaveLength(1);
+    expect(after?.deliveryMission?.operations[0]).toMatchObject({ actorRole: 'caisse', actorId: STAFF });
+    await service().dispatchManager(TENANT, id, { operationId: randomUUID(), expectedRevision: 1 }, actor);
+    await expect(service().assign(TENANT, id, input, cashier)).resolves.toMatchObject({ replay: true, appliedRevision: 1,
+      mission: { revision: 2, operator: { id: operator.id }, canAssign: false } });
+  });
+  it('la caisse ne retire ni ne remplace une affectation mais peut relire un ACK après réaffectation responsable', async () => {
+    const id = await seed(); const a = await createOperator('Aline'); const b = await createOperator('Brice'); const input = assignInput(a.id);
+    await expect(service().assign(TENANT, id, assignInput(null), cashier)).rejects.toMatchObject({ status: 403 });
+    await service().assign(TENANT, id, input, cashier);
+    await expect(service().assign(TENANT, id, assignInput(b.id, 1), cashier)).rejects.toMatchObject({ status: 403 });
+    await expect(service().assign(TENANT, id, assignInput(null, 1), cashier)).rejects.toMatchObject({ status: 403 });
+    await service().assign(TENANT, id, assignInput(b.id, 1), actor);
+    await expect(service().assign(TENANT, id, input, cashier)).resolves.toMatchObject({ replay: true, appliedRevision: 1,
+      mission: { revision: 2, operator: { id: b.id } } });
+    expect((await stored(id))?.deliveryMission?.operations).toHaveLength(2);
+  });
+  it.each(['new', 'preparing'])('la caisse acquitte le refus %s, sans rendre cet ancien POST applicable une fois prêt', async status => {
+    const id = await seed({ status }); const operator = await createOperator(); const input = assignInput(operator.id);
+    expect(await service().getManager(TENANT, id, cashier)).toMatchObject({ canAssign: false });
+    await expect(service().assign(TENANT, id, input, cashier)).resolves.toMatchObject({ outcome: 'rejected', refusalCode: 'delivery.mission.not_ready' });
+    await orders.updateOne({ _id: id }, { $set: { status: 'ready' }, $inc: { __v: 1 } });
+    await expect(service().assign(TENANT, id, input, cashier)).resolves.toMatchObject({ replay: true, outcome: 'rejected', refusalCode: 'delivery.mission.not_ready' });
+    expect((await stored(id))?.deliveryMission?.assignment).toBeNull();
+    await expect(service().assign(TENANT, id, assignInput(operator.id, 1), cashier)).resolves.toMatchObject({ outcome: 'applied' });
+  });
+  it('la caisse compose une tournée avant départ puis refuse un livreur déjà en route ; le manager reste libre', async () => {
+    const first = await seed(); const second = await seed(); const third = await seed(); const operator = await createOperator();
+    await service().assign(TENANT, first, assignInput(operator.id), cashier);
+    await service().assign(TENANT, second, assignInput(operator.id), cashier);
+    expect(await service().availableOperators(TENANT, cashier)).toMatchObject({ operators: [{ id: operator.id, assignedCount: 2, departedCount: 0 }] });
+    await service().dispatchManager(TENANT, first, { operationId: randomUUID(), expectedRevision: 1 }, actor);
+    expect((await service().availableOperators(TENANT, cashier)).operators).toEqual([]);
+    const input = assignInput(operator.id);
+    await expect(service().assign(TENANT, third, input, cashier)).resolves.toMatchObject({ outcome: 'rejected', refusalCode: 'DELIVERY_OPERATOR_CHANGED' });
+    await orders.updateOne({ _id: first }, { $set: { status: 'delivered' } });
+    expect(await service().availableOperators(TENANT, cashier)).toMatchObject({ operators: [{ id: operator.id, assignedCount: 1, departedCount: 0 }] });
+    await expect(service().assign(TENANT, third, input, cashier)).resolves.toMatchObject({ replay: true, outcome: 'rejected' });
+    await service().dispatchManager(TENANT, second, { operationId: randomUUID(), expectedRevision: 1 }, actor);
+    await expect(service().assign(TENANT, third, assignInput(operator.id, 1), actor)).resolves.toMatchObject({ outcome: 'applied' });
+  });
+  it('une affectation responsable concurrente gagne sans être remplacée par la caisse', async () => {
+    const id = await seed(); const a = await createOperator('Aline'); const b = await createOperator('Brice');
+    const model = interceptWrite(orders, async () => { await service(secondOrders).assign(TENANT, id, assignInput(b.id), actor); });
+    await expect(service(model).assign(TENANT, id, assignInput(a.id), cashier)).rejects.toMatchObject({ status: 409 });
+    expect((await stored(id))?.deliveryMission?.assignment?.operatorId.toString()).toBe(b.id);
+    expect((await stored(id))?.deliveryMission?.operations).toHaveLength(1);
+  });
+  it('relit le départ d’une autre mission après le choix du livreur et avant de persister', async () => {
+    const existing = await seed(); const pending = await seed(); const operator = await createOperator();
+    await service().assign(TENANT, existing, assignInput(operator.id), actor);
+    const original = tenants.findById.bind(tenants); let reads = 0;
+    const spy = vi.spyOn(tenants, 'findById').mockImplementation((...args: unknown[]) => {
+      const query = Reflect.apply(original, tenants, args); const exec = query.exec.bind(query);
+      query.exec = async () => {
+        const row = await exec();
+        if (++reads === 2) await service(secondOrders).dispatchManager(TENANT, existing, { operationId: randomUUID(), expectedRevision: 1 }, actor);
+        return row;
+      };
+      return query;
+    });
+    try {
+      await expect(service().assign(TENANT, pending, assignInput(operator.id), cashier)).resolves.toMatchObject({ outcome: 'rejected', refusalCode: 'DELIVERY_OPERATOR_CHANGED' });
+      expect((await stored(pending))?.deliveryMission?.assignment).toBeNull();
+    } finally { spy.mockRestore(); }
+  });
+  it('le choix disponible filtre accès révoqués/Staff changé, borne son tenant et ne lit pas les secrets', async () => {
+    const active = await createOperator(); const revoked = await createOperator('Révoqué');
+    await directory.update(TENANT, revoked.id, { expectedRevision: 0, active: false }, actor);
+    await staff.create({ _id: STAFF, tenantId: TENANT, name: 'Équipier fixture', role: 'caisse', pinHash: 'fixture', sessionVersion: 'v1' });
+    const linked = await directory.create(TENANT, { staffId: STAFF, requestId: randomUUID() }, actor);
+    await staff.updateOne({ _id: STAFF }, { $set: { sessionVersion: 'v2' } });
+    const foreign = await directory.create(OTHER, { requestId: randomUUID(), name: 'Autre restaurant' }, { ...actor, tenantId: OTHER });
+    const result = await service().availableOperators(TENANT, cashier);
+    expect(result.operators).toEqual([{ id: active.id, name: active.name, revision: 0, assignedCount: 0, departedCount: 0 }]);
+    expect(JSON.stringify(result)).not.toMatch(/staffId|session|invite|token|pin|tenantId/);
+    const id = await seed();
+    for (const target of [revoked, linked, foreign]) {
+      const revision = (await stored(id))?.deliveryMission?.revision ?? 0;
+      await expect(service().assign(TENANT, id, assignInput(target.id, revision, target.revision), cashier)).resolves.toMatchObject({ outcome: 'rejected', refusalCode: 'DELIVERY_OPERATOR_CHANGED' });
+    }
+  });
+  it('le choix disponible garde un curseur quand les premiers accès sont tous devenus inéligibles', async () => {
+    await operators.insertMany(Array.from({ length: 51 }, (_, index) => ({
+      _id: new mongoose.Types.ObjectId((index + 1).toString(16).padStart(24, '0')), tenantId: TENANT,
+      name: 'Livreur fixture', creationHash: 'a'.repeat(64), active: true, revision: 0,
+      sessionVersion: randomUUID(), ...(index < 50 ? { staffId: new mongoose.Types.ObjectId(), staffSessionVersion: 'v1' } : {}),
+    })));
+    const first = await service().availableOperators(TENANT, cashier);
+    expect(first.operators).toEqual([]); expect(first.nextCursor).not.toBeNull();
+    const second = await service().availableOperators(TENANT, cashier, { after: first.nextCursor! });
+    expect(second.operators).toHaveLength(1); expect(second.nextCursor).toBeNull();
+  });
+  it('le choix disponible groupe les lectures Staff/opérateurs et conserve les noms Staff actuels', async () => {
+    const ids = Array.from({ length: 12 }, () => new mongoose.Types.ObjectId());
+    await staff.insertMany(ids.map((id, index) => ({ _id: id, tenantId: TENANT, name: `Équipier ${index}`,
+      role: 'caisse', pinHash: 'fixture', active: true, sessionVersion: 'v1' })));
+    await Promise.all(ids.map(id => directory.create(TENANT, { staffId: String(id), requestId: randomUUID() }, actor)));
+    await staff.updateOne({ _id: ids[0] }, { $set: { name: 'Nom actualisé' } });
+    const pageReads = vi.spyOn(operators, 'find'); const individualReads = vi.spyOn(operators, 'findOne');
+    const individualExists = vi.spyOn(operators, 'exists'); const staffReads = vi.spyOn(staff, 'find');
+    const tenantReads = vi.spyOn(tenants, 'findById'); const countReads = vi.spyOn(orders, 'aggregate');
+    try {
+      const result = await service().availableOperators(TENANT, cashier);
+      expect(result.operators).toHaveLength(12);
+      expect(result.operators.some(row => row.name === 'Nom actualisé')).toBe(true);
+      expect(pageReads).toHaveBeenCalledTimes(2); expect(staffReads).toHaveBeenCalledOnce();
+      expect(tenantReads).toHaveBeenCalledTimes(2); expect(countReads).toHaveBeenCalledOnce();
+      expect(individualReads).not.toHaveBeenCalled(); expect(individualExists).not.toHaveBeenCalled();
+      expect(staffReads).toHaveBeenCalledWith({ tenantId: TENANT, _id: { $in: expect.any(Array) } }, { active: 1, sessionVersion: 1, name: 1 });
+    } finally {
+      for (const spy of [pageReads, individualReads, individualExists, staffReads, tenantReads, countReads]) spy.mockRestore();
+    }
+  });
+  it.each([false, true])('retire un choix dont la révision change pendant la lecture groupée, active=%s', async active => {
+    await staff.create({ _id: STAFF, tenantId: TENANT, name: 'Équipier fixture', role: 'caisse', pinHash: 'fixture', sessionVersion: 'v1' });
+    const linked = await directory.create(TENANT, { staffId: STAFF, requestId: randomUUID() }, actor);
+    const original = staff.find.bind(staff);
+    const spy = vi.spyOn(staff, 'find').mockImplementation((...args: unknown[]) => {
+      const query = Reflect.apply(original, staff, args); const exec = query.exec.bind(query);
+      query.exec = async () => {
+        const rows = await exec();
+        await operators.updateOne({ _id: linked.id }, { $set: { active }, $inc: { revision: 1 } });
+        return rows;
+      };
+      return query;
+    });
+    try { expect((await service().availableOperators(TENANT, cashier)).operators).toEqual([]); }
+    finally { spy.mockRestore(); }
+  });
+  it('les missions exigent delivery mais pas RH, y compris pour la caisse', async () => {
     const id = await seed(); const operator = await createOperator();
-    await expect(service().assign(TENANT, id, assignInput(operator.id), { ...actor, kind: 'staff', role: 'caisse' })).rejects.toMatchObject({ status: 403 });
     expect((await service().listManager(TENANT, actor)).missions).toHaveLength(1);
     await tenants.updateOne({ _id: TENANT }, { $set: { onlineDelivery: false } });
     await expect(service().getManager(TENANT, id, actor)).rejects.toMatchObject({ status: 403 });
+    await expect(service().availableOperators(TENANT, cashier)).rejects.toMatchObject({ status: 403 });
+    await expect(service().assign(TENANT, id, assignInput(operator.id), cashier)).rejects.toMatchObject({ status: 403 });
   });
   it('isole restaurant, type et opérateur sur liste/détail/départ', async () => {
     const { operator, session } = await connected(); const id = await seed(); const other = await seed({ tenantId: OTHER });

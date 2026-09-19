@@ -13,6 +13,7 @@ import {
   DeliveryMissionResultSchema, DeliveryMissionsViewSchema, DeliveryMissionViewSchema,
   DeliveryOperatorInvitationSchema, DeliveryOperatorViewSchema, DeliveryOperatorsViewSchema,
   DeliverySessionViewSchema, type DeliveryOperatorView, type JwtPayload,
+  DeliveryAvailableOperatorsViewSchema,
 } from '@sm/contracts';
 import { AuthGuard } from '../../common/auth';
 import { CapaciteGuard, CapacitesService, Fonction } from '../../common/capacites';
@@ -24,7 +25,7 @@ import { DeliveryAccessGuard } from './delivery-access.guard';
 import { DeliveryAccessService } from './delivery-access.service';
 import { DeliveryOperatorsController } from './delivery-operators.controller';
 import { DeliveryOperatorsService } from './delivery-operators.service';
-import { DeliveryCourierMissionsController, DeliveryMissionsController } from './delivery-missions.controller';
+import { DeliveryAvailableOperatorsController, DeliveryCourierMissionsController, DeliveryMissionsController } from './delivery-missions.controller';
 import { DeliveryMissionsService } from './delivery-missions.service';
 import { DeliveryMissionsQuotaGuard } from './delivery-missions.quota';
 import { DeliveryController } from './delivery.controller';
@@ -114,6 +115,7 @@ describe('cible de recette HTTP des missions', () => {
       [DeliveryOperatorsController, [DeliveryOperatorsService]],
       [DeliveryAccessController, [DeliveryAccessService, SharedPublicQuota]],
       [DeliveryMissionsController, [DeliveryMissionsService]],
+      [DeliveryAvailableOperatorsController, [DeliveryMissionsService]],
       [DeliveryCourierMissionsController, [DeliveryMissionsService]],
       [DeliveryController, [DeliveryService]],
       [CapaciteGuard, [Reflector, CapacitesService]],
@@ -131,7 +133,7 @@ describe('cible de recette HTTP des missions', () => {
         JwtModule.register({ secret: randomBytes(32).toString('base64url'), signOptions: { expiresIn: '5m' } }),
         ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
       ],
-      controllers: [DeliveryOperatorsController, DeliveryAccessController, DeliveryMissionsController,
+      controllers: [DeliveryOperatorsController, DeliveryAccessController, DeliveryMissionsController, DeliveryAvailableOperatorsController,
         DeliveryCourierMissionsController, DeliveryController, AccessProbe],
       providers: [
         ...Object.entries(models).map(([name, model]) => ({ provide: getModelToken(name), useValue: model })),
@@ -346,11 +348,19 @@ describe('cible de recette HTTP des missions', () => {
     expect((await http('GET', '/delivery/missions', tokens.owner)).status).toBe(401);
   });
 
-  it('la caisse lit et confirme un départ, sans affecter ; le chemin legacy est fermé', async () => {
+  it('la caisse affecte une commande prête puis conserve son départ existant ; le chemin legacy est fermé', async () => {
     const id = await seed(); const operator = await createOperator();
-    expect((await http('POST', `/delivery/missions/${id}/assignment`, tokens.staff, assignBody(operator))).status).toBe(403);
-    expect((await stored(id))?.deliveryMission).toBeNull();
-    await assign(id, operator);
+    const initial = await http('GET', `/delivery/missions/${id}`, tokens.staff);
+    expect(DeliveryMissionViewSchema.parse(initial.body)).toMatchObject({ canAssign: true, canDispatch: false });
+    const input = assignBody(operator);
+    const assigned = await http('POST', `/delivery/missions/${id}/assignment`, tokens.staff, input);
+    expect(assigned.status).toBe(200);
+    expect(DeliveryMissionResultSchema.parse(assigned.body)).toMatchObject({ outcome: 'applied', appliedRevision: 1, replay: false });
+    const replay = await http('POST', `/delivery/missions/${id}/assignment`, tokens.staff, input);
+    expect(DeliveryMissionResultSchema.parse(replay.body)).toMatchObject({ outcome: 'applied', replay: true });
+    const stale = await http('POST', `/delivery/missions/${id}/assignment`, tokens.staff, assignBody(operator));
+    expect(stale.status).toBe(409); expect(stale.body).toMatchObject({ code: 'DELIVERY_MISSION_CHANGED' });
+    expect((await http('POST', `/delivery/missions/${id}/assignment`, tokens.staff, assignBody(operator, 1))).status).toBe(403);
     const detail = await http('GET', `/delivery/missions/${id}`, tokens.staff);
     expect(detail.status).toBe(200);
     expect(DeliveryMissionViewSchema.parse(detail.body)).toMatchObject({ canAssign: false, canDispatch: true });
@@ -364,6 +374,51 @@ describe('cible de recette HTTP des missions', () => {
     const row = await stored(id);
     expect(row?.delivery?.dispatchedAt).toBeInstanceOf(Date); expect(row?.delivery?.deliveredAt).toBeNull();
     expect((await http('POST', `/orders/${id}/dispatch`, tokens.staff, {})).status).toBe(409);
+  });
+
+  it('la caisse consulte les accès affectables sans annuaire RH ni droits de gestion et avec garde tenant/session', async () => {
+    const operator = await createOperator();
+    await createOperator(tokens.foreign);
+    for (const token of [tokens.staff, tokens.owner, tokens.cogerant]) {
+      const response = await http('GET', '/delivery/operators/available', token);
+      expect(response.status).toBe(200); expect(response.cacheControl).toBe('private, no-store');
+      expect(DeliveryAvailableOperatorsViewSchema.parse(response.body)).toEqual({ operators: [{
+        id: operator.id, name: operator.name, revision: 0, assignedCount: 0, departedCount: 0,
+      }], nextCursor: null });
+      expect(JSON.stringify(response.body)).not.toMatch(/staffId|candidates|invite|session|token|phone|email/);
+    }
+    expect((await http('GET', '/delivery/operators/available')).status).toBe(401);
+    expect((await http('GET', '/delivery/operators/available?tenantId=' + OTHER, tokens.staff)).status).toBe(400);
+    expect((await http('GET', '/delivery/operators', tokens.staff)).status).toBe(403);
+    expect((await http('POST', '/delivery/operators', tokens.staff, { requestId: randomUUID(), name: 'Interdit' })).status).toBe(403);
+    expect((await http('PATCH', `/delivery/operators/${operator.id}`, tokens.staff, { expectedRevision: 0, active: false })).status).toBe(403);
+    expect((await http('POST', `/delivery/operators/${operator.id}/invitation`, tokens.staff, { expectedRevision: 0 })).status).toBe(403);
+    const foreignOrder = await seed({ tenantId: OTHER });
+    expect((await http('POST', `/delivery/missions/${foreignOrder}/assignment`, tokens.staff, assignBody(operator))).status).toBe(404);
+    await models.Tenant.updateOne({ _id: TENANT }, { $set: { onlineDelivery: false } });
+    expect((await http('GET', '/delivery/operators/available', tokens.staff)).status).toBe(403);
+    await models.Tenant.updateOne({ _id: TENANT }, { $set: { onlineDelivery: true } });
+    await models.Staff.updateOne({ _id: STAFF }, { $set: { sessionVersion: 'staff-v2' } });
+    expect((await http('GET', '/delivery/operators/available', tokens.staff)).status).toBe(401);
+  });
+
+  it('la caisse refuse une commande non prête et un livreur déjà parti, sans perdre le refus au rejeu', async () => {
+    const operator = await createOperator(); const preparing = await seed({ status: 'preparing' });
+    const input = assignBody(operator);
+    const refused = await http('POST', `/delivery/missions/${preparing}/assignment`, tokens.staff, input);
+    expect(refused.status).toBe(200);
+    expect(DeliveryMissionResultSchema.parse(refused.body)).toMatchObject({ outcome: 'rejected', refusalCode: 'delivery.mission.not_ready' });
+    await models.Order.updateOne({ _id: preparing }, { $set: { status: 'ready' }, $inc: { __v: 1 } });
+    const replay = await http('POST', `/delivery/missions/${preparing}/assignment`, tokens.staff, input);
+    expect(DeliveryMissionResultSchema.parse(replay.body)).toMatchObject({ replay: true, outcome: 'rejected' });
+    const departing = await seed(); await assign(departing, operator, tokens.staff);
+    expect((await http('POST', `/delivery/missions/${departing}/dispatch`, tokens.staff, { operationId: randomUUID(), expectedRevision: 1 })).status).toBe(200);
+    const available = await http('GET', '/delivery/operators/available', tokens.staff);
+    expect(DeliveryAvailableOperatorsViewSchema.parse(available.body).operators).toEqual([]);
+    const occupied = await http('POST', `/delivery/missions/${preparing}/assignment`, tokens.staff, assignBody(operator, 1));
+    expect(occupied.status).toBe(200);
+    expect(DeliveryMissionResultSchema.parse(occupied.body)).toMatchObject({ outcome: 'rejected', refusalCode: 'DELIVERY_OPERATOR_CHANGED' });
+    expect((await stored(preparing))?.deliveryMission?.assignment).toBeNull();
   });
 
   it('le bearer opaque ne voit que ses missions et ne devient jamais une session gérant ou caisse', async () => {

@@ -54,6 +54,8 @@ import {
   type ServerOrderRow,
 } from './service-state';
 import { canConfirmCounterHandover } from './service-handover';
+import { DeliveryAssignmentPanel, DeliveryAssignmentRecoveries } from './DeliveryAssignmentPanel';
+import type { DeliveryAssignmentAccess } from './useDeliveryAssignment';
 import { canCollectOrder, serviceAgeLabel } from './service-payment';
 import type {
   ActiveOrderStatus,
@@ -91,6 +93,7 @@ export function ServicePanel({
   truncatedStatuses,
   onConfirmHandover,
   onCollectPayment,
+  deliveryAccess,
   offline,
 }: {
   commandes: ServiceCommande[];
@@ -107,6 +110,7 @@ export function ServicePanel({
   truncatedStatuses: ActiveOrderStatus[];
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
   onCollectPayment?: (row: ServerOrderRow) => void;
+  deliveryAccess?: DeliveryAssignmentAccess;
   offline?: boolean;
 }) {
   const { palette, type } = useTheme();
@@ -140,6 +144,7 @@ export function ServicePanel({
       />
 
       <ScrollView contentContainerStyle={{ padding: pad, paddingBottom: L.sp(40), gap: L.sp(S.lg) }}>
+        {deliveryAccess ? <DeliveryAssignmentRecoveries key={deliveryAccess.ownerId} access={deliveryAccess} offline={!!offline} brand={brand} /> : null}
         {commandes.length === 0 ? (
           <EmptyState
             title={
@@ -201,6 +206,7 @@ export function ServicePanel({
           onClose={() => setDetailId(null)}
           onConfirmHandover={onConfirmHandover}
           onCollectPayment={onCollectPayment}
+          deliveryAccess={deliveryAccess}
           offline={offline}
         />
       ) : null}
@@ -467,6 +473,7 @@ export function DetailCommande({
   onClose,
   onConfirmHandover,
   onCollectPayment,
+  deliveryAccess,
   offline,
 }: {
   commande: ServiceCommande;
@@ -475,6 +482,7 @@ export function DetailCommande({
   onClose: () => void;
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
   onCollectPayment?: (row: ServerOrderRow) => void;
+  deliveryAccess?: DeliveryAssignmentAccess;
   offline?: boolean;
 }) {
   const { sheet, type, palette } = useTheme();
@@ -545,9 +553,14 @@ export function DetailCommande({
             <Text style={[type.strong, { fontSize: L.fs(14) }]}>{[row.delivery.address.line1, row.delivery.address.line2, `${row.delivery.address.postalCode} ${row.delivery.address.city}`].filter(Boolean).join(', ')}</Text>
             {row.delivery.instructions ? <Text style={type.mut}>{row.delivery.instructions}</Text> : null}
             {row.pickup?.slot ? <Text style={type.mut}>Arrivée estimée · {heureCourte(row.pickup.slot)}</Text> : null}
-            <Text style={type.mut}>{row.delivery.dispatchedAt ? `Départ confirmé à ${heureCourte(row.delivery.dispatchedAt)}${row.delivery.driverName ? ` · ${row.delivery.driverName}` : ''}` : 'Confirmez le départ du livreur depuis les commandes du back-office.'}</Text>
+            {row.delivery.dispatchedAt ? <Text style={type.mut}>{`Départ confirmé à ${heureCourte(row.delivery.dispatchedAt)}${row.delivery.driverName ? ` · ${row.delivery.driverName}` : ''}`}</Text>
+              : !deliveryAccess ? <Text style={type.mut}>Confirmez le départ du livreur depuis les commandes du back-office.</Text> : null}
           </View>
         ) : null}
+
+        {row.type === 'delivery' && deliveryAccess ? <DeliveryAssignmentPanel
+          key={`${deliveryAccess.ownerId}:${row._id}`} missionId={row._id} access={deliveryAccess} offline={!!offline} brand={brand}
+        /> : null}
 
         {onCollectPayment && canCollectOrder(row) ? (
           <View style={[sheet.inset, { padding: S.md, gap: S.sm }]}>

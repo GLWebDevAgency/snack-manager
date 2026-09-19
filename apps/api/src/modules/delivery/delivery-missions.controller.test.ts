@@ -5,16 +5,22 @@ import { DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMis
 import { IS_PUBLIC, ROLES } from '../../common/auth';
 import { CAPACITES_REQUISES } from '../../common/capacites';
 import { DeliveryAccessGuard } from './delivery-access.guard';
-import { DeliveryMissionsController, DeliveryCourierMissionsController, DeliveryCourierHistoryController } from './delivery-missions.controller';
+import { DeliveryMissionsController, DeliveryCourierMissionsController, DeliveryCourierHistoryController, DeliveryAvailableOperatorsController } from './delivery-missions.controller';
 import { DeliveryMissionsQuotaGuard } from './delivery-missions.quota';
 
 const operationId = '11111111-1111-4111-8111-111111111111';
 describe('frontières HTTP des missions', () => {
-  it('lecture/départ gérant-caisse avec delivery seule, affectation responsable', () => {
+  it('lecture/départ/affectation gérant-caisse avec delivery seule, règles métier dans le service', () => {
     expect(Reflect.getMetadata(ROLES, DeliveryMissionsController)).toEqual(['owner', 'gerant', 'caisse']);
-    expect(Reflect.getMetadata(ROLES, DeliveryMissionsController.prototype.assign)).toEqual(['owner', 'gerant']);
+    expect(Reflect.getMetadata(ROLES, DeliveryMissionsController.prototype.assign)).toEqual(['owner', 'gerant', 'caisse']);
     expect(Reflect.getMetadata(CAPACITES_REQUISES, DeliveryMissionsController)).toEqual(['delivery']);
     expect(Reflect.getMetadata(IS_PUBLIC, DeliveryMissionsController)).not.toBe(true);
+  });
+  it('expose seulement une lecture dédiée du choix livreur à la caisse', () => {
+    expect(Reflect.getMetadata(ROLES, DeliveryAvailableOperatorsController)).toEqual(['owner', 'gerant', 'caisse']);
+    expect(Reflect.getMetadata(CAPACITES_REQUISES, DeliveryAvailableOperatorsController)).toEqual(['delivery']);
+    expect(Reflect.getMetadata(IS_PUBLIC, DeliveryAvailableOperatorsController)).not.toBe(true);
+    expect(Object.getOwnPropertyNames(DeliveryAvailableOperatorsController.prototype)).toEqual(['constructor', 'list']);
   });
   it('isole les routes livreur et applique quota avant authentification DB', () => {
     expect(Reflect.getMetadata(IS_PUBLIC, DeliveryCourierMissionsController)).toBe(true);

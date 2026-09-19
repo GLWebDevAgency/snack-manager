@@ -27,6 +27,20 @@ export type DeliveryOperatorInvite = z.infer<typeof DeliveryOperatorInviteSchema
 export const DeliveryOperatorsQuerySchema = z.object({ after: objectId.optional() }).strict();
 export type DeliveryOperatorsQuery = z.infer<typeof DeliveryOperatorsQuerySchema>;
 
+/** Choix opérationnel de caisse : aucune identité RH ni donnée d'invitation.
+ * Les compteurs décrivent les missions actives, jamais une présence en ligne. */
+export const DeliveryAvailableOperatorsViewSchema = z.object({
+  operators: z.array(z.object({
+    id: objectId,
+    name: z.string().min(1).max(160),
+    revision,
+    assignedCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    departedCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  }).strict()).max(50),
+  nextCursor: objectId.nullable(),
+}).strict();
+export type DeliveryAvailableOperatorsView = z.infer<typeof DeliveryAvailableOperatorsViewSchema>;
+
 export const DeliveryOperatorViewSchema = z.object({
   id: objectId,
   name: z.string().min(1).max(160),

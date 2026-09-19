@@ -42,6 +42,7 @@ import {
 } from '@sm/contracts';
 import {
   DEMO_TENANT,
+  assertDeliveryAssignmentsSettled,
   SmClient,
   QueueScopeRetiredError,
   demoStore,
@@ -95,6 +96,7 @@ function nativeStore(): KeyValueStore {
 import { KEYS } from './pos-state';
 import { withDemoLoyalty } from './demo-loyalty';
 import { withDemoPayment } from './demo-payment';
+import { withDemoDelivery } from './demo-delivery';
 import { assertPhoneOrderPurgeSafe } from './phone-order-attempt';
 import { pendingCollectionIds } from './service-payment';
 import { assertDiningPurgeSafe } from './dining-operation';
@@ -102,6 +104,7 @@ export { KEYS };
 
 /** Lecture sous le verrou de purge : aucun journal direct ne passe par la file. */
 async function assertDirectOperationsSettled(store: KeyValueStore): Promise<void> {
+  await assertDeliveryAssignmentsSettled(store);
   await assertDiningPurgeSafe(store);
   await assertPhoneOrderPurgeSafe(store);
   if ((await pendingCollectionIds(store)).length > 0) {
@@ -180,7 +183,7 @@ setStore(
 export const client = new SmClient({
   baseUrl: API_URL,
   queueScopeRequired: true,
-  ...(DEMO ? { transport: withDemoLoyalty(withDemoPayment(demoTransport())) } : null),
+  ...(DEMO ? { transport: withDemoLoyalty(withDemoDelivery(withDemoPayment(demoTransport()))) } : null),
 });
 
 export interface PinLoginResponse {
