@@ -153,3 +153,13 @@ regexes = [
   '''^b013b4b93f88dbcc7c00c1e510d36e0e53abf047d1afccd4f14d79a9d8955492$''',
   '''^d65cd936af136a7e6e258792c2541d3329da9d8aa414f78dc36524ec43615c4e$''',
 ]
+
+# Nom public du document de stockage, sans credential ni contenu du journal.
+# L'exemption ne couvre que cette valeur, ce fichier et la règle générique.
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Identifiant public du journal local des affectations"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''^packages/client-core/src/delivery-assignment\.ts$''']
+regexes = ['''^sm\.delivery-assignment\.v1$''']
