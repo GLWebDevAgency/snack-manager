@@ -17,7 +17,7 @@ interface StripeOptions { stripeAccount?: string; idempotencyKey?: string }
 interface StripeClient {
   paymentIntents: {
     create(params: Record<string, unknown>, options?: StripeOptions): Promise<ProviderIntent>;
-    retrieve(id: string, options?: StripeOptions): Promise<ProviderIntent>;
+    retrieve(id: string, params: Record<string, never>, options?: StripeOptions): Promise<ProviderIntent>;
     cancel(id: string, params: Record<string, unknown>, options?: StripeOptions): Promise<ProviderIntent>;
   };
 }
@@ -77,7 +77,7 @@ export class PaymentsService {
       create: (params, accountId, idempotencyKey) => stripe.paymentIntents.create(
         { ...params }, { stripeAccount: accountId, idempotencyKey },
       ),
-      retrieve: (id, accountId) => stripe.paymentIntents.retrieve(id, scope(accountId)),
+      retrieve: (id, accountId) => stripe.paymentIntents.retrieve(id, {}, scope(accountId)),
       cancel: (id, accountId, idempotencyKey) => stripe.paymentIntents.cancel(
         id, { cancellation_reason: 'requested_by_customer' }, { ...scope(accountId), idempotencyKey },
       ),

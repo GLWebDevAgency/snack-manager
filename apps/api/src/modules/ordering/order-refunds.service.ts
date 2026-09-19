@@ -21,7 +21,7 @@ export interface RefundStripeClient {
     list(params: { payment_intent: string; limit: number; starting_after?: string }, options: Options): Promise<{ data: RefundProof[]; has_more: boolean }>;
     create(params: { payment_intent: string; amount: number; metadata: Record<string, string> }, options: Options): Promise<RefundProof>;
   };
-  charges: { retrieve(id: string, options: Options): Promise<{ payment_intent?: string | { id: string } | null }> };
+  charges: { retrieve(id: string, params: Record<string, never>, options: Options): Promise<{ payment_intent?: string | { id: string } | null }> };
 }
 export type RefundClientFactory = () => Promise<RefundStripeClient | null>;
 const DURABLE_WRITE = { w: 'majority' as const, j: true, wtimeout: 10_000 };
@@ -287,7 +287,7 @@ export class OrderRefundsService {
     const object = event.data.object as { payment_intent?: string | { id: string } | null; charge?: string | null };
     let intent = typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id;
     if (!intent && object.charge) {
-      const charge = await client.charges.retrieve(object.charge, event.account ? { stripeAccount: event.account } : {});
+      const charge = await client.charges.retrieve(object.charge, {}, event.account ? { stripeAccount: event.account } : {});
       intent = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
     }
     if (!intent) return;
