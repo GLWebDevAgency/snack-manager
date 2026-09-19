@@ -1,14 +1,31 @@
 import { Body, Controller, Get, Header, Headers, HttpCode, Param, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { DELIVERY_VIEW_VERSION_HEADER, DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionsQuerySchema,
+import { DELIVERY_VIEW_VERSION_HEADER, DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionsQuerySchema, DeliveryOperatorsQuerySchema,
   deliveryMissionForVersion, deliveryMissionsForVersion, deliveryMissionResultForVersion,
-  type DeliveryMissionAssign, type DeliveryMissionDispatch, type DeliveryMissionsQuery, type JwtPayload } from '@sm/contracts';
+  type DeliveryMissionAssign, type DeliveryMissionDispatch, type DeliveryMissionsQuery, type DeliveryOperatorsQuery, type JwtPayload } from '@sm/contracts';
 import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { Capacites } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { DeliveryAccessGuard, type DeliveryAccessRequest } from './delivery-access.guard';
 import { DeliveryMissionsService } from './delivery-missions.service';
 import { DeliveryMissionsQuotaGuard } from './delivery-missions.quota';
+
+/** La caisse consulte un choix minimal, sans accès à l'annuaire de gestion. */
+@Controller('delivery/operators')
+@Roles('owner', 'gerant', 'caisse')
+@Capacites('delivery')
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 120, ttl: 60_000 } })
+export class DeliveryAvailableOperatorsController {
+  constructor(private readonly missions: DeliveryMissionsService) {}
+
+  @Get('available')
+  @Header('Cache-Control', 'private, no-store')
+  list(@TenantId() tenantId: string, @CurrentUser() actor: JwtPayload,
+    @Query(zod(DeliveryOperatorsQuerySchema)) query: DeliveryOperatorsQuery) {
+    return this.missions.availableOperators(tenantId, actor, query);
+  }
+}
 
 @Controller('delivery/missions')
 @Roles('owner', 'gerant', 'caisse')
@@ -34,7 +51,7 @@ export class DeliveryMissionsController {
   }
 
   @Post(':id/assignment')
-  @Roles('owner', 'gerant')
+  @Roles('owner', 'gerant', 'caisse')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async assign(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() actor: JwtPayload,

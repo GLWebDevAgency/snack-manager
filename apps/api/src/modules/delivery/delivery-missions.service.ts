@@ -6,9 +6,11 @@ import type Redis from 'ioredis';
 import {
   DELIVERY_MISSION_MAX_OPERATIONS, DELIVERY_MISSION_PAGE_SIZE,
   DeliveryMissionAssignSchema, DeliveryMissionDispatchSchema, DeliveryMissionsQuerySchema, DeliveryMissionRefusalCodeSchema, DeliveryMissionResultSchema, DeliveryHistoryViewSchema,
+  DeliveryAvailableOperatorsViewSchema, DeliveryOperatorsQuerySchema,
   capacitesEffectives, isAccessBlocked, ordersChannel, WS_EVENTS,
   type DeliveryMissionAssign, type DeliveryMissionDispatch, type DeliveryMissionResult,
   type DeliveryMissionsQuery, type DeliveryMissionsView, type DeliveryMissionView, type JwtPayload,
+  type DeliveryAvailableOperatorsView, type DeliveryOperatorsQuery,
 } from '@sm/contracts';
 import { ordering } from '@sm/domain';
 import type { DeliveryOperator, Order, Staff, Tenant } from '@sm/db';
@@ -48,7 +50,7 @@ export class DeliveryMissionsService {
     }
     const actor = principal.actor;
     if (!['user', 'staff'].includes(actor.kind) || actor.tenantId !== tenantId
-      || !(assignment ? MANAGERS : [...MANAGERS, 'caisse']).includes(actor.role)) throw new ForbiddenException();
+      || ![...MANAGERS, 'caisse'].includes(actor.role)) throw new ForbiddenException();
     if (!/^[a-f0-9]{24}$/.test(tenantId)) throw new ForbiddenException();
     const tenant = await this.tenants.findById(tenantId, { ...SOUSCRIPTION_FIELDS, 'account.status': 1 })
       .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
@@ -91,7 +93,62 @@ export class DeliveryMissionsService {
   private async view(row: MissionOrder, principal: Principal): Promise<DeliveryMissionView> {
     const assignment = row.deliveryMission?.assignment;
     const available = !!assignment && !!await this.operator(String(row.tenantId), String(assignment.operatorId));
-    return missionView(row, principal.kind === 'manager' && MANAGERS.includes(principal.actor.role), available);
+    const canAssign = principal.kind === 'manager' && (MANAGERS.includes(principal.actor.role)
+      || (principal.actor.role === 'caisse' && row.status === 'ready' && !assignment));
+    return missionView(row, canAssign, available);
+  }
+
+  private async operatorHasDepartedMission(tenantId: string, operatorId: string): Promise<boolean> {
+    return !!await this.orders.exists({ tenantId, type: 'delivery', status: { $in: ACTIVE },
+      'deliveryMission.assignment.operatorId': operatorId, 'delivery.dispatchedAt': { $ne: null },
+    }).read('primary').readConcern('majority').maxTimeMS(10_000);
+  }
+
+  async availableOperators(tenantId: string, actor: JwtPayload, raw: DeliveryOperatorsQuery = {}): Promise<DeliveryAvailableOperatorsView> {
+    const parsed = DeliveryOperatorsQuerySchema.safeParse(raw);
+    if (!parsed.success) throw invalid();
+    const principal: Principal = { kind: 'manager', actor };
+    await this.authorize(tenantId, principal);
+    const rows = await this.operators.find({ tenantId, active: true,
+      ...(parsed.data.after ? { _id: { $gt: parsed.data.after } } : {}),
+    }, { active: 1, revision: 1, name: 1, staffId: 1, staffSessionVersion: 1 })
+      .sort({ _id: 1 }).limit(DELIVERY_MISSION_PAGE_SIZE + 1)
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean<Operator[]>();
+    const page = rows.slice(0, DELIVERY_MISSION_PAGE_SIZE);
+    // Même contrôle que operator(), groupé pour ne pas ouvrir jusqu'à 150
+    // lectures par page. Aucune donnée de session/invitation n'est chargée.
+    const staffIds = page.flatMap(row => row.staffId ? [row.staffId] : []);
+    const members = staffIds.length ? await this.staff.find({ tenantId, _id: { $in: staffIds } }, { active: 1, sessionVersion: 1, name: 1 })
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean() : [];
+    const byStaffId = new Map(members.map(member => [String(member._id), member]));
+    const eligible = page.flatMap(row => {
+      if (!row.staffId) return [row];
+      const member = byStaffId.get(String(row.staffId));
+      return member?.active && row.staffSessionVersion === String(member.sessionVersion ?? '0')
+        ? [{ ...row, name: member.name }] : [];
+    });
+    // Une révocation/réinvitation pendant la lecture Staff retire le choix.
+    const current = eligible.length ? await this.operators.find({ tenantId, active: true,
+      $or: eligible.map(row => ({ _id: row._id, revision: row.revision })),
+    }, { _id: 1 }).read('primary').readConcern('majority').maxTimeMS(10_000).lean<{ _id: Types.ObjectId }[]>() : [];
+    const currentIds = new Set(current.map(row => String(row._id)));
+    const operators = eligible.filter(row => currentIds.has(String(row._id)));
+    const counts = operators.length ? await this.orders.aggregate<{ _id: Types.ObjectId; assignedCount: number; departedCount: number }>([
+      { $match: { tenantId: new Types.ObjectId(tenantId), type: 'delivery', status: { $in: ACTIVE },
+        'deliveryMission.assignment.operatorId': { $in: operators.map(row => row._id) } } },
+      { $group: { _id: '$deliveryMission.assignment.operatorId',
+        assignedCount: { $sum: { $cond: [{ $eq: [{ $ifNull: ['$delivery.dispatchedAt', null] }, null] }, 1, 0] } },
+        departedCount: { $sum: { $cond: [{ $ne: [{ $ifNull: ['$delivery.dispatchedAt', null] }, null] }, 1, 0] } },
+      } },
+    ]).read('primary').readConcern('majority').option({ maxTimeMS: 10_000 }) : [];
+    const byId = new Map(counts.map(row => [String(row._id), row]));
+    await this.authorize(tenantId, principal);
+    return DeliveryAvailableOperatorsViewSchema.parse({
+      operators: operators.filter(row => !(byId.get(String(row._id))?.departedCount ?? 0))
+        .map(row => ({ id: String(row._id), name: row.name.trim().slice(0, 160) || 'Livreur', revision: row.revision,
+        assignedCount: byId.get(String(row._id))?.assignedCount ?? 0, departedCount: byId.get(String(row._id))?.departedCount ?? 0 })),
+      nextCursor: rows.length > DELIVERY_MISSION_PAGE_SIZE ? String(page.at(-1)!._id) : null,
+    });
   }
 
   private async list(tenantId: string, principal: Principal, raw: DeliveryMissionsQuery): Promise<DeliveryMissionsView> {
@@ -167,12 +224,21 @@ export class DeliveryMissionsService {
     if (previous) return this.replay(tenantId, id, principal, previous, fingerprint);
     const revision = before.deliveryMission?.revision ?? 0;
     if (revision !== input.expectedRevision) throw changed();
+    // La caisse peut choisir le premier livreur d'une commande prête. Elle
+    // ne retire ni ne remplace une affectation. Le rejeu exact précède cette
+    // garde : une réponse perdue reste récupérable après le départ ou une
+    // réaffectation décidée ensuite par le responsable.
+    const cashierAssignment = assigning && principal.kind === 'manager' && principal.actor.role === 'caisse';
+    if (cashierAssignment && (!(input as DeliveryMissionAssign).operatorId || before.deliveryMission?.assignment)) {
+      throw new ForbiddenException();
+    }
     if (revision === Number.MAX_SAFE_INTEGER || (before.deliveryMission?.operations.length ?? 0) >= DELIVERY_MISSION_MAX_OPERATIONS) {
       throw new ConflictException({ code: 'DELIVERY_MISSION_LIMIT', message: 'Le journal de cette mission est complet. Contactez le responsable.' });
     }
     const state = missionState(before);
     const decision = assigning ? ordering.canAssignDeliveryMission(state) : ordering.canDispatchDeliveryMission(state);
     let refusalCode = decision.ok ? null : DeliveryMissionRefusalCodeSchema.parse(decision.error.code);
+    if (!refusalCode && cashierAssignment && before.status !== 'ready') refusalCode = 'delivery.mission.not_ready';
     let assignment = before.deliveryMission?.assignment ?? null;
     if (!refusalCode && assigning) {
       const assign = input as DeliveryMissionAssign;
@@ -183,6 +249,16 @@ export class DeliveryMissionsService {
     } else if (!refusalCode && (!assignment || !await this.operator(tenantId, String(assignment.operatorId)))) {
       refusalCode = 'DELIVERY_OPERATOR_CHANGED';
     }
+    await this.authorize(tenantId, principal, assigning);
+    // Les tournées permettent plusieurs commandes avant départ. Dernière
+    // relecture avant le CAS : ne pas affecter depuis la caisse un livreur
+    // déjà parti. Les autres Order ne sont pas dans cette écriture atomique :
+    // un départ concurrent postérieur à la lecture peut encore la croiser.
+    if (!refusalCode && cashierAssignment && assignment
+      && await this.operatorHasDepartedMission(tenantId, String(assignment.operatorId))) {
+      refusalCode = 'DELIVERY_OPERATOR_CHANGED';
+      assignment = before.deliveryMission?.assignment ?? null;
+    }
     const operation: MissionOperation = { operationId: input.operationId, fingerprint, action, revision: revision + 1,
       outcome: refusalCode ? 'rejected' : 'applied', refusalCode, reason: assigning ? (input as DeliveryMissionAssign).reason : null,
       at: new Date(), actorKind, actorId, actorRole: principal.kind === 'courier' ? 'livreur' : principal.actor.role,
@@ -191,7 +267,6 @@ export class DeliveryMissionsService {
       operatorId: assignment?.operatorId ?? null };
     const mission: MissionRecord = { version: 1, revision: revision + 1, assignment,
       operations: [...(before.deliveryMission?.operations ?? []), operation] };
-    await this.authorize(tenantId, principal, assigning);
     const filter = { ...this.filter(tenantId, principal), _id: id, __v: before.__v ?? { $exists: false }, status: before.status,
       ...(!refusalCode ? { 'delivery.dispatchedAt': null } : {}),
       ...(before.deliveryMission ? { 'deliveryMission.version': 1, 'deliveryMission.revision': revision,
