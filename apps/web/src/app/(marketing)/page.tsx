@@ -1,24 +1,23 @@
 import { AppsShowcase } from "@/components/marketing/AppsShowcase";
 import { Canaux } from "@/components/marketing/Canaux";
-import { Comparison } from "@/components/marketing/Comparison";
-import { CommerceOffers } from "@/components/marketing/CommerceOffers";
 import { ContactSection } from "@/components/marketing/ContactSection";
 import { Faq } from "@/components/marketing/Faq";
-import { Founder } from "@/components/marketing/Founder";
-import { Hero } from "@/components/marketing/Hero";
-import { RestaurantJourney } from "@/components/marketing/RestaurantJourney";
-import { MenuStudio } from "@/components/marketing/MenuStudio";
-import "@/components/marketing/communication-v2.css";
-import { Materiel } from "@/components/marketing/Materiel";
-import { Pricing } from "@/components/marketing/Pricing";
-import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { Simulator } from "@/components/marketing/Simulator";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
+import { LandingIntro, NeedsNavigation } from "@/components/marketing/notch/LandingIntro";
+import { ServiceStory } from "@/components/marketing/notch/ServiceStory";
+import { MenuExperience } from "@/components/marketing/notch/MenuExperience";
+import { MenuInsights } from "@/components/marketing/notch/MenuInsights";
+import { OffersExperience } from "@/components/marketing/notch/OffersExperience";
+import { OnboardingStory } from "@/components/marketing/notch/OnboardingStory";
+import { MotionProvider } from "@/components/marketing/notch/Motion";
+import { ProjectNavigation } from "@/components/marketing/notch/ProjectNavigation";
+import "@/components/marketing/notch/landing.css";
 import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
 import { lireReseaux } from "@/lib/reseaux";
 
-/** Public V2: needs, product proof, menu services, clear offers and accompanied onboarding. */
+/** Public narrative; the staging navigation and footer retain their visual contract. */
 export default async function LandingPage() {
   // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
   // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
@@ -38,24 +37,27 @@ export default async function LandingPage() {
 
       <SiteHeader />
 
-      <main id="top">
-        <Hero reseaux={reseaux} />
-        <Comparison />
-        <AppsShowcase />
-        <MenuStudio />
-        <Pricing />
-        <CommerceOffers />
-        <Canaux />
-        <Materiel />
-        <RestaurantJourney />
-        <Simulator />
-        <Founder />
-        <Faq />
-        <ContactSection />
-      </main>
-
+      <MotionProvider>
+        <main id="top" className="nl-main">
+          <LandingIntro />
+          <NeedsNavigation />
+          <ServiceStory />
+          <AppsShowcase />
+          <MenuExperience />
+          <MenuInsights />
+          <OffersExperience />
+          <div className="nl-workshop"><Canaux /></div>
+          <OnboardingStory />
+          <details className="nl-calculator">
+            <summary id="simulateur">Chiffrer mon organisation actuelle<span aria-hidden="true">+</span></summary>
+            <Simulator embedded />
+          </details>
+          <Faq />
+          <ContactSection />
+        </main>
+        <ProjectNavigation />
+      </MotionProvider>
       <SiteFooter reseaux={reseaux} />
-      <RevealObserver />
 
       <script
         type="application/ld+json"

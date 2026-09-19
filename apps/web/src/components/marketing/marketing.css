@@ -7298,9 +7298,6 @@ html:has(.mk) {
   }
 }
 
-/* V2: expose the primary navigation at rest; retain the branded notch. */
-.mk .hd-mid { width: var(--hd-open-w, 740px); max-width: calc(100vw - 80px); }
-.mk .hd-links { opacity: 1; filter: none; transform: none; }
 /* Non-included functions remain readable when comparing plans. */
 .mk .pr-module.off { opacity: 1; color: #aaa; }
 .mk .pr-module.off .pr-dot { border-color: #aaa; }

@@ -1,0 +1,63 @@
+/* Landing body only: the staging navigation and footer retain their own styles. */
+.mk .nl-root { --nl-brass: #c9a675; color: #f4f0e9; }
+.mk .nl-main { overflow: clip; }
+.mk .nl-root [id] { scroll-margin-top: 100px; }
+.mk .nl-root .rv { opacity: 1; transform: none; }
+.mk .nl-root :focus-visible { outline: 2px solid #d9ba88; outline-offset: 5px; }
+.mk .nl-root .h2 { letter-spacing: -.055em; line-height: 1.06; }
+.mk .nl-root .badge { color: #d2b68f; border-color: #c9a67542; background: #c9a6750a; }
+.mk .nl-root .body-text { color: #b7b4b0; }
+.mk .nl-root .demo-section { max-width: 1360px; padding: 100px 44px 80px; margin: 0 auto; }
+.mk .nl-root .demo-pills { flex-wrap: wrap; gap: 8px; max-width: 900px; margin-inline: auto; }
+.mk .nl-root .demo-pill { padding: 11px 19px; }
+.mk .nl-root .demo-pill.is-on { background: #d6b68a; color: #16130f; border-color: #d6b68a; }
+.mk .nl-root .demo-sub { max-width: 720px; }
+.mk .nl-root .demo-poster .ph img { object-fit: contain; object-position: top center; }
+.mk .nl-root .demo-legend { border-radius: 22px; background: #111112; border-color: #ffffff19; }
+.mk .nl-root .demo-legendbody { padding: 28px; }
+.mk .nl-root .demo-signature { color: #b4b0aa; }
+.mk .nl-root .demo-arrow { background: #181819; border: 1px solid #ffffff29; }
+.mk .nl-workshop { padding: 60px 24px; }
+.mk .nl-workshop .ch-section { max-width: 1220px; margin: 0 auto; padding: 64px; border: 1px solid #ffffff20; border-radius: 34px; background: #111112; }
+.mk .nl-workshop .ch-media { opacity: .25; }
+.mk .nl-workshop .ch-veil { background: linear-gradient(100deg, #111112f5, #111112d9); }
+.mk .nl-workshop .ch-row { padding-block: 26px; }
+.mk .nl-workshop .ch-row.lead { padding-top: 30px; }
+.mk .nl-workshop .ch-tax-note { margin-top: 20px; font-size: 13px; }
+.mk .nl-workshop .ch-pricenote { color: #b7b4b0; }
+.mk .nl-calculator { max-width: 1220px; margin: 60px auto; border-block: 1px solid #ffffff25; }
+.mk .nl-calculator > summary { cursor: pointer; padding: 28px 8px; display: flex; align-items: center; justify-content: space-between; gap: 24px; list-style: none; }
+.mk .nl-calculator > summary::-webkit-details-marker { display: none; }
+.mk .nl-calculator > summary > span:first-child { display: grid; gap: 8px; }
+.mk .nl-calculator > summary small { text-transform: uppercase; color: #c9a675; font-size: 11px; letter-spacing: .16em; }
+.mk .nl-calculator > summary strong { font-size: clamp(22px, 3vw, 32px); font-weight: 500; letter-spacing: -.035em; }
+.mk .nl-calculator > summary > span:last-child { font-size: 32px; color: #c9a675; transition: transform .25s; }
+.mk .nl-calculator[open] > summary > span:last-child { transform: rotate(45deg); }
+.mk .nl-calculator .section { padding: 28px 0 60px; }
+.mk .nl-root .faq-section { max-width: 1220px; margin: 0 auto; padding: 100px 0; }
+.mk .nl-root .faq-q { padding-block: 24px; }
+.mk .nl-root .faq-answer { color: #b7b4b0; }
+.mk .nl-root .cta-section { padding: 100px 24px 120px; }
+.mk .nl-root .cta-heading { max-width: 880px; }
+.mk .nl-root .ct-card { border-radius: 30px; border-color: #c9a67536; background: radial-gradient(ellipse at 0 0, #c9a6750c, transparent 65%), #111112; }
+.mk .nl-root .ct-sub, .mk .nl-root .ct-alt, .mk .nl-root .ct-checkhelp, .mk .nl-root .ct-privacy { color: #b7b4b0; }
+.mk .nl-root .ct-field input, .mk .nl-root .ct-field select, .mk .nl-root .ct-field textarea { border-color: #ffffff29; background-color: #09090a; }
+.mk .nl-root .ct-field select option { background: #111112; color: #f4f0e9; }
+.mk .nl-root[data-motion="paused"] *, .mk .nl-root[data-motion="paused"] *::before, .mk .nl-root[data-motion="paused"] *::after { animation-play-state: paused !important; }
+@media (max-width: 1280px) {
+  .mk .nl-calculator, .mk .nl-root .faq-section { margin-inline: 40px; }
+}
+@media (max-width: 809px) {
+  .mk .nl-root .demo-section { padding: 64px 20px; }
+  .mk .nl-root .demo-pills { gap: 7px; }
+  .mk .nl-root .demo-pill { padding: 10px 14px; font-size: 12px; }
+  .mk .nl-workshop { padding: 32px 16px; }
+  .mk .nl-workshop .ch-section { padding: 36px 24px; border-radius: 24px; }
+  .mk .nl-calculator, .mk .nl-root .faq-section { margin-inline: 24px; }
+  .mk .nl-root .faq-section { padding-block: 60px; }
+  .mk .nl-root .cta-section { padding: 64px 16px 80px; }
+  .mk .nl-root .ct-card { padding: 28px 22px; border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk .nl-root *, .mk .nl-root *::before, .mk .nl-root *::after { animation: none !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
