@@ -1,158 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS, ancre, type ReseauPublié } from "./content";
+import { useEffect, useRef, useState } from "react";
+import { CTA_DEMO, HERO_SHOTS, ancre, type ReseauPublié } from "./content";
 import { Photo } from "./Photo";
 import { Reseaux } from "./Reseaux";
 
-/** Position d'une carte dans le deck : centre, gauche, droite, ou hors-champ. */
 function slot(index: number, current: number, total: number) {
-  let off = (((index - current) % total) + total) % total;
-  if (off > total / 2) off -= total;
-  if (off === 0) return "hd-center";
-  if (off === -1) return "hd-left";
-  if (off === 1) return "hd-right";
-  return "hd-hidden";
+  let offset = (((index - current) % total) + total) % total;
+  if (offset > total / 2) offset -= total;
+  return offset === 0 ? "hd-center" : offset === -1 ? "hd-left" : offset === 1 ? "hd-right" : "hd-hidden";
 }
 
-/**
- * Hero de la maquette : un carrousel 3D d'applications tourne DERRIÈRE le
- * texte (perspective 1400 px, cartes en `translateZ(-380px) rotateY(24deg)`),
- * recouvert de trois voiles — flou, voile blanc, ombre basse — pour que le
- * titre reste parfaitement lisible.
- *
- * La maquette y plaçait des iframes de démonstration ; on affiche les VRAIES
- * captures de nos applications (`public/shots/`).
- *
- * LE HERO N'OUVRE QU'UNE PORTE, ET CE N'EST PAS LE FORMULAIRE. Son appel
- * principal mène à la démonstration manipulable, un écran plus bas : c'est la
- * seule inversion de hiérarchie de la page, et elle est le corollaire de la
- * thèse — le seul actif que personne d'autre n'a, c'est que nos applications
- * se touchent. « Être rappelé » reste offert juste à côté, en second.
- *
- * LA RANGÉE DE GAGES EST PARTIE (« Sans engagement », « Installé en quelques
- * jours », « Testé en service réel »). Elle répondait ici à trois questions
- * que le visiteur ne se pose pas encore, et les usait avant qu'elles ne
- * comptent : l'engagement se dit une fois, dans les termes exacts du socle,
- * sous la grille tarifaire et dans la FAQ ; le délai d'installation est la
- * frise du lancement ; le service réel est la section du pilote.
- */
-/**
- * `reseaux` traverse ce composant sans qu'il s'en serve : il est un îlot
- * CLIENT et ne peut donc pas lire l'API lui-même. C'est la page serveur qui
- * lit (`lib/reseaux.ts`) et qui fait descendre la liste jusqu'ici.
- */
+/** Actual application captures, with a decorative, pausable carousel. */
 export function Hero({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
   const total = HERO_SHOTS.length;
   const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const root = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = window.setInterval(() => setCurrent((c) => (c + 1) % total), 4500);
-    return () => window.clearInterval(id);
-  }, [total]);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let visible = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const update = () => {
+      clearInterval(timer);
+      if (!paused && !media.matches && visible && !document.hidden) {
+        timer = setInterval(() => setCurrent((c) => (c + 1) % total), 5000);
+      }
+    };
+    const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; update(); });
+    if (root.current) observer.observe(root.current);
+    media.addEventListener("change", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(timer);
+      observer.disconnect();
+      media.removeEventListener("change", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [paused, total]);
 
   return (
-    <section className="hero" id="hero">
+    <section className="hero hero-v2" id="hero" ref={root}>
       <div className="hero-frame">
         <div className="hero-demo" aria-hidden="true">
           <div className="hero-demotrack">
             {HERO_SHOTS.map((shot, i) => (
-              <div
-                className={`hero-democard ${slot(i, current, total)}${shot.portrait ? " hd-portrait" : ""}`}
-                key={shot.src}
-              >
+              <div className={`hero-democard ${slot(i, current, total)}${shot.portrait ? " hd-portrait" : ""}`} key={shot.src}>
                 <Photo shot={shot} eager={i === 0} sizes="(max-width: 810px) 130vw, min(900px, 74vw)" />
               </div>
             ))}
           </div>
         </div>
-        <div className="hero-blur" />
-        <div className="hero-veil" />
-        <div className="hero-shade" />
-
+        <div className="hero-blur" /><div className="hero-veil" /><div className="hero-shade" />
         <div className="hero-content">
-          <span className="badge">
-            <span className="accent">Nouveau</span>Conçu par des restaurateurs
-          </span>
-          {/* Trois segments, trois promesses : le titre se lit en diagonale,
-              même quand le français n'est pas la langue forte du lecteur. Le
-              sous-titre porte l'énergie (« marche déjà → cartonner ») et la
-              liste concrète — le bénéfice d'abord, l'outil ensuite. */}
-          <h1 className="h1 hero-title">
-            Plus de commandes. Moins de galère.
-            <br />
-            Zéro commission.
-          </h1>
+          <span className="badge"><span className="accent">Snack Manager</span>Pour les restaurateurs indépendants</span>
+          <h1 className="h1 hero-title">Gérez votre restaurant.<br /><span>Faites vivre votre carte.</span></h1>
           <p className="subheading hero-sub">
-            Votre restaurant marche déjà. On va le faire <span className="kw">cartonner</span> : caisse, cuisine
-            et commande en ligne dans <span className="kw-w">un seul outil</span>,{" "}
-            <span className="kw">à vos couleurs</span>, installé par des gens qui ont{" "}
-            <span className="kw-w">tenu le comptoir</span>.
+            Caisse, cuisine, suivi de l’activité et commande directe : choisissez les outils adaptés à votre organisation.
+            Pour vos menus papier et TV, notre Atelier vous accompagne dans la création et les mises à jour.
           </p>
-          {/*
-           * LES DEUX APPELS PASSENT PAR `ancre()`, COMME TOUT LE RESTE DU SITE.
-           *
-           * Ils étaient écrits `href="#produit"` / `href="#contact"`, au motif
-           * que le hero n'existe que sur `/` — ce qui est vrai aujourd'hui et
-           * ne protège de rien. Une ancre nue ne coûte rien tant que le
-           * composant reste sur sa page ; le jour où il en bouge, elle ne
-           * déclenche ni 404 ni erreur de console, elle NE FAIT RIEN. C'est la
-           * panne la moins visible du site, et elle se répare avant, pas après.
-           *
-           * `ancre()` rend `/#produit` : depuis `/`, le navigateur y reconnaît
-           * une navigation de même document et se contente de faire défiler —
-           * comportement identique au fragment nu, `scroll-padding-top`
-           * compris. Et elle LÈVE si la section quitte `SECTIONS`, ce qu'un
-           * fragment écrit à la main ne saura jamais faire.
-           */}
           <div className="hero-actions">
-            <a className="btn light" href={ancre("produit").href}>
-              {CTA_DEMO}
-            </a>
-            <a className="btn dark" href={ancre("contact").href}>
-              {CTA_CALLBACK}
-            </a>
+            <a className="btn light" href={ancre("produit").href}>{CTA_DEMO}<span aria-hidden="true"> ↗</span></a>
+            <a className="btn dark" href={ancre("menus").href}>Refaire mes menus</a>
           </div>
-          {/*
-           * LES RÉSEAUX PASSENT APRÈS LES BOUTONS, ET C'EST TOUT L'ARBITRAGE.
-           *
-           * Le fondateur les veut dans le hero ; le hero n'a qu'un travail,
-           * ouvrir une porte. Posés à la hauteur des appels, quatre
-           * pictogrammes ronds gagnent contre deux rectangles de texte — c'est
-           * l'œil qui tranche, pas la hiérarchie qu'on avait prévue. Sous eux,
-           * sans libellé, au demi-blanc, ils sont trouvés par qui les cherche
-           * et invisibles pour qui lit le titre.
-           *
-           * Tant qu'aucun compte n'a d'adresse en base, `Reseaux` rend `null`
-           * et le hero sort exactement le balisage d'hier.
-           */}
+          <p className="hero-v2-note">Logiciels et accompagnement. Selon vos besoins, à votre rythme.</p>
           <Reseaux reseaux={reseaux} variant="hero" />
         </div>
-
-        <div className="hero-live" aria-hidden="true">
-          <div className="hero-chip">
-            <span className="hero-chipdot" />
-            <span className="t">
-              <b>Commande en ligne · 18,90 € payée</b>
-              <span>Ticket parti en cuisine — sans passer par la caisse</span>
-            </span>
-          </div>
-          <div className="hero-chip">
-            <span className="hero-chipdot gold" />
-            <span className="t">
-              <b>Cuisine · 3 frites à lancer</b>
-              <span>Agrégé sur toutes les commandes en cours</span>
-            </span>
-          </div>
-          <div className="hero-chip">
-            <span className="hero-chipdot" />
-            <span className="t">
-              <b>N°42 prête en 11 min</b>
-              <span>Sticker sac imprimé, client prévenu</span>
-            </span>
-          </div>
+        <div className="hero-live hero-v2-pillars">
+          <div className="hero-chip"><span className="hero-chipdot" /><span className="t"><b>Votre service</b><span>Caisse, cuisine et suivi de l’activité</span></span></div>
+          <div className="hero-chip"><span className="hero-chipdot gold" /><span className="t"><b>Votre carte</b><span>Menus papier, présentations TV et retouches</span></span></div>
+          <div className="hero-chip"><span className="hero-chipdot" /><span className="t"><b>Vos clients</b><span>Commande directe et fidélité en pilote</span></span></div>
         </div>
+        <button type="button" className="hero-motion" aria-pressed={paused} onClick={() => setPaused((v) => !v)}>
+          {paused ? "Reprendre les aperçus" : "Mettre les aperçus en pause"}
+        </button>
       </div>
     </section>
   );

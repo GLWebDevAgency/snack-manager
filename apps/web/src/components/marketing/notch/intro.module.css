@@ -1,0 +1,204 @@
+:global(.mk) .hero { padding: 23px 16px 0; color: #f5f2eb; }
+:global(.mk) .frame { position: relative; isolation: isolate; max-width: 1660px; margin: 0 auto; overflow: hidden; border: 1px solid #30302e; border-radius: 28px; background: radial-gradient(ellipse at 50% 55%, #302b2266, transparent 60%), linear-gradient(145deg, #1b1d1d, #101111 55%, #191916); }
+:global(.mk) .frame::after { content: ""; position: absolute; z-index: -1; inset: 0; background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 100px 100px; opacity: .024; mask-image: linear-gradient(transparent, #000 40%, transparent); pointer-events: none; }
+:global(.mk) .grain { position: absolute; z-index: -1; inset: 0; opacity: .1; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' opacity='.28' d='M0 0h160v160H0z'/%3E%3C/svg%3E"); pointer-events: none; }
+:global(.mk) .topNotch { position: absolute; top: -1px; left: 25px; display: flex; align-items: center; gap: 8px; padding: 9px 22px 12px; border-radius: 0 0 18px 18px; background: #000; color: #b4b1a8; font-size: 10px; letter-spacing: .075em; text-transform: uppercase; white-space: nowrap; }
+:global(.mk) .topNotch::before, :global(.mk) .topNotch::after { content: ""; position: absolute; top: 0; width: 18px; height: 18px; background: radial-gradient(circle at bottom left, transparent 17px, #000 18px); right: 100%; transform: scaleX(-1); }
+:global(.mk) .topNotch::after { right: auto; left: 100%; transform: none; }
+:global(.mk) .topNotch > span { width: 5px; height: 5px; border-radius: 50%; background: #c9a15a; }
+:global(.mk) .intro { position: relative; z-index: 3; padding: 88px 32px 0; text-align: center; }
+:global(.mk) .eyebrow { display: flex; justify-content: center; align-items: center; gap: 9px; color: #c9c7be; font-size: 12px; line-height: 1.5; letter-spacing: .035em; }
+:global(.mk) .eyebrow > span { width: 5px; height: 5px; border-radius: 50%; background: #c9a15a; box-shadow: 0 0 15px #c9a15560; }
+:global(.mk) .intro .title { margin: 23px auto 0; max-width: 1180px; font-size: clamp(42px, 6.1vw, 86px); line-height: 1.055; letter-spacing: -.065em; font-weight: 500; text-wrap: balance; }
+:global(.mk) .title > span { display: block; }
+:global(.mk) .title > span:last-child { color: #cfb381; }
+:global(.mk) .intro .description { max-width: 610px; margin: 25px auto 0; color: #bdbeb8; font-size: 16px; line-height: 1.7; text-wrap: balance; }
+:global(.mk) .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
+:global(.mk) .actions .primary, :global(.mk) .actions .secondary { display: inline-flex; justify-content: center; align-items: center; gap: 22px; min-height: 49px; padding: 12px 22px; border-radius: 9px; font-size: 13px; line-height: 1.4; font-weight: 550; transition: background .2s, transform .2s, border-color .2s; }
+:global(.mk) .actions .primary { color: #171816; background: #f2efe6; border: 1px solid #f2efe6; }
+:global(.mk) .actions .secondary { color: #e9e8e1; background: #ffffff06; border: 1px solid #ffffff24; }
+:global(.mk) .actions a:hover { transform: translateY(-2px); }
+:global(.mk) .actions .primary:hover { background: #fffaf0; }
+:global(.mk) .actions .secondary:hover { background: #ffffff0d; border-color: #c9a15a88; }
+:global(.mk) .cinema { position: relative; width: min(1140px, 100%); height: 520px; margin: 52px auto 0; perspective: 1400px; }
+:global(.mk) .orbit { position: absolute; inset: 60px -10% -40px; border: 1px solid #c9a15a15; border-radius: 50%; transform: rotateX(64deg); box-shadow: 0 0 100px #b4975612, inset 0 0 60px #b4975609; }
+:global(.mk) .orbit::after { content: ""; position: absolute; inset: -45px; border: 1px solid #c9a15a0a; border-radius: inherit; }
+:global(.mk) .monitor { position: absolute; top: 0; left: 50%; width: 79%; transform: translateX(-50%) rotateX(5deg); transform-origin: bottom; padding: 7px; border-radius: 15px; border: 1px solid #70716b; background: linear-gradient(160deg, #3f423e, #171918 30%, #30332f); box-shadow: 0 45px 80px #0009, inset 0 0 0 1px #ffffff0b; animation: monitorFloat 13s ease-in-out infinite; }
+:global(.mk) .monitorBar { display: flex; align-items: center; justify-content: space-between; height: 31px; padding: 0 10px 6px; color: #c8cbc3; font-size: 10px; letter-spacing: .02em; }
+:global(.mk) .windowDots { display: flex; gap: 4px; width: 30px; }
+:global(.mk) .windowDots i { width: 4px; height: 4px; background: #85887e; border-radius: 50%; }
+:global(.mk) .windowDots i:first-child { background: #b69a69; }
+:global(.mk) .barDivider { margin: 0 6px; color: #66695e; }
+:global(.mk) .screen { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 7px; background: #171918; }
+:global(.mk) .slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: scale(1.025); transition: opacity .65s, transform 1.2s, visibility .65s; }
+:global(.mk) .slide[data-active="true"] { opacity: 1; visibility: visible; transform: none; }
+:global(.mk) .monitor .screen .slide img { object-fit: contain; }
+:global(.mk) .rearCard { position: absolute; top: 22px; left: 0; width: 38%; aspect-ratio: 16 / 10; border: 1px solid #a39a8170; border-radius: 13px; padding: 7px; background: #222521; transform: rotate(-11deg) translateY(45px); box-shadow: 0 20px 60px #0009; animation: rearFloat 13s ease-in-out infinite; }
+:global(.mk) .rearCard > span:last-child { border-radius: 5px; height: calc(100% - 27px); }
+:global(.mk) .rearLabel { display: flex; align-items: center; gap: 7px; padding: 0 2px 7px; color: #d6c7a8; font-size: 10px; }
+:global(.mk) .phone { position: absolute; z-index: 2; right: 1.5%; top: 78px; width: 16.5%; aspect-ratio: 390 / 844; padding: 7px; border: 1px solid #93978c; border-radius: 27px; background: #151816; transform: rotate(7deg); box-shadow: -15px 30px 50px #0009, inset 0 0 0 2px #343731; animation: phoneFloat 13s ease-in-out infinite; }
+:global(.mk) .phone > span:not(.phoneNotch):not(.phoneLabel) { border-radius: 21px; }
+:global(.mk) .phoneNotch { position: absolute; z-index: 2; top: 9px; left: 32%; right: 32%; height: 11px; border-radius: 0 0 7px 7px; background: #151816; }
+:global(.mk) .phoneLabel { position: absolute; left: 50%; bottom: -31px; transform: translateX(-50%); color: #c5b38f; font-size: 10px; letter-spacing: .025em; white-space: nowrap; }
+:global(.mk) .caption { position: absolute; z-index: 3; left: 4%; bottom: 39px; display: flex; align-items: center; gap: 13px; padding: 15px 21px 15px 15px; border: 1px solid #a4987959; border-radius: 13px; background: #20231ff5; box-shadow: 0 16px 30px #0006; transform: rotate(-3deg); }
+:global(.mk) .captionIcon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #c9a15a47; border-radius: 10px; color: #d4b784; }
+:global(.mk) .caption > span:last-child { display: grid; gap: 5px; }
+:global(.mk) .caption strong { font-size: 13px; font-weight: 500; }
+:global(.mk) .caption > span:last-child > span { color: #aaaFA3; font-size: 11px; }
+:global(.mk) .heroFooter { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 19px; padding: 9px 28px 24px; }
+:global(.mk) .scenePicker { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 5px; border: 1px solid #ffffff16; border-radius: 50px; background: #080a09a6; }
+:global(.mk) .scenePicker button { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 7px 15px; border: 1px solid transparent; border-radius: 30px; color: #aaaFA5; font-size: 11px; transition: background .25s, color .25s; }
+:global(.mk) .scenePicker button[aria-pressed="true"] { color: #efe9db; background: #33342f; border-color: #ffffff15; }
+:global(.mk) .pickerDot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+:global(.mk) .scenePicker button[aria-pressed="true"] .pickerDot { color: #d1ae72; }
+:global(.mk) .captureNote { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 10px 18px; color: #9fa398; font-size: 10px; line-height: 1.5; }
+:global(.mk) .captureNote .motionControl { font-size: 10px; color: #b9bdb0; }
+:global(.mk) .hero a:focus-visible, :global(.mk) .hero button:focus-visible, :global(.mk) .needs a:focus-visible { outline: 2px solid #e3bd77; outline-offset: 5px; }
+:global(.mk) .frame[data-playing="false"] *, :global(.mk) .needsGrid[data-playing="false"] * { animation-play-state: paused !important; }
+
+:global(.mk) .needs { max-width: 1264px; margin: 0 auto; padding: 120px 32px 110px; color: #f2f0e8; }
+:global(.mk) .sectionHeading { display: grid; justify-items: start; gap: 22px; }
+:global(.mk) .sectionLabel { color: #d0cec4; font-size: 11px; letter-spacing: .065em; text-transform: uppercase; }
+:global(.mk) .sectionLabel > span { margin-right: 10px; color: #b59c71; font-variant-numeric: tabular-nums; }
+:global(.mk) .sectionHeading h2 { font-size: clamp(36px, 4.3vw, 60px); line-height: 1.06; letter-spacing: -.055em; font-weight: 500; }
+:global(.mk) .sectionHeading h2 > span { color: #92968d; }
+:global(.mk) .sectionHeading > p:last-child { color: #a4a99e; font-size: 15px; line-height: 1.7; }
+:global(.mk) .needsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 46px; }
+:global(.mk) .needCard { display: flex; flex-direction: column; min-width: 0; }
+:global(.mk) .needVisual { position: relative; height: 276px; overflow: hidden; border: 1px solid #343832; border-radius: 16px; background: radial-gradient(ellipse at 60% 90%, #45453744, transparent 70%), #171a17; transition: border-color .4s, background-color .4s; }
+:global(.mk) .needCard:hover .needVisual, :global(.mk) .needCard[data-active="true"] .needVisual { border-color: #8b7858; background-color: #1c211b; }
+:global(.mk) .needNotch { position: absolute; z-index: 2; left: -1px; top: -1px; min-width: 126px; display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 16px 1px 1px; border-radius: 0 0 13px 0; color: #c4c9bd; background: #000; font-size: 10px; }
+:global(.mk) .needNotch::after { content: ""; position: absolute; top: 0; left: 100%; width: 14px; height: 14px; background: radial-gradient(circle at bottom right, transparent 13px, #000 14px); }
+:global(.mk) .needNotch > span { color: #b89d70; font-size: 10px; }
+:global(.mk) .illustration { height: 100%; overflow: hidden; }
+:global(.mk) .illustrationNote { position: absolute; right: 12px; bottom: 11px; color: #9a9e91; font-size: 9px; }
+:global(.mk) .needCopy { display: flex; flex: 1; flex-direction: column; align-items: start; padding: 24px 0 0; }
+:global(.mk) .needCopy h3 { max-width: 300px; font-size: 25px; line-height: 1.18; font-weight: 500; letter-spacing: -.035em; text-wrap: balance; }
+:global(.mk) .needCopy p { padding-top: 13px; color: #a4a99e; font-size: 13px; line-height: 1.75; }
+:global(.mk) .needLink { display: inline-flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; padding-top: 23px; margin-top: auto; color: #d8bc8b; font-size: 12px; }
+:global(.mk) .needLink svg { transition: transform .25s; }
+:global(.mk) .needCard:hover .needLink svg { transform: translate(3px, -3px); }
+:global(.mk) .serviceMock { position: absolute; top: 61px; left: 8%; right: 8%; padding: 15px; border: 1px solid #777b6560; border-radius: 11px; background: linear-gradient(150deg, #32362e, #242921); box-shadow: 0 25px 35px #0006; transform: rotate(-4deg); animation: serviceFloat 9s ease-in-out infinite; }
+:global(.mk) .mockHeading { display: flex; align-items: center; gap: 8px; color: #d3d6c8; font-size: 11px; }
+:global(.mk) .mockHeading > svg { color: #bdad89; }
+:global(.mk) .mockStatus { width: 5px; height: 5px; margin-left: auto; border-radius: 50%; background: #c9a15a; box-shadow: 0 0 9px #c9a15a40; }
+:global(.mk) .serviceRows { display: grid; gap: 6px; margin-top: 15px; }
+:global(.mk) .serviceRow { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #ffffff09; border-radius: 5px; background: #13171080; color: #b6bbaa; font-size: 10px; }
+:global(.mk) .rowIcon { display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid #85877455; border-radius: 4px; color: #ccb991; font-size: 8px; }
+:global(.mk) .rowTrack { width: 30px; height: 3px; overflow: hidden; margin-left: auto; border-radius: 3px; background: #ffffff14; }
+:global(.mk) .rowTrack i { display: block; width: 100%; height: 100%; transform-origin: left; background: #c2af79; animation: rowProgress 9s ease-in-out infinite; animation-delay: calc(var(--row) * .7s); }
+:global(.mk) .mockBottom { display: flex; justify-content: space-between; align-items: center; gap: 9px; padding-top: 13px; color: #a0a796; font-size: 8px; }
+:global(.mk) .mockBottom i { flex: 1; height: 1px; background: #7980685c; }
+:global(.mk) .menuMock { position: absolute; inset: 0; }
+:global(.mk) .paperMock { position: absolute; top: 54px; left: 12%; width: 43%; height: 188px; display: flex; flex-direction: column; align-items: stretch; padding: 16px 15px; border: 1px solid #e7dec6; background: #ece4d0; color: #383c30; box-shadow: 0 18px 28px #0005; transform: rotate(-12deg); animation: paperFloat 10s ease-in-out infinite; }
+:global(.mk) .paperTop { font-size: 13px; letter-spacing: -.03em; font-weight: 700; }
+:global(.mk) .paperRule { height: 1px; background: #797861; margin: 8px 0 3px; }
+:global(.mk) .paperName { margin: 8px 0 5px; font-size: 8px; font-weight: 650; }
+:global(.mk) .paperLine { height: 2px; margin: 3px 0; background: linear-gradient(90deg, #77786770 60%, transparent 60%, transparent 85%, #77786770 85%); }
+:global(.mk) .paperStamp { margin-top: auto; font-size: 6px; text-transform: uppercase; letter-spacing: .1em; }
+:global(.mk) .tvMock { position: absolute; top: 88px; left: 38%; width: 53%; height: 125px; padding: 13px; border: 4px solid #4a5041; border-radius: 7px; background: #202719; box-shadow: 0 15px 30px #0007; transform: rotate(7deg); animation: tvFloat 10s ease-in-out infinite; }
+:global(.mk) .tvTop { display: flex; justify-content: space-between; color: #cec5a3; font-size: 6px; letter-spacing: .08em; }
+:global(.mk) .tvPlate { position: absolute; top: 35px; right: 7px; display: grid; place-items: center; width: 54px; height: 54px; border: 7px solid #d5cdb06b; border-radius: 50%; background: #7d70424f; }
+:global(.mk) .tvPlate i { position: absolute; width: 15px; height: 12px; border-radius: 70% 35% 70% 35%; background: #b29261; transform: translate(-6px, -4px) rotate(30deg); }
+:global(.mk) .tvPlate i:nth-child(2) { transform: translate(6px, 2px) rotate(-10deg); background: #788562; }
+:global(.mk) .tvPlate i:nth-child(3) { transform: translate(-4px, 7px) rotate(-35deg); background: #baaa79; }
+:global(.mk) .tvCopy { display: block; position: relative; margin-top: 19px; color: #f0e9d8; font-size: 10px; line-height: 1.4; letter-spacing: -.03em; }
+:global(.mk) .tvCopy em { color: #baa773; font-style: normal; }
+:global(.mk) .tvUnderline { display: block; margin-top: 12px; width: 42px; height: 2px; background: #aa8f57; }
+:global(.mk) .formatLabel { position: absolute; top: 240px; left: 14%; display: flex; align-items: center; gap: 14px; color: #bbb9a8; font-size: 9px; }
+:global(.mk) .formatLabel > span { color: #bca066; }
+:global(.mk) .directMock { position: absolute; inset: 0; }
+:global(.mk) .directPhone { position: absolute; z-index: 1; top: 44px; left: 17%; width: 124px; height: 218px; padding: 26px 10px 10px; border: 3px solid #636b59; border-radius: 20px; background: #272d22; box-shadow: 0 20px 30px #0008; transform: rotate(-9deg); animation: directFloat 10s ease-in-out infinite; }
+:global(.mk) .miniNotch { position: absolute; top: 0; left: 37px; width: 45px; height: 11px; border-radius: 0 0 8px 8px; background: #636b59; }
+:global(.mk) .directBrand { display: flex; align-items: center; gap: 5px; color: #e3d4b1; font-size: 7px; }
+:global(.mk) .directMeal { position: relative; display: block; height: 76px; margin-top: 9px; border-radius: 4px; background: radial-gradient(circle, #565f4266, #3a40332b); }
+:global(.mk) .directMeal > span { position: absolute; width: 53px; height: 53px; border-radius: 50%; top: 10px; left: 23px; border: 8px solid #aca689; background: #5e643e; box-shadow: 0 4px 7px #0003; }
+:global(.mk) .directMeal i { position: absolute; top: 28px; left: 44px; width: 15px; height: 11px; border-radius: 60% 30%; background: #c19d60; transform: rotate(35deg); }
+:global(.mk) .directMeal i:last-child { top: 40px; left: 41px; background: #9daa69; transform: rotate(-25deg); }
+:global(.mk) .directLine { display: block; height: 3px; margin: 10px 0; width: 90%; background: #737a635a; }
+:global(.mk) .directLine + .directLine { margin-top: -4px; width: 62%; }
+:global(.mk) .directCta { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 4px; color: #292d22; background: #c2b189; font-size: 7px; }
+:global(.mk) .directCta svg { width: 10px; height: 10px; }
+:global(.mk) .directOrbit { position: absolute; top: 65px; right: 6%; width: 180px; height: 180px; border: 1px solid #9c8d654a; border-radius: 50%; }
+:global(.mk) .directOrbit::after { content: ""; position: absolute; inset: 15px; border: 1px solid #9c8d651c; border-radius: inherit; }
+:global(.mk) .directBubble { position: absolute; z-index: 2; top: 122px; right: 7%; padding: 15px; border: 1px solid #747b6169; border-radius: 9px; color: #aeb49f; background: #303729f5; box-shadow: 0 10px 25px #0004; font-size: 10px; line-height: 1.7; transform: rotate(4deg); animation: bubbleFloat 10s ease-in-out infinite; }
+:global(.mk) .directBubble strong { font-weight: 500; color: #e6dabb; }
+@keyframes monitorFloat { 0%, 100% { transform: translateX(-50%) rotateX(5deg) translateY(0); } 50% { transform: translateX(-50%) rotateX(2deg) translateY(-8px); } }
+@keyframes rearFloat { 0%, 100% { transform: rotate(-11deg) translateY(45px); } 50% { transform: rotate(-9deg) translateY(37px); } }
+@keyframes phoneFloat { 0%, 100% { transform: rotate(7deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-12px); } }
+@keyframes serviceFloat { 0%, 100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-5px); } }
+@keyframes rowProgress { 0%, 15%, 100% { transform: scaleX(.2); opacity: .35; } 35%, 75% { transform: scaleX(1); opacity: 1; } }
+@keyframes paperFloat { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(-8deg) translateY(-4px); } }
+@keyframes tvFloat { 0%, 100% { transform: rotate(7deg); } 50% { transform: rotate(3deg) translateY(-7px); } }
+@keyframes directFloat { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(-5deg) translateY(-4px); } }
+@keyframes bubbleFloat { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(1deg) translateY(-6px); } }
+@media (min-width: 1500px) { :global(.mk) .cinema { margin-top: 64px; } }
+@media (max-width: 1050px) { :global(.mk) .cinema { height: 450px; } :global(.mk) .caption { bottom: 25px; } :global(.mk) .needsGrid { gap: 18px; } :global(.mk) .needCopy h3 { font-size: 23px; } :global(.mk) .serviceMock { left: 5%; right: 5%; padding: 12px; } :global(.mk) .rowTrack { width: 20px; } :global(.mk) .directPhone { left: 10%; } :global(.mk) .directBubble { right: 4%; padding: 12px; font-size: 9px; } }
+@media (max-width: 809.98px) { :global(.mk) .hero { padding-top: 58px; } :global(.mk) .topNotch { left: 50%; transform: translateX(-50%); } }
+@media (max-width: 760px) {
+  :global(.mk) .hero { padding: 58px 10px 0; }
+  :global(.mk) .frame { border-radius: 19px; }
+  :global(.mk) .topNotch { font-size: 8px; padding: 8px 14px 11px; }
+  :global(.mk) .intro { padding: 71px 18px 0; }
+  :global(.mk) .eyebrow { font-size: 10px; gap: 6px; }
+  :global(.mk) .intro .title { margin-top: 22px; font-size: clamp(42px, 7.5vw, 58px); line-height: 1.08; letter-spacing: -.055em; max-width: 620px; }
+  :global(.mk) .intro .description { margin-top: 22px; max-width: 470px; font-size: 14px; line-height: 1.75; }
+  :global(.mk) .actions { gap: 10px; margin-top: 23px; }
+  :global(.mk) .actions .primary, :global(.mk) .actions .secondary { min-height: 46px; font-size: 12px; padding: 11px 15px; gap: 14px; }
+  :global(.mk) .cinema { height: min(65vw, 420px); margin-top: 43px; }
+  :global(.mk) .monitor { width: 88%; left: 47%; padding: 5px; border-radius: 10px; }
+  :global(.mk) .monitorBar { height: 22px; padding: 0 5px 5px; font-size: 7px; }
+  :global(.mk) .monitorBar > svg { width: 12px; height: 12px; }
+  :global(.mk) .windowDots { width: 20px; gap: 3px; }
+  :global(.mk) .windowDots i { width: 3px; height: 3px; }
+  :global(.mk) .screen { border-radius: 5px; }
+  :global(.mk) .rearCard { top: 0; width: 42%; left: -4%; }
+  :global(.mk) .rearLabel { font-size: 7px; gap: 4px; padding-bottom: 4px; }
+  :global(.mk) .rearLabel > svg { width: 12px; height: 12px; }
+  :global(.mk) .phone { right: 2.5%; top: 44px; width: 21%; min-width: 84px; padding: 4px; border-radius: 15px; }
+  :global(.mk) .phone > span:not(.phoneNotch):not(.phoneLabel) { border-radius: 11px; }
+  :global(.mk) .phoneNotch { top: 5px; height: 6px; }
+  :global(.mk) .phoneLabel { bottom: -21px; font-size: 8px; }
+  :global(.mk) .caption { left: 5%; bottom: 9px; padding: 10px 13px 10px 10px; gap: 8px; border-radius: 9px; }
+  :global(.mk) .captionIcon { width: 29px; height: 29px; border-radius: 6px; }
+  :global(.mk) .captionIcon > svg { width: 19px; height: 19px; }
+  :global(.mk) .caption strong { font-size: 10px; }
+  :global(.mk) .caption > span:last-child > span { font-size: 8px; }
+  :global(.mk) .heroFooter { padding: 18px 15px 22px; gap: 14px; }
+  :global(.mk) .scenePicker { gap: 1px; padding: 3px; }
+  :global(.mk) .scenePicker button { min-height: 40px; padding: 7px 10px; gap: 6px; font-size: 9px; }
+  :global(.mk) .captureNote { gap: 8px; font-size: 8px; }
+  :global(.mk) .captureNote .motionControl { font-size: 9px; }
+  :global(.mk) .needs { padding: 82px 24px 80px; }
+  :global(.mk) .sectionHeading { gap: 18px; }
+  :global(.mk) .sectionHeading h2 { font-size: clamp(36px, 6vw, 48px); }
+  :global(.mk) .sectionHeading > p:last-child { max-width: 420px; font-size: 14px; }
+  :global(.mk) .needsGrid { grid-template-columns: 1fr; gap: 36px; margin-top: 34px; }
+  :global(.mk) .needCard { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  :global(.mk) .needVisual { height: 260px; }
+  :global(.mk) .needCopy { justify-content: center; padding-top: 20px; }
+  :global(.mk) .needCopy h3 { font-size: 24px; }
+  :global(.mk) .needLink { margin-top: 0; }
+}
+@media (max-width: 520px) {
+  :global(.mk) .title > span { max-width: 370px; margin-inline: auto; }
+  :global(.mk) .actions { flex-direction: column; align-items: center; }
+  :global(.mk) .actions a { width: min(280px, 100%); }
+  :global(.mk) .cinema { height: 270px; }
+  :global(.mk) .caption { bottom: 16px; }
+  :global(.mk) .needs { padding-inline: 24px; }
+  :global(.mk) .needCard { display: flex; gap: 0; }
+  :global(.mk) .needVisual { width: 100%; height: 272px; }
+  :global(.mk) .needCopy { padding-top: 22px; }
+  :global(.mk) .needCopy h3 { max-width: 290px; font-size: 28px; }
+  :global(.mk) .needCopy p { font-size: 14px; }
+  :global(.mk) .needLink { padding-top: 18px; }
+  :global(.mk) .serviceMock { left: 10%; right: 10%; top: 57px; padding: 15px; }
+  :global(.mk) .directPhone { left: 20%; }
+  :global(.mk) .directBubble { right: 10%; font-size: 10px; padding: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.mk) .hero *, :global(.mk) .needs * { animation: none !important; transition: none !important; }
+  :global(.mk) .hero a:hover, :global(.mk) .needCard:hover .needLink svg { transform: none; }
+  :global(.mk) .rowTrack i { transform: none; opacity: 1; }
+}

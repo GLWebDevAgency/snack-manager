@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
-import { ATELIER_CENTS } from "@/components/marketing/content";
+import { euros } from "@/components/marketing/content";
+import { MENUS_OFFERS } from "@/components/marketing/menu-offers";
 import { urlAbsolue } from "@/lib/site";
 import { lireReseaux } from "@/lib/reseaux";
 import { ATELIER_SECTIONS } from "./content";
@@ -22,15 +23,15 @@ const ATELIER_PATH = "/atelier";
  * 21/08/2026 : une révision de tarifs ne peut pas laisser ce fichier annoncer
  * l'ancien montant.
  */
-const PRIX_SITE = `${ATELIER_CENTS.site / 100} €`;
-const PRIX_PRESENCE = `${ATELIER_CENTS.presence / 100} €/mois`;
+const PRIX_MENU = euros(MENUS_OFFERS[0].priceCents);
 
 export const metadata: Metadata = {
-  title: "Site internet, Google et réseaux pour snack — Snack Manager",
-  description: `L’Atelier, les services d’agence de Snack Manager : site vitrine dès ${PRIX_SITE} avec maquette montrée avant tout engagement, fiche Google gérée à ${PRIX_PRESENCE}, réseaux sociaux. Prix affichés, menu à jour depuis la caisse.`,
+  title: "Menus papier, menus TV et communication restaurant — Snack Manager",
+  description: `Création de menus papier et TV dès ${PRIX_MENU} HT. Retouches, analyse de carte, identité, site et présence en ligne. Prestations définies au devis ; impression et livraison distinctes.`,
   keywords: [
-    "création site internet snack",
-    "site internet kebab",
+    "création menu restaurant",
+    "menu papier trois volets",
+    "menu TV restaurant",
     "agence communication restaurant",
     "gestion fiche google restaurant",
     "réseaux sociaux restaurant",
@@ -41,13 +42,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: ATELIER_PATH,
     siteName: "Snack Manager",
-    title: "Site internet, Google et réseaux pour snack — Snack Manager",
-    description: `La maquette de votre site, montrée avant tout engagement. Site vitrine dès ${PRIX_SITE}, fiche Google gérée à ${PRIX_PRESENCE} — prix affichés.`,
+    title: "Votre carte, sur papier et sur écran — L’Atelier Snack Manager",
+    description: `Menus papier et TV dès ${PRIX_MENU} HT, créations et mises à jour ponctuelles. Impression, livraison et matériel distincts.`,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Site internet, Google et réseaux pour snack — Snack Manager",
-    description: "L’Atelier : votre présence en ligne, tenue par ceux qui font tourner votre caisse. Prix affichés.",
+    title: "Menus papier, TV et communication — Snack Manager",
+    description: "Une carte adaptée à votre restaurant, des prestations définies et un prix expliqué avant le travail.",
   },
   robots: { index: true, follow: true },
 };

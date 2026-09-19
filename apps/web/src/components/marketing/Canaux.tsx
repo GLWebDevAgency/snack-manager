@@ -85,8 +85,9 @@ export function Canaux() {
         <h2 className="h2">{title}</h2>
       </div>
 
+      <p className="body-text ch-tax-note">Tous les prix sont HT. Prestations ponctuelles et accompagnements mensuels sont indiqués séparément.</p>
       <ol className="ch-rows">
-        {SERVICES.map((service, i) => (
+        {SERVICES.filter((service) => service.id !== "commande").map((service, i) => (
           // `SERVICES[0]` est la fiche Google, et l'ordre du tableau est
           // l'ordre d'affichage : la rangée de tête n'est pas choisie ici.
           <li className={i === 0 ? "ch-row lead rv" : "ch-row rv"} key={service.id}>

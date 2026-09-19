@@ -191,6 +191,7 @@ export function SiteHeader() {
             {/* Le panneau — frère du contenu clippé, jamais son enfant. */}
             <div
               id="hd-droppanel"
+              aria-hidden={!dropOpen}
               className={dropOpen ? "hd-droppanel open" : "hd-droppanel"}
               style={dropLeft !== null ? { left: `${dropLeft}px` } : undefined}
               onMouseEnter={dropEnter}

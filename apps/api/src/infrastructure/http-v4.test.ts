@@ -68,6 +68,20 @@ describe('fetchV4 — le transport forcé en IPv4', () => {
     expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('absent');
   });
 
+  it.each([204, 205, 304])('rend HTTP %s sans corps ni exception hors promesse', async (status) => {
+    const { requestFn } = fauxHttps({ status });
+    const res = await fetchV4Of(requestFn)('https://api.brevo.com/v3/test');
+    expect(res.status).toBe(status);
+    expect(res.body).toBeNull();
+    expect(await res.text()).toBe('');
+  });
+
+  it('rejette la promesse si la construction de Response échoue', async () => {
+    const { requestFn } = fauxHttps({ status: 600 });
+    await expect(fetchV4Of(requestFn)('https://api.brevo.com/v3/test'))
+      .rejects.toBeInstanceOf(RangeError);
+  });
+
   it('laisse l’erreur réseau BRUTE — le code ENETUNREACH doit se lire', async () => {
     const erreur = Object.assign(new Error('connect ENETUNREACH 2604:a880::1:443'), {
       code: 'ENETUNREACH',

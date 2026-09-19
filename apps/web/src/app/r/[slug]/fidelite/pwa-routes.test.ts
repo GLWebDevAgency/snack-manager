@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DIRECTIONS } from "@sm/contracts";
+import { estCacheFideliteObsolete, estCheminCoquilleFidelite, estReponseCoquilleFideliteCacheable, nomsCachesFidelite } from "./sw.js/worker";
 
 const mocks = vi.hoisted(() => ({ load: vi.fn() }));
 
@@ -153,7 +154,7 @@ describe("application fidélité installable", () => {
   });
 
   it("sert un worker borné à la fidélité et exclut explicitement la carte privée", async () => {
-    const { GET, estReponseCoquilleFideliteCacheable } = await import(
+    const { GET } = await import(
       "./sw.js/route"
     );
     const response = await GET(new Request("https://classfood.example/sw.js"), context);
@@ -246,7 +247,7 @@ describe("application fidélité installable", () => {
   });
 
   it("ne traite comme navigation hors ligne que la racine, avec ou sans slash", async () => {
-    const { GET, estCheminCoquilleFidelite } = await import("./sw.js/route");
+    const { GET } = await import("./sw.js/route");
     const source = await (
       await GET(new Request("https://classfood.example/sw.js"), context)
     ).text();
@@ -266,7 +267,7 @@ describe("application fidélité installable", () => {
   });
 
   it("isole les caches de foo et foo-bar, puis ne purge que son ancien nom exact", async () => {
-    const { GET, estCacheFideliteObsolete, nomsCachesFidelite } = await import(
+    const { GET } = await import(
       "./sw.js/route"
     );
     mocks.load.mockResolvedValueOnce({

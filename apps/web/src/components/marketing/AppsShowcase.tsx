@@ -69,16 +69,9 @@ type LoadState = "loading" | "ready" | "failed";
  * trente secondes qui suivent. L'index existait déjà (`CatalogueColumn.demo`
  * pointe l'application) ; il n'y avait qu'à le câbler.
  *
- * ─── LES VRAIES APPLICATIONS, PAS DES CAPTURES ───
- *
- * Les QUATRE applications réelles tournent en `?demo=1` — le visiteur prend
- * une commande, l'encaisse, la voit tomber en cuisine, la recommande en ligne
- * côté client, puis va lire son chiffre d'affaires côté gérant.
- *
- * Les quatre, et pas deux : ce que le restaurateur doit constater ici, c'est
- * autant l'ÉTENDUE que la profondeur. Une application qu'on ne peut qu'admirer
- * en photo à côté de trois qu'on manipule, c'est celle-là qu'on soupçonne de
- * ne pas exister.
+ * Les surfaces dotées d'un mode public tournent en `?demo=1`, avec leurs
+ * données d'exemple indépendantes. L'application livreur garde une affiche
+ * et une présentation accompagnée : sa route réelle exige une invitation.
  *
  * ─── CE QUI EMPÊCHE LA PAGE DE COULER ───
  *
@@ -219,11 +212,10 @@ export function AppsShowcase() {
         {title}
       </h2>
       <p className="body-text demo-sub rv">
-        Les quatre applications sont <strong>manipulables ici même</strong> :
-        prenez une commande, suivez-la en cuisine, commandez depuis votre
-        téléphone, ouvrez le back-office. Tout tourne dans{" "}
-        <span className="kw">votre navigateur</span> — rien n&apos;est
-        enregistré, un rechargement remet la démo à zéro.
+        Découvrez les outils du restaurant et de vos clients. Explorez les{" "}
+        <strong>démonstrations dans votre navigateur</strong>, avec des données
+        d&apos;exemple propres à chaque application. Le parcours livreur vous
+        est présenté par notre équipe.
       </p>
 
       <div className="demo-pills rv">
@@ -551,6 +543,14 @@ export function AppsShowcase() {
               </ul>
               <p className="demo-legenddevice">{legend.device}</p>
             </>
+          ) : null}
+          {app.presentation ? (
+            <div className="demo-presentation">
+              <p>{app.presentation.note}</p>
+              <a className="demo-trybtn demo-tryout" href={app.presentation.href}>
+                {app.presentation.cta}
+              </a>
+            </div>
           ) : null}
         </div>
       </div>

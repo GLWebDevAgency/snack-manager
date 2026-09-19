@@ -22,6 +22,8 @@ import { ProductionService } from './production.service';
 import { SignalsService } from './signals.service';
 import { ContactIngestGuard } from './contact-ingest.guard';
 import { PublicLeadsController } from './public-leads.controller';
+import { PublicNewsletterController } from './public-newsletter.controller';
+import { NewsletterService } from './newsletter.service';
 import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 
 /**
@@ -48,6 +50,7 @@ import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
     PlatformController,
     PublicPlatformController,
     PublicLeadsController,
+    PublicNewsletterController,
     ProductionController,
   ],
   providers: [
@@ -77,6 +80,7 @@ import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
     PlatformService,
     ProductionService,
     ContactIngestGuard,
+    NewsletterService,
   ],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal

@@ -12,7 +12,7 @@ const FIELDS = [
 ] as const;
 
 /** Mesure le coût déclaré de l'organisation actuelle, sans promettre sa disparition. */
-export function Simulator() {
+export function Simulator({ embedded = false }: { embedded?: boolean } = {}) {
   const { badge, title } = section("simulateur");
   const [inputs, setInputs] = useState({
     coordinationHours: 0, hourlyCostEuros: 0, remakes: 0, remakeCostEuros: 0,
@@ -20,7 +20,7 @@ export function Simulator() {
   const result = currentOperatingCost(inputs);
 
   return (
-    <section className="section sim-section" id="simulateur">
+    <section className="section sim-section" id={embedded ? undefined : "simulateur"}>
       {badge ? <span className="badge">{badge}</span> : null}
       <h2 className="h2 center-h2" style={{ maxWidth: 760 }}>{title}</h2>
       <div className="sim-lead rv">

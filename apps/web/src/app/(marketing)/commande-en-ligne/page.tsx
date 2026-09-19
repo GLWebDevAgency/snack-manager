@@ -17,14 +17,14 @@ import { CommandeBody } from "./sections";
 
 const COMMANDE_PATH = "/commande-en-ligne";
 
-const PRIX_MODULE = `${MODULE_MONTHLY_CENTS / 100} €/mois`;
+const PRIX_MODULE = `${MODULE_MONTHLY_CENTS / 100} € HT/mois`;
 
 export const metadata: Metadata = {
-  title: "Commande en ligne sans commission — Snack Manager",
-  description: `Le click & collect à vos couleurs, avec back-office et pilote fidélité accompagné, dès ${PRIX_MODULE} HT. Commande et livraison restaurant incluses dans Boost ; livraison à configurer et valider en pilote.`,
+  title: "Commande en ligne pour restaurant — Snack Manager",
+  description: `Le click & collect à vos couleurs, avec back-office et pilote fidélité accompagné, dès ${PRIX_MODULE}. Commande et livraison restaurant incluses dans Boost ; livraison à configurer et valider en pilote.`,
   keywords: [
     "click and collect restaurant sans commission",
-    "commande en ligne snack",
+    "commande en ligne restaurant indépendant",
     "click and collect kebab",
     "site de commande restaurant indépendant",
     "fidélité restaurant en ligne",
@@ -35,13 +35,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: COMMANDE_PATH,
     siteName: "Snack Manager",
-    title: "Commande en ligne sans commission — Snack Manager",
-    description: `Vos clients commandent chez vous, au prix de la carte. Click & collect à ${PRIX_MODULE}. Commande et livraison incluses dans Boost ; livraison à configurer et valider en pilote.`,
+    title: "Commande en ligne pour restaurant — Snack Manager",
+    description: `Page de commande et back-office à ${PRIX_MODULE}, ou compris dans Boost. 0 % de commission Snack Manager ; frais de paiement distincts. Livraison en pilote, avec vos livreurs.`,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Commande en ligne sans commission — Snack Manager",
-    description: "Le click & collect à vos couleurs : commande, créneau, cuisine — zéro commission.",
+    title: "Commande en ligne pour restaurant — Snack Manager",
+    description: "Votre carte et vos créneaux en ligne, avec un espace pour traiter les commandes. 0 % de commission Snack Manager ; frais de paiement distincts.",
   },
   robots: { index: true, follow: true },
 };

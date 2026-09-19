@@ -84,11 +84,11 @@ const OFFRES_PATH = "/offres";
  */
 export const metadata: Metadata = {
   title: "Offres et tarifs — Snack Manager",
-  description: `Le détail des suites, des applications fidélité et commande en ligne, et des sites sur mesure : ce qui est compris, ce qui ne l'est pas. ${PRICE_RANGE}.`,
+  description: `Suites Service, Gestion et Boost : ${PRICE_RANGE}. Comparez les applications, les fonctions TV comprises, les prestations Menus et les frais de mise en route.`,
   keywords: [
-    "tarif logiciel caisse snack",
+    "tarif logiciel caisse restaurant",
     "prix logiciel restaurant",
-    "abonnement caisse fast-food",
+    "tarif création menu TV papier",
     "tarif click and collect restaurant",
     "logiciel snack sans commission",
   ],
@@ -99,12 +99,12 @@ export const metadata: Metadata = {
     url: OFFRES_PATH,
     siteName: "Snack Manager",
     title: "Offres et tarifs — Snack Manager",
-    description: `Suites, fidélité seule, click & collect et sites sur mesure. Livraison sur validation pilote. ${PRICE_RANGE}.`,
+    description: `Suites et applications, menus papier et TV, mise en service : un prix et un périmètre clairs. ${PRICE_RANGE}. Fidélité et livraison selon leur périmètre pilote.`,
   },
   twitter: {
     card: "summary_large_image",
     title: "Offres et tarifs — Snack Manager",
-    description: "Applications seules ou suites, avec le back-office utile à votre activité. Sites vitrines sur mesure.",
+    description: "Choisissez les fonctions utiles à votre restaurant et les prestations pour faire vivre votre carte. Frais et conditions détaillés.",
   },
   robots: { index: true, follow: true },
 };
@@ -212,6 +212,7 @@ function structuredData() {
         priceCurrency: "EUR",
         // UN/CEFACT : « MON » = le mois, « ANN » = l'année.
         unitCode: "MON",
+        valueAddedTaxIncluded: false,
       },
     },
     {
@@ -227,6 +228,7 @@ function structuredData() {
         price: plain(yearlyCents(plan.monthlyCents)),
         priceCurrency: "EUR",
         unitCode: "ANN",
+        valueAddedTaxIncluded: false,
       },
     },
   ]);

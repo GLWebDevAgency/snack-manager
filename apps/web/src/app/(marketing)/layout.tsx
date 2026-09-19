@@ -6,7 +6,7 @@ import "@/components/marketing/marketing.css";
 import { SplashAuPremierPassage } from "@/components/brand/SplashAuPremierPassage";
 import { RemonterAuChangementDePage } from "@/components/marketing/RemonterAuChangementDePage";
 
-const TITLE = "Snack Manager — Plus de commandes, moins de galère, zéro commission";
+const TITLE = "Snack Manager — Logiciels et accompagnement pour les restaurateurs";
 /**
  * LA DESCRIPTION EST DU TEXTE AFFICHÉ, ET ELLE OBÉIT AUX MÊMES RÈGLES QUE LA
  * PAGE — c'est elle que Google met sous le lien et que les messageries collent
@@ -34,7 +34,7 @@ const TITLE = "Snack Manager — Plus de commandes, moins de galère, zéro comm
  * que la page affichait la nouvelle — un prix périmé lisible sans même ouvrir
  * le site. La fourchette est désormais dérivée (`PRICE_RANGE`, content.ts).
  */
-const DESCRIPTION = `Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. Zéro commission, à vos couleurs, lancement accompagné. ${PRICE_RANGE}.`;
+const DESCRIPTION = `Caisse, cuisine, gestion et commande directe pour les restaurants indépendants. Menus papier et TV avec notre Atelier. ${PRICE_RANGE} HT.`;
 
 /**
  * Le logotype « Snack Manager » de la maquette est composé en ADLaM Display.
@@ -54,13 +54,13 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   applicationName: "Snack Manager",
   keywords: [
-    "logiciel caisse snack",
+    "logiciel caisse restaurant",
     "logiciel restaurant",
-    "caisse tactile fast-food",
+    "caisse tactile restaurant indépendant",
     "KDS cuisine",
     "click and collect restaurant",
     "commande en ligne restaurant",
-    "logiciel snack halal",
+    "menus papier et TV restaurant",
   ],
   alternates: { canonical: "/" },
   openGraph: {
@@ -68,13 +68,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: "/",
     siteName: "Snack Manager",
-    title: "Snack Manager — le système d'exploitation des snacks indépendants",
-    description: "Caisse, cuisine, commande en ligne et back-office réunis. À vos couleurs, lancement accompagné.",
+    title: "Snack Manager — Gérez votre restaurant. Faites vivre votre carte.",
+    description: "Caisse, cuisine, gestion et commande directe. Des outils adaptés à votre organisation et un Atelier pour vos menus papier et TV.",
   },
   twitter: {
     card: "summary_large_image",
     title: TITLE,
-    description: "Caisse, cuisine, commande en ligne et back-office pour snacks indépendants.",
+    description: "Logiciels et accompagnement pour les restaurateurs indépendants.",
   },
   robots: { index: true, follow: true },
 };
