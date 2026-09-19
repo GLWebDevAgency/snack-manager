@@ -262,13 +262,41 @@ describe("la démonstration chiffre comme le serveur", () => {
 });
 
 describe("les créneaux sont relatifs à l'instant présent", () => {
-  it("ne propose jamais un créneau passé, même six mois après l'écriture du code", async () => {
-    const api = orderingApi(demoTransport({ latency: false }));
+  it.each([
+    "2026-09-19T10:00:00.000Z", // 12 h à Paris, heure d’été.
+    "2027-03-19T11:00:00.000Z", // 12 h à Paris, six mois plus tard, heure d’hiver.
+  ])("ne propose jamais un créneau passé à %s", async (instant) => {
+    // Le contrat testé est celui d’une journée encore réservable, pas celui
+    // de l’heure à laquelle le runner CI arrive en fin de service.
+    const now = Date.parse(instant);
+    const api = orderingApi(demoTransport({ latency: false, now: () => now }));
     const slots = await api.loadSlots(DEMO_SLUG);
 
     expect(slots.slots.length).toBeGreaterThan(0);
     for (const slot of slots.slots) {
-      expect(Date.parse(slot.iso)).toBeGreaterThan(Date.now());
+      expect(Date.parse(slot.iso)).toBeGreaterThan(now);
+    }
+  });
+
+  it.each([
+    "2026-09-19T21:30:05.000Z", // 23 h 30 : aucun retrait après le délai de préparation.
+    "2026-09-19T21:55:00.000Z", // 23 h 55 : aucun créneau ne tient avant minuit.
+  ])("propose le lendemain lorsque les créneaux du jour sont épuisés à %s", async (instant) => {
+    const now = Date.parse(instant);
+    const api = orderingApi(demoTransport({ latency: false, now: () => now }));
+    const today = await api.loadSlots(DEMO_SLUG);
+
+    expect(today.date).toBe("2026-09-19");
+    expect(today.slots).toHaveLength(0);
+    expect(today.closedToday).toBe(true);
+    expect(today.nextOpenDate).toBe("2026-09-20");
+
+    const tomorrow = await api.loadSlots(DEMO_SLUG, today.nextOpenDate!);
+    expect(tomorrow.date).toBe("2026-09-20");
+    expect(tomorrow.closedToday).toBe(false);
+    expect(tomorrow.slots.length).toBeGreaterThan(0);
+    for (const slot of tomorrow.slots) {
+      expect(Date.parse(slot.iso)).toBeGreaterThan(now);
     }
   });
 
