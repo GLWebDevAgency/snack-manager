@@ -5,6 +5,7 @@ import { Reseaux } from "./Reseaux";
 import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre, type ReseauPublié } from "./content";
 import { LogoMark } from "../brand/Logo";
 import { SmallFillet } from "./icons";
+import { NewsletterForm } from "./NewsletterForm";
 
 /**
  * Pied de page en carte, avec l'onglet-encoche du logo posé sur son bord haut
@@ -28,8 +29,8 @@ import { SmallFillet } from "./icons";
  * site, y compris d'un article de blog : un `#tarifs` écrit ici serait un lien
  * mort partout sauf sur la landing, et muet — pas de 404, pas d'erreur, rien.
  *
- * La liste reste explicitement fermée tant qu'aucun service d'inscription
- * n'est branché. Les classes et la structure visuelle du footer sont conservées.
+ * Le formulaire transmet une demande de confirmation ; seule la validation
+ * du lien reçu par e-mail finalise l'inscription auprès du service d'envoi.
  */
 /**
  * Comme `Hero`, ce pied de page est un îlot CLIENT : il reçoit les réseaux au
@@ -62,27 +63,7 @@ export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
           <div className="foot-columns">
             <div className="foot-left">
               <p className="foot-tagline">Simplifier le quotidien du service</p>
-              <div className="foot-newsletter">
-                <p className="subheading foot-newsletterlabel">La liste de lancement arrive bientôt</p>
-                  <form
-                    className="foot-form"
-                    onSubmit={(e) => e.preventDefault()}
-                  >
-                    <label className="ct-hp" htmlFor="foot-email">
-                      Votre adresse e-mail
-                    </label>
-                    <input
-                      id="foot-email"
-                      type="email"
-                      name="email"
-                      placeholder="nom@email.com"
-                      className="foot-input"
-                      autoComplete="email"
-                      disabled
-                    />
-                    <input type="submit" value="Bientôt" className="foot-subscribe" disabled />
-                  </form>
-              </div>
+              <NewsletterForm />
               {/*
                * LES RÉSEAUX SONT ICI, ET C'EST L'ENDROIT ÉVIDENT — un pied de
                * page est le seul lieu d'un site où l'on cherche un compte sans
