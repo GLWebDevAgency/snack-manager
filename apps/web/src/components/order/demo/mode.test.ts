@@ -262,33 +262,42 @@ describe("la démonstration chiffre comme le serveur", () => {
 });
 
 describe("les créneaux sont relatifs à l'instant présent", () => {
-  it("ne propose jamais un créneau passé, même six mois après l'écriture du code", async () => {
-    const api = orderingApi(demoTransport({ latency: false }));
+  it.each([
+    "2026-09-19T10:00:00.000Z", // 12 h à Paris, heure d’été.
+    "2027-03-19T11:00:00.000Z", // 12 h à Paris, six mois plus tard, heure d’hiver.
+  ])("ne propose jamais un créneau passé à %s", async (instant) => {
+    // Le contrat testé est celui d’une journée encore réservable, pas celui
+    // de l’heure à laquelle le runner CI arrive en fin de service.
+    const now = Date.parse(instant);
+    const api = orderingApi(demoTransport({ latency: false, now: () => now }));
     const slots = await api.loadSlots(DEMO_SLUG);
 
-    /*
-     * CE TEST TOMBAIT TOUS LES SOIRS, ET LE DÉFAUT ÉTAIT DANS LE TEST.
-     *
-     * Il exigeait `length > 0` sans condition. Or la démonstration reproduit
-     * fidèlement l'API : passé l'heure de fermeture, il n'y a plus de créneau
-     * aujourd'hui, `closedToday` passe à vrai et `nextOpenDate` porte la
-     * réouverture. Zéro créneau à 21 h n'est pas un défaut, c'est la bonne
-     * réponse — et l'intégration continue refusait donc toute fusion en soirée,
-     * pour une raison sans rapport avec ce qu'on lui demandait de vérifier.
-     *
-     * L'invariant que l'intitulé promet est « jamais un créneau PASSÉ ». Il est
-     * vrai à toute heure et se vérifie sur la liste, vide ou non. Le reste du
-     * contrat est vérifié explicitement plutôt que supposé : ou bien il y a des
-     * créneaux, ou bien la journée est déclarée fermée avec sa réouverture.
-     */
+    expect(slots.slots.length).toBeGreaterThan(0);
+    expect(slots.closedToday).toBe(false);
     for (const slot of slots.slots) {
-      expect(Date.parse(slot.iso)).toBeGreaterThan(Date.now());
+      expect(Date.parse(slot.iso)).toBeGreaterThan(now);
     }
-    if (slots.slots.length === 0) {
-      expect(slots.closedToday, "une journée sans créneau doit se déclarer fermée").toBe(true);
-      expect(slots.nextOpenDate, "une journée fermée doit dire quand elle rouvre").not.toBeNull();
-    } else {
-      expect(slots.closedToday).toBe(false);
+  });
+
+  it.each([
+    "2026-09-19T21:30:05.000Z", // 23 h 30 : aucun retrait après le délai de préparation.
+    "2026-09-19T21:55:00.000Z", // 23 h 55 : aucun créneau ne tient avant minuit.
+  ])("propose le lendemain lorsque les créneaux du jour sont épuisés à %s", async (instant) => {
+    const now = Date.parse(instant);
+    const api = orderingApi(demoTransport({ latency: false, now: () => now }));
+    const today = await api.loadSlots(DEMO_SLUG);
+
+    expect(today.date).toBe("2026-09-19");
+    expect(today.slots).toHaveLength(0);
+    expect(today.closedToday).toBe(true);
+    expect(today.nextOpenDate).toBe("2026-09-20");
+
+    const tomorrow = await api.loadSlots(DEMO_SLUG, today.nextOpenDate!);
+    expect(tomorrow.date).toBe("2026-09-20");
+    expect(tomorrow.closedToday).toBe(false);
+    expect(tomorrow.slots.length).toBeGreaterThan(0);
+    for (const slot of tomorrow.slots) {
+      expect(Date.parse(slot.iso)).toBeGreaterThan(now);
     }
   });
 
