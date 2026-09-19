@@ -1,8 +1,10 @@
 import 'reflect-metadata';
+import { EventEmitter } from 'node:events';
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { describe, expect, it, vi } from 'vitest';
 import type { SharedPublicQuota } from '../../common/shared-public-quota';
+import { fetchV4Of, type RequestFn } from '../../infrastructure/http-v4';
 import { NewsletterService, NewsletterSubscribeSchema } from './newsletter.service';
 
 const BODY = { email: 'restaurateur@example.test', consent: true, source: 'site-vitrine' } as const;
@@ -83,6 +85,33 @@ describe('newsletter — double opt-in Brevo', () => {
     const f = fixture();
     f.transport.mockResolvedValue(new Response(status === 204 ? null : 'private-provider-detail', { status }));
     await expect(f.service.subscribe(BODY)).rejects.toMatchObject({ status: 503, message: expect.not.stringContaining('private-provider-detail') });
+  });
+
+  it('transforme un vrai HTTP 204 du transport IPv4 en 503 maîtrisé', async () => {
+    const requestFn: RequestFn = (_url, _options, callback) => {
+      const request = new EventEmitter() as EventEmitter & {
+        end: () => void;
+        destroy: (error?: Error) => void;
+      };
+      request.end = () => {
+        setImmediate(() => {
+          const response = new EventEmitter() as EventEmitter & { statusCode: number };
+          response.statusCode = 204;
+          callback(response as never);
+          response.emit('end');
+        });
+      };
+      request.destroy = (error) => { if (error) request.emit('error', error); };
+      return request as never;
+    };
+    const f = fixture();
+    // Substitute only HTTPS IO: execute the actual adapter and its Response
+    // construction so a provider's empty response cannot hide behind a mock.
+    f.transport.mockImplementation(fetchV4Of(requestFn));
+    await expect(f.service.subscribe(BODY)).rejects.toMatchObject({
+      status: 503, message: 'L’inscription est momentanément indisponible. Réessayez dans un instant.',
+    });
+    expect(f.transport).toHaveBeenCalledOnce();
   });
 
   it('rend une erreur générique sur timeout sans exposer l’exception du transport', async () => {
