@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import { PUBLISHED_COMMERCE_OFFERS } from "@/components/marketing/commerce-offers";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import {
-  MODULE_MONTHLY_CENTS,
   MODULE_SETUP_CENTS,
   PLANS,
   PRICE_RANGE,
@@ -84,11 +84,11 @@ const OFFRES_PATH = "/offres";
  */
 export const metadata: Metadata = {
   title: "Offres et tarifs — Snack Manager",
-  description: `Le détail des trois formules Snack Manager, du module commande en ligne et des services : ce qui est compris, ce qui ne l'est pas. ${PRICE_RANGE}.`,
+  description: `Suites Service, Gestion et Boost : ${PRICE_RANGE}. Comparez les applications, les fonctions TV comprises, les prestations Menus et les frais de mise en route.`,
   keywords: [
-    "tarif logiciel caisse snack",
+    "tarif logiciel caisse restaurant",
     "prix logiciel restaurant",
-    "abonnement caisse fast-food",
+    "tarif création menu TV papier",
     "tarif click and collect restaurant",
     "logiciel snack sans commission",
   ],
@@ -99,12 +99,12 @@ export const metadata: Metadata = {
     url: OFFRES_PATH,
     siteName: "Snack Manager",
     title: "Offres et tarifs — Snack Manager",
-    description: `Trois formules, un module commande en ligne, trois services chiffrés. Zéro commission. ${PRICE_RANGE}.`,
+    description: `Suites et applications, menus papier et TV, mise en service : un prix et un périmètre clairs. ${PRICE_RANGE}. Fidélité et livraison selon leur périmètre pilote.`,
   },
   twitter: {
     card: "summary_large_image",
     title: "Offres et tarifs — Snack Manager",
-    description: "Le détail de chaque formule, du module commande en ligne et des services. Zéro commission.",
+    description: "Choisissez les fonctions utiles à votre restaurant et les prestations pour faire vivre votre carte. Frais et conditions détaillés.",
   },
   robots: { index: true, follow: true },
 };
@@ -212,6 +212,7 @@ function structuredData() {
         priceCurrency: "EUR",
         // UN/CEFACT : « MON » = le mois, « ANN » = l'année.
         unitCode: "MON",
+        valueAddedTaxIncluded: false,
       },
     },
     {
@@ -227,6 +228,7 @@ function structuredData() {
         price: plain(yearlyCents(plan.monthlyCents)),
         priceCurrency: "EUR",
         unitCode: "ANN",
+        valueAddedTaxIncluded: false,
       },
     },
   ]);
@@ -248,26 +250,22 @@ function structuredData() {
       inLanguage: "fr-FR",
       itemListElement: [
         ...offresFormules,
-        {
+        ...PUBLISHED_COMMERCE_OFFERS.map((offer) => ({
           "@type": "Offer",
-          // Le module s'appelle « Commande en ligne & fidélité » et JAMAIS
-          // « Livraison » : le mot Livraison en face d'un prix se lit comme un
-          // livreur qu'on facture, et nous n'en fournissons aucun.
-          name: "Commande en ligne & fidélité",
-          description: `Module vendu à part, compris dans Boost. ${plain(
-            MODULE_SETUP_CENTS,
-          )} € de mise en service la première fois.`,
-          price: plain(MODULE_MONTHLY_CENTS),
+          name: offer.title,
+          description: `${offer.status}. ${plain(MODULE_SETUP_CENTS)} € HT de mise en service standard, précisée au devis.`,
+          price: plain(offer.monthlyCents),
           priceCurrency: "EUR",
           availability: "https://schema.org/InStock",
           itemOffered: produit,
           priceSpecification: {
             "@type": "UnitPriceSpecification",
-            price: plain(MODULE_MONTHLY_CENTS),
+            price: plain(offer.monthlyCents),
             priceCurrency: "EUR",
             unitCode: "MON",
+            valueAddedTaxIncluded: false,
           },
-        },
+        })),
       ],
     },
   ];

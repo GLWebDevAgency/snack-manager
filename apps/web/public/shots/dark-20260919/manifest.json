@@ -1,0 +1,93 @@
+{
+  "backoffice.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/dashboard?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 84502,
+    "width": 1440,
+    "height": 734,
+    "sha256": "08d9187fbde447ca41e0f1f9a224b98464bbda9ede0987a9e6151286d559804d"
+  },
+  "menu.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/menu?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 89274,
+    "width": 1440,
+    "height": 734,
+    "sha256": "90893e19cae2f52e4a946ae6b49a9038b292886b8538b4634444c73066a408ff"
+  },
+  "fidelite.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/fidelite?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 70568,
+    "width": 1440,
+    "height": 734,
+    "sha256": "e2499e64bc08e262403ddba9fadcc1e31e0b5da524b2f31e24eb6a4fc75e1e6c"
+  },
+  "tv-studio.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/screens?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 55439,
+    "width": 744,
+    "height": 766,
+    "sha256": "b7a62305aaf0a777a75cd0ef52580cc262cabd758771cbdc9ba535df66ce89dc"
+  },
+  "pos.jpg": {
+    "source": "https://pos-staging-7f92.up.railway.app/?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 39030,
+    "width": 744,
+    "height": 516,
+    "sha256": "01907c099cf57d788bd77f1204629f6ffc1952e47f62ffafcad2a3a8e70dcd81"
+  },
+  "kds.jpg": {
+    "source": "https://kds-staging-90da.up.railway.app/?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 50718,
+    "width": 744,
+    "height": 516,
+    "sha256": "49925e2915f57ed1dc8e41c58d531b31e215f3f39f948e16303190b3b61beca9"
+  },
+  "commande.jpg": {
+    "source": "http://127.0.0.1:3017/r/demo?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 44004,
+    "width": 390,
+    "height": 740,
+    "sha256": "b0ffbed2eb0962f3b82091313ba282a5cdcc9c7bd2673eff13696cc3ad2e27ac",
+    "revision": "9f4f3a05651d0c2568c597d1702274ae4344dc60 (local production build; order app unchanged)"
+  },
+  "livreur.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/livreur",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "public invitation access screen; no delivery mission shown",
+    "bytes": 37412,
+    "width": 734,
+    "height": 756,
+    "sha256": "e78f381859339ced00c77f8516706f73dd977fddc29e45686df1a7979c561c09"
+  },
+  "board.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/screens?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 25459,
+    "width": 642,
+    "height": 361,
+    "sha256": "a495a805c57a8b2b6f4b023862d7e8b555f13f8f7bb10daf1bd3119bb0d51821"
+  }
+}

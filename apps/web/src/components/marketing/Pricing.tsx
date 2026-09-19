@@ -2,16 +2,15 @@
 
 import type { CSSProperties, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
-import { Comparateur } from "./Comparateur";
 import {
   BILLING_CYCLES,
   BILLING_YEARLY_NOTE,
   COMMISSIONS,
-  CTA_CALLBACK,
   ENGAGEMENT,
   FOUNDER_POLICY,
   MODULE_ADDON,
   PLANS,
+  PLAN_MONTHLY_CENTS,
   PLAN_MODULES,
   PRICING_FOOTNOTE,
   PRICING_MATH,
@@ -212,6 +211,7 @@ export function Pricing() {
         {title}
       </h2>
 
+      <p className="body-text">Prix HT par établissement. Choisissez le paiement mensuel ou annuel.</p>
       {/* ─── Ce qu'on prélève, et ce que prélèvent les autres ─── */}
       <dl className="pr-commissions rv">
         {COMMISSIONS.map((c, i) => (
@@ -232,11 +232,6 @@ export function Pricing() {
           </div>
         ))}
       </dl>
-
-      {/* La quatrième ligne du tableau, rendue manipulable : le visiteur pose
-          ses propres chiffres sur la « caisse gratuite » avant de lire la
-          grille — c'est l'ordre de l'ancrage, ce n'est pas un hasard. */}
-      <Comparateur />
 
       {/* ─── Le sélecteur de périodicité ───
           `--i` place la pastille dorée sous l'onglet actif et `--n` la
@@ -296,7 +291,7 @@ export function Pricing() {
         {PLANS.map((plan, i) => (
           <div className="rv" key={plan.id} style={{ transitionDelay: `${i * 0.1}s` }}>
             <article className={plan.popular ? "pr-card popular spot" : "pr-card spot"}>
-              {plan.popular ? <span className="pr-badge">Populaire</span> : null}
+              {plan.popular ? <span className="pr-badge">Gestion + commande directe</span> : null}
               <h3 className="h5">{plan.name}</h3>
 
               {/* LES DEUX MONTANTS SONT LÀ, EMPILÉS DANS LA MÊME CASE.
@@ -346,15 +341,16 @@ export function Pricing() {
                   );
                 })}
               </ul>
+              <a className="btn dark pr-choice" href={ancre("contact").href}>Parler de {plan.name} <span aria-hidden="true">↗</span></a>
             </article>
           </div>
         ))}
       </div>
 
       {/* `ancre()` et pas `#contact` : voir le hero. */}
-      <a className="btn light pr-cta" href={ancre("contact").href}>
-        {CTA_CALLBACK}
-      </a>
+      <p className="pr-tv-note">Les modèles TV existants sont inclus dans les trois suites. La création de menus par notre Atelier, l’impression, le matériel et l’installation sont distincts. * Continuité locale : commandes conservées en caisse et tickets déjà reçus en cuisine ; les échanges entre appareils nécessitent une connexion.</p>
+      <a className="pr-compare-link" href="/offres">Comparer tout ce qui est inclus dans les offres →</a>
+      <div className="pr-upgrade"><p><strong>Service → Gestion : +{euros(PLAN_MONTHLY_CENTS.complet - PLAN_MONTHLY_CENTS.essentiel)} HT/mois.</strong><br />Au tarif mensuel. Ajoutez le planning, les stocks et le suivi du coût matière lorsque votre organisation en a besoin.</p><p><strong>Gestion → Boost : +{euros(PLAN_MONTHLY_CENTS.boost - PLAN_MONTHLY_CENTS.complet)} HT/mois.</strong><br />Au tarif mensuel. Ajoutez la commande directe et les parcours fidélité et livraison en pilote accompagné.</p></div>
 
       {/* ═══ L'ADDITION SE FAIT SOUS LES YEUX ═══
 

@@ -53,28 +53,28 @@ export const CAISSE_SECTIONS: readonly CaisseSectionMeta[] = [
     nav: "Le service",
     badge: "Au comptoir",
     title: "Prendre la commande, l'envoyer en cuisine, encaisser.",
-    lead: "Trois gestes, des gros boutons : une nouvelle recrue tient la caisse en une heure.",
+    lead: "Une interface tactile pour saisir les plats, transmettre les commandes et enregistrer les règlements. La prise en main se prépare avec votre carte.",
   },
   {
     id: "encaissement",
     nav: "L'encaissement",
-    badge: "Le compte est bon",
-    title: "Espèces, carte, titre-restaurant. Et le soir, tout se recoupe.",
-    lead: "Chaque moyen de paiement a son bouton, et la clôture de service se vérifie ligne par ligne — le tiroir, le TPE, la télécollecte.",
+    badge: "Suivi des règlements",
+    title: "Retrouvez vos règlements par moyen de paiement.",
+    lead: "La clôture présente les montants enregistrés par moyen de paiement. Vous les rapprochez de votre tiroir et des relevés de vos terminaux.",
   },
   {
     id: "coupure",
     nav: "Sans internet",
-    badge: "Vendredi soir",
-    title: "Le wifi saute ? La caisse continue.",
-    lead: "Un rush ne prévient pas. La caisse et la cuisine travaillent en local, et tout se resynchronise au retour du réseau.",
+    badge: "En cas de coupure",
+    title: "Continuez la saisie pendant une coupure.",
+    lead: "La caisse garde localement les commandes saisies et les renvoie à la reconnexion. Leur transmission à la cuisine attend le retour de la connexion.",
   },
   {
     id: "vous",
     nav: "Chez vous",
     badge: "À vos couleurs",
     title: "Votre nom, votre logo, votre matériel.",
-    lead: "La caisse s'installe comme un téléviseur : un code de six caractères, et elle est chez vous — sur une tablette du commerce.",
+    lead: "Associez un appareil compatible à votre établissement avec un code d'appairage. La configuration et les périphériques sont vérifiés avec vous.",
   },
 ] as const;
 
@@ -104,7 +104,7 @@ export const CAISSE_SOMMAIRE: readonly { href: string; label: string }[] = CAISS
  * texte dit déjà. Provenance : `public/photos/libre/PROVENANCE.md`.
  */
 export const CAISSE_SHOTS = {
-  hero: { src: "/shots/pos.png", alt: "" },
+  hero: { src: "/shots/dark-20260919/pos.jpg", alt: "" },
   cta: { src: "/photos/libre/service-sous-lampe.webp", alt: "" },
 } satisfies Record<string, Shot>;
 
@@ -112,14 +112,14 @@ export const CAISSE_SHOTS = {
 
 /**
  * Le premier doré de la page est un prix, comme sur `/offres` — et il est
- * DÉRIVÉ de la grille : le jour où Essentiel bouge, cette page suit.
+ * DÉRIVÉ de la grille : le jour où Service bouge, cette page suit.
  */
 export const CAISSE_HERO = {
   badge: "La caisse",
-  title: "La caisse qui tient le rush.",
-  lead: "Prendre la commande, l'envoyer en cuisine, encaisser — même quand la file déborde, même quand le wifi saute.",
-  price: `dès ${euros(PLAN_MONTHLY_CENTS.essentiel)} / mois`,
-  claim: "zéro commission — quand vous vendez plus, c'est pour vous",
+  title: "Une caisse pour organiser votre service.",
+  lead: "Prendre la commande, suivre la cuisine, encaisser. En cas de coupure, la saisie reste locale et la transmission reprend au retour du réseau.",
+  price: `dès ${euros(PLAN_MONTHLY_CENTS.essentiel)} HT / mois / établissement`,
+  claim: "Comprise dans Service, Gestion et Boost. Frais de paiement et matériel distincts.",
 } as const;
 
 /* ── 1. Le service ───────────────────────────────────────────── */
@@ -130,12 +130,12 @@ export const CAISSE_HERO = {
  * pilote, pas une étude inventée.
  */
 export const SERVICE_POINTS: readonly string[] = [
-  "Sur place, à emporter, téléphone : trois boutons, pas un menu caché.",
-  "Le ticket part en cuisine tout seul — sur l'écran, et à l'imprimante.",
-  "Un ticket mis en attente reçoit un code court, criable au comptoir.",
-  "Remise ou annulation : code PIN du gérant, et tout est journalisé.",
-  "Le numéro de retrait s'affiche tout de suite, même sans réseau.",
-  "La carte et les prix se changent au back-office — la caisse suit en direct.",
+  "Saisissez les commandes sur place, à emporter ou reçues par téléphone.",
+  "Les commandes sont transmises à l’écran cuisine connecté. L’impression utilise le matériel compatible configuré dans votre établissement.",
+  "Un code de retrait permet d’identifier une commande mise en attente.",
+  "Les remises et annulations sont soumises aux autorisations prévues et enregistrées dans le journal d’activité.",
+  "Le numéro de retrait et le statut permettent de retrouver la commande transmise.",
+  "Gérez la carte et les prix depuis le back-office ; les appareils connectés récupèrent les mises à jour.",
 ] as const;
 
 /* ── 2. L'encaissement ───────────────────────────────────────── */
@@ -151,40 +151,40 @@ export type EncaissementRow = { readonly label: string; readonly line: string };
 export const ENCAISSEMENT_ROWS: readonly EncaissementRow[] = [
   {
     label: "Espèces",
-    line: "Vous tapez ce que le client pose, la caisse calcule le rendu.",
+    line: "Saisissez le montant reçu pour calculer la monnaie à rendre.",
   },
   {
     label: "Carte bancaire",
-    line: "Vous encaissez sur votre TPE, aux conditions de votre banque : l’argent va droit sur votre compte. La caisse, elle, enregistre.",
+    line: "Le paiement est encaissé sur votre TPE selon le contrat de votre prestataire. Vous enregistrez le règlement dans la caisse.",
   },
   {
     label: "Titre-restaurant",
-    line: "Papier ou carte, sur votre terminal habituel. Le midi est enfin ventilé correctement.",
+    line: "Enregistrez les titres acceptés par votre établissement. Les cartes titre-restaurant sont encaissées sur un terminal compatible.",
   },
   {
     label: "À encaisser au retrait",
-    line: "La commande part en cuisine, le règlement attend le client.",
+    line: "Préparez une commande dont le règlement est prévu au retrait.",
   },
 ] as const;
 
 export const Z_NOTE =
-  "Et le soir, la clôture de service affiche cinq lignes qui se recoupent : les espèces du tiroir, le bordereau du TPE, la télécollecte des titres, la vente en ligne, le reste dû.";
+  "La clôture regroupe les montants enregistrés pour contrôler votre service. Les relevés de banque, de TPE et de prestataires de paiement restent à rapprocher séparément.";
 
 /* ── 3. La coupure ───────────────────────────────────────────── */
 
 export const COUPURE_POINTS: readonly string[] = [
-  "Aucune commande perdue : chaque envoi est rejoué jusqu'à ce qu'il passe, sans jamais créer de doublon.",
-  "Les tickets s'impriment quand même — l'imprimante est sur votre réseau local, pas sur internet.",
-  "Le numéro de retrait sort tout de suite : la file avance, le client attend son numéro, pas la fibre.",
+  "Les commandes enregistrées sur cet appareil sont conservées localement puis renvoyées à la reconnexion, avec une protection contre les doublons.",
+  "L’impression dépend du matériel compatible et du réseau local. Le ticket et le sticker sont testés sur votre installation avant le lancement.",
+  "Sans connexion, les nouvelles commandes n’arrivent pas sur une autre tablette. Le fonctionnement de secours est validé avec votre équipe.",
 ] as const;
 
 /* ── 4. Chez vous ────────────────────────────────────────────── */
 
 export const VOUS_POINTS: readonly string[] = [
-  "Une tablette du commerce, Android ou iPad. Aucun matériel propriétaire, aucune location.",
-  "L'imprimante ticket 80 mm en réseau est requise : le ticket cuisine, le sticker du sac, le tiroir-caisse.",
-  "Votre nom, votre logo, votre couleur — la caisse est à votre enseigne, pas à la nôtre.",
-  "La tablette casse ? Six caractères sur la remplaçante, et la caisse revient.",
+  "Le matériel compatible est étudié avant installation, selon votre appareil, votre système et les périphériques nécessaires.",
+  "Tickets, stickers et tiroir-caisse : le matériel compatible est sélectionné et testé selon vos besoins.",
+  "Votre nom, votre logo et vos couleurs identifient votre établissement.",
+  "Un appareil de remplacement peut être associé à votre établissement. Les commandes restées uniquement sur l’ancien appareil nécessitent une récupération spécifique.",
 ] as const;
 
 /* ── L'appel final ───────────────────────────────────────────── */
@@ -195,6 +195,6 @@ export const VOUS_POINTS: readonly string[] = [
  * titre de la section produit — « Passez derrière le comptoir ».
  */
 export const CAISSE_CTA = {
-  title: "Essayez-la maintenant, sans compte.",
-  line: "La caisse tourne en démonstration sur la page d'accueil : prenez une commande, encaissez-la — personne ne vous demandera votre e-mail.",
+  title: "Découvrez la caisse en démonstration.",
+  line: "Explorez la caisse depuis la page d’accueil avec des données d’exemple. Les actions de démonstration ne déclenchent aucun paiement réel.",
 } as const;

@@ -49,13 +49,13 @@ export function corps() {
     <>
       <p className="bl-p">
         Un client vous le dira un jour, à moitié gêné, en récupérant son sac : « chez vous c'est moins cher que sur
-        l'appli ». Il a raison, et ce n'est ni une arnaque ni une erreur de saisie. C'est une addition — et elle
-        s'explique en trois minutes.
+        l'appli ». Cette différence peut venir des prix des plats, des promotions et des frais appliqués.
+        Pour la comprendre, il faut distinguer ce que paient le restaurant et le client.
       </p>
 
       <h2 className="bl-h2">Il n'y a pas une facture, il y en a deux</h2>
       <p className="bl-p">
-        Sur une commande passée via une plateforme, deux factures se superposent sur le même kebab, et elles ne sont pas
+        Sur une commande passée via une plateforme, deux factures se superposent sur le même repas, et elles ne sont pas
         envoyées à la même personne.
       </p>
       <ul className="bl-liste">
@@ -77,18 +77,16 @@ export function corps() {
       <h2 className="bl-h2">Le troisième écart : celui que vous créez vous-même</h2>
       <p className="bl-p">
         C'est le point le moins connu, et c'est celui qui explique le gros de la différence. Sur une plateforme, les
-        prix de la carte sont saisis et modifiés <strong>par le restaurateur</strong>, dans l'interface commerçant. Rien
-        n'oblige à y afficher exactement le prix de la salle.
+        prix de la carte sont saisis et modifiés <strong>par le restaurateur</strong>, dans l'interface commerçant. Les conditions de vente et les options de tarification sont à vérifier dans votre contrat commerçant.
       </p>
       <p className="bl-p">
-        Et beaucoup ne le font pas, pour une raison arithmétique simple : si une part du montant part en commission,
-        vendre au prix de la salle revient à vendre à marge réduite. Alors on relève la carte en ligne. La commission ne
-        se voit nulle part sur la fiche produit du client — mais elle est dedans.
+        À coûts identiques, une commission réduit la contribution d’une vente. Certains restaurants adaptent leurs prix
+        pour en tenir compte. Comparer les canaux demande aussi d’intégrer l’emballage, les promotions et la livraison.
       </p>
 
       <Note titre="La phrase à retenir">
-        Le prix plus élevé sur l'appli n'est pas décidé par l'appli. Il est décidé par le restaurateur, pour absorber ce
-        que l'appli lui facture. C'est la même dépense, écrite à un autre endroit.
+        Le montant final dépend du prix des plats, des promotions et des frais. Comparez le détail de la commande
+        et votre relevé commerçant pour comprendre ce qui revient réellement au restaurant.
       </Note>
 
       <h2 className="bl-h2">Ce que cet argent achète — parce qu'il achète quelque chose</h2>
@@ -98,57 +96,55 @@ export function corps() {
       </p>
       <p className="bl-p">
         <strong>L'acquisition.</strong> Une plateforme met votre carte devant quelqu'un qui ne connaissait ni votre nom
-        ni votre rue. C'est un client que vous n'aviez pas, et que vous n'auriez pas eu ce soir-là. Aucun panneau, aucun
-        prospectus, aucune page de commande ne fait ça tout seul.
+        ni votre rue. Cette visibilité peut vous faire connaître de nouveaux clients. Son intérêt se mesure avec les commandes
+        obtenues et leur contribution, au même titre que vos autres moyens de communication.
       </p>
       <p className="bl-p">
         <strong>La logistique.</strong> Quand il y a livraison, quelqu'un porte le sac, quelqu'un répond au client dont
-        la commande est en retard, quelqu'un rembourse quand ça se passe mal. Ce travail existe, il coûte, et vous n'avez
-        ni à l'organiser ni à l'assurer.
+        la commande est en retard, quelqu'un rembourse quand ça se passe mal. La répartition de ces services et de leurs coûts dépend de l’offre souscrite auprès de la plateforme.
       </p>
       <p className="bl-p">
         Un restaurateur qui supprime ce canal du jour au lendemain supprime aussi ce travail-là, et il le découvre le
         vendredi suivant. Ce n'est pas ce que nous conseillons, et ce n'est pas ce que nous vendons.
       </p>
 
-      <h2 className="bl-h2">Alors où est le problème ?</h2>
+      <h2 className="bl-h2">Quel coût pour les clients qui reviennent ?</h2>
       <p className="bl-p">
-        Il n'est pas dans le prix de l'acquisition. Il est dans le fait de <strong>payer l'acquisition deux fois</strong>.
+        Pour vos clients réguliers, examinez <strong>le coût complet de chaque canal</strong> et le service qu’il apporte.
       </p>
       <p className="bl-p">
-        Le premier soir, la plateforme vous amène un inconnu : la commission achète une rencontre, et elle les vaut. Le
-        onzième soir, ce même client sait très bien qui vous êtes, ce qu'il veut, et à quelle heure il passera. Il n'y a
-        plus rien à acquérir — et pourtant la commission est identique.
+        Un client régulier peut apprécier la simplicité d’une plateforme ou sa livraison. Il peut aussi préférer
+        votre page directe pour retrouver votre carte et choisir son retrait. Ces usages ont des coûts différents.
       </p>
       <p className="bl-p">
-        Un habitué qui commande via une plateforme est donc, mécaniquement, votre commande la moins rentable. C'est le
-        seul reproche que nous formulons, et il ne vise personne : c'est la structure du tarif, pas une intention.
+        Une commande directe n’est pas automatiquement plus rentable : abonnement, paiement, emballage et éventuelle
+        livraison restent à financer. Le bon calcul compare ce qui reste pour votre établissement après ces dépenses.
       </p>
 
       <h2 className="bl-h2">Le canal direct ne fait pas le même travail</h2>
       <p className="bl-p">
-        Une page de commande à vous ne vous amènera pas d'inconnu à 21 h. Ce n'est pas son métier, et prétendre le
-        contraire serait vous vendre du vent. Son métier, c'est le onzième soir.
+        Votre page directe peut être découverte depuis votre site, votre fiche Google ou vos supports. Elle donne
+        aussi aux clients qui vous connaissent un accès simple à votre carte et à vos créneaux.
       </p>
       <ul className="bl-liste">
         <li>
-          <strong>Le prix est celui de la salle.</strong> Pas de commission à absorber, donc pas de carte à relever.
-          C'est exactement l'écart que votre client a remarqué — et cette fois, il joue pour vous.
+          <strong>Vous définissez vos prix.</strong> Snack Manager ne prélève pas de commission sur vos commandes.
+          L’abonnement et les frais de paiement restent distincts.
         </li>
         <li>
-          <strong>La fidélité se cumule.</strong> Points ou tampons, dans la même page, sans carte en carton à perdre au
-          fond d'une poche.
+          <strong>Un programme fidélité en pilote accompagné.</strong> Cartes, points ou tampons et récompenses sont
+          configurables. Le cumul automatique après commande en ligne et l’utilisation sécurisée des récompenses restent à finaliser.
         </li>
         <li>
-          <strong>Le client est le vôtre.</strong> Son numéro, son historique, ses habitudes. C'est la différence entre
-          un chiffre d'affaires et un fonds de commerce.
+          <strong>Une relation directe.</strong> Vous accédez aux informations utiles au traitement des commandes
+          et aux données disponibles dans le cadre des consentements recueillis.
         </li>
       </ul>
 
-      <h2 className="bl-h2">Les trois taux, côte à côte</h2>
+      <h2 className="bl-h2">Les coûts du canal direct à distinguer</h2>
       <p className="bl-p">
-        Voilà ce qui se prélève sur une commande, selon par où elle passe. Les deux premières lignes sont des ordres de
-        grandeur ; la troisième est celle qu'on préfère taire, alors nous l'affichons nous-mêmes.
+        Le coût du canal direct ne se résume pas à la commission du logiciel. Séparez l’abonnement, le paiement et,
+        si vous la proposez, la livraison organisée par votre établissement.
       </p>
       {/*
        * Le tableau vit dans son propre conteneur défilant : trois colonnes de
@@ -177,9 +173,8 @@ export function corps() {
         </table>
       </div>
       <p className="bl-p">
-        Les frais d'encaissement carte, eux, se paient sur les deux canaux : c'est votre prestataire de paiement, et cet
-        argent ne revient à personne d'autre. Les faire disparaître d'un comparatif serait exactement le genre d'omission
-        qu'on découvre sur son premier relevé.
+        Les frais de paiement dépendent de chaque contrat : ils peuvent être inclus dans certains services ou facturés
+        séparément. Utilisez vos relevés pour les compter une seule fois dans votre comparaison.
       </p>
 
       <h2 className="bl-h2">La bonne question n'est pas « laquelle », c'est « laquelle pour qui »</h2>
@@ -189,23 +184,23 @@ export function corps() {
       </p>
       <ul className="bl-liste">
         <li>
-          <strong>Le client qui ne vous connaît pas</strong> arrive par la plateforme, ou par votre fiche Google. La
-          commission est le prix de la rencontre : elle est chère, et elle est justifiée.
+          <strong>Pour vous faire connaître</strong>, plusieurs canaux sont possibles : plateformes, fiche Google,
+          site et communication locale. Comparez leur apport et leurs coûts.
         </li>
         <li>
-          <strong>Le client qui revient</strong> devrait commander en direct. C'est là que la commission cesse d'acheter
-          quoi que ce soit, et c'est là que vous avez le plus à gagner.
+          <strong>Pour faciliter le retour</strong>, rendez votre commande directe visible et simple à utiliser,
+          tout en conservant les services utiles à votre clientèle.
         </li>
       </ul>
       <p className="bl-p">
         Tout le travail consiste donc à faire passer le second groupe d'un canal à l'autre, sans rien casser du premier.
-        Un lien de commande sur votre fiche Google, un sticker sur le sac, un mot au comptoir, des points qui se cumulent
-        : c'est lent, c'est cumulatif, et ça ne se voit pas en une semaine.
+        Un lien de commande sur votre fiche Google, un sticker sur le sac, un mot au comptoir : ces actions peuvent
+        encourager le retour en direct. Leur effet se mesure dans la durée, sans résultat garanti.
       </p>
 
       <h2 className="bl-h2">Ce que vous pouvez regarder dès ce mois-ci</h2>
       <p className="bl-p">
-        Trois nombres, que vous avez déjà, et qui ne demandent aucun outil pour être posés sur un papier :
+        Trois indicateurs à réunir à partir de vos ventes et relevés disponibles :
       </p>
       <ol className="bl-etapes bl-etapes-simple">
         <li className="bl-etape">
@@ -216,27 +211,26 @@ export function corps() {
         </li>
         <li className="bl-etape">
           <p className="bl-p">
-            Ce que la commission représente sur un mois complet, tous canaux confondus. Le montant surprend souvent, parce
-            qu'il n'arrive jamais sous forme de facture.
+            Le total mensuel des commissions, frais de paiement et dépenses de livraison, à partir de vos relevés
+            et factures, sans compter deux fois le même coût.
           </p>
         </li>
         <li className="bl-etape">
           <p className="bl-p">
-            Le nombre de clients qui ont commandé plus de deux fois. Ceux-là sont votre marge, et aujourd'hui vous ne
-            savez probablement pas qui ils sont.
+            La fréquence de retour des clients, lorsqu’elle peut être mesurée avec les données et consentements
+            disponibles. Distinguez-la de la contribution financière des commandes.
           </p>
         </li>
       </ol>
       <p className="bl-p">
-        Le troisième est le seul que vous ne pouvez pas obtenir aujourd'hui si tout passe par un tiers : la liste des
-        clients qui reviennent ne vous appartient pas. C'est, à notre avis, le vrai coût — et il ne figure sur aucun
-        relevé.
+        Les données accessibles varient selon vos outils et vos contrats. Vérifiez ce que vous pouvez exporter
+        ou analyser avant de promettre un suivi individualisé des clients qui reviennent.
       </p>
 
       <Note titre="Et la livraison, dans tout ça ?">
-        Nous n'en fournissons aucune. Notre tunnel de commande s'arrête au créneau de retrait, et si vous livrez, vous
-        continuez comme aujourd'hui — vos tournées, vos horaires. C'est aussi pour ça que les plateformes ne sont pas nos
-        adversaires : elles font un métier que nous ne faisons pas.
+        Snack Manager ne fournit pas de livreurs. La livraison organisée par votre restaurant est proposée en pilote,
+        après configuration et validation du parcours. Elle est prévue dans Boost ou dans le module dédié ; vos livreurs,
+        le matériel et les dépenses de livraison restent distincts.
       </Note>
 
       <p className="bl-p">

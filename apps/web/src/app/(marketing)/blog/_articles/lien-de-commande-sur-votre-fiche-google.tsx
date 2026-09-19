@@ -179,27 +179,26 @@ export function corps() {
         plateformes n'a aucun intérêt à fermer une porte qui lui amène des clients qu'il n'aurait pas eus.
       </p>
       <p className="bl-p">
-        Enfin, nous ne vous donnerons aucun délai de prise en compte : Google n'en publie pas, et un délai inventé se
-        vérifie tout seul, contre celui qui l'a inventé. Vérifiez le lendemain, puis la semaine suivante.
+        L’affichage du lien sur Google ne dépend pas de Snack Manager. Vérifiez la fiche après la modification,
+        puis à nouveau quelques jours plus tard, avant de considérer l’accès comme disponible.
       </p>
 
-      <h2 className="bl-h2">Alors pourquoi s'embêter, si les plateformes restent ?</h2>
+      <h2 className="bl-h2">Quel intérêt pour votre commande directe ?</h2>
       <p className="bl-p">
-        Parce que les deux canaux ne font pas le même travail, et que vous avez besoin des deux.
+        Parce que plusieurs canaux peuvent répondre à des besoins différents de vos clients.
       </p>
       <p className="bl-p">
-        Une plateforme <strong>acquiert</strong>. Elle amène devant votre carte quelqu'un qui ne connaissait ni votre nom
-        ni votre rue, et quand il y a une livraison, elle la fait. C'est un travail réel, et il se facture — cher, mais
-        il se facture.
+        Une plateforme peut <strong>vous faire connaître</strong> et proposer un service de livraison selon votre contrat.
+        Comparez son apport et son coût avec ceux de vos autres canaux.
       </p>
       <p className="bl-p">
-        Votre lien direct, lui, <strong>fidélise</strong>. L'habitué qui commande chez vous paie le prix affiché en
-        salle, ses points de fidélité se cumulent dans votre page, son numéro et son historique vous appartiennent. Et
-        si vous voulez lui écrire un jour pour annoncer une nouveauté, vous le pouvez.
+        Votre lien direct, lui, <strong>entretient la relation</strong>. L'habitué retrouve votre carte et son
+        historique. Notre programme fidélité est proposé en pilote accompagné : cartes et récompenses configurables,
+        mais attribution automatique après commande en ligne et utilisation sécurisée des récompenses restent à finaliser.
       </p>
       <p className="bl-p">
-        La fiche Google est le seul endroit du web où ces deux logiques se rencontrent devant le même client, au même
-        moment. C'est pour ça qu'elle mérite dix minutes de votre après-midi.
+        Votre fiche Google peut présenter ces différentes possibilités au même client. Elle mérite donc
+        une vérification régulière des liens, horaires et parcours proposés.
       </p>
 
       <h2 className="bl-h2">À revérifier une fois par trimestre</h2>

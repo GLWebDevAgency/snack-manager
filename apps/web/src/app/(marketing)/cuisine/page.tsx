@@ -17,14 +17,14 @@ import { CuisineBody } from "./sections";
 
 const CUISINE_PATH = "/cuisine";
 
-const PRIX_ENTREE = `${PLAN_MONTHLY_CENTS.essentiel / 100} €/mois`;
+const PRIX_ENTREE = `${PLAN_MONTHLY_CENTS.essentiel / 100} € HT/mois`;
 
 export const metadata: Metadata = {
-  title: "Écran cuisine (KDS) pour snack — Snack Manager",
-  description: `L'écran cuisine des snacks : chaque commande arrive à sa place, avec le son, lisible de loin — et la coupure ne vide pas l'écran. Compris dans toutes les formules, dès ${PRIX_ENTREE}.`,
+  title: "Écran cuisine (KDS) pour restaurant — Snack Manager",
+  description: `Suivez les commandes et leur préparation sur un écran cuisine. Compris dans Service, Gestion et Boost, dès ${PRIX_ENTREE}. Les nouvelles commandes nécessitent une connexion.`,
   keywords: [
     "écran cuisine restaurant",
-    "KDS snack",
+    "KDS restaurant indépendant",
     "kitchen display system français",
     "écran commande cuisine fast-food",
     "gestion tickets cuisine",
@@ -35,13 +35,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: CUISINE_PATH,
     siteName: "Snack Manager",
-    title: "Écran cuisine (KDS) pour snack — Snack Manager",
-    description: `Chaque commande à sa place, lisible de loin, même sans internet. Compris dans toutes les formules, dès ${PRIX_ENTREE}.`,
+    title: "Écran cuisine (KDS) pour restaurant — Snack Manager",
+    description: `Une vue commune des commandes à préparer. Compris dans les trois suites, dès ${PRIX_ENTREE}. En cas de coupure, seuls les tickets déjà reçus restent disponibles.`,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Écran cuisine (KDS) pour snack — Snack Manager",
-    description: "L'écran qui tient la cuisine : une seule file, trois colonnes, le son à l'arrivée.",
+    title: "Écran cuisine (KDS) pour restaurant — Snack Manager",
+    description: "Un écran cuisine pour les restaurants indépendants : statuts de préparation, détails des commandes et signal sonore à l’arrivée.",
   },
   robots: { index: true, follow: true },
 };
