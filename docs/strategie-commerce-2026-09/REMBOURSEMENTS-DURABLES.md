@@ -1,5 +1,11 @@
 # Remboursements : intention durable avant Stripe
 
+**Complément du 20 septembre :** le socle ci-dessous est déjà intégré par PR #173.
+La [reprise professionnelle et navigateur](REPRISE-REMBOURSEMENTS-2026-09-20.md)
+complète maintenant le journal, avec lecture locale et retrait avant départ.
+Ses contraintes de déploiement incluent les anciens writers de PR #173.
+Le texte ci-dessous conserve la portée et la recette du lot initial.
+
 Lot L3b, première étape, préparé sur `fix/order-refund-durable-intent`.
 Ce document décrit le code et sa recette locale ; il ne constitue pas un reçu
 de déploiement ni une activation en production. Aucun remboursement réel n'a

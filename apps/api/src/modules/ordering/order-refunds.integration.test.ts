@@ -217,6 +217,122 @@ integration('remboursements durables sur deux connexions Mongo standalone', () =
     return String(row._id);
   }
 
+  describe('journal local : lecture seule du document financier réel', () => {
+    function observeOnly() {
+      commands = [];
+      provider.refunds.list.mockClear(); provider.refunds.create.mockClear(); provider.charges.retrieve.mockClear();
+      audit.log.mockClear(); audit.logOnce.mockClear(); publish.mockClear();
+    }
+    function expectNoEffects() {
+      expect(commands.map(command => command.commandName)).toEqual(expect.arrayContaining(['find']));
+      expect(commands.every(command => command.commandName === 'find')).toBe(true);
+      for (const { command } of commands) {
+        expect(command.readConcern).toEqual({ level: 'majority' });
+        expect(command.maxTimeMS).toBe(10_000);
+      }
+      expect(provider.refunds.list).not.toHaveBeenCalled();
+      expect(provider.refunds.create).not.toHaveBeenCalled();
+      expect(provider.charges.retrieve).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled(); expect(audit.logOnce).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+    }
+
+    it('relit les partiels cumulés acquis avec activation fermée sans changer version, réserve ou reçu', async () => {
+      const id = await seed(); const initial = body(); const subsequent = body({ amountCents: 150 });
+      await request(id, initial); await request(id, subsequent);
+      const before = await read(id);
+      const closed = new OrderRefundsService(first, async () => null,
+        { publish } as unknown as Redis, { pourTenant: async () => capabilities } as never, audit as never);
+      observeOnly();
+      const journal = await closed.journal(String(TENANT), id, ACTOR);
+      expect(journal).toMatchObject({ orderId: id, enabled: false,
+        summary: { refundedCents: 400, pendingRefundCents: 0, remainingCents: 850, status: 'partial' },
+        operations: [
+          { operationId: initial.operationId, state: 'known', providerStatus: 'succeeded', canResume: false },
+          { operationId: subsequent.operationId, state: 'known', providerStatus: 'succeeded', canResume: false },
+        ] });
+      expect(Object.keys(journal).sort()).toEqual(['enabled', 'operations', 'orderId', 'summary']);
+      for (const operation of journal.operations) {
+        expect(Object.keys(operation).sort()).toEqual([
+          'amountCents', 'canResume', 'operationId', 'orderId', 'preparedAt', 'providerStatus', 'reason', 'state',
+        ]);
+      }
+      for (const secret of [ACTOR, ACCOUNT, INTENT, initial.password, 'idempotencyKey', 'metadata', 'paymentFlow', 'refundFlow']) {
+        expect(JSON.stringify(journal)).not.toContain(secret);
+      }
+      expectNoEffects();
+      expect(await read(id)).toEqual(before);
+      expect(provider.createdCount).toBe(2);
+    });
+
+    it('montre une réponse fournisseur perdue sans la résoudre ni relancer et limite la reprise à son auteur', async () => {
+      const id = await seed(); const input = body();
+      provider.hideList = true;
+      provider.hooks.afterCreate = async () => { throw new Error('ACK fournisseur perdu après effet'); };
+      await expect(request(id, input)).rejects.toThrow();
+      expect(provider.createdCount).toBe(1);
+      const before = await read(id);
+      observeOnly();
+      const own = await service().journal(String(TENANT), id, ACTOR);
+      expect(own).toMatchObject({ enabled: true, summary: { refundedCents: 0, pendingRefundCents: 250, remainingCents: 1000 },
+        operations: [{ operationId: input.operationId, state: 'creating', providerStatus: null, canResume: true }] });
+      const other = await service().journal(String(TENANT), id, '507f1f77bcf86cd799439033');
+      expect(other.operations[0]).toMatchObject({ operationId: input.operationId, canResume: false });
+      expectNoEffects();
+      expect(await read(id)).toEqual(before);
+      expect(provider.createdCount).toBe(1);
+    });
+
+    it.each(['prepared', 'expired', 'review_required'] as const)(
+      'projette %s sans écrire une transition ni libérer les centimes réservés', async (phase) => {
+        const input = body(); const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        const id = await seed();
+        await first.updateOne({ _id: id }, { $set: { 'payment.pendingRefundCents': input.amountCents,
+          refundFlow: { version: 1, operations: [{ operationId: input.operationId, amountCents: input.amountCents,
+            reason: input.reason, actorId: ACTOR, environment: 'test', paymentIntentId: INTENT, accountId: ACCOUNT,
+            idempotencyKey: `order-refund:${id}:${input.operationId}`, preparedAt: old,
+            requestStartedAt: phase === 'prepared' ? null : phase === 'expired' ? old : new Date(),
+            state: phase === 'expired' ? 'creating' : phase }] } } }, { runValidators: true });
+        const before = await read(id);
+        observeOnly();
+        const journal = await service().journal(String(TENANT), id, ACTOR);
+        expect(journal).toMatchObject({ enabled: true,
+          summary: { pendingRefundCents: 250, refundedCents: 0, remainingCents: 1000 },
+          operations: [{ operationId: input.operationId, preparedAt: old.toISOString(), providerStatus: null,
+            state: phase === 'prepared' ? 'prepared' : 'review_required', canResume: phase === 'prepared' }] });
+        expectNoEffects();
+        expect(await read(id)).toEqual(before);
+      },
+    );
+
+    it('garde le reçu lisible mais ferme la reprise après changement de mode fournisseur', async () => {
+      const id = await seed(); const input = body(); await request(id, input);
+      const before = await read(id);
+      provider.environment = 'live'; observeOnly();
+      expect(await service().journal(String(TENANT), id, ACTOR)).toMatchObject({ enabled: false,
+        summary: { refundedCents: 250, remainingCents: 1000 },
+        operations: [{ operationId: input.operationId, state: 'known', providerStatus: 'succeeded', canResume: false }] });
+      expectNoEffects();
+      expect(await read(id)).toEqual(before);
+    });
+
+    it('ne lit aucun journal voisin ou POS hors offre online, et ne charge pas le client fournisseur', async () => {
+      const onlineId = await seed(); const posId = await seed({ channel: 'pos', number: 2 });
+      const factory = vi.fn(async () => provider);
+      const journalService = new OrderRefundsService(first, factory,
+        { publish } as unknown as Redis, { pourTenant: async () => capabilities } as never, audit as never);
+      const beforeOnline = await read(onlineId); const beforePos = await read(posId);
+      observeOnly();
+      await expect(journalService.journal('507f1f77bcf86cd799439044', onlineId, ACTOR)).rejects.toThrow('Commande introuvable');
+      capabilities = ['online'];
+      await expect(journalService.journal(String(TENANT), posId, ACTOR)).rejects.toThrow('Commande introuvable');
+      capabilities = ['loyalty'];
+      await expect(journalService.journal(String(TENANT), onlineId, ACTOR)).rejects.toThrow('Commande introuvable');
+      expect(factory).not.toHaveBeenCalled(); expectNoEffects();
+      expect(await read(onlineId)).toEqual(beforeOnline); expect(await read(posId)).toEqual(beforePos);
+    });
+  });
+
   it('rend intention privée, réserve et __v visibles avant le premier create fournisseur', async () => {
     const id = await seed(); const input = body(); const before = await read(id); let observed: StoredOrder | null = null;
     provider.hooks.beforeCreate = async () => { observed = await read(id); throw new Error('Départ fournisseur interrompu.'); };
@@ -598,6 +714,96 @@ integration('remboursements durables sur deux connexions Mongo standalone', () =
     expect(await request(id, input)).toMatchObject({ pendingRefundCents: 1100, refundedCents: 0, remainingCents: 150 });
     await expect(request(id, body(), second)).rejects.toBeInstanceOf(ConflictException);
     expect(provider.createdCount).toBe(1); expect((await read(id))?.payment.pendingRefundCents).toBe(1100);
+  });
+
+  it('journalise un abandon avant départ sans fournisseur et interdit pour toujours son ancien UUID', async () => {
+    const id = await seed(); const input = body();
+    const result = await serviceWithNativeAudit().withdraw(String(TENANT), id, ACTOR, input);
+    expect(result).toMatchObject({ summary: { remainingCents: 1250, pendingRefundCents: 0 },
+      operations: [{ operationId: input.operationId, state: 'withdrawn', providerStatus: null, canResume: false }] });
+    expect(provider.refunds.list).not.toHaveBeenCalled(); expect(provider.refunds.create).not.toHaveBeenCalled();
+    expect((await read(id))!.refundFlow!.operations[0]).toMatchObject({ state: 'withdrawn', requestStartedAt: null });
+    expect((await firstAudit.find({ action: 'order.refund.withdraw' }).lean())).toHaveLength(1);
+    expect(await serviceWithNativeAudit(second, secondAudit).withdraw(String(TENANT), id, ACTOR, input)).toEqual(result);
+    await expect(request(id, input)).rejects.toThrow('abandonnée avant envoi');
+    expect(provider.refunds.list).not.toHaveBeenCalled(); expect(provider.refunds.create).not.toHaveBeenCalled();
+    expect((await firstAudit.find({ action: 'order.refund.withdraw' }).lean())).toHaveLength(1);
+    // The immutable tombstone does not block a deliberate, distinct request.
+    expect(await request(id, body({ operationId: randomUUID() }))).toMatchObject({ refundedCents: 250, remainingCents: 1000 });
+    expect(provider.createdCount).toBe(1);
+  });
+
+  it.each(['actor', 'amount', 'reason'] as const)('ne permet pas de remplacer un abandon par une autre intention : %s', async change => {
+    const id = await seed(); const input = body();
+    await service().withdraw(String(TENANT), id, ACTOR, input);
+    const modified = { ...input, ...(change === 'amount' ? { amountCents: 300 } : {}), ...(change === 'reason' ? { reason: 'Autre intention' } : {}) };
+    await expect(service().withdraw(String(TENANT), id, change === 'actor' ? 'another-owner' : ACTOR, modified)).rejects.toThrow('autre remboursement');
+    expect(provider.createdCount).toBe(0);
+  });
+
+  it('interdit l’abandon après départ même si aucune preuve Stripe n’est encore visible', async () => {
+    const id = await seed(); const input = body();
+    provider.hooks.beforeCreate = async () => { throw new Error('Network unavailable after durable dispatch'); };
+    await expect(request(id, input)).rejects.toThrow();
+    const before = await read(id);
+    await expect(service(second).withdraw(String(TENANT), id, ACTOR, input)).rejects.toThrow('déjà pu être envoyée');
+    expect(await read(id)).toEqual(before); expect(before!.payment.pendingRefundCents).toBe(250);
+  });
+
+  it('refuse de fabriquer une absence fournisseur après un reçu connu ou un doute historique', async () => {
+    const id = await seed(); const input = body();
+    await request(id, input);
+    await expect(service(second).withdraw(String(TENANT), id, ACTOR, input)).rejects.toThrow('déjà pu être envoyée');
+    const historical = await seed({ number: 2, payment: { method: 'online', status: 'paid', stripePaymentIntentId: INTENT,
+      stripeAccountId: ACCOUNT, refundedCents: 250, refunds: [{ id: 're_historical', amountCents: 250, status: 'succeeded', operationId: input.operationId }] } });
+    await expect(service().withdraw(String(TENANT), historical, ACTOR, input)).rejects.toThrow();
+    expect((await read(historical))?.refundFlow).toBeNull();
+  });
+
+  it('un retrait concurrent gagne le CAS avant départ et empêche la continuation retardée d’envoyer', async () => {
+    const id = await seed(); const input = body();
+    const reached = paymentBarrier(), resume = paymentBarrier();
+    let held = false;
+    const proxy = new Proxy(first, { get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== 'findOneAndUpdate') return typeof value === 'function' ? value.bind(target) : value;
+      return (...args: unknown[]) => {
+        const query = Reflect.apply(value, target, args) as Query<unknown, Order>;
+        const execute = query.exec.bind(query);
+        query.exec = async () => {
+          const update = args[1] as { $set?: { refundFlow?: { operations: StoredOperation[] } } };
+          if (!held && update.$set?.refundFlow?.operations.some(op => op.operationId === input.operationId && op.state === 'creating')) {
+            held = true; reached.release(); await resume.promise;
+          }
+          return execute();
+        };
+        return query;
+      };
+    } });
+    const running = paymentOutcome(request(id, input, proxy));
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([reached.promise, new Promise<never>((_resolve, reject) => {
+        deadline = setTimeout(() => reject(new Error('Provider dispatch checkpoint not reached')), 3000);
+      })]);
+      expect((await read(id))!.refundFlow!.operations[0]!.state).toBe('prepared');
+      const withdrawn = await service(second).withdraw(String(TENANT), id, ACTOR, input);
+      expect(withdrawn.summary).toMatchObject({ pendingRefundCents: 0, remainingCents: 1250 });
+      expect(withdrawn.operations[0]!.state).toBe('withdrawn');
+    } finally { clearTimeout(deadline); resume.release(); }
+    expect((await running).ok).toBe(false);
+    expect(provider.refunds.create).not.toHaveBeenCalled();
+    expect((await read(id))!.refundFlow!.operations[0]!.state).toBe('withdrawn');
+  });
+
+  it('relit un retrait réellement commité après perte de l’accusé Mongo sans seconde opération', async () => {
+    const id = await seed(); const input = body();
+    const intercepted = interceptWrites(first, 'lose_ack');
+    const result = await service(intercepted.proxy).withdraw(String(TENANT), id, ACTOR, input);
+    expect(intercepted.injections()).toBe(1);
+    expect(result.operations).toHaveLength(1); expect(result.operations[0]!.state).toBe('withdrawn');
+    expect(await service(second).withdraw(String(TENANT), id, ACTOR, input)).toEqual(result);
+    expect(provider.refunds.create).not.toHaveBeenCalled(); expect(provider.refunds.list).not.toHaveBeenCalled();
   });
 
   it('le journal privé reste absent des lectures ordinaires, de la sérialisation et des événements', async () => {

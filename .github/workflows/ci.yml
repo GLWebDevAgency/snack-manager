@@ -277,6 +277,7 @@ jobs:
           pnpm --filter @sm/api exec vitest run
           src/modules/ordering/order-payment-lifecycle.integration.test.ts
           src/modules/ordering/order-refunds.integration.test.ts
+          src/modules/ordering/order-refund-journal.http.integration.test.ts
           --maxWorkers=1 --no-file-parallelism
 
       - name: Tests MongoDB réels — admission et reprise de commande

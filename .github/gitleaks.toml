@@ -163,3 +163,12 @@ condition = "AND"
 regexTarget = "secret"
 paths = ['''^packages/client-core/src/delivery-assignment\.ts$''']
 regexes = ['''^sm\.delivery-assignment\.v1$''']
+
+# Nom public du stockage des intentions, sans mot de passe ni jeton.
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Identifiant public du journal local des remboursements"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''^packages/client-core/src/order-refund-journal\.ts$''']
+regexes = ['''^sm\.order-refunds\.v1$''']

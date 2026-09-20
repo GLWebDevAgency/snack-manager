@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { OwnerOrderCancelSchema, OrderRefundRequestSchema, type JwtPayload, type OrderRefundRequest, type OwnerOrderCancel } from '@sm/contracts';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
@@ -19,8 +19,15 @@ export class OrderFinanceController {
   ) {}
 
   @Get(':id/refunds')
+  @Header('Cache-Control', 'private, no-store')
   summary(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.refunds.summary(tenantId, id);
+  }
+
+  @Get(':id/refunds/journal')
+  @Header('Cache-Control', 'private, no-store')
+  journal(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() actor: JwtPayload) {
+    return this.refunds.journal(tenantId, id, actor.sub);
   }
 
   @Post(':id/refunds')
@@ -31,6 +38,16 @@ export class OrderFinanceController {
     @Body(zod(OrderRefundRequestSchema)) body: OrderRefundRequest) {
     await this.owner.verify(actor, body.password);
     return this.refunds.request(tenantId, id, actor.sub, body);
+  }
+
+  @Post(':id/refunds/withdraw')
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async withdrawRefund(@TenantId() tenantId: string, @Param('id') id: string, @CurrentUser() actor: JwtPayload,
+    @Body(zod(OrderRefundRequestSchema)) body: OrderRefundRequest) {
+    await this.owner.verify(actor, body.password);
+    return this.refunds.withdraw(tenantId, id, actor.sub, body);
   }
 
   @Post(':id/cancel-owner')

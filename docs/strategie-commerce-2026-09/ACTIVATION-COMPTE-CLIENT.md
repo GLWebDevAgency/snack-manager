@@ -1,5 +1,13 @@
 # Préflight opérateur du compte client
 
+**Contrôle du 20 septembre 2026 :** sur Classfood staging, la configuration
+d'accès compte est valide en mode `production_paid` (la cible reste staging).
+Le navigateur montre un compte existant authentifié, son profil vérifié et une
+carte fidélité liée. Les relevés du 13 septembre indiquant une fermeture sont
+donc historiques. Ce contrôle de continuité ne rejoue pas l'inscription, la
+réception d'un SMS ou la création d'une clé d'accès et ne renouvelle aucune
+attestation tarifaire ou budgétaire. [État et suite du chantier](REPRISE-REMBOURSEMENTS-2026-09-20.md).
+
 ## Compte client et carte : un seul portefeuille
 
 Le compte personnel porte l'identité vérifiée, les clés d'accès et les commandes

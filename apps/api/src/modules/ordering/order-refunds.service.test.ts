@@ -27,6 +27,7 @@ let provider: RefundProof[];
 let stripe: RefundStripeClient;
 let sut: OrderRefundsService;
 let capabilities: string[];
+let refundsEnabled: boolean;
 let publication: ReturnType<typeof vi.fn<(channel: string, message: string) => Promise<number>>>;
 const get = (object: object, path: string): unknown => path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], object);
 const set = (object: object, path: string, value: unknown) => {
@@ -61,6 +62,7 @@ let writes: { filter: Record<string, unknown>; update: Update }[];
 beforeEach(() => {
   row = { __v: 0, _id: ID, tenantId: TENANT, channel: 'online', totals: { total: 1250 }, payment: { method: 'online', status: 'paid', stripePaymentIntentId: 'pi_paid', stripeAccountId: ACCOUNT, refundSyncVersion: 0 } };
   capabilities = ['bo'];
+  refundsEnabled = true;
   provider = [];
   writes = [];
   const model = {
@@ -87,7 +89,55 @@ beforeEach(() => {
   };
   stripe = client;
   publication = vi.fn(async () => 1);
-  sut = new OrderRefundsService(model, async () => stripe, { publish: publication } as unknown as Redis, { pourTenant: async () => capabilities } as never, { logOnce: vi.fn(async () => undefined) } as never);
+  sut = new OrderRefundsService(model, async () => refundsEnabled ? stripe : null, { publish: publication } as unknown as Redis, { pourTenant: async () => capabilities } as never, { logOnce: vi.fn(async () => undefined) } as never);
+});
+
+describe('local refund journal observation', () => {
+  it('reads an acquired receipt with activation closed and Stripe unavailable without any writes', async () => {
+    await sut.request(TENANT, ID, 'owner1', body);
+    refundsEnabled = false;
+    vi.mocked(stripe.refunds.list).mockClear().mockRejectedValue(new Error('Provider down'));
+    vi.mocked(stripe.refunds.create).mockClear(); publication.mockClear(); writes = [];
+    const before = structuredClone(row);
+    const result = await sut.journal(TENANT, ID, 'owner1');
+    expect(result).toMatchObject({ orderId: ID, enabled: false, summary: { refundedCents: 250, remainingCents: 1000 },
+      operations: [{ orderId: ID, operationId: OPERATION, amountCents: 250, reason: body.reason,
+        state: 'known', providerStatus: 'succeeded', canResume: false }] });
+    for (const privateValue of ['actorId', 'owner1', ACCOUNT, 'pi_paid', 'idempotencyKey', body.password, 'metadata']) {
+      expect(JSON.stringify(result)).not.toContain(privateValue);
+    }
+    expect(row).toEqual(before); expect(writes).toEqual([]);
+    expect(stripe.refunds.list).not.toHaveBeenCalled(); expect(stripe.refunds.create).not.toHaveBeenCalled();
+    expect(publication).not.toHaveBeenCalled();
+  });
+  it('shows an unresolved reservation and only allows its author to resume within the initial window', async () => {
+    vi.mocked(stripe.refunds.create).mockRejectedValue(new Error('Response lost'));
+    await expect(sut.request(TENANT, ID, 'owner1', body)).rejects.toThrow();
+    expect(await sut.journal(TENANT, ID, 'owner1')).toMatchObject({ summary: { pendingRefundCents: 250, remainingCents: 1000 },
+      operations: [{ operationId: OPERATION, state: 'creating', providerStatus: null, canResume: true }] });
+    expect((await sut.journal(TENANT, ID, 'other-owner')).operations[0]!.canResume).toBe(false);
+    const before = structuredClone(row);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 60 * 60 * 1000);
+      expect((await sut.journal(TENANT, ID, 'owner1')).operations[0]).toMatchObject({ state: 'review_required', canResume: false });
+      expect(row).toEqual(before);
+    } finally { vi.useRealTimers(); }
+  });
+  it('preserves the tenant and commercial scope and does not query the provider', async () => {
+    await expect(sut.journal('665f0d0a1c2b3d4e5f6a0002', ID, 'owner1')).rejects.toThrow('Commande introuvable');
+    capabilities = [];
+    await expect(sut.journal(TENANT, ID, 'owner1')).rejects.toThrow('Commande introuvable');
+    expect(stripe.refunds.list).not.toHaveBeenCalled(); expect(writes).toEqual([]);
+  });
+  it('does not enable refunds for counter payment or changed provider environment', async () => {
+    row.payment.method = 'counter';
+    expect(await sut.journal(TENANT, ID, 'owner1')).toMatchObject({ enabled: false, summary: { remainingCents: 0 } });
+    row.payment.method = 'online';
+    await sut.request(TENANT, ID, 'owner1', body);
+    stripe.environment = 'live';
+    expect(await sut.journal(TENANT, ID, 'owner1')).toMatchObject({ enabled: false, operations: [{ state: 'known' }] });
+  });
 });
 
 describe('restaurant refunds', () => {

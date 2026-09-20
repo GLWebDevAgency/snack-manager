@@ -1,5 +1,15 @@
 # Suivi unique des demandes — pilote Classfood et vision 2030
 
+**Vérification du 20 septembre 2026 :** la note « Mon compte fermé » est historique.
+Sur Classfood staging, le compte existant authentifié et sa carte liée sont
+accessibles ; l'accès runtime est valide. PR #170 et le journal serveur #173 sont
+déjà intégrés. La [revue séparée](../reviews/PR-170-REPRISE-FIDELITE-2026-09-20.md)
+et la [reprise durable des remboursements](REPRISE-REMBOURSEMENTS-2026-09-20.md)
+précisent le nouveau lot et ses preuves. Restent bien le writer de gains web,
+les compensations automatiques et la consommation liée à une vente. Les états
+datés ci-dessous ne doivent pas annuler ce constat plus récent. Aucun changement
+de production ni nouvel envoi SMS n'est déduit de cette vérification.
+
 **Registre opérationnel actualisé le 10 septembre 2026.** C'est le point d'entrée des demandes du fondateur ; les audits liés restent des photographies datées et les spécifications décrivent les critères de réception. Ne pas réouvrir un sujet sur la seule lecture d'un ancien constat, ni confondre code écrit, fusionné, déployé et recetté.
 
 **Lot du 12 septembre 2026 : [application client commune — commande, compte et fidélité](REPRISE-COMPTE-FIDELITE-2026-09-12.md), [PR #178](https://github.com/GLWebDevAgency/snack-manager/pull/178).** Le web responsive réunit cinq destinations, avec un noyau de navigation réutilisable par Expo, une identité vérifiée unique, une adhésion explicite et les preuves QR conservées. Historique du compte et reçus invités restent distincts. Le menu en pause reste consultable ; les pannes partielles préservent le service sain. Les validations locales comprennent la passe web **2 939 tests**, les autres composants **6 321 tests** et les transactions PostgreSQL du lien **61/61** ; les scénarios finaux et les limites de ces chiffres sont détaillés dans la note. La CI et le SHA servi sont suivis dans la PR ; aucun résultat distant n'est déduit des tests locaux. Les états du 10 septembre ci-dessous sont historiques. Writer de gains web, consommation, compensations et ouverture du pilote restent des lots distincts ; aucune application Expo ni nouvelle dépense fournisseur n'est déclarée par cette refonte.
