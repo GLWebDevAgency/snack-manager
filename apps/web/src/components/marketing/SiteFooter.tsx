@@ -5,7 +5,6 @@ import { Reseaux } from "./Reseaux";
 import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre, type ReseauPublié } from "./content";
 import { LogoMark } from "../brand/Logo";
 import { SmallFillet } from "./icons";
-import { NewsletterForm } from "./NewsletterForm";
 
 /**
  * Pied de page en carte, avec l'onglet-encoche du logo posé sur son bord haut
@@ -29,8 +28,6 @@ import { NewsletterForm } from "./NewsletterForm";
  * site, y compris d'un article de blog : un `#tarifs` écrit ici serait un lien
  * mort partout sauf sur la landing, et muet — pas de 404, pas d'erreur, rien.
  *
- * Le formulaire transmet une demande de confirmation ; seule la validation
- * du lien reçu par e-mail finalise l'inscription auprès du service d'envoi.
  */
 /**
  * Comme `Hero`, ce pied de page est un îlot CLIENT : il reçoit les réseaux au
@@ -63,13 +60,10 @@ export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
           <div className="foot-columns">
             <div className="foot-left">
               <p className="foot-tagline">Simplifier le quotidien du service</p>
-              <NewsletterForm />
               {/*
                * LES RÉSEAUX SONT ICI, ET C'EST L'ENDROIT ÉVIDENT — un pied de
                * page est le seul lieu d'un site où l'on cherche un compte sans
-               * qu'on ait à vous y pousser. Ils sont sous l'inscription à la
-               * liste parce que les deux disent la même chose (« suivez-nous »)
-               * et que l'e-mail est celui des deux qui nous appartient.
+               * qu'on ait à vous y pousser.
                *
                * Tant qu'aucune URL n'est renseignée dans `RESEAUX`, `Reseaux`
                * rend `null` : ni rangée vide, ni titre orphelin.

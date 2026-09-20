@@ -21,6 +21,8 @@ describe('SiteLeadCreateSchema', () => {
     expect(() => SiteLeadCreateSchema.parse({ ...valid, name: 'x'.repeat(121) })).toThrow();
     expect(() => SiteLeadCreateSchema.parse({ ...valid, restaurant: 'x'.repeat(161) })).toThrow();
     expect(() => SiteLeadCreateSchema.parse({ ...valid, message: 'x'.repeat(2_001) })).toThrow();
+    expect(() => SiteLeadCreateSchema.parse({ ...valid, email: `${'a'.repeat(148)}@example.com` })).not.toThrow();
+    expect(() => SiteLeadCreateSchema.parse({ ...valid, email: `${'a'.repeat(149)}@example.com` })).toThrow();
   });
 
   it('refuse un faux téléphone, un créneau inventé et une source contrôlée par le client', () => {
@@ -39,5 +41,13 @@ describe('SiteLeadCreateSchema', () => {
         platforms: false,
       }),
     ).toMatchObject({ restaurant: null, email: null, message: null, platforms: false });
+  });
+
+  it('accepte une référence UUID et un besoin connu sans changer les anciens payloads', () => {
+    const requestId = 'ba59d765-e641-4229-a846-e09f36c7a7a6';
+    expect(SiteLeadCreateSchema.parse({ ...valid, requestId, need: 'menu-tv' }))
+      .toMatchObject({ requestId, need: 'menu-tv' });
+    expect(() => SiteLeadCreateSchema.parse({ ...valid, requestId: 'reference-libre' })).toThrow();
+    expect(() => SiteLeadCreateSchema.parse({ ...valid, need: 'offre-inventee' })).toThrow();
   });
 });

@@ -868,12 +868,33 @@ export type LeadContact = z.infer<typeof LeadContactSchema>;
  * visiteur ne choisit ni l'étape commerciale, ni une séquence, ni une place
  * fondateur. La date de création vient également de Mongo, jamais du client.
  */
+export const SITE_LEAD_NEEDS = {
+  service: 'Organiser le service et la gestion',
+  gestion: 'Choisir l’offre Gestion',
+  boost: 'Choisir l’offre Boost',
+  'menu-papier': 'Refaire mon menu papier',
+  'menu-tv': 'Préparer mes menus TV',
+  'carte-tv': 'Réunir menus papier et TV',
+  'commande-directe': 'Développer la commande directe',
+  fidelite: 'Préparer un pilote fidélité',
+  livraison: 'Préparer ma livraison avec mes livreurs',
+  communication: 'Confier mon site ou ma communication',
+  'etre-conseille': 'Être conseillé sur mon projet',
+} as const;
+export const SiteLeadNeedSchema = z.enum(Object.keys(SITE_LEAD_NEEDS) as [
+  keyof typeof SITE_LEAD_NEEDS, ...Array<keyof typeof SITE_LEAD_NEEDS>,
+]);
+
 export const SiteLeadCreateSchema = z
   .object({
+    // Facultatifs pour les vitrines déjà déployées ; les nouveaux clients
+    // conservent le même UUID tant que les données de la demande ne changent pas.
+    requestId: z.uuid().optional(),
+    need: SiteLeadNeedSchema.nullable().optional(),
     name: z.string().trim().min(2).max(120),
     restaurant: z.string().trim().min(1).max(160).nullable(),
     phone: z.string().trim().max(32).regex(/^[+0-9][0-9\s.\-()]{7,19}$/),
-    email: z.email().max(180).nullable(),
+    email: z.email().max(160).nullable(),
     callbackSlot: z.enum(['matin', 'entre-services', 'apres-21h']),
     message: z.string().trim().max(2_000).nullable(),
     platforms: z.boolean(),
@@ -881,13 +902,18 @@ export const SiteLeadCreateSchema = z
   })
   .strict();
 export type SiteLeadCreate = z.infer<typeof SiteLeadCreateSchema>;
+export type SiteLeadAccepted = { ok: true; stored: true; requestId: string };
+
+// Le message public (2 000 caractères) est conservé intégralement avec ses
+// métadonnées de rappel. Les notes ainsi créées doivent rester éditables.
+export const LEAD_NOTES_MAX_LENGTH = 4_096;
 
 export const LeadCreateSchema = z.object({
   restaurantName: z.string().trim().min(1).max(160),
   contact: LeadContactSchema.default({ name: '', phone: '', email: '' }),
   stage: LeadStageSchema.default('nouveau'),
   sequence: LeadSequenceSchema.nullable().default(null),
-  notes: z.string().trim().max(2_000).default(''),
+  notes: z.string().trim().max(LEAD_NOTES_MAX_LENGTH).default(''),
   founderSeatReserved: z.boolean().default(false),
 });
 export type LeadCreate = z.infer<typeof LeadCreateSchema>;
@@ -912,7 +938,7 @@ export const LeadUpdateSchema = z.object({
   contact: LeadContactUpdateSchema.optional(),
   stage: LeadStageSchema.optional(),
   sequence: LeadSequenceSchema.nullable().optional(),
-  notes: z.string().trim().max(2_000).optional(),
+  notes: z.string().trim().max(LEAD_NOTES_MAX_LENGTH).optional(),
   founderSeatReserved: z.boolean().optional(),
   /** Poser ou remplacer la proposition ; `null` la retire. Datée côté API. */
   proposal: LeadProposalSchema.nullable().optional(),

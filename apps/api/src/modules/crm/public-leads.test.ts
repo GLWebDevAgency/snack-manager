@@ -10,9 +10,10 @@ import { IS_PUBLIC } from '../../common/auth';
 import type { SharedPublicQuota } from '../../common/shared-public-quota';
 import { ContactIngestGuard } from './contact-ingest.guard';
 import { PublicLeadsController } from './public-leads.controller';
-import type { CrmService } from './crm.service';
+import type { ContactIntakeService } from './contact-intake.service';
 
 const BODY = {
+  requestId: 'ba59d765-e641-4229-a846-e09f36c7a7a6',
   name: 'Karim B.',
   restaurant: 'Class Food',
   phone: '+33 6 12 34 56 78',
@@ -37,12 +38,12 @@ function guard(expected?: string) {
 }
 
 function harness(options: { quota?: boolean; quotaError?: Error } = {}) {
-  const createLead = vi.fn().mockResolvedValue({ id: 'lead_1' });
+  const createLead = vi.fn().mockResolvedValue({ ok: true, stored: true, requestId: BODY.requestId });
   const reserve = options.quotaError
     ? vi.fn().mockRejectedValue(options.quotaError)
     : vi.fn().mockResolvedValue(options.quota ?? true);
   const controller = new PublicLeadsController(
-    { createLead } as unknown as CrmService,
+    { create: createLead } as unknown as ContactIntakeService,
     { reserve } as unknown as SharedPublicQuota,
   );
   return { controller, createLead, reserve };
@@ -74,7 +75,7 @@ describe('PublicLeadsController', () => {
   it('transforme le formulaire en lead CRM durable sans donner de droits CRM au visiteur', async () => {
     const { controller, createLead, reserve } = harness();
 
-    await expect(controller.create(BODY)).resolves.toEqual({ ok: true });
+    await expect(controller.create(BODY)).resolves.toEqual({ ok: true, stored: true, requestId: BODY.requestId });
 
     expect(reserve).toHaveBeenCalledWith({
       scope: 'contact-leads',
@@ -83,29 +84,14 @@ describe('PublicLeadsController', () => {
       clientLimit: 30,
       globalLimit: 30,
     });
-    expect(createLead).toHaveBeenCalledWith({
-      restaurantName: 'Class Food',
-      contact: {
-        name: 'Karim B.',
-        phone: '+33 6 12 34 56 78',
-        email: 'karim@example.com',
-      },
-      stage: 'nouveau',
-      sequence: null,
-      founderSeatReserved: false,
-      notes: expect.stringContaining('Deux caisses, gros rush le midi.'),
-    });
-    const saved = createLead.mock.calls[0]?.[0];
-    expect(saved.notes).toContain('Créneau de rappel : entre les services');
-    expect(saved.notes).toContain('Plateformes de livraison : oui');
+    expect(createLead).toHaveBeenCalledWith(BODY);
   });
 
-  it('emploie un libellé neutre quand le restaurant reste à qualifier', async () => {
+  it('transmet aussi les anciennes demandes sans e-mail ni message', async () => {
     const { controller, createLead } = harness();
     await controller.create({ ...BODY, restaurant: null, email: null, message: null });
     expect(createLead.mock.calls[0]?.[0]).toMatchObject({
-      restaurantName: 'Restaurant à qualifier',
-      contact: { email: '' },
+      restaurant: null, email: null, message: null,
     });
   });
 
