@@ -52,7 +52,7 @@ export function MenuInsights() {
             <div className={styles.posterTop}><span>VOTRE CARTE</span><span>02 / PRÉSENTER</span></div>
             <h3>Une place<br />pour la <em>fraîcheur.</em></h3>
             <div className={styles.foodHalo} />
-            <Image className={styles.food} src="/photos/salade-cesar.webp" alt="" width={640} height={640} sizes="(max-width: 700px) 300px, 450px" />
+            <Image className={styles.food} src="/illustrations/food/bowl.svg" unoptimized alt="" width={240} height={165} sizes="(max-width: 700px) 300px, 450px" />
             <div className={styles.posterBottom}><strong>La salade César</strong><span>Votre recette. Votre identité.</span></div>
             <span className={styles.selectionStamp}>MISE EN AVANT<br /><b>À VALIDER<br />AVEC VOUS</b></span>
           </div>

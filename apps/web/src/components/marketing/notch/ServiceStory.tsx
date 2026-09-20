@@ -1,16 +1,16 @@
 "use client";
 
 import { LogoMark } from "../../brand/Logo";
-import { DEMO_APPS } from "../content";
+import { CINEMA_SHOTS, DEMO_APPS } from "../content";
 import { Photo } from "../Photo";
 import { MotionControl, useSceneMotion } from "./Motion";
 import styles from "./service.module.css";
 
 const STEPS = [
-  { short: "La commande", title: "Une commande bien cadrée.", body: "Produits, options et total : la caisse accompagne la prise de commande.", app: DEMO_APPS[0], label: "Caisse · prise de commande", link: "Explorer la caisse" },
-  { short: "La cuisine", title: "Une préparation lisible.", body: "Les tickets et leurs statuts aident l’équipe à suivre ce qui reste à préparer.", app: DEMO_APPS[1], label: "Cuisine · suivi des préparations", link: "Explorer l’écran cuisine" },
-  { short: "La remise", title: "Le bon mode de remise.", body: "Retrait au restaurant ou livraison par votre propre équipe, selon votre organisation.", app: null, label: "Retrait & livraison · parcours illustré", link: "Parler de mon organisation" },
-  { short: "Le suivi", title: "Vous gardez la vue d’ensemble.", body: "Retrouvez les commandes et les ventes dans votre espace gérant.", app: DEMO_APPS[3], label: "Back-office · suivi de l’activité", link: "Explorer le back-office" },
+  { short: "La commande", title: "Une commande bien cadrée.", body: "Produits, options et total : la caisse accompagne la prise de commande.", app: DEMO_APPS[0], shot: CINEMA_SHOTS.pos, label: "Caisse · prise de commande", link: "Explorer la caisse" },
+  { short: "La cuisine", title: "Une préparation lisible.", body: "Les tickets et leurs statuts aident l’équipe à suivre ce qui reste à préparer.", app: DEMO_APPS[1], shot: CINEMA_SHOTS.kds, label: "Cuisine · suivi des préparations", link: "Explorer l’écran cuisine" },
+  { short: "La remise", title: "Le bon mode de remise.", body: "Retrait au restaurant ou livraison par votre propre équipe, selon votre organisation.", app: null, shot: null, label: "Retrait & livraison · parcours illustré", link: "Parler de mon organisation" },
+  { short: "Le suivi", title: "Vous gardez la vue d’ensemble.", body: "Retrouvez les commandes et les ventes dans votre espace gérant.", app: DEMO_APPS[3], shot: CINEMA_SHOTS.bo, label: "Back-office · suivi de l’activité", link: "Explorer le back-office" },
 ] as const;
 
 function Arrow() {
@@ -80,7 +80,7 @@ export function ServiceStory() {
             <div className={styles.displayContent}>
               {STEPS.map((item, index) => (
                 <div className={styles.scene} key={item.short} data-active={step === index} aria-hidden={step !== index}>
-                  {item.app ? <Photo shot={item.app.shot} sizes="(max-width: 700px) 95vw, 850px" /> : <Handoff />}
+                  {item.shot ? <Photo shot={item.shot} sizes="(max-width: 700px) 95vw, 850px" /> : <Handoff />}
                 </div>
               ))}
             </div>

@@ -104,7 +104,7 @@ export const CAISSE_SOMMAIRE: readonly { href: string; label: string }[] = CAISS
  * texte dit déjà. Provenance : `public/photos/libre/PROVENANCE.md`.
  */
 export const CAISSE_SHOTS = {
-  hero: { src: "/shots/dark-20260919/pos.jpg", alt: "" },
+  hero: { src: "/shots/dark-20260920/pos.jpg", alt: "" },
   cta: { src: "/photos/libre/service-sous-lampe.webp", alt: "" },
 } satisfies Record<string, Shot>;
 
