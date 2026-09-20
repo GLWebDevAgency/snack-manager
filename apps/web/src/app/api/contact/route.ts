@@ -1,168 +1,98 @@
 import { randomUUID } from "node:crypto";
+import { SiteLeadCreateSchema } from "@sm/contracts";
 import { NextResponse } from "next/server";
-
-/**
- * POST /api/contact — lead du site vitrine.
- *
- * Chaîne de traitement :
- *   1. validation stricte (le client n'est jamais cru) ;
- *   2. transfert authentifié au guichet d'ingestion de l'API ;
- *   3. succès uniquement après l'accusé d'une écriture MongoDB durable.
- *
- * La limitation qui protège réellement l'écriture est atomique et partagée
- * dans Redis côté API. Next ne donne pas ici de source IP dont la chaîne de
- * confiance soit démontrable : utiliser le premier `X-Forwarded-For` ferait
- * seulement croire à une protection qu'un appelant peut faire tourner.
- */
+import { boundedJson, rejectsOrigin } from "@/lib/public-form-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-const LEADS_PATH = process.env.LEADS_ENDPOINT ?? "/public/leads";
-
-const PHONE_RE = /^[+0-9][0-9\s.\-()]{7,19}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const SLOTS = new Set(["matin", "entre-services", "apres-21h"]);
-
-const MAX = { name: 120, restaurant: 160, phone: 32, email: 180, message: 2000 } as const;
-
-/* ── Validation ────────────────────────────────────────────────────── */
-
-type Lead = {
-  name: string;
-  restaurant: string | null;
-  phone: string;
-  email: string | null;
-  callbackSlot: string;
-  message: string | null;
-  /**
-   * « Vous vendez déjà sur Uber Eats ou Deliveroo ? » — la case à cocher du
-   * formulaire. C'est un signal de qualification, pas une commande : on regarde
-   * les pages du restaurateur avec lui pendant l'appel. Aucun prix, aucune
-   * promesse, aucun délai n'est attaché à ce booléen, ni ici ni dans la page.
-   */
-  platforms: boolean;
-  source: "site-vitrine";
+const unavailableMessage = "Impossible d'enregistrer votre demande pour le moment. Réessayez dans un instant.";
+const fieldErrors: Record<string, string> = {
+  name: "Indiquez votre nom (entre 2 et 120 caractères).",
+  restaurant: "Le nom du restaurant ne doit pas dépasser 160 caractères.",
+  phone: "Numéro de téléphone invalide.",
+  email: "Adresse e-mail invalide.",
+  callbackSlot: "Choisissez un créneau de rappel proposé.",
+  message: "Votre message ne doit pas dépasser 2 000 caractères.",
+  need: "Choisissez un besoin proposé.",
 };
 
-function str(value: unknown, max: number): string {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
+function optionalText(value: unknown): unknown {
+  if (value == null) return null;
+  return typeof value === "string" ? value.trim() || null : value;
 }
 
-function parse(body: unknown): { lead: Lead } | { error: string } {
-  if (typeof body !== "object" || body === null) {
-    return { error: "Requête invalide." };
-  }
-  const b = body as Record<string, unknown>;
-
-  const name = str(b.name, MAX.name);
-  const phone = str(b.phone, MAX.phone);
-  const email = str(b.email, MAX.email);
-  const slot = str(b.callbackSlot, 40);
-
-  if (name.length < 2) return { error: "Indiquez votre nom." };
-  if (!PHONE_RE.test(phone)) return { error: "Numéro de téléphone invalide." };
-  if (email && !EMAIL_RE.test(email)) return { error: "Adresse e-mail invalide." };
-
-  return {
-    lead: {
-      name,
-      restaurant: str(b.restaurant, MAX.restaurant) || null,
-      phone,
-      email: email || null,
-      callbackSlot: SLOTS.has(slot) ? slot : "matin",
-      message: str(b.message, MAX.message) || null,
-      // Une case décochée n'est pas envoyée par le navigateur : tout ce qui
-      // n'est pas strictement `true` vaut « non », y compris un "on" en chaîne
-      // ou un champ absent. Un booléen mal formé ne doit pas faire échouer un
-      // rappel — le nom et le téléphone sont les seuls champs qui le peuvent.
-      platforms: b.platforms === true,
-      source: "site-vitrine",
-    },
-  };
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-/* ── Handler ───────────────────────────────────────────────────────── */
-
+/** Success acknowledges durable storage, never receipt by an email inbox. */
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "Requête invalide." }, { status: 400 });
+  if (rejectsOrigin(request)) return json({ ok: false, error: "Origine de la demande invalide." }, 403);
+  if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    return json({ ok: false, error: "Activez JavaScript pour envoyer le formulaire." }, 415);
+  }
+  const body = await boundedJson(request, 16 * 1024);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ ok: false, error: "Requête invalide ou trop volumineuse." }, 400);
+  }
+  const input = body as Record<string, unknown>;
+  // Pick the public fields explicitly: browser autofill can add unrelated keys.
+  // Never truncate a visitor's message or accept client-chosen CRM state.
+  const parsed = SiteLeadCreateSchema.safeParse({
+    requestId: input.requestId ?? randomUUID(),
+    name: input.name,
+    restaurant: optionalText(input.restaurant),
+    phone: input.phone,
+    email: optionalText(input.email),
+    callbackSlot: input.callbackSlot ?? "matin",
+    need: optionalText(input.need),
+    message: optionalText(input.message),
+    platforms: input.platforms === true,
+    source: "site-vitrine",
+  });
+  if (!parsed.success) {
+    const field = String(parsed.error.issues[0]?.path[0] ?? "");
+    return json({ ok: false, error: fieldErrors[field] ?? "Requête invalide. Rechargez la page et réessayez." }, 400);
   }
 
-  const parsed = parse(body);
-  if ("error" in parsed) {
-    return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
-  }
-
-  const { lead } = parsed;
+  const lead = parsed.data;
   const correlationId = randomUUID();
   const ingestToken = process.env.SM_CONTACT_INGEST_TOKEN?.trim();
-  if (!ingestToken) {
-    logFailure({ correlationId, outcome: "configuration-absente" });
-    return unavailable();
+  const apiUrl = (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL)?.trim().replace(/\/+$/, "");
+  if (!ingestToken || !apiUrl) {
+    logFailure(correlationId, "configuration-absente");
+    return json({ ok: false, error: unavailableMessage }, 503);
   }
-
   try {
-    const res = await fetch(`${API_URL}${LEADS_PATH}`, {
-      method: "POST",
+    const res = await fetch(`${apiUrl}${process.env.LEADS_ENDPOINT ?? "/public/leads"}`, {
+      method: "POST", redirect: "error", cache: "no-store",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ingestToken}`,
-        "X-SM-Correlation-Id": correlationId,
+        Accept: "application/json", "Content-Type": "application/json",
+        Authorization: `Bearer ${ingestToken}`, "X-SM-Correlation-Id": correlationId,
       },
-      body: JSON.stringify(lead),
-      signal: AbortSignal.timeout(8000),
+      body: JSON.stringify(lead), signal: AbortSignal.timeout(8000),
     });
-
-    if (res.ok) return NextResponse.json({ ok: true, stored: true });
-
-    logFailure({ correlationId, outcome: "api-refus", status: res.status });
-    if (res.status === 429) {
-      return NextResponse.json(
-        { ok: false, error: "Trop de demandes ont été reçues. Réessayez dans quelques minutes." },
-        { status: 429 },
-      );
+    if (res.ok) {
+      const ack: unknown = await res.json();
+      if (ack && typeof ack === "object" && "ok" in ack && ack.ok === true
+        && "stored" in ack && ack.stored === true && "requestId" in ack && ack.requestId === lead.requestId) {
+        return json({ ok: true, stored: true, requestId: lead.requestId });
+      }
+      logFailure(correlationId, "accuse-invalide", res.status);
+      return json({ ok: false, error: unavailableMessage }, 502);
     }
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Impossible d'enregistrer votre demande pour le moment. Réessayez dans un instant.",
-      },
-      { status: 502 },
-    );
+    logFailure(correlationId, "api-refus", res.status);
+    if (res.status === 429) return json({ ok: false, error: "Trop de demandes ont été reçues. Réessayez dans quelques minutes." }, 429);
+    if (res.status === 409) return json({ ok: false, error: "Cette référence correspond déjà à une autre demande. Rechargez la page et réessayez." }, 409);
+    return json({ ok: false, error: unavailableMessage }, 502);
   } catch {
-    // Ne jamais recopier `Error.message` : une URL, un SDK ou un proxy peut y
-    // inclure le corps envoyé — donc les coordonnées que l'on protège.
-    logFailure({ correlationId, outcome: "api-indisponible" });
-    return unavailable();
+    // Error messages can include URLs, credentials or the submitted payload.
+    logFailure(correlationId, "api-indisponible");
+    return json({ ok: false, error: unavailableMessage }, 503);
   }
 }
 
-type ContactFailure = {
-  correlationId: string;
-  outcome: "configuration-absente" | "api-refus" | "api-indisponible";
-  status?: number;
-};
-
-/** Cette fonction ne PEUT PAS recevoir un lead : la PII reste hors des logs. */
-function logFailure(event: ContactFailure) {
-  console.warn("[contact] demande non persistée", {
-    correlationId: event.correlationId,
-    outcome: event.outcome,
-    status: event.status ?? null,
-  });
-}
-
-function unavailable() {
-  return NextResponse.json(
-    {
-      ok: false,
-      error: "Impossible d'enregistrer votre demande pour le moment. Réessayez dans un instant.",
-    },
-    { status: 503 },
-  );
+function logFailure(correlationId: string, outcome: "configuration-absente" | "api-refus" | "api-indisponible" | "accuse-invalide", status?: number) {
+  console.warn("[contact] demande sans accusé confirmé", { correlationId, outcome, status: status ?? null });
 }

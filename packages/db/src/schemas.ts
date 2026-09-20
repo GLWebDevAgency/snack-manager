@@ -818,6 +818,39 @@ export type AuditLog = InferSchemaType<typeof AuditLogSchema>;
 
 export const LeadSchema = new Schema(
   {
+    // Guichet public seulement : l'intention d'e-mail et le lead naissent dans
+    // la même écriture Mongo. Le CRM ne modifie jamais ce snapshot d'origine.
+    siteRequestId: { type: String, select: false },
+    siteRequestFingerprint: { type: String, select: false },
+    siteRequest: {
+      type: new Schema({
+        name: { type: String, required: true },
+        restaurant: { type: String, default: null },
+        phone: { type: String, required: true },
+        email: { type: String, default: null },
+        need: { type: String, default: null },
+        callbackSlot: { type: String, required: true },
+        message: { type: String, default: null },
+        platforms: { type: Boolean, required: true },
+      }, { _id: false }),
+      default: null,
+      select: false,
+    },
+    contactNotification: {
+      type: new Schema({
+        state: { type: String, enum: ['pending', 'processing', 'accepted', 'failed'], required: true },
+        attempts: { type: Number, default: 0 },
+        nextAttemptAt: { type: Date, default: null },
+        leaseToken: { type: String, default: null },
+        leaseUntil: { type: Date, default: null },
+        firstAttemptAt: { type: Date, default: null },
+        acceptedAt: { type: Date, default: null },
+        providerMessageId: { type: String, default: null },
+        lastError: { type: String, default: null },
+      }, { _id: false }),
+      default: null,
+      select: false,
+    },
     restaurantName: { type: String, required: true },
     contact: {
       name: { type: String, default: '' },
@@ -877,6 +910,12 @@ export const LeadSchema = new Schema(
   { timestamps: true },
 );
 export type Lead = InferSchemaType<typeof LeadSchema>;
+LeadSchema.index({ siteRequestId: 1 }, {
+  name: 'site_request_id_unique', unique: true,
+  partialFilterExpression: { siteRequestId: { $type: 'string' } },
+});
+LeadSchema.index({ 'contactNotification.state': 1, 'contactNotification.nextAttemptAt': 1 });
+LeadSchema.index({ 'contactNotification.state': 1, 'contactNotification.leaseUntil': 1 });
 
 // ─────────────────────────────────────────────────────────────
 // errorEvents — le journal d'erreurs de la plateforme (exploitation)
