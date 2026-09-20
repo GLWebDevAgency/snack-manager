@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { OrderRefundJournalSchema, type OrderRefundJournal, type OrderRefundOperationView } from '@sm/contracts';
+import { OrderRefundJournalSchema, type OrderRefundJournal, type OrderRefundMutationRequest, type OrderRefundOperationView } from '@sm/contracts';
 import { completeOrderRefundIntent, prepareOrderRefundIntent, readOrderRefundIntent, type OrderRefundIntent } from '@sm/client-core';
 import { api } from '@/lib/api';
 import { fmtEuro } from '@/lib/format';
@@ -132,7 +132,7 @@ export function RefundModal({ order, onClose, onRefunded }: {
     current(run);
     let failure: unknown;
     try {
-      await api.post(`/orders/${order._id}/refunds${withdraw ? '/withdraw' : ''}`,  { operationId: saved.operationId, amountCents: saved.amountCents, reason: saved.reason, password }, { signal: AbortSignal.timeout(45_000) });
+      await api.post(`/orders/${order._id}/refunds${withdraw ? '/withdraw' : ''}`,  { clientProtocolVersion: 1, operationId: saved.operationId, amountCents: saved.amountCents, reason: saved.reason, password } satisfies OrderRefundMutationRequest, { signal: AbortSignal.timeout(45_000) });
     } catch (cause) { failure = cause; }
     finally { if (mounted.current) setPassword(''); }
     current(run);

@@ -63,6 +63,7 @@ beforeAll(async () => {
     if (request.method === 'POST' && [base, base + '/withdraw'].includes(path)) {
       const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = JSON.parse(Buffer.concat(chunks).toString()); posts.push({ path, body });
+      if (body.clientProtocolVersion !== 1) { json({ code: 'REFUND_CLIENT_UPDATE_REQUIRED', message: 'Actualisez cette page avant de demander un remboursement.' }, 409); return; }
       const found = journal.operations.find(entry => entry.operationId === body.operationId);
       const row = found ?? operation({ operationId: body.operationId, amountCents: body.amountCents, reason: body.reason });
       if (!found) journal.operations.push(row);
@@ -96,7 +97,7 @@ beforeEach(async () => {
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
   await page.goto(origin + '/admin/orders');
 });
-afterEach(async () => { held?.(); heldRead?.(); await context.close(); expect(faults).toEqual([]); });
+afterEach(async () => { held?.(); heldRead?.(); await context.close(); expect(faults).toEqual([]); for (const post of posts) expect(post.body.clientProtocolVersion).toBe(1); });
 afterAll(async () => { await browser?.close(); await new Promise<void>(resolve => server?.close(() => resolve())); });
 async function open(target = page) { await target.getByRole('button', { name: 'Ouvrir remboursements', exact: true }).click(); await target.getByRole('button', { name: 'Relire le journal', exact: true }).waitFor(); await expect.poll(() => target.getByRole('button', { name: 'Relire le journal', exact: true }).isEnabled()).toBe(true); }
 async function fill(target = page) { await target.getByLabel('Montant à rembourser (€)').fill('5,00'); await target.getByLabel('Motif', { exact: true }).fill('Produit indisponible'); await target.getByLabel('Votre mot de passe', { exact: true }).fill('local-password-fixture'); }
