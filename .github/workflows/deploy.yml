@@ -692,6 +692,21 @@ jobs:
             || '' }}
         run: |
           set -euo pipefail
+          # Le serveur Next doit joindre l'API réellement exposée dans sa cible.
+          # Le port privé 3001 refuse les connexions depuis le service web ; le
+          # réimposer ici cassait le relais après chaque nouveau déploiement.
+          case "${ENVIRONNEMENT:-}" in
+            staging)
+              contact_api_origin='https://api-staging-a5e8.up.railway.app'
+              ;;
+            production)
+              contact_api_origin='https://api-production-8949.up.railway.app'
+              ;;
+            *)
+              echo "::error title=Environnement du relais web inconnu::Aucune origine API autorisée. Rien n'est publié."
+              exit 1
+              ;;
+          esac
           if ! railway variables --environment "$ENVIRONNEMENT" --service api --skip-deploys \
                --set "SM_CONTACT_INGEST_TOKEN=$CONTACT_INGEST_TOKEN" \
                --set "TURNSTILE_SECRET_KEY=$TURNSTILE_SECRET" \
@@ -703,7 +718,7 @@ jobs:
 
           if ! railway variables --environment "$ENVIRONNEMENT" --service web --skip-deploys \
                --set "SM_CONTACT_INGEST_TOKEN=$CONTACT_INGEST_TOKEN" \
-               --set 'API_URL=http://api.railway.internal:3001' \
+               --set "API_URL=$contact_api_origin" \
                --set "NEXT_PUBLIC_TURNSTILE_SITE_KEY=$TURNSTILE_SITE_KEY" \
                > "$RUNNER_TEMP/variables-web-public.log" 2>&1; then
             echo "::error title=Configuration publique non publiée::service web (sortie masquée). Rien ne part."
