@@ -8,18 +8,12 @@ import {
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
-import { SiteLeadCreateSchema, type SiteLeadCreate } from '@sm/contracts';
+import { SiteLeadCreateSchema, type SiteLeadAccepted, type SiteLeadCreate } from '@sm/contracts';
 import { Public } from '../../common/auth';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { zod } from '../../common/zod.pipe';
 import { ContactIngestGuard } from './contact-ingest.guard';
-import { CrmService } from './crm.service';
-
-const CALLBACK_LABELS: Record<SiteLeadCreate['callbackSlot'], string> = {
-  matin: 'le matin',
-  'entre-services': 'entre les services',
-  'apres-21h': 'après 21 h',
-};
+import { ContactIntakeService } from './contact-intake.service';
 
 /**
  * Guichet d'acquisition séparé du CRM trans-tenant : aucune lecture, aucun
@@ -31,13 +25,13 @@ const CALLBACK_LABELS: Record<SiteLeadCreate['callbackSlot'], string> = {
 @Controller('public/leads')
 export class PublicLeadsController {
   constructor(
-    private readonly crm: CrmService,
+    private readonly intake: ContactIntakeService,
     private readonly quota: SharedPublicQuota,
   ) {}
 
   @Post()
   @HttpCode(201)
-  async create(@Body(zod(SiteLeadCreateSchema)) body: SiteLeadCreate): Promise<{ ok: true }> {
+  async create(@Body(zod(SiteLeadCreateSchema)) body: SiteLeadCreate): Promise<SiteLeadAccepted> {
     let allowed: boolean;
     try {
       allowed = await this.quota.reserve({
@@ -62,29 +56,6 @@ export class PublicLeadsController {
       );
     }
 
-    await this.crm.createLead({
-      restaurantName: body.restaurant ?? 'Restaurant à qualifier',
-      contact: {
-        name: body.name,
-        phone: body.phone,
-        email: body.email ?? '',
-      },
-      stage: 'nouveau',
-      sequence: null,
-      founderSeatReserved: false,
-      notes: leadNotes(body),
-    });
-    return { ok: true };
+    return this.intake.create(body);
   }
-}
-
-function leadNotes(body: SiteLeadCreate): string {
-  return [
-    'Source : formulaire de la vitrine.',
-    `Créneau de rappel : ${CALLBACK_LABELS[body.callbackSlot]}.`,
-    `Plateformes de livraison : ${body.platforms ? 'oui' : 'non'}.`,
-    body.message ? `Besoin exprimé : ${body.message}` : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join('\n');
 }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { BillingController } from './billing.controller';
@@ -20,6 +21,11 @@ import { ContactIngestGuard } from './contact-ingest.guard';
 import { PublicLeadsController } from './public-leads.controller';
 import { PublicNewsletterController } from './public-newsletter.controller';
 import { NewsletterService } from './newsletter.service';
+import { ContactIntakeService } from './contact-intake.service';
+import { ContactNotificationProcessor } from './contact-notification.processor';
+import { CONTACT_MAILER } from '../../infrastructure/contact/contact-mailer';
+import { createContactMailer } from '../../infrastructure/contact/contact-mailer.factory';
+import { configSourceOf } from '../../infrastructure/config-source';
 
 /**
  * Back-office interne Snack Manager (CRM HQ) — pipeline commercial, places
@@ -65,6 +71,13 @@ import { NewsletterService } from './newsletter.service';
     ProductionService,
     ContactIngestGuard,
     NewsletterService,
+    ContactIntakeService,
+    ContactNotificationProcessor,
+    {
+      provide: CONTACT_MAILER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => createContactMailer(configSourceOf(config)),
+    },
   ],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal

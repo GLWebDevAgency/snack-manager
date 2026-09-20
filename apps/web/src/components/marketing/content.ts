@@ -2071,7 +2071,7 @@ export const CALLBACK_SLOTS = [
  * qui remplace la redondance supprimée.
  */
 export const CONTACT_POINTS = [
-  "On vous rappelle sous 24 h ouvrées",
+  "Un échange sur votre projet et vos priorités",
   "Une démonstration adaptée à votre besoin",
   "Un devis qui sépare logiciel, création et frais externes",
 ] as const;
