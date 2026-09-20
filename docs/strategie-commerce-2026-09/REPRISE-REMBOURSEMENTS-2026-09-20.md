@@ -45,12 +45,23 @@ pas sur une clé fournisseur réutilisée indéfiniment.
 
 ## Déploiement et limites
 
+Un onglet du back-office peut conserver l'ancien JavaScript après le déploiement.
+Les deux routes POST exigent donc le contrat de transport
+`clientProtocolVersion: 1`, sans valeur implicite. Une version absente ou différente
+renvoie `409 REFUND_CLIENT_UPDATE_REQUIRED` avec une demande d'actualisation,
+avant la réauthentification et tout appel financier. La pipe valide ensuite
+le corps strict et retire ce marqueur avant le service métier. Ce marqueur
+établit la compatibilité du client ; il ne remplace ni son journal durable,
+ni l'authentification, ni les contrôles serveur d'idempotence.
+
 `withdrawn` fait évoluer le protocole : un binaire de PR #173 comprend le journal
 initial mais ne reconnaît pas ce nouvel état terminal. Aucun ancien writer ne
 doit rester actif après le premier retrait. Garder le drapeau fermé pendant la
 bascule, retirer et drainer les anciennes instances, puis ouvrir uniquement en
 staging. Après la première écriture, rester sur un binaire compatible ; fermer
 le drapeau et corriger en avant. Ne supprimer aucun reçu pour autoriser un rollback.
+La révision initiale de PR #196 a été déployée avec le drapeau fermé : l'ouverture
+attend également cette barrière contre les anciens onglets.
 
 Une opération déjà partie dont la preuve demeure incertaine exige toujours un
 rapprochement. La limite de 128 opérations conserve les preuves au lieu de
@@ -78,14 +89,14 @@ Stripe de test exécuté en staging.
   10 ignorés. API globale : 4 079 tests, 886 ignorés faute de leurs environnements
   dédiés ; ces ignorés ne constituent pas une recette distante.
 - Mongo natif dédié : 66 scénarios de remboursement, auxquels s'ajoutent
-  8 tests indépendants de portée des reçus. Perte de réponse, retrait concurrent
+  19 tests indépendants de portée des reçus. Perte de réponse, retrait concurrent
   au départ fournisseur, audit perdu, retrait répété, reprise tardive interdite
   et nouvelle demande volontaire après retrait sont exercés.
 - Frontière d'autorisation et HTTP local Nest/JWT/Mongo : 40 tests, dont la
   réauthentification réelle Argon2, les rôles, le tenant, les droits d'offre,
   la révocation de session et la lecture sans fournisseur. Le fournisseur est
   simulé dans ces tests ; aucun argent réel n'est engagé.
-- Interface : 44 tests ciblés, dont 23 dans Chromium avec le composant réel,
+- Interface : 46 tests ciblés, dont 25 dans Chromium avec le composant réel,
   localStorage et les verrous du navigateur. Fermeture, rechargement, réponse
   perdue, bascule de session et concurrence entre onglets sont couverts.
   Captures et géométrie vérifiées à 320, 390, 820 et 1 440 px. Les réponses HTTP

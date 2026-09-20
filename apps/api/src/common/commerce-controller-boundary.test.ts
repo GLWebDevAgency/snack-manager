@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import type { ExecutionContext } from '@nestjs/common';
-import { HEADERS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { HEADERS_METADATA, METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RequestMethod } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { JwtPayload } from '@sm/contracts';
@@ -14,6 +14,7 @@ import { EngageController } from '../modules/engage/engage.controller';
 import { OrderFinanceController } from '../modules/orders/order-finance.controller';
 import { TenantsController } from '../modules/tenants/tenants.controller';
 import { AuthGuard } from './auth';
+import { OrderRefundMutationPipe } from '../modules/orders/order-refund-mutation.pipe';
 
 type ControllerType = { prototype: object };
 function context(controller: ControllerType, method: string, authenticated: boolean): ExecutionContext {
@@ -108,4 +109,31 @@ describe('commercial guard on real mixed controllers', () => {
     expect(owner.verify).not.toHaveBeenCalled(); expect(refunds.request).not.toHaveBeenCalled();
     expect(refunds.summary).not.toHaveBeenCalled();
   });
+  it.each(['refund', 'withdrawRefund'] as const)(
+    '%s attache la garde transport et transmet le corps métier sans version après réauthentification', async (action) => {
+      const metadata = Reflect.getMetadata(ROUTE_ARGS_METADATA, OrderFinanceController, action) as
+        Record<string, { pipes?: unknown[] }>;
+      const pipes = Object.values(metadata).flatMap(argument => argument.pipes ?? []);
+      const pipe = pipes.find(value => value instanceof OrderRefundMutationPipe);
+      expect(pipe).toBeInstanceOf(OrderRefundMutationPipe);
+      if (!(pipe instanceof OrderRefundMutationPipe)) throw new Error('Garde protocole absente de la route financière.');
+      const business = { operationId: '11111111-1111-4111-8111-111111111111', amountCents: 100,
+        reason: 'Produit indisponible', password: 'fixture-owner-password' };
+      const transformed = pipe.transform({ ...business, clientProtocolVersion: 1 });
+      expect(transformed).toEqual(business);
+      const result = { receipt: 'fixture-result' };
+      const refunds = { request: vi.fn(async () => result), withdraw: vi.fn(async () => result) };
+      const owner = { verify: vi.fn(async () => undefined) };
+      const controller = new OrderFinanceController(refunds as never, {} as never, owner as never);
+      const actor = { sub: 'owner', tenantId: 'tenant', role: 'owner', kind: 'user' } as JwtPayload;
+      expect(await controller[action]('tenant', 'order-id', actor, transformed)).toBe(result);
+      expect(owner.verify).toHaveBeenCalledExactlyOnceWith(actor, business.password);
+      const method = action === 'refund' ? refunds.request : refunds.withdraw;
+      const unused = action === 'refund' ? refunds.withdraw : refunds.request;
+      expect(method).toHaveBeenCalledExactlyOnceWith('tenant', 'order-id', 'owner', business);
+      expect(owner.verify.mock.invocationCallOrder[0]).toBeLessThan(method.mock.invocationCallOrder[0]!);
+      expect(unused).not.toHaveBeenCalled();
+    },
+  );
+
 });

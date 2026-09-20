@@ -12,6 +12,14 @@ export const OrderRefundRequestSchema = OwnerOrderCancelSchema.extend({
 }).strict();
 export type OrderRefundRequest = z.infer<typeof OrderRefundRequestSchema>;
 
+/** HTTP compatibility boundary: old tabs cannot initiate financial mutations
+ * without the durable client protocol. This is not an authorization proof and
+ * is stripped before the immutable business request reaches the service. */
+export const OrderRefundMutationRequestSchema = OrderRefundRequestSchema.extend({
+  clientProtocolVersion: z.literal(1),
+}).strict();
+export type OrderRefundMutationRequest = z.infer<typeof OrderRefundMutationRequestSchema>;
+
 export type OrderRefundSummary = {
   refundedCents: number;
   pendingRefundCents: number;

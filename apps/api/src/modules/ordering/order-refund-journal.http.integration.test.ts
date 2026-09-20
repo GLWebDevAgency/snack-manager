@@ -5,7 +5,7 @@ import { Module, type INestApplication } from '@nestjs/common';
 import { APP_GUARD, NestFactory, Reflector } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { getModelToken } from '@nestjs/mongoose';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorageService, getStorageToken } from '@nestjs/throttler';
 import * as argon2 from 'argon2';
 import mongoose, { Types, type Connection } from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,6 +81,10 @@ describe('cible de recette HTTP du journal de remboursement', () => {
   let origin: string;
   let jwt: JwtService;
   let passwordHash: string;
+  let password: string;
+  let reauthentication: OwnerReauthentication;
+  let expectedAuditReceipts = 0;
+  let expectedPublishes = 0;
   let orderId: string;
   let operationId: string;
   let tokens: { owner: string; manager: string; foreign: string; staff: string };
@@ -117,7 +121,8 @@ describe('cible de recette HTTP du journal de remboursement', () => {
     await db.db!.collection('_test_run').insertOne({ runId: RUN_ID }); ownsDatabase = true;
     models = fixtureModels(db);
     for (const model of Object.values(models)) { await model.createCollection(); await model.createIndexes(); }
-    passwordHash = await argon2.hash(randomBytes(24).toString('base64url'));
+    password = randomBytes(24).toString('base64url');
+    passwordHash = await argon2.hash(password);
 
     // Vitest/esbuild ne produit pas design:paramtypes ; on restaure uniquement
     // l’injection des vrais constructeurs, sans remplacer les gardes.
@@ -151,10 +156,16 @@ describe('cible de recette HTTP du journal de remboursement', () => {
     await app.listen(0, '127.0.0.1');
     origin = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
     jwt = app.get(JwtService);
+    reauthentication = app.get(OwnerReauthentication);
+    vi.spyOn(reauthentication, 'verify'); // Observation only: the real Argon2 path still runs.
   }, 15_000);
 
   beforeEach(async () => {
     await assertOwnDatabase();
+    // Each scenario owns a fresh quota window; keep the real 5/minute guard.
+    const throttles = app!.get<ThrottlerStorageService>(getStorageToken());
+    throttles.onApplicationShutdown(); throttles.storage.clear();
+    expectedAuditReceipts = 0; expectedPublishes = 0;
     await models.Tenant.deleteMany({});
     await models.User.deleteMany({});
     await models.Staff.deleteMany({});
@@ -205,11 +216,11 @@ describe('cible de recette HTTP du journal de remboursement', () => {
   afterEach(() => {
     expect(provider.refunds.list).not.toHaveBeenCalled(); expect(provider.refunds.create).not.toHaveBeenCalled();
     expect(provider.charges.retrieve).not.toHaveBeenCalled();
-    expect(audit.log).not.toHaveBeenCalled(); expect(audit.logOnce).not.toHaveBeenCalled();
-    expect(redis.publish).not.toHaveBeenCalled(); expect(unusedOrders.cancelAsOwner).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled(); expect(audit.logOnce).toHaveBeenCalledTimes(expectedAuditReceipts);
+    expect(redis.publish).toHaveBeenCalledTimes(expectedPublishes); expect(unusedOrders.cancelAsOwner).not.toHaveBeenCalled();
   });
   afterAll(async () => {
-    try { await app?.close(); }
+    try { await app?.close(); vi.restoreAllMocks(); }
     finally {
       if (db) {
         try { if (ownsDatabase) { await assertOwnDatabase(); await db.dropDatabase(); } }
@@ -284,10 +295,60 @@ describe('cible de recette HTTP du journal de remboursement', () => {
   it.each(['refunds', 'refunds/withdraw'])('POST %s refuse le mauvais mot de passe avant intention, fournisseur ou mutation', async (path) => {
     const before = await readOrder(); commands = [];
     const response = await http('POST', `/orders/${orderId}/${path}`, tokens.owner,
-      { operationId: randomUUID(), amountCents: 100, reason: 'Seconde demande de recette', password: 'wrong-fixture-password' });
+      { clientProtocolVersion: 1, operationId: randomUUID(), amountCents: 100, reason: 'Seconde demande de recette', password: 'wrong-fixture-password' });
     expect(response.status).toBe(401);
     expect(response.body).toMatchObject({ message: 'Mot de passe incorrect.' });
+    expect(reauthentication.verify).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sub: OWNER }), 'wrong-fixture-password');
     expectReadOnlyCommands(); expect(clientFactory).not.toHaveBeenCalled();
     expect(await readOrder()).toEqual(before);
   });
+  it.each(['refunds', 'refunds/withdraw'].flatMap(path => [undefined, 0, '1', 2].map(version => ({ path, version }))))(
+    'POST $path refuse le protocole $version avant réauthentification et tout effet', async ({ path, version }) => {
+      const before = await readOrder(); commands = [];
+      const body = { ...(version === undefined ? {} : { clientProtocolVersion: version }),
+        operationId: randomUUID(), amountCents: 100, reason: 'Ancien onglet de recette', password };
+      const response = await http('POST', `/orders/${orderId}/${path}`, tokens.owner, body);
+      expect(response.status).toBe(409);
+      expect(response.body).toMatchObject({ code: 'REFUND_CLIENT_UPDATE_REQUIRED',
+        message: 'Actualisez cette page avant de demander un remboursement.' });
+      expect(reauthentication.verify).not.toHaveBeenCalled();
+      expect(clientFactory).not.toHaveBeenCalled(); expectReadOnlyCommands();
+      expect(await readOrder()).toEqual(before);
+    },
+  );
+
+  it('version 1 retire avant envoi, rejoue le même retrait et refuse ensuite le même POST de remboursement', async () => {
+    expectedAuditReceipts = 2; expectedPublishes = 1;
+    const before = await readOrder();
+    const withdrawnId = randomUUID();
+    const body = { clientProtocolVersion: 1, operationId: withdrawnId, amountCents: 100,
+      reason: 'Abandon avant envoi de recette', password };
+    const withdrawn = await http('POST', `/orders/${orderId}/refunds/withdraw`, tokens.owner, body);
+    expect(withdrawn.status).toBe(200);
+    const receipt = OrderRefundJournalSchema.parse(withdrawn.body);
+    expect(receipt.summary).toMatchObject({ refundedCents: 250, pendingRefundCents: 0, remainingCents: 1000 });
+    expect(receipt.operations).toHaveLength(2);
+    expect(receipt.operations.find(operation => operation.operationId === withdrawnId))
+      .toMatchObject({ state: 'withdrawn', canResume: false, amountCents: 100, providerStatus: null });
+    const afterWithdrawal = await readOrder();
+    expect(afterWithdrawal?.payment).toMatchObject({ status: 'paid', refundedCents: 250, pendingRefundCents: 0 });
+    expect(afterWithdrawal?.payment.refunds).toEqual(before?.payment.refunds);
+    expect(afterWithdrawal?.refundFlow?.operations.find(operation => operation.operationId === withdrawnId))
+      .toMatchObject({ state: 'withdrawn', requestStartedAt: null });
+    expect(JSON.stringify(afterWithdrawal)).not.toContain('clientProtocolVersion');
+    expect(audit.logOnce).toHaveBeenCalledWith(expect.objectContaining({ action: 'order.refund.withdraw',
+      tenantId: TENANT, targetId: orderId, meta: expect.objectContaining({ operationId: withdrawnId, amountCents: 100 }) }), withdrawnId);
+    commands = [];
+    const replay = await http('POST', `/orders/${orderId}/refunds/withdraw`, tokens.owner, body);
+    expect(replay.status).toBe(200); expect(replay.body).toEqual(withdrawn.body);
+    expectReadOnlyCommands(); expect(await readOrder()).toEqual(afterWithdrawal);
+    commands = []; clientFactory.mockClear();
+    const delayed = await http('POST', `/orders/${orderId}/refunds`, tokens.owner, body);
+    expect(delayed.status).toBe(409);
+    expect(delayed.body).toMatchObject({ message: 'Cette demande a été abandonnée avant envoi. Elle ne peut pas être réutilisée.' });
+    expectReadOnlyCommands(); expect(clientFactory).not.toHaveBeenCalled();
+    expect(await readOrder()).toEqual(afterWithdrawal);
+    expect(reauthentication.verify).toHaveBeenCalledTimes(3);
+  });
+
 });
