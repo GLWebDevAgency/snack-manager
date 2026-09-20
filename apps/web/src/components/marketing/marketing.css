@@ -4606,15 +4606,38 @@ html:has(.mk) {
   flex-direction: column;
   gap: 14px;
 }
+.mk .ct-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.mk .ct-fields:disabled input,
+.mk .ct-fields:disabled select,
+.mk .ct-fields:disabled textarea {
+  cursor: wait;
+  opacity: .7;
+}
+.mk .ct-required,
+.mk .ct-help {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #b7b4b0;
+  margin: 0;
+}
 .mk .ct-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
 }
 .mk .ct-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 .mk .ct-field label {
   font-size: 12.5px;
@@ -4661,6 +4684,7 @@ html:has(.mk) {
 .mk .ct-field select {
   appearance: none;
   -webkit-appearance: none;
+  padding-right: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath d='M3 6l5 5 5-5' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
@@ -4706,6 +4730,12 @@ html:has(.mk) {
   font-size: 14px;
   color: var(--gray);
 }
+.mk .ct-reference {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #b7b4b0;
+}
+.mk .ct-reference span { display: block; overflow-wrap: anywhere; }
 .mk .ct-hp {
   position: absolute;
   width: 1px;
