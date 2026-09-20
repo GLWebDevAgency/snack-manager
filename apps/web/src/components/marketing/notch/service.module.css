@@ -34,9 +34,9 @@
 :global(.mk) .displayBar > svg { color: #c6b382; }
 :global(.mk) .displayIndex { margin-left: auto; color: #dac8a4; font-variant-numeric: tabular-nums; }
 :global(.mk) .displayIndex > span { color: #939d87; }
-:global(.mk) .displayContent { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border: 1px solid #ffffff0e; border-radius: 5px; background: #171e13; }
-:global(.mk) .scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: translateY(9px) scale(.99); transition: opacity .55s, transform .75s, visibility .55s; }
-:global(.mk) .scene[data-active="true"] { visibility: visible; opacity: 1; transform: none; }
+:global(.mk) .displayContent { position: relative; overflow: hidden; aspect-ratio: 16 / 9; box-shadow: inset 0 0 0 1px #ffffff0e; border-radius: 5px; background: #171e13; }
+:global(.mk) .scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .55s, visibility .55s; }
+:global(.mk) .scene[data-active="true"] { visibility: visible; opacity: 1; }
 :global(.mk) .display .displayContent .scene img { object-fit: contain; }
 :global(.mk) .displayCaption { display: flex; justify-content: space-between; gap: 10px; padding: 9px 5px 3px; color: #a8b19c; font-size: 8px; letter-spacing: .01em; }
 :global(.mk) .timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0 34px 25px; }
@@ -136,8 +136,6 @@
   :global(.mk) .bottomline a { font-size: 12px; }
 }
 @media (max-width: 480px) {
-  :global(.mk) .displayContent { aspect-ratio: 16 / 11; }
-  :global(.mk) .display .displayContent .scene img { object-fit: contain; }
   :global(.mk) .displayCaption { gap: 6px; font-size: 6px; }
   :global(.mk) .timeline button { flex-direction: column; align-items: flex-start; gap: 6px; min-height: 63px; }
   :global(.mk) .timelineNumber { font-size: 9px; }
@@ -146,17 +144,17 @@
   :global(.mk) .explanations h3 { font-size: 19px; }
   :global(.mk) .explanations p { font-size: 12px; }
   :global(.mk) .explanations a { font-size: 9px; gap: 6px; }
-  :global(.mk) .handoff { padding: 11px 10px 10px; }
+  :global(.mk) .handoff { padding: 8px 10px; }
   :global(.mk) .handoffOrigin { gap: 2px 7px; }
   :global(.mk) .handoffOrigin > span { font-size: 7px; }
   :global(.mk) .handoffOrigin > strong { font-size: 10px; }
   :global(.mk) .handoffOrigin > svg { width: 23px; height: 23px; }
-  :global(.mk) .handoffLines { height: 23px; }
-  :global(.mk) .handoffLines > i { height: 15px; top: 8px; }
-  :global(.mk) .handoffLines > span { height: 8px; }
+  :global(.mk) .handoffLines { height: 13px; }
+  :global(.mk) .handoffLines > i { height: 8px; top: 5px; }
+  :global(.mk) .handoffLines > span { height: 5px; }
   :global(.mk) .handoffRoutes { width: 85%; gap: 12px; }
   :global(.mk) .routeCard { padding: 6px; border-radius: 6px; }
-  :global(.mk) .routePicture { padding-bottom: 3px; }
+  :global(.mk) .routePicture { display: none; }
   :global(.mk) .routePicture > svg { max-height: 44px; }
   :global(.mk) .routePhone { width: 29px; height: 45px; border-radius: 5px; }
   :global(.mk) .routePhone > span { left: 8px; right: 8px; height: 3px; }

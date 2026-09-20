@@ -2,12 +2,12 @@
 
 import type { CSSProperties } from "react";
 import { LogoMark } from "../../brand/Logo";
-import { DEMO_APPS } from "../content";
+import { CINEMA_SHOTS, DEMO_APPS } from "../content";
 import { Photo } from "../Photo";
 import { MotionControl, useSceneMotion } from "./Motion";
 import styles from "./intro.module.css";
 
-const HERO_APPS = [DEMO_APPS[0], DEMO_APPS[1], DEMO_APPS[3]];
+const HERO_SHOTS = [CINEMA_SHOTS.pos, CINEMA_SHOTS.kds, CINEMA_SHOTS.bo];
 const HERO_LABELS = ["La caisse", "La cuisine", "La vue d’ensemble"];
 
 function Arrow({ diagonal = false }: { diagonal?: boolean }) {
@@ -20,7 +20,7 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
 
 /** The screenshots are real product captures; the composition is editorial. */
 export function LandingIntro() {
-  const { ref, step, select, playing, reduced } = useSceneMotion({ count: HERO_APPS.length, intervalMs: 6500 });
+  const { ref, step, select, playing, reduced } = useSceneMotion({ count: HERO_SHOTS.length, intervalMs: 6500 });
 
   return (
     <section id="hero" className={styles.hero} aria-labelledby="landing-title">
@@ -48,7 +48,7 @@ export function LandingIntro() {
           <div className={styles.orbit} aria-hidden="true" />
           <div className={styles.rearCard} aria-hidden="true">
             <span className={styles.rearLabel}><LogoMark size={18} /> Votre carte, vos écrans</span>
-            <Photo shot={DEMO_APPS[5].shot} decorative />
+            <div className={styles.rearScreen}><Photo shot={DEMO_APPS[5].shot} decorative /></div>
           </div>
           <div className={styles.monitor}>
             <div className={styles.monitorBar}>
@@ -57,16 +57,16 @@ export function LandingIntro() {
               <LogoMark size={18} />
             </div>
             <div className={styles.screen}>
-              {HERO_APPS.map((app, index) => (
-                <div className={styles.slide} key={app.id} data-active={step === index} aria-hidden={step !== index}>
-                  <Photo shot={app.shot} eager={index === 0} sizes="(max-width: 700px) 95vw, 900px" />
+              {HERO_SHOTS.map((shot, index) => (
+                <div className={styles.slide} key={shot.src} data-active={step === index} aria-hidden={step !== index}>
+                  <Photo shot={shot} eager={index === 0} sizes="(max-width: 700px) 95vw, 900px" />
                 </div>
               ))}
             </div>
           </div>
           <div className={styles.phone}>
             <span className={styles.phoneNotch} aria-hidden="true" />
-            <Photo shot={DEMO_APPS[2].shot} sizes="(max-width: 700px) 110px, 190px" />
+            <div className={styles.phoneScreen}><Photo shot={DEMO_APPS[2].shot} sizes="(max-width: 700px) 110px, 190px" /></div>
             <span className={styles.phoneLabel}>Côté client</span>
           </div>
           <div className={styles.caption}>

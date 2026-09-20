@@ -1,0 +1,123 @@
+{
+  "pos.jpg": {
+    "source": "https://pos-staging-7f92.up.railway.app/?demo=1",
+    "capturedAt": "2026-09-20T03:18:30.360Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1280,
+    "height": 800,
+    "capture": "Full app viewport verified; no resizing or content crop",
+    "bytes": 95971,
+    "sha256": "ccbe1a63e533f56e6cbc4033e42bf24cf5904ef8920d691fb21f79e4af986573"
+  },
+  "pos-cinema.jpg": {
+    "source": "https://pos-staging-7f92.up.railway.app/?demo=1",
+    "capturedAt": "2026-09-20T03:18:30.667Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1600,
+    "height": 900,
+    "capture": "Full app viewport verified; no resizing or content crop",
+    "bytes": 123194,
+    "sha256": "10f26a9e9b0003b8fcdac958ece7134bf18e6cd02fc06a05e94c8d565e7bcb1a"
+  },
+  "kds.jpg": {
+    "source": "https://kds-staging-90da.up.railway.app/?demo=1",
+    "capturedAt": "2026-09-20T03:18:59.883Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1920,
+    "height": 1080,
+    "capture": "Full app viewport verified; no resizing or content crop",
+    "bytes": 142247,
+    "sha256": "412f5f47a2e897bf510ed883cab110222dc9357e1b8ee473408b7b574c5a0bc4"
+  },
+  "backoffice.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/dashboard?demo=1",
+    "capturedAt": "2026-09-20T03:31:09.357Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1440,
+    "height": 900,
+    "capture": "Direct browser screenshot; full viewport without resizing or content crop",
+    "bytes": 111329,
+    "sha256": "02785cb97610838b92d3a8949504b7c90ea7f0afd06f728e86c14518ce108ae1"
+  },
+  "backoffice-cinema.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/dashboard?demo=1",
+    "capturedAt": "2026-09-20T03:26:19.293Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1600,
+    "height": 900,
+    "capture": "Full app viewport verified, no resizing or content crop",
+    "bytes": 114930,
+    "sha256": "326c8be893ea4df94f76d22a7c93e8ca79a9881bd8c396065028b04513729c38"
+  },
+  "menu.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/menu?demo=1",
+    "capturedAt": "2026-09-20T03:32:50.370Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1440,
+    "height": 900,
+    "capture": "Direct browser screenshot; full viewport without resizing or content crop",
+    "bytes": 119835,
+    "sha256": "7c4a23675fa0d86727ba0472a391918b9053f7891e95b9a8b7008109d6c59d5d"
+  },
+  "fidelite.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/fidelite?demo=1",
+    "capturedAt": "2026-09-20T03:26:57.861Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1440,
+    "height": 900,
+    "capture": "Full app viewport verified, no resizing or content crop",
+    "bytes": 87060,
+    "sha256": "d8e5eb9e561f84c1bcfa24ccd2d8a1da2049b38f0964d90c591bf6aa738313aa"
+  },
+  "tv-studio.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/screens?demo=1",
+    "capturedAt": "2026-09-20T03:33:03.554Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 1440,
+    "height": 900,
+    "capture": "Direct browser screenshot; full viewport without resizing or content crop",
+    "bytes": 105334,
+    "sha256": "c4372e517d085964e2fa492fb85cf4e0229480c44118f610348d8011a6bb850f"
+  },
+  "commande.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/r/demo?demo=1",
+    "capturedAt": "2026-09-20T03:23:21.023Z",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "width": 390,
+    "height": 844,
+    "capture": "Full app viewport verified, no resizing or content crop",
+    "bytes": 49005,
+    "sha256": "a9d7314552e1f6ec44c1f32dd960d6e05869f7644878e0ab52cf4c8eef6143c8"
+  },
+  "livreur.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/livreur",
+    "capturedAt": "2026-09-20T03:23:49.729Z",
+    "theme": "dark",
+    "data": "public invitation access screen; no delivery mission shown",
+    "width": 390,
+    "height": 844,
+    "capture": "Full app viewport verified, no resizing or content crop",
+    "bytes": 35794,
+    "sha256": "25d516bec6a93fafce4b9dcb8553698ddf91fa2c658658b0cfca977e066400c5"
+  },
+  "board.jpg": {
+    "source": "https://web-staging-6f5f.up.railway.app/admin/screens?demo=1",
+    "capturedAt": "2026-09-19",
+    "theme": "dark",
+    "data": "fictitious demo data",
+    "bytes": 25459,
+    "width": 642,
+    "height": 361,
+    "sha256": "a495a805c57a8b2b6f4b023862d7e8b555f13f8f7bb10daf1bd3119bb0d51821",
+    "note": "Existing TV preview retained; only application viewports recaptured on 2026-09-20."
+  }
+}

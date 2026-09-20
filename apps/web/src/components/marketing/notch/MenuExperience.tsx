@@ -34,7 +34,7 @@ function FoldedMenu() {
       <div className={`${styles.leaf} ${styles.rightLeaf}`}>
         <span className={styles.paperKicker}>L’ENVIE DU MOMENT</span>
         <h3>Simplement<br /><em>généreux.</em></h3>
-        <div className={styles.paperFood}><Image src="/photos/smash-burger.webp" alt="" width={335} height={298} sizes="(max-width: 600px) 130px, 230px" /></div>
+        <div className={styles.paperFood}><Image src="/illustrations/food/smash-burger.svg" unoptimized alt="" width={240} height={165} sizes="(max-width: 600px) 130px, 230px" /></div>
         <p>Une belle recette.<br />Une place de choix.</p>
         <span className={styles.paperFoot}>Sur place · à emporter</span>
       </div>
@@ -49,13 +49,13 @@ function TelevisionMenu() {
         <div className={`${styles.tvSlide} ${styles.tvSlideOne}`}>
           <div className={styles.tvCopy}><span>LA CARTE / VOTRE RESTAURANT</span><strong>L’envie<br />du <em>moment.</em></strong><p>Le burger signature</p><b>À savourer, tout simplement.</b></div>
           <div className={styles.tvHalo} />
-          <Image className={styles.tvFood} src="/photos/smash-burger.webp" alt="" width={335} height={298} sizes="(max-width: 600px) 220px, 400px" />
+          <Image className={styles.tvFood} src="/illustrations/food/smash-burger.svg" unoptimized alt="" width={240} height={165} sizes="(max-width: 600px) 220px, 400px" />
           <span className={styles.compositionNumber}>01 / 02</span>
         </div>
         <div className={`${styles.tvSlide} ${styles.tvSlideTwo}`}>
           <div className={styles.tvCopy}><span>LA CARTE / VOTRE RESTAURANT</span><strong>Une pause<br /><em>fraîche.</em></strong><p>La salade César</p><b>Une autre envie, la même identité.</b></div>
           <div className={styles.tvHalo} />
-          <Image className={styles.tvFood} src="/photos/salade-cesar.webp" alt="" width={640} height={640} sizes="(max-width: 600px) 220px, 400px" />
+          <Image className={styles.tvFood} src="/illustrations/food/bowl.svg" unoptimized alt="" width={240} height={165} sizes="(max-width: 600px) 220px, 400px" />
           <span className={styles.compositionNumber}>02 / 02</span>
         </div>
         <div className={styles.tvFooter}><span>À VOTRE IMAGE.</span><span>SUR PLACE · À EMPORTER</span></div>
