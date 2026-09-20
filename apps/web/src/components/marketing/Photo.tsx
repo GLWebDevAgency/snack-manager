@@ -58,6 +58,8 @@ export function Photo({
         <img
           src={shot.src}
           alt={decorative ? "" : shot.alt}
+          width={shot.width}
+          height={shot.height}
           loading={eager ? "eager" : "lazy"}
           fetchPriority={eager ? "high" : "auto"}
           decoding="async"

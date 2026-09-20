@@ -37,7 +37,7 @@
 :global(.mk) .poster h3 { position: absolute; top: 12%; left: 7%; z-index: 2; margin: 0; font-size: clamp(25px, 3.3vw, 46px); line-height: 1.04; letter-spacing: -.045em; font-weight: 500; }
 :global(.mk) .poster h3 em { font-family: Georgia, serif; font-weight: 400; }
 :global(.mk) .foodHalo { position: absolute; width: 89%; aspect-ratio: 1; border: 1px solid #7185553b; border-radius: 50%; top: 31%; left: 22%; box-shadow: 0 0 0 22px #7185550a; }
-:global(.mk) .food { position: absolute; width: 97%; height: auto; top: 23%; right: -13%; transform: rotate(-12deg) scale(.92); filter: drop-shadow(6px 14px 12px #5461352a); }
+:global(.mk) .food { position: absolute; display: block; width: 142%; height: auto; top: 4%; right: -32%; object-fit: contain; transform: rotate(-8deg) scale(.92); filter: drop-shadow(6px 14px 12px #5461352a); }
 :global(.mk) .posterBottom { position: absolute; bottom: 7%; left: 7%; display: grid; gap: 6px; z-index: 3; }
 :global(.mk) .posterBottom strong { font-size: 15px; font-weight: 550; }
 :global(.mk) .posterBottom > span { font-size: 8px; color: #636b56; }

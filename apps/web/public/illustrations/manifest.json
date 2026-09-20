@@ -1,0 +1,1031 @@
+{
+  "version": 1,
+  "sourceCommit": "56699753884136daee4b5db1bb532ac2aa69fee4",
+  "sourceRepository": "GLWebDevAgency/snack-manager",
+  "provenance": "Vecteurs de l’aperçu RestoPilot fourni au projet et ajouts internes. Illustrations génériques ; aucune recette ou certification implicite.",
+  "sources": [
+    {
+      "path": "scripts/illustrations/source/assets/index.mjs",
+      "originPath": "design/refonte-swiftui/packages/assets/index.mjs",
+      "sha256": "099ff0d81edb66763cfb8f43c2e77a5fb1931a4ce5d0353af499607445784313"
+    },
+    {
+      "path": "scripts/illustrations/source/assets/original.mjs",
+      "originPath": "design/refonte-swiftui/packages/assets/original.mjs",
+      "sha256": "3b13ef6362ec929389fa54a520834a1efef1d6fba42294c14622779e8ce1efe1"
+    },
+    {
+      "path": "scripts/illustrations/source/icons/index.mjs",
+      "originPath": "design/refonte-swiftui/packages/icons/index.mjs",
+      "sha256": "690cce7d543631e4d68536c1b5eb52f5184ebc353d828f1a2b6aa44cdfdd2449"
+    },
+    {
+      "path": "scripts/illustrations/source/icons/aliases.mjs",
+      "originPath": "design/refonte-swiftui/packages/icons/aliases.mjs",
+      "sha256": "ca65df6b0e23c9650dd550f8d3be6b0bc93f6f3a57d6d6746824271ec5e50bfe"
+    }
+  ],
+  "counts": {
+    "food": 41,
+    "icons": 78
+  },
+  "landing": {
+    "burger": "/illustrations/food/smash-burger.svg",
+    "salad": "/illustrations/food/bowl.svg"
+  },
+  "assets": [
+    {
+      "id": "burger",
+      "kind": "food",
+      "label": "Burger classique halal",
+      "path": "/illustrations/food/burger.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2530,
+      "sha256": "02372da9b859020ce49e226f8edb75f6fe60c2660544e849909011ae6cbeb24e"
+    },
+    {
+      "id": "double",
+      "kind": "food",
+      "label": "Double burger halal",
+      "path": "/illustrations/food/double.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2668,
+      "sha256": "8293e4cc00c65c761d1f349f5903372876781628c594b7f7d3b8d01917e4d4f0"
+    },
+    {
+      "id": "black",
+      "kind": "food",
+      "label": "Burger pain noir halal",
+      "path": "/illustrations/food/black.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2523,
+      "sha256": "ae12466e6131467d54848094b6d24ac394118426a53abe1944a6bcde3d376422"
+    },
+    {
+      "id": "chicken",
+      "kind": "food",
+      "label": "Burger poulet croustillant",
+      "path": "/illustrations/food/chicken.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2537,
+      "sha256": "6d6a8d7f7ba768988dab9719921f253e68673c4bb4833deac3d0d8d33062e9ef"
+    },
+    {
+      "id": "smash-burger",
+      "kind": "food",
+      "label": "Smash burger",
+      "path": "/illustrations/food/smash-burger.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2314,
+      "sha256": "f14f183db2a66df29e5a76df0899955ffe8cba1ef7f60537b0cce83cea9f60e2"
+    },
+    {
+      "id": "wrap",
+      "kind": "food",
+      "label": "Wrap",
+      "path": "/illustrations/food/wrap.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1448,
+      "sha256": "e3e4ea489530fa60b903719831ca831d51cc3349595b009d3bf3a2ba2cb3a7da"
+    },
+    {
+      "id": "tacos",
+      "kind": "food",
+      "label": "Tacos grillé",
+      "path": "/illustrations/food/tacos.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2012,
+      "sha256": "b10fc5ba2c9741ab6574d1e5b460c41994088ef86cd7f87ae9a9278b4adddf30"
+    },
+    {
+      "id": "kebab",
+      "kind": "food",
+      "label": "Sandwich kebab",
+      "path": "/illustrations/food/kebab.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1843,
+      "sha256": "d35276d3fa1d27c64e99e240f8f1e1a90a449fb996214205b47a922cae1a446a"
+    },
+    {
+      "id": "shawarma-plate",
+      "kind": "food",
+      "label": "Assiette shawarma",
+      "path": "/illustrations/food/shawarma-plate.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2070,
+      "sha256": "eae49c0a239d5916deb969f2f9e7ef2f59fe2eb8f63d22ae7fae2093fcc2520f"
+    },
+    {
+      "id": "panini",
+      "kind": "food",
+      "label": "Panini grillé",
+      "path": "/illustrations/food/panini.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2062,
+      "sha256": "8220f19bd72df4d54f2abde689cc09d7b5843fecb1fa844101deeaf8671686f1"
+    },
+    {
+      "id": "bowl",
+      "kind": "food",
+      "label": "Bowl",
+      "path": "/illustrations/food/bowl.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2000,
+      "sha256": "b8ac3893651c1c37c8bea8877baed7dba7db2c3e6d0a95f90f79406734d0b2b8"
+    },
+    {
+      "id": "pizza-margherita",
+      "kind": "food",
+      "label": "Pizza margherita",
+      "path": "/illustrations/food/pizza-margherita.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2335,
+      "sha256": "86ed8523590fa5d1d36bfdaa3d92e042a2b8624a5b05acebc7a0aee99f56619f"
+    },
+    {
+      "id": "pizza-chicken",
+      "kind": "food",
+      "label": "Pizza poulet",
+      "path": "/illustrations/food/pizza-chicken.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2353,
+      "sha256": "d245e241e0594725a6c8f2fefff4216b487b1792784c61077c92363e7ca69fc7"
+    },
+    {
+      "id": "pizza-vegetarian",
+      "kind": "food",
+      "label": "Pizza végétarienne",
+      "path": "/illustrations/food/pizza-vegetarian.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2393,
+      "sha256": "e537c953b2e27c30cc09366dc6118c3554da9398f34e4b417d44bf02ecb0c9e5"
+    },
+    {
+      "id": "pizza-slice",
+      "kind": "food",
+      "label": "Part de pizza",
+      "path": "/illustrations/food/pizza-slice.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1949,
+      "sha256": "522dcfab6952285ca77ad17b9afa9d7301babb140897dbfc5352b93760f73ec1"
+    },
+    {
+      "id": "calzone",
+      "kind": "food",
+      "label": "Calzone halal",
+      "path": "/illustrations/food/calzone.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1927,
+      "sha256": "3a90d33140556422e84f3fa7e2db5a901a002a8c0d960c541157632b9856426c"
+    },
+    {
+      "id": "fries",
+      "kind": "food",
+      "label": "Frites",
+      "path": "/illustrations/food/fries.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2813,
+      "sha256": "83d84ac8c33b89e303c38464dfa8d351855106522f1ae960dc193094f35527d6"
+    },
+    {
+      "id": "loaded-fries",
+      "kind": "food",
+      "label": "Frites garnies",
+      "path": "/illustrations/food/loaded-fries.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 3018,
+      "sha256": "e730a1c7e4fb8d9422db42ca023775035041e32f9349cc3d9ea3f260e0b6423a"
+    },
+    {
+      "id": "tenders",
+      "kind": "food",
+      "label": "Tenders",
+      "path": "/illustrations/food/tenders.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 3664,
+      "sha256": "1a146a4bcbfe2f1baa352f95c9c3dd0e475bd0dce691985b67c343711656471c"
+    },
+    {
+      "id": "nuggets",
+      "kind": "food",
+      "label": "Nuggets",
+      "path": "/illustrations/food/nuggets.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 3664,
+      "sha256": "90dbd5216bf1a24df185daa2c7b05284dfa0b12b6b16390e96905205252b873e"
+    },
+    {
+      "id": "croustille",
+      "kind": "food",
+      "label": "Poulet croustille",
+      "path": "/illustrations/food/croustille.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2893,
+      "sha256": "4f779adaccce5038fa953fc1e921d2ff5084d87980eb8b328ff81c51bb07fd64"
+    },
+    {
+      "id": "nuggets-croustille",
+      "kind": "food",
+      "label": "Nuggets croustille",
+      "path": "/illustrations/food/nuggets-croustille.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 5266,
+      "sha256": "b8362435dac21dcc41a6b23d1c938c296a289e642e81d71bdc3781fbfa02f59b"
+    },
+    {
+      "id": "wings",
+      "kind": "food",
+      "label": "Ailes de poulet",
+      "path": "/illustrations/food/wings.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2450,
+      "sha256": "cf94fd7b3080b0e5474645ac5c3fb2d3bcc5f91d36bfdd1b137bc8aa3a5a8ecf"
+    },
+    {
+      "id": "samosa",
+      "kind": "food",
+      "label": "Samoussa",
+      "path": "/illustrations/food/samosa.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2173,
+      "sha256": "16215181c3f0d8d2f882b41eed9b0de4098e4510bf3459d502795c3507d43760"
+    },
+    {
+      "id": "pad-thai",
+      "kind": "food",
+      "label": "Pad thaï halal",
+      "path": "/illustrations/food/pad-thai.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2672,
+      "sha256": "ca5946462e36b2f75668b57608250d5043f5dc46042b2315e940b8b5bcbf38ca"
+    },
+    {
+      "id": "thai-noodles",
+      "kind": "food",
+      "label": "Nouilles wok thaï",
+      "path": "/illustrations/food/thai-noodles.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2626,
+      "sha256": "825747c8d66d240f538608b7b103f66c9e595db62974b8c9390679ae606b7a5a"
+    },
+    {
+      "id": "thai-rice",
+      "kind": "food",
+      "label": "Riz thaï sauté",
+      "path": "/illustrations/food/thai-rice.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2237,
+      "sha256": "219dea9b8d34596c7442ecc0e6ac7c05549758ec71c1cd2fc1a63854876f7802"
+    },
+    {
+      "id": "thai-curry",
+      "kind": "food",
+      "label": "Curry thaï",
+      "path": "/illustrations/food/thai-curry.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2230,
+      "sha256": "358d962a290c608325bf16409f8ef446ceee57b31297e1fd5008f7491051d374"
+    },
+    {
+      "id": "spring-rolls",
+      "kind": "food",
+      "label": "Nems halal",
+      "path": "/illustrations/food/spring-rolls.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2615,
+      "sha256": "e967d31b6a8d6c3a5a24a65bfeb8f7cc35642e087c8a7d578d5cde89b6769a07"
+    },
+    {
+      "id": "lemonade",
+      "kind": "food",
+      "label": "Citronnade",
+      "path": "/illustrations/food/lemonade.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1672,
+      "sha256": "272e15ce7119b659fec75c9130640be60588c6bc44c806919cfca9b8338806e6"
+    },
+    {
+      "id": "cola",
+      "kind": "food",
+      "label": "Canette cola",
+      "path": "/illustrations/food/cola.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2214,
+      "sha256": "657463055c96d4032c83cde11742a730d36ca5a2c9e6d428ff49d831495f4fd1"
+    },
+    {
+      "id": "orange-can",
+      "kind": "food",
+      "label": "Canette orange",
+      "path": "/illustrations/food/orange-can.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2280,
+      "sha256": "b631dfaf654aab57914eec0f04aa4e32cd8b70081b1a67fb5ac39e7659c25822"
+    },
+    {
+      "id": "iced-tea",
+      "kind": "food",
+      "label": "Canette thé glacé",
+      "path": "/illustrations/food/iced-tea.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 2258,
+      "sha256": "9446d831ed298a4ba7e232de0c308307223ef1a097af577dc63df2fbf64f60b0"
+    },
+    {
+      "id": "water",
+      "kind": "food",
+      "label": "Bouteille d’eau",
+      "path": "/illustrations/food/water.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1993,
+      "sha256": "1b2f2df911ff5a599e6d5a4829ce8b0cbde70997ed2521d8844d56ff2589ca9f"
+    },
+    {
+      "id": "coffee",
+      "kind": "food",
+      "label": "Café",
+      "path": "/illustrations/food/coffee.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1970,
+      "sha256": "f050cd1c54ecc0e0c07c2cf3477dae6b039d7d2f81a8c8f9bd7c57f5d68eb57e"
+    },
+    {
+      "id": "tiramisu",
+      "kind": "food",
+      "label": "Tiramisu cacao",
+      "path": "/illustrations/food/tiramisu.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 4367,
+      "sha256": "89d0ebaae3b5d50292c19d89481dfc511ddd7ecd48c5e27f4966b43535502d40"
+    },
+    {
+      "id": "tiramisu-pistachio",
+      "kind": "food",
+      "label": "Tiramisu pistache",
+      "path": "/illustrations/food/tiramisu-pistachio.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 4522,
+      "sha256": "c42cdd7d04366cc42a6d39153952c932754ee2ba7ffb797b421a852b8ac99808"
+    },
+    {
+      "id": "tiramisu-caramel",
+      "kind": "food",
+      "label": "Tiramisu caramel",
+      "path": "/illustrations/food/tiramisu-caramel.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 4525,
+      "sha256": "7bcf165709d10e42f16488de02600075241dd05066c8406a2dd63ca0873da3fd"
+    },
+    {
+      "id": "tiramisu-berry",
+      "kind": "food",
+      "label": "Dessert fruits rouges",
+      "path": "/illustrations/food/tiramisu-berry.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 4557,
+      "sha256": "70e0fa1124cf051c84a0bcad3750cf08686b93c8a534859a6b202b05358009de"
+    },
+    {
+      "id": "cookie",
+      "kind": "food",
+      "label": "Cookie",
+      "path": "/illustrations/food/cookie.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1857,
+      "sha256": "a40e78f3d60c32fd4d36069874f639bf8fc992d11d529b8024145e579d45b32f"
+    },
+    {
+      "id": "brownie",
+      "kind": "food",
+      "label": "Brownie",
+      "path": "/illustrations/food/brownie.svg",
+      "viewBox": "0 0 240 165",
+      "bytes": 1726,
+      "sha256": "b8337ba1771eb6899e41bb0adc6039b00d5e48e662db403854b0d1bd6aa41045"
+    },
+    {
+      "id": "store",
+      "kind": "icon",
+      "path": "/illustrations/icons/store.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 316,
+      "sha256": "0fc3687fda1b1be89a4ceef9cded230fa1798e98655fdf1f9b6b7767a5665636"
+    },
+    {
+      "id": "pos",
+      "kind": "icon",
+      "path": "/illustrations/icons/pos.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 305,
+      "sha256": "9ebc0671748af10941a2dc9b4b04c51c0e5c32dac1bb94658ace64efbc97d370"
+    },
+    {
+      "id": "kitchen",
+      "kind": "icon",
+      "path": "/illustrations/icons/kitchen.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 312,
+      "sha256": "754c577a85a31bc75717361a2647dfc4e0e5eb33b24b1582685781141b9434b7"
+    },
+    {
+      "id": "table",
+      "kind": "icon",
+      "path": "/illustrations/icons/table.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 296,
+      "sha256": "1ede056dd067d270d5cce88b5c4f64b46769a1e53c5465e3b2bbf2850f9d8f9d"
+    },
+    {
+      "id": "orders",
+      "kind": "icon",
+      "path": "/illustrations/icons/orders.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 304,
+      "sha256": "a6b80ae47b19cdd77857ccc98d6394b5b37d65aab9b9f48d8ab14c24ac9211d8"
+    },
+    {
+      "id": "menu",
+      "kind": "icon",
+      "path": "/illustrations/icons/menu.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 292,
+      "sha256": "8c230568cf3bd681bdd85eaa56d98020015ebe9f915b0821a952f96ae63074cd"
+    },
+    {
+      "id": "chart",
+      "kind": "icon",
+      "path": "/illustrations/icons/chart.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 252,
+      "sha256": "623d8187d2502d2c86c5a9dc1ed9484677165e9f0857d077f4cdaa90f0028991"
+    },
+    {
+      "id": "search",
+      "kind": "icon",
+      "path": "/illustrations/icons/search.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 268,
+      "sha256": "16ac5f5c348ebe2a8c8430a5d55912fee1d364e66017e3e16a8bde59a28a5f0f"
+    },
+    {
+      "id": "plus",
+      "kind": "icon",
+      "path": "/illustrations/icons/plus.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 237,
+      "sha256": "77323899bdcf5b220420f5f6d35939a8e315b2c29565d0c0e9dd95c8e480a491"
+    },
+    {
+      "id": "minus",
+      "kind": "icon",
+      "path": "/illustrations/icons/minus.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 229,
+      "sha256": "af69ada3e18f3230818201f5486b6009094c5c87b53a5de4e5562faf9fce7b96"
+    },
+    {
+      "id": "arrow",
+      "kind": "icon",
+      "path": "/illustrations/icons/arrow.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 242,
+      "sha256": "7f60221cf883bb1c3f94838fc581efe3a483a2dadaae12ebe0c19e24ec663617"
+    },
+    {
+      "id": "close",
+      "kind": "icon",
+      "path": "/illustrations/icons/close.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 241,
+      "sha256": "16f5df1c618513fd199aa310f9ae4c832fbbf0902c037e5897afc09c38bc77b2"
+    },
+    {
+      "id": "check",
+      "kind": "icon",
+      "path": "/illustrations/icons/check.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 235,
+      "sha256": "78d10369337f5190f8b473fbde8d332c795d705c4d2f57a747c22acc9243dc1f"
+    },
+    {
+      "id": "moon",
+      "kind": "icon",
+      "path": "/illustrations/icons/moon.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 259,
+      "sha256": "d319154d78ff959ee2d990697f50bb1ffc29f2be26eea953cacd664dcc7726e4"
+    },
+    {
+      "id": "sun",
+      "kind": "icon",
+      "path": "/illustrations/icons/sun.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 316,
+      "sha256": "4bd9ace1aed6d2bed7a6205e6ff0f5eb4743bbe4ce55687749482ec57d5c2673"
+    },
+    {
+      "id": "clock",
+      "kind": "icon",
+      "path": "/illustrations/icons/clock.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 263,
+      "sha256": "21b5b4b16e4efc9362df62cb333d1e03cf21d627418fa9babab5fd467b55e531"
+    },
+    {
+      "id": "burger",
+      "kind": "icon",
+      "path": "/illustrations/icons/burger.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 289,
+      "sha256": "8ea81a6b012d080947575392c77f0e7ed477bbd68a10edd00114a924cce949f5"
+    },
+    {
+      "id": "grid",
+      "kind": "icon",
+      "path": "/illustrations/icons/grid.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 401,
+      "sha256": "41979950a7b1276a49a915b19d0898e6c7ddb977803664cebbc56fc07c0579ac"
+    },
+    {
+      "id": "cup",
+      "kind": "icon",
+      "path": "/illustrations/icons/cup.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 258,
+      "sha256": "791924f529e59d03dab284f46f7cf02c3181c56266c3ffd53511119dc77e985e"
+    },
+    {
+      "id": "bowl",
+      "kind": "icon",
+      "path": "/illustrations/icons/bowl.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 272,
+      "sha256": "d7cf7cd70c767cd652264e983d4def3302c52fd90e3750eac69d53f84e071e67"
+    },
+    {
+      "id": "wrap",
+      "kind": "icon",
+      "path": "/illustrations/icons/wrap.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 273,
+      "sha256": "ecef360dfd95c949eee4a57a4f5bfe4926d05099016fce788ced37874cdedb71"
+    },
+    {
+      "id": "fries",
+      "kind": "icon",
+      "path": "/illustrations/icons/fries.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 282,
+      "sha256": "9167b5bf061a23b61689804249e47d2a359ffd54d78e6c31aa4f8ed6845a031e"
+    },
+    {
+      "id": "cookie",
+      "kind": "icon",
+      "path": "/illustrations/icons/cookie.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 314,
+      "sha256": "340c43dc328f57a4517d6783fc8209fd12d615b65797efa40f65804e063c931c"
+    },
+    {
+      "id": "note",
+      "kind": "icon",
+      "path": "/illustrations/icons/note.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 314,
+      "sha256": "5a69f0acfbd1ebe670e60581c9a136f921b55674aa8ea7a000b9e633567050ad"
+    },
+    {
+      "id": "cash",
+      "kind": "icon",
+      "path": "/illustrations/icons/cash.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 314,
+      "sha256": "c12ab06a126edd547edbf28a0d4a2f3edc86b660909c0e1ab843ffa7cda8d67d"
+    },
+    {
+      "id": "card",
+      "kind": "icon",
+      "path": "/illustrations/icons/card.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 284,
+      "sha256": "40acdcc9eeaea850f3bc59cbe619a2d02509e6019dc1ae3ba7a3848b149a8a91"
+    },
+    {
+      "id": "expand",
+      "kind": "icon",
+      "path": "/illustrations/icons/expand.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 255,
+      "sha256": "fff5ca8042e86f11f10899b25e94a18c8428dea4903603ebbea3062688bc80ad"
+    },
+    {
+      "id": "refresh",
+      "kind": "icon",
+      "path": "/illustrations/icons/refresh.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 288,
+      "sha256": "5144fdcbbf1b8c27418212a6ca2955b1806c5003f3724209e7bb0ebbdcacf751"
+    },
+    {
+      "id": "bag",
+      "kind": "icon",
+      "path": "/illustrations/icons/bag.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 262,
+      "sha256": "d9a940778226d9c185e9852f35c79f5770ad0f9d3be17377d405ce4bfc08385a"
+    },
+    {
+      "id": "shield",
+      "kind": "icon",
+      "path": "/illustrations/icons/shield.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 288,
+      "sha256": "64abaaa2fbf8581dd4ea97bc72c3019a9b3fa542d12a65d7319da696d726d0cc"
+    },
+    {
+      "id": "info",
+      "kind": "icon",
+      "path": "/illustrations/icons/info.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 281,
+      "sha256": "817671333d43c0ceeaa0d0605d433e928ed9c3f6204dd6487d809fd0a89e334a"
+    },
+    {
+      "id": "gift",
+      "kind": "icon",
+      "path": "/illustrations/icons/gift.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 309,
+      "sha256": "29fe37b8043325b741ae5d66e592bd7a0dd4e67ea1c150eb0127d8c789aa3bdd"
+    },
+    {
+      "id": "qr",
+      "kind": "icon",
+      "path": "/illustrations/icons/qr.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 301,
+      "sha256": "c9e08b269c8539441998b57f618b4f215bded5ffaa7e8b0340631bf4c185cd69"
+    },
+    {
+      "id": "camera",
+      "kind": "icon",
+      "path": "/illustrations/icons/camera.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 311,
+      "sha256": "aad1f0cf5404e87c315be3acc1d4a1a26a0ec59c79ea6dd2ea5bf3974a539949"
+    },
+    {
+      "id": "pin",
+      "kind": "icon",
+      "path": "/illustrations/icons/pin.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 303,
+      "sha256": "d5cded7a6f4e78b0b9d234187a9454bbc3b893761af06bbe1fd3eef7819b20a3"
+    },
+    {
+      "id": "route",
+      "kind": "icon",
+      "path": "/illustrations/icons/route.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 283,
+      "sha256": "0aef01db5eb7d1618f1dfc7e1fa81c2800c0c6bd225f485d9e71a4c631094244"
+    },
+    {
+      "id": "phone",
+      "kind": "icon",
+      "path": "/illustrations/icons/phone.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 305,
+      "sha256": "16aa978b3e846c5c9ed7f1b17a70fc29394476c87413dba888a799df3722f4b0"
+    },
+    {
+      "id": "users",
+      "kind": "icon",
+      "path": "/illustrations/icons/users.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 322,
+      "sha256": "92bd9b6b819e98fefedf6a049c79bca72aa1700e006c401e986f86b3309aa241"
+    },
+    {
+      "id": "lock",
+      "kind": "icon",
+      "path": "/illustrations/icons/lock.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 268,
+      "sha256": "dfe274792c404ca3a18b6f996a21b279c4dbb7f6c1c0db58008048417634ee67"
+    },
+    {
+      "id": "warning",
+      "kind": "icon",
+      "path": "/illustrations/icons/warning.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 259,
+      "sha256": "55cca3459b700adc9e554763c346fddf50408c2ec758a8b8ea27f34df6e8e4d4"
+    },
+    {
+      "id": "wifi",
+      "kind": "icon",
+      "path": "/illustrations/icons/wifi.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 296,
+      "sha256": "6bfd29ef5366d292850706089459a589144a3f4659f644b5f7c29b45c41ae954"
+    },
+    {
+      "id": "offline",
+      "kind": "icon",
+      "path": "/illustrations/icons/offline.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 327,
+      "sha256": "cd64c7c1b9f6f001f8d505f727b4560c1bb51950e11ffe611564b9639a71a4c6"
+    },
+    {
+      "id": "settings",
+      "kind": "icon",
+      "path": "/illustrations/icons/settings.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 304,
+      "sha256": "47a6cf83f9896b75d1e38727b9c1e746a5a83816629ce85b46eb6bdfc1bbc7a6"
+    },
+    {
+      "id": "chevron",
+      "kind": "icon",
+      "path": "/illustrations/icons/chevron.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 233,
+      "sha256": "4d1ecd8bdc5e58064c1a96cd94fb7017ec059b36967d811fb298659b869f71ce"
+    },
+    {
+      "id": "down",
+      "kind": "icon",
+      "path": "/illustrations/icons/down.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 233,
+      "sha256": "420747f3970298dc65bf896bc0e5971a8ff12d70ef47048831b9bbd1738e973b"
+    },
+    {
+      "id": "back",
+      "kind": "icon",
+      "path": "/illustrations/icons/back.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 234,
+      "sha256": "d8368b19bcfc6aee3b1e91efcb800216f5f4dc11484f3e600b33f1e6878f4714"
+    },
+    {
+      "id": "filter",
+      "kind": "icon",
+      "path": "/illustrations/icons/filter.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 246,
+      "sha256": "00fe7f2add4a494a21343402c1f4f03709a68f3bf50b6c4a94928950af608137"
+    },
+    {
+      "id": "calendar",
+      "kind": "icon",
+      "path": "/illustrations/icons/calendar.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 258,
+      "sha256": "cc9356b337859ecdff9a30ae3c514532ed021baf4d65557143215eb62a1190d6"
+    },
+    {
+      "id": "download",
+      "kind": "icon",
+      "path": "/illustrations/icons/download.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 257,
+      "sha256": "6d005aed504bd0dcf5adbc66ee271f063ba6db756bb0a5293e136e2ea072f4a8"
+    },
+    {
+      "id": "star",
+      "kind": "icon",
+      "path": "/illustrations/icons/star.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 295,
+      "sha256": "916e72f110bcc6c86b67c0cc11687605a470ec2da4779ed953a9808b4ad26976"
+    },
+    {
+      "id": "bell",
+      "kind": "icon",
+      "path": "/illustrations/icons/bell.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 279,
+      "sha256": "5cfcb6be5cc56b9204f04de6b1923ba931c64aa6d0dc1e6d4fa1248545cd523c"
+    },
+    {
+      "id": "box",
+      "kind": "icon",
+      "path": "/illustrations/icons/box.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 271,
+      "sha256": "02ed63ae3c28052f07627abf34d5bb70d6887be26077a0f7e5291c60b1ba5e47"
+    },
+    {
+      "id": "globe",
+      "kind": "icon",
+      "path": "/illustrations/icons/globe.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 307,
+      "sha256": "51774eb1722acd7762db1f1fe37c2d6b19edb72849a070a3169c8255519390d6"
+    },
+    {
+      "id": "sound",
+      "kind": "icon",
+      "path": "/illustrations/icons/sound.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 287,
+      "sha256": "d04f0c8bfd208c0e2bdfad5e8bb64b8eab210d9b5933e568e8de34f86546b84b"
+    },
+    {
+      "id": "dessert",
+      "kind": "icon",
+      "path": "/illustrations/icons/dessert.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 291,
+      "sha256": "1f2ce14596e212b297dc3eb95ae45351daacfd39a15d5e1eda45e593cbe8d9af"
+    },
+    {
+      "id": "kebab",
+      "kind": "icon",
+      "path": "/illustrations/icons/kebab.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 272,
+      "sha256": "fd7d8b6bc272a08f292027c0e6844e284350be943f871de32cdf6775e344953c"
+    },
+    {
+      "id": "coffee",
+      "kind": "icon",
+      "path": "/illustrations/icons/coffee.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 297,
+      "sha256": "484d0f8c76201e1b8f018ec86a5f57ec12e079eed71fea953e463c3a3888b7b8"
+    },
+    {
+      "id": "leaf",
+      "kind": "icon",
+      "path": "/illustrations/icons/leaf.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 262,
+      "sha256": "b5f5391181360fb919e45d4e453e95c6baf462547c072312a4c5cc75edab7192"
+    },
+    {
+      "id": "logout",
+      "kind": "icon",
+      "path": "/illustrations/icons/logout.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 256,
+      "sha256": "d2eb8a1ed7f6332c5812841537c8f45654f01a443ae3c5a8fc82a67517a79d63"
+    },
+    {
+      "id": "edit",
+      "kind": "icon",
+      "path": "/illustrations/icons/edit.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 262,
+      "sha256": "9c41851c014a55594790e32cb0f7091ae7e389a2e0b3594efe5eef44aa132d11"
+    },
+    {
+      "id": "dots",
+      "kind": "icon",
+      "path": "/illustrations/icons/dots.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 252,
+      "sha256": "f6af8d08c6bcb95a18f411ac58405f6b86deefc918165693a662ce0721a36697"
+    },
+    {
+      "id": "tacos",
+      "kind": "icon",
+      "path": "/illustrations/icons/tacos.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 285,
+      "sha256": "4304bd677276eb7c28ecc1c904a929fe20e890d048a72e7f2d25d4395f5aa061"
+    },
+    {
+      "id": "print",
+      "kind": "icon",
+      "path": "/illustrations/icons/print.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 275,
+      "sha256": "b4a64508f6f840aa00346c9b8c0a39748902779711443b462eb05ac5ea017205"
+    },
+    {
+      "id": "tv",
+      "kind": "icon",
+      "path": "/illustrations/icons/tv.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 252,
+      "sha256": "b2a49d650350c85ede18362624b59752c118c376b657cbe93f2fdc40fdc3c1fe"
+    },
+    {
+      "id": "mail",
+      "kind": "icon",
+      "path": "/illustrations/icons/mail.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 249,
+      "sha256": "65ccd6cd7278c4837e6c116232378014f2b59e99c5374bfd83a63601969f5cad"
+    },
+    {
+      "id": "tag",
+      "kind": "icon",
+      "path": "/illustrations/icons/tag.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 254,
+      "sha256": "9c4a3e96d51225aed0239b2db82a8d126c617390019e4f72d4e955813966f2f7"
+    },
+    {
+      "id": "headset",
+      "kind": "icon",
+      "path": "/illustrations/icons/headset.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 291,
+      "sha256": "70f0da8901ad2bb5df8d62ccce780c3151d534ced75fe2151be398bc3f384053"
+    },
+    {
+      "id": "user",
+      "kind": "icon",
+      "path": "/illustrations/icons/user.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 281,
+      "sha256": "b48fbf984a83ed9c3a23ef2510ae0e65433de4e6305364a47969af81042bc2ab"
+    },
+    {
+      "id": "truck",
+      "kind": "icon",
+      "path": "/illustrations/icons/truck.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 322,
+      "sha256": "d533dba37dde1f263094dee946a01e58661e980ba38c400da98457605a5eec67"
+    },
+    {
+      "id": "pizza",
+      "kind": "icon",
+      "path": "/illustrations/icons/pizza.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 284,
+      "sha256": "4b89d5cf072b63ccf6525ef71930077f3ea027a1ae8cd01355309843b71b3667"
+    },
+    {
+      "id": "smash",
+      "kind": "icon",
+      "path": "/illustrations/icons/smash.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 305,
+      "sha256": "ea5551492140b7f1fdc1dadfe99f97661cb27dc6878d6a496d6991200defed32"
+    },
+    {
+      "id": "panini",
+      "kind": "icon",
+      "path": "/illustrations/icons/panini.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 291,
+      "sha256": "ed9fb06751f9f2983a0fa479f2333330cb2f494bdc313f43230ad9ce6702cf81"
+    },
+    {
+      "id": "wings",
+      "kind": "icon",
+      "path": "/illustrations/icons/wings.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 307,
+      "sha256": "467305d6b02e7655626d6c1dd528fe87558d4af829744ee6ec8d6381000b7690"
+    },
+    {
+      "id": "noodles",
+      "kind": "icon",
+      "path": "/illustrations/icons/noodles.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 284,
+      "sha256": "4c64a13e450d447726db2874b6c8a52ca1da65b9995925d1a8e9fb7121ec1f83"
+    },
+    {
+      "id": "rice",
+      "kind": "icon",
+      "path": "/illustrations/icons/rice.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 277,
+      "sha256": "e61ef91ded2786b15891b0f39e026ce7112d7f651772c3a44ac1a85552214d25"
+    },
+    {
+      "id": "curry",
+      "kind": "icon",
+      "path": "/illustrations/icons/curry.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 286,
+      "sha256": "1b1e2ba905954cfc46e552e3416f7cad81d71cbac05af55e28b9e58f5fcf9f0c"
+    },
+    {
+      "id": "spicy",
+      "kind": "icon",
+      "path": "/illustrations/icons/spicy.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 300,
+      "sha256": "54972738eb76efb482d33b3e816b7aacdbffa51f176307fba2026e7396f3e3c3"
+    },
+    {
+      "id": "thai",
+      "kind": "icon",
+      "path": "/illustrations/icons/thai.svg",
+      "viewBox": "0 0 24 24",
+      "bytes": 278,
+      "sha256": "d93154c36fb697e573314b3d4be660b47043eba0c43de1bc430d65b25c1bd546"
+    }
+  ]
+}
