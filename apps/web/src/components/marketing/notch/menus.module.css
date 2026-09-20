@@ -35,8 +35,8 @@
 :global(.mk) .menuLine strong { font-size: clamp(6px, .86vw, 12px); font-weight: 650; }
 :global(.mk) .menuLine span { font-size: clamp(5px, .6vw, 8px); color: #697063; }
 :global(.mk) .paperSeal { border: 1px solid #414f3960; width: clamp(44px, 6vw, 84px); height: clamp(44px, 6vw, 84px); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: clamp(4px, .5vw, 7px); text-align: center; position: absolute; bottom: 6%; left: 50%; margin: 0; transform: translateX(-50%) rotate(-10deg); letter-spacing: .05em; }
-:global(.mk) .paperFood { position: absolute; top: 33%; left: -5%; width: 110%; }
-:global(.mk) .paperFood img { width: 100%; height: auto; filter: drop-shadow(0 14px 8px #443e361d); }
+:global(.mk) .paperFood { position: absolute; top: 32%; left: -23%; width: 146%; }
+:global(.mk) .paperFood img { display: block; width: 100%; height: auto; object-fit: contain; filter: drop-shadow(0 14px 8px #443e361d); }
 :global(.mk) .rightLeaf > p { position: absolute; left: 0; right: 0; bottom: 12%; font-family: Georgia, serif; font-style: italic; text-align: center; font-size: clamp(10px, 1.1vw, 16px); line-height: 1.4; margin: 10px 0 0; }
 :global(.mk) .tvRig { position: absolute; width: 73%; max-width: 990px; left: 50%; top: 46%; transform: translate(-50%, -44%) scale(.83); opacity: 0; visibility: hidden; z-index: 1; }
 :global(.mk) .television { background: #080909; padding: 10px 10px 17px; border: 1px solid #57594b; border-radius: 16px; box-shadow: 0 34px 60px #0008, 0 1px 0 #9998 inset; position: relative; }
@@ -51,8 +51,8 @@
 :global(.mk) .tvCopy > p { margin: 8% 0 5%; font-size: clamp(10px, 1.3vw, 18px); }
 :global(.mk) .tvCopy > b { font-weight: 400; color: #c3c6b6; font-size: clamp(7px, .85vw, 12px); }
 :global(.mk) .tvHalo { position: absolute; width: 61%; aspect-ratio: 1; border-radius: 50%; border: 1px solid #d6bd8233; right: -13%; top: -7%; background: #8d9f6240; box-shadow: 0 0 0 45px #d6bd8209; }
-:global(.mk) .tvFood { position: absolute; width: 48%; height: auto; right: 0; top: 13%; object-fit: contain; filter: drop-shadow(0 30px 12px #0003); animation: foodFloat 7s ease-in-out infinite; }
-:global(.mk) .tvSlideTwo .tvFood { width: 54%; top: 0; right: -4%; }
+:global(.mk) .tvFood { position: absolute; display: block; width: 72%; height: auto; right: -12%; top: 5%; object-fit: contain; filter: drop-shadow(0 30px 12px #0003); animation: foodFloat 7s ease-in-out infinite; }
+:global(.mk) .tvSlideTwo .tvFood { width: 76%; top: 4%; right: -14%; }
 :global(.mk) .compositionNumber { position: absolute; bottom: 16%; right: 5%; letter-spacing: .15em; font-size: clamp(7px, .8vw, 11px); color: #e0d4b8; }
 :global(.mk) .tvFooter { position: absolute; display: flex; justify-content: space-between; bottom: 0; left: 0; right: 0; padding: 2% 6%; color: #d1d5c0; background: #102517; font-size: clamp(5px, .6vw, 9px); letter-spacing: .13em; z-index: 4; }
 :global(.mk) .tvStatus { width: 3px; height: 3px; position: absolute; bottom: 6px; left: 50%; background: #afc29e; border-radius: 50%; }

@@ -1499,6 +1499,7 @@ html:has(.mk) {
   height: 100%;
 }
 .mk .dv-screen .ph img {
+  object-fit: contain;
   object-position: top center;
 }
 /*
