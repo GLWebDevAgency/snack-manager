@@ -29,7 +29,7 @@ const RefundOperationSchema = new Schema({
   idempotencyKey: presentText,
   preparedAt: { ...date, required: true },
   requestStartedAt: date,
-  state: { ...text, enum: ['prepared', 'creating', 'known', 'review_required'], required: true },
+  state: { ...text, enum: ['prepared', 'creating', 'known', 'review_required', 'withdrawn'], required: true },
   refund: { type: RefundProofSchema },
   providerCheckedAt: date,
   reviewReason: text,

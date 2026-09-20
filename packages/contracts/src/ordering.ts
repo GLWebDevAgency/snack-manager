@@ -537,6 +537,7 @@ export const TENANT_AUDIT_ACTIONS = [
    * passe pas pour un oubli.
    */
   'order.refund',
+  'order.refund.withdraw',
 
   // ─── Prix de vente ───
   /**
@@ -614,6 +615,7 @@ export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.delivery_override': 'Remise dérogatoire de livraison',
   'order.delivery_proof_rotate': 'Renouvellement de la preuve de remise',
   'order.refund': 'Remboursement',
+  'order.refund.withdraw': 'Demande de remboursement abandonnée avant envoi',
   'price.change': 'Changement de prix',
   'product.create': 'Produit ajouté à la carte',
   'product.delete': 'Produit retiré de la carte',

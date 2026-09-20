@@ -7,7 +7,7 @@ export type RefundOperation = {
   operationId: string; amountCents: number; reason: string; actorId: string;
   environment: 'test' | 'live'; paymentIntentId: string; accountId: string | null;
   idempotencyKey: string; preparedAt: Date; requestStartedAt?: Date | null;
-  state: 'prepared' | 'creating' | 'known' | 'review_required';
+  state: 'prepared' | 'creating' | 'known' | 'review_required' | 'withdrawn';
   refund?: RefundProof | null; providerCheckedAt?: Date | null; reviewReason?: string | null;
 };
 export type RefundFlow = { version: 1; operations: RefundOperation[] };
@@ -49,6 +49,17 @@ export function refundProjection(order: RefundSnapshot, incoming: readonly Refun
 } {
   const flow = order.refundFlow ? structuredClone(order.refundFlow) : null;
   if (flow && (flow.version !== 1 || flow.operations.length > MAX_REFUND_OPERATIONS)) refundUnavailable();
+  if (flow?.operations.length && (order.payment.method !== 'online' || !order.payment.stripePaymentIntentId)) refundUnavailable();
+  // Validate the stored scope even when provider access is disabled. A receipt
+  // from another Connect account is never a proof for this order. A change of
+  // current runtime key must not invalidate an otherwise coherent old receipt.
+  for (const operation of flow?.operations ?? []) {
+    if (operation.paymentIntentId !== order.payment.stripePaymentIntentId
+      || operation.accountId !== (order.payment.stripeAccountId ?? null)
+      || (order.paymentFlow?.attempt && operation.environment !== order.paymentFlow.attempt.environment)
+      || (operation.state === 'withdrawn' && (operation.requestStartedAt || operation.refund
+        || order.payment.refunds?.some(row => row.operationId?.toLowerCase() === operation.operationId.toLowerCase())))) refundUnavailable();
+  }
   const rows = new Map<string, StoredRefund>((order.payment.refunds ?? []).map((row) => [row.id, { ...row }]));
   for (const operation of flow?.operations ?? []) {
     if (operation.refund) {
@@ -64,7 +75,7 @@ export function refundProjection(order: RefundSnapshot, incoming: readonly Refun
   const before = refundSummary(order.totals.total, [...rows.values()].map((row) => ({
     id: row.id, amount: row.amountCents, status: row.status,
   })));
-  const reservedLocally = (flow?.operations ?? []).filter(operation => !operation.refund)
+  const reservedLocally = (flow?.operations ?? []).filter(operation => !operation.refund && operation.state !== 'withdrawn')
     .reduce((sum, operation) => sum + operation.amountCents, 0);
   if ((order.payment.refundedCents ?? 0) > before.refundedCents
     || (order.payment.pendingRefundCents ?? 0) > before.pendingRefundCents + reservedLocally) {
@@ -79,6 +90,7 @@ export function refundProjection(order: RefundSnapshot, incoming: readonly Refun
     if (previous && previous.amountCents !== proof.amount) refundUnavailable();
     const operation = flow?.operations.find((entry) => entry.operationId === proof.metadata?.operationId || entry.refund?.id === proof.id);
     if (operation) {
+      if (operation.state === 'withdrawn') refundUnavailable();
       assertRefundProof(order, proof, operation);
       // The Stripe SDK returns a complete object (charge, timestamps, balances,
       // etc.). Persist only our correlated receipt, never an SDK object shape.
@@ -97,7 +109,7 @@ export function refundProjection(order: RefundSnapshot, incoming: readonly Refun
     id: row.id, amount: row.amountCents, status: row.status,
   })));
   for (const operation of flow?.operations ?? []) {
-    if (!operation.refund) summary.pendingRefundCents += operation.amountCents;
+    if (!operation.refund && operation.state !== 'withdrawn') summary.pendingRefundCents += operation.amountCents;
   }
   if (!Number.isSafeInteger(summary.pendingRefundCents) || summary.refundedCents + summary.pendingRefundCents > order.totals.total) {
     throw new ConflictException('Preuves de remboursement incohérentes : rapprochement requis.');

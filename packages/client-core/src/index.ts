@@ -14,3 +14,4 @@ export * from './error-report';
 export * from './supplement-categories';
 export * from './customer-app-navigation';
 export * from './delivery-assignment';
+export * from './order-refund-journal';
