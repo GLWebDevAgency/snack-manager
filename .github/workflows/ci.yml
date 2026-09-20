@@ -131,6 +131,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: pnpm
 
+      # Exécute le vrai bloc du workflow avec une CLI Railway simulée, sans
+      # réseau ni secrets : une régression d'origine doit bloquer la livraison.
+      - name: Vérifier l'origine du relais web
+        run: node --test scripts/verifier-relai-web.node-test.mjs
+
       - name: Restaurer le cache Turborepo
         uses: actions/cache@v6
         with:
