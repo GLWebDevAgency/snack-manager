@@ -1,4 +1,4 @@
-# Commande, récompenses et remboursements — livraison du 21 septembre 2026
+# Commande, récompenses et remboursements
 
 Ce lot complète les gains web livrés par la PR #204 : consommation d’une récompense dans la commande protégée, devis click & collect autoritaire, restitution des points utilisés, remboursements comptoir et compensation des gains POS. Le déploiement et les essais distants doivent être accompagnés d’un reçu portant la révision effectivement servie. Les tests locaux ne prouvent pas une livraison en production, une réception SMS, une clé d’accès physique ou un mouvement d’espèces.
 
@@ -7,6 +7,8 @@ Ce lot complète les gains web livrés par la PR #204 : consommation d’une ré
 Le compte vérifié et la carte rattachée partagent le portefeuille existant. La carte autonome continue de fonctionner au comptoir. Les capacités du forfait du restaurant, son état commercial et son programme actif restent contrôlés côté serveur ; la simple présence d’un bouton ne donne aucun droit.
 
 À la validation du panier, le serveur recalcule les produits, options, promotions et frais. Le click & collect possède maintenant son devis, comme la livraison. Le client transmet le total attendu : si le tarif a changé, aucune commande à un autre montant n’est acceptée silencieusement. Le devis n’est pas une réservation de créneau, de stock ou de points ; l’admission reste la décision finale.
+
+Une vitrine laissée ouverte doit actualiser sa disponibilité au retour sur l’application. Une lecture publique dédiée renouvelle uniquement l’ouverture, la pause et les créneaux, sans recharger la marque, le panier ou le formulaire de paiement. Lorsque cette information n’est plus vérifiée, l’interface ne promet ni une ouverture ni une heure de retrait passée. Une pause de nouvelles commandes ne doit pas interrompre la reprise d’une commande déjà acceptée.
 
 Un compte rattaché peut choisir une récompense éligible. Le solde privé n’est ni persistant ni partagé avec une commande invitée ; il disparaît à l’expiration de sa preuve ou au changement d’identité. Les nouveaux champs privés/publics sont négociés explicitement pour conserver la compatibilité des anciens clients stricts.
 

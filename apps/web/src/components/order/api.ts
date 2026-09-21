@@ -58,7 +58,7 @@ import type {
   AbandonPublicOrder,
   IngredientCategory,
 } from "@sm/contracts";
-import { featuredProductIdsOf, IngredientCategorySchema, marqueEffective, WebsiteUrlSchema, PublicOrderRecoveryResultSchema, type Brand } from "@sm/contracts";
+import { featuredProductIdsOf, IngredientCategorySchema, marqueEffective, WebsiteUrlSchema, PublicOrderRecoveryResultSchema, PublicOrderingAvailabilitySchema, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -495,6 +495,32 @@ export function orderingApi(transport: Transport = httpTransport) {
     return res.body as T;
   }
 
+  /** Small live read: never re-fetch the catalogue or replace checkout state. */
+  async function loadAvailability(slug: string, signal?: AbortSignal) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const timeout = setTimeout(abort, 10_000);
+    let rejectAbort: (() => void) | undefined;
+    try {
+      const canceled = new Promise<never>((_, reject) => {
+        rejectAbort = () => reject(new Error("Disponibilités indisponibles"));
+        controller.signal.addEventListener("abort", rejectAbort, { once: true });
+        if (controller.signal.aborted) rejectAbort();
+      });
+      const body = await Promise.race([canceled, getJson<unknown>(`/public/tenants/${encodeURIComponent(slug)}/availability`, {
+        signal: controller.signal, revalidate: 0,
+      })]);
+      if (controller.signal.aborted) throw new Error("Disponibilités indisponibles");
+      return PublicOrderingAvailabilitySchema.parse(body);
+    } finally {
+      clearTimeout(timeout);
+      if (rejectAbort) controller.signal.removeEventListener("abort", rejectAbort);
+      signal?.removeEventListener("abort", abort);
+    }
+  }
+
   /**
    * Charge tout ce qu’il faut pour afficher un restaurant.
    *
@@ -700,6 +726,7 @@ export function orderingApi(transport: Transport = httpTransport) {
   }
 
   return {
+    loadAvailability,
     loadSite,
     loadBrand,
     loadSlots,

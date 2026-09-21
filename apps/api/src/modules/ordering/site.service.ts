@@ -6,13 +6,15 @@ import {
   brandColorDe,
   logoUrlDe,
   publicOrderingState,
+  PublicOrderingAvailabilitySchema,
   WebsiteUrlSchema,
   type MediaVue,
   type PublicSiteResponse,
   type PublicSiteReview,
   type PublicSiteTenant,
+  type PublicOrderingAvailability,
 } from '@sm/contracts';
-import type { Review } from '@sm/db';
+import type { Review, Tenant } from '@sm/db';
 import { marqueObservee } from '../../common/marque-observee';
 import { MenuService } from '../menu/menu.service';
 import { horairesPublics } from '../tenants/horaires-publics';
@@ -23,6 +25,18 @@ import { publicDeliverySettingsOf } from '../delivery/delivery-order';
 
 /** Nombre d'avis récents renvoyés avec la page publique. */
 const LATEST_REVIEWS = 3;
+
+/** Same commercial gate for the initial site and its lightweight refresh. */
+function orderingStateOf(tenant: Tenant) {
+  return publicOrderingState(
+    tenant.account,
+    {
+      paused: tenant.settings?.onlineOrderingPaused === true,
+      message: tenant.settings?.pauseMessage ?? null,
+    },
+    aLaCapacite(tenant, 'online'),
+  );
+}
 
 /**
  * La vue publique de l'établissement — EXPORTÉE pour être testée sans Mongo.
@@ -87,14 +101,7 @@ export class SiteService {
     // la mention d'un abonnement) — règle partagée des contrats. Le menu, les
     // horaires et les avis restent servis : on ferme un guichet, on n'efface
     // pas un restaurant d'Internet.
-    const gate = publicOrderingState(
-      tenant.account,
-      {
-        paused: tenant.settings?.onlineOrderingPaused === true,
-        message: tenant.settings?.pauseMessage ?? null,
-      },
-      aLaCapacite(tenant, 'online'),
-    );
+    const gate = orderingStateOf(tenant);
     const paused = gate.paused;
 
     return {
@@ -112,6 +119,21 @@ export class SiteService {
       todayHours: this.slots.todayHours(tenant, parisYmd(new Date())),
       timezone: slots.timezone,
     };
+  }
+
+  /** No menu, reviews or media reads; every request resolves the current tenant and today's capacity. */
+  async availability(slug: string): Promise<PublicOrderingAvailability> {
+    const observedAt = new Date();
+    const tenant = await this.tenants.bySlug(slug);
+    const slots = await this.slots.compute(tenant);
+    return PublicOrderingAvailabilitySchema.parse({
+      observedAt: observedAt.toISOString(),
+      openNow: this.slots.isOpenNow(tenant, observedAt),
+      ordering: orderingStateOf(tenant),
+      todayHours: this.slots.todayHours(tenant, parisYmd(observedAt)),
+      timezone: slots.timezone,
+      slots,
+    });
   }
 
   /**

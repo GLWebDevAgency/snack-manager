@@ -711,3 +711,4 @@ export const ordersChannel = (tenantId: string) => `tenant:${tenantId}:orders`;
 export * from './loyalty-sale-settlement';
 
 export * from './order-reward';
+export * from './public-ordering-availability';

@@ -444,7 +444,7 @@ export function Checkout({
 
   const nameOk = customer.name.trim().length >= 2 && customer.name.trim().length <= 80;
   const contactOk = nameOk && phoneOk(customer.phone) && (!isDelivery || Boolean(deliveryQuote));
-  const blockedByPause = paused;
+  const blockedByPause = paused && !order && step !== "recovery";
 
   const chosenSlot = useMemo(
     () => slots?.slots.find((s) => s.iso === slotIso) ?? null,
@@ -748,6 +748,7 @@ export function Checkout({
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter", previous?: PendingCheckoutAttempt) {
     if (requestInFlightRef.current || (!demo && (!recovery.ready || recovery.error))) return;
+    if (!previous && paused) return;
     if (!previous && !demo && !checkoutQuote) { setError("Vérifiez le total de votre panier avant de confirmer."); return; }
     if (!previous && (!slotsReady || !chosenSlot || chosenSlot.full || !slotIso || !contactOk || cart.lines.length === 0)) return;
     const proof = demo ? "demo" : turnstileToken;

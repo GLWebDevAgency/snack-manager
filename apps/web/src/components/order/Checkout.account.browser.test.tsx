@@ -92,7 +92,7 @@ beforeAll(async () => {
       // Fixed HTTP fixture: Monday noon in Europe/Paris, with bookable pickup slots regardless of runner time.
       const raw=demoSite(new Date('2030-09-09T10:00:00.000Z'),()=>0);raw.tenant.slug='recette';raw.tenant.brand=marqueDeRepli(null,null);
       raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
-      const api=orderingApi({send:async request=>({status:200,body:request.path.includes('/slots')?raw.slots:raw})});
+      const api=orderingApi({send:async request=>({status:200,body:request.path.endsWith('/availability')?{observedAt:new Date().toISOString(),openNow:raw.openNow,ordering:raw.ordering,todayHours:raw.todayHours,timezone:raw.timezone,slots:raw.slots}:request.path.includes('/slots')?raw.slots:raw})});
       node=<Storefront site={await api.loadSite('recette')} api={api} mode="embed" demo={false}/>;
     }createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
     bundle: true, write: false, outdir: '/virtual-account-checkout', platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic',
