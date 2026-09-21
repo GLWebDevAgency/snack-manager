@@ -6,6 +6,20 @@ const presentText = { ...text, required: true, validate: (value: string) => valu
 const cents = { type: Number, cast: false, required: true, min: 1, max: 100_000_000, validate: Number.isSafeInteger };
 const date = { type: Date, cast: false, validate: (value: Date | null) => value === null || Number.isFinite(value.getTime()) };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AllocationSchema = new Schema({
+  version: { type: Number, cast: false, enum: [1], required: true },
+  merchandiseCents: { ...cents, min: 0 },
+  deliveryCents: { ...cents, min: 0 },
+}, options);
+const AllocationReceiptSchema = new Schema({
+  operationId: { ...presentText, validate: (value: string) => value.length === 36 && uuid.test(value) },
+  state: { ...text, enum: ['recorded', 'withdrawn'] },
+  refundId: presentText,
+  allocation: { type: AllocationSchema, required: true },
+  actorId: presentText,
+  reason: { ...presentText, minlength: 3, maxlength: 200 },
+  recordedAt: { ...date, required: true },
+}, options);
 
 /** Observation fournisseur seulement : aucune interprétation du statut ni
  * reconstitution d'un remboursement à partir du paiement courant. */
@@ -21,6 +35,7 @@ const RefundProofSchema = new Schema({
 const RefundOperationSchema = new Schema({
   operationId: { ...presentText, validate: (value: string) => value.length === 36 && uuid.test(value) },
   amountCents: cents,
+  allocation: { type: AllocationSchema },
   reason: { ...presentText, minlength: 3, maxlength: 200 },
   actorId: presentText,
   environment: { ...text, enum: ['test', 'live'], required: true },
@@ -43,4 +58,6 @@ export const OrderRefundFlowSchema = new Schema({
   version: { type: Number, cast: false, enum: [1], required: true },
   operations: { type: [RefundOperationSchema], required: true, default: undefined, castNonArrays: false,
     validate: { validator: (rows: unknown[]) => rows.length <= 128, message: 'Journal de remboursement trop volumineux.' } },
+  allocations: { type: [AllocationReceiptSchema], default: undefined, castNonArrays: false,
+    validate: { validator: (rows: unknown[]) => rows.length <= 128, message: 'Journal de ventilation trop volumineux.' } },
 }, options);

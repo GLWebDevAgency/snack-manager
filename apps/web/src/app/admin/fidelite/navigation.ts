@@ -2,6 +2,7 @@ export const LOYALTY_NAVIGATION = [
   { href: "/admin/fidelite", label: "Vue d'ensemble", exact: true },
   { href: "/admin/fidelite/programme", label: "Programme", exact: false },
   { href: "/admin/fidelite/recompenses", label: "Récompenses", exact: false },
+  { href: "/admin/fidelite/ventes", label: "Ventes web", exact: false },
   { href: "/admin/fidelite/clients", label: "Clients", exact: false },
 ] as const;
 

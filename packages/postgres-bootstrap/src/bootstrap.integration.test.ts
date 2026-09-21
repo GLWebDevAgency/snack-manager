@@ -392,7 +392,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       });
       expect(protectedReport.issues).toEqual([]);
       // The manifest includes future objects; the 0008 bridge is still absent.
-      expect(protectedReport.objects).toHaveLength(107);
+      expect(protectedReport.objects).toHaveLength(116);
       for (const name of protectedTables) {
         await expect(freshMigrationPool.query(
           `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
@@ -464,7 +464,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationRole, runtimeRole,
       });
       expect(accessReport.issues).toEqual([]);
-      expect(accessReport.objects).toHaveLength(107);
+      expect(accessReport.objects).toHaveLength(116);
       expect((await freshMigrationPool.query(`SELECT 1 FROM pg_catalog.pg_constraint
         WHERE conrelid='customer.passkey_credentials'::regclass
           AND conname='passkey_credentials_parent_ref_tenant_ref_account_id_key'`)).rows).toEqual([]);

@@ -17,7 +17,21 @@ interface PosOrderEvidence {
   channel?: unknown;
   status?: unknown;
   totals?: { total?: unknown } | null;
-  payment?: { status?: unknown } | null;
+  payment?: { status?: unknown; refundedCents?: unknown; pendingRefundCents?: unknown;
+    refunds?: { status?: unknown }[] } | null;
+  refundFlow?: { operations?: { state?: unknown; refund?: { status?: unknown } | null }[] } | null;
+}
+
+/** This historical POS path has no cumulative correction writer. Never award
+ * the gross ticket as a NEW gain after a known refund or unresolved request. */
+function intactFinancialEvidence(order: PosOrderEvidence): boolean {
+  const payment = order.payment;
+  if ([payment?.refundedCents ?? 0, payment?.pendingRefundCents ?? 0].some(value => value !== 0)) return false;
+  if (payment?.refunds != null && (!Array.isArray(payment.refunds)
+    || payment.refunds.some(row => !['failed', 'canceled'].includes(String(row.status))))) return false;
+  const operations = order.refundFlow?.operations;
+  return operations == null || (Array.isArray(operations) && operations.every(operation => operation.state === 'withdrawn'
+    || (operation.state === 'known' && ['failed', 'canceled'].includes(String(operation.refund?.status)))));
 }
 
 export interface LoyaltyPurchaseClaim {
@@ -85,6 +99,11 @@ export class LoyaltyPurchaseVerifier {
           status: 1,
           loyaltyMemberId: 1,
           'payment.status': 1,
+          'payment.refundedCents': 1,
+          'payment.pendingRefundCents': 1,
+          'payment.refunds.status': 1,
+          'refundFlow.operations.state': 1,
+          'refundFlow.operations.refund.status': 1,
           'totals.total': 1,
         },
       )
@@ -96,6 +115,7 @@ export class LoyaltyPurchaseVerifier {
       order.channel !== 'pos' ||
       order.status !== 'delivered' ||
       order.payment?.status !== 'paid' ||
+      !intactFinancialEvidence(order) ||
       typeof total !== 'number' ||
       !Number.isSafeInteger(total) ||
       total < 0

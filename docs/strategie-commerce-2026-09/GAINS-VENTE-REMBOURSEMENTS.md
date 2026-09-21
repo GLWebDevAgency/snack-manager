@@ -1,5 +1,8 @@
 # Fidélité sur vente et remboursement — socle de calcul
 
+Suite d’implémentation : [Crédits web et compensations](CREDITS-WEB-COMPENSATIONS.md).
+L’état ci-dessous est le reçu historique du socle, pas le statut de ce nouveau lot.
+
 État au 10 septembre 2026 : socle reçu sur staging dans [#160](https://github.com/GLWebDevAgency/snack-manager/pull/160),
 révision `f93980ea30b44abf5be7847fac7e4ea6bdddba8c`. Deux fonctions pures sont implémentées dans
 `@sm/domain`, sans writer, worker supplémentaire, migration ou activation.

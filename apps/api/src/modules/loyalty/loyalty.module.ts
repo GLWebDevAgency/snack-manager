@@ -9,10 +9,15 @@ import { LoyaltyController } from './loyalty.controller';
 import { LoyaltyPublicController } from './loyalty-public.controller';
 import { LoyaltyPublicService } from './loyalty-public.service';
 import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
+import { LoyaltyHistoricalSaleService } from './loyalty-historical-sale.service';
+import { LoyaltyWebSettlementProcessor } from './loyalty-web-settlement.processor';
+import { EncaissementModule } from '../encaissement/encaissement.module';
+import { LoyaltySaleSettlementController } from './loyalty-sale-settlement.controller';
+import { LoyaltySaleSettlementService } from './loyalty-sale-settlement.service';
 
 @Module({
-  imports: [TenantsModule],
-  controllers: [LoyaltyController, LoyaltyMemberController, LoyaltyPublicController],
+  imports: [TenantsModule, EncaissementModule],
+  controllers: [LoyaltyController, LoyaltyMemberController, LoyaltyPublicController, LoyaltySaleSettlementController],
   providers: [
     LoyaltyAdminService,
     LoyaltyEnrollmentExpiryProcessor,
@@ -20,6 +25,9 @@ import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
     LoyaltyOrderEarnProcessor,
     LoyaltyPublicService,
     LoyaltyPurchaseVerifier,
+    LoyaltyHistoricalSaleService,
+    LoyaltyWebSettlementProcessor,
+    LoyaltySaleSettlementService,
   ],
 })
 export class LoyaltyModule {}

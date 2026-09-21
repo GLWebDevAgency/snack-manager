@@ -243,6 +243,60 @@ describe('cible de recette HTTP du journal de remboursement', () => {
     expect(commands.every(command => command === 'find')).toBe(true);
   }
 
+  describe('ventilation historique : véritable frontière HTTP propriétaire', () => {
+    const allocationPath = () => `/orders/${orderId}/refunds/re_journal_http/allocation`;
+    const input = () => ({ clientProtocolVersion: 2, operationId: randomUUID(), password,
+      reason: 'Produits et frais vérifiés', allocation: { version: 1, merchandiseCents: 200, deliveryCents: 50 } });
+    it.each([undefined, 'staff', 'manager', 'foreign'] as const)('refuse le principal %s avant toute mutation', async role => {
+      const before = await readOrder(); commands = [];
+      const response = await http('POST', allocationPath(), role ? tokens[role] : undefined, input());
+      expect(response.status).toBe(role === undefined ? 401 : role === 'foreign' ? 404 : 403);
+      expect(await readOrder()).toEqual(before);
+      expect(audit.logOnce).not.toHaveBeenCalled();
+    });
+    it('vérifie réellement le mot de passe et conserve le journal si la vérification échoue', async () => {
+      const before = await readOrder();
+      const response = await http('POST', allocationPath(), tokens.owner, { ...input(), password: 'wrong-allocation-password' });
+      expect(response.status).toBe(401);
+      expect(reauthentication.verify).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sub: OWNER }), 'wrong-allocation-password');
+      expect(await readOrder()).toEqual(before);
+      expect(audit.logOnce).not.toHaveBeenCalled();
+    });
+    it('enregistre une ventilation avec Stripe fermé et rejoue le reçu exact sans nouvelle mutation', async () => {
+      await models.Order.updateOne({ _id: orderId }, { $set: { 'totals.subtotal': 1000, 'totals.deliveryFee': 250 } });
+      refundsEnabled = false; expectedAuditReceipts = 2;
+      const body = input();
+      const first = await http('POST', allocationPath(), tokens.owner, body);
+      expect(first.status).toBe(200); expect(first.cacheControl).toBe('private, no-store');
+      expect(first.body).toMatchObject({ enabled: false,
+        allocations: [{ operationId: body.operationId, refundId: 're_journal_http', allocation: body.allocation, reason: body.reason }],
+        allocation: { remaining: { version: 1, merchandiseCents: 800, deliveryCents: 200 }, unallocated: [] } });
+      const beforeReplay = await readOrder(); commands = [];
+      const replay = await http('POST', allocationPath(), tokens.owner, body);
+      expect(replay.status).toBe(200); expect(replay.body).toEqual(first.body);
+      expectReadOnlyCommands(); expect(await readOrder()).toEqual(beforeReplay);
+      expect(JSON.stringify(first.body)).not.toContain(password);
+    });
+    it.each([undefined, 'staff', 'manager', 'foreign'] as const)('protège aussi l’abandon contre le principal %s', async role => {
+      const before = await readOrder();
+      const response = await http('POST', `${allocationPath()}/withdraw`, role ? tokens[role] : undefined, input());
+      expect(response.status).toBe(role === undefined ? 401 : role === 'foreign' ? 404 : 403);
+      expect(await readOrder()).toEqual(before); expect(audit.logOnce).not.toHaveBeenCalled();
+    });
+    it('réauthentifie l’abandon puis conserve son reçu terminal face au POST retardé', async () => {
+      const body = input(); refundsEnabled = false;
+      expect((await http('POST', `${allocationPath()}/withdraw`, tokens.owner, { ...body, password: 'wrong' })).status).toBe(401);
+      expectedAuditReceipts = 2;
+      const first = await http('POST', `${allocationPath()}/withdraw`, tokens.owner, body);
+      expect(first.status).toBe(200); expect(first.cacheControl).toBe('private, no-store');
+      expect(first.body).toMatchObject({ allocations: [{ operationId: body.operationId, state: 'withdrawn' }] });
+      const before = await readOrder(); commands = [];
+      const delayed = await http('POST', allocationPath(), tokens.owner, body);
+      expect(delayed.status).toBe(200); expect(delayed.body).toEqual(first.body);
+      expectReadOnlyCommands(); expect(await readOrder()).toEqual(before);
+    });
+  });
+
   it.each([true, false])('owner reçoit 200/no-store et un reçu réduit, activation %s, sans mutation', async (enabled) => {
     refundsEnabled = enabled;
     const before = await readOrder(); commands = [];
@@ -295,14 +349,14 @@ describe('cible de recette HTTP du journal de remboursement', () => {
   it.each(['refunds', 'refunds/withdraw'])('POST %s refuse le mauvais mot de passe avant intention, fournisseur ou mutation', async (path) => {
     const before = await readOrder(); commands = [];
     const response = await http('POST', `/orders/${orderId}/${path}`, tokens.owner,
-      { clientProtocolVersion: 1, operationId: randomUUID(), amountCents: 100, reason: 'Seconde demande de recette', password: 'wrong-fixture-password' });
+      { clientProtocolVersion: 2, operationId: randomUUID(), amountCents: 100, reason: 'Seconde demande de recette', password: 'wrong-fixture-password' });
     expect(response.status).toBe(401);
     expect(response.body).toMatchObject({ message: 'Mot de passe incorrect.' });
     expect(reauthentication.verify).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sub: OWNER }), 'wrong-fixture-password');
     expectReadOnlyCommands(); expect(clientFactory).not.toHaveBeenCalled();
     expect(await readOrder()).toEqual(before);
   });
-  it.each(['refunds', 'refunds/withdraw'].flatMap(path => [undefined, 0, '1', 2].map(version => ({ path, version }))))(
+  it.each(['refunds', 'refunds/withdraw'].flatMap(path => [undefined, 0, '2', 1, 3].map(version => ({ path, version }))))(
     'POST $path refuse le protocole $version avant réauthentification et tout effet', async ({ path, version }) => {
       const before = await readOrder(); commands = [];
       const body = { ...(version === undefined ? {} : { clientProtocolVersion: version }),
@@ -317,11 +371,11 @@ describe('cible de recette HTTP du journal de remboursement', () => {
     },
   );
 
-  it('version 1 retire avant envoi, rejoue le même retrait et refuse ensuite le même POST de remboursement', async () => {
+  it('version 2 retire avant envoi, rejoue le même retrait et refuse ensuite le même POST de remboursement', async () => {
     expectedAuditReceipts = 2; expectedPublishes = 1;
     const before = await readOrder();
     const withdrawnId = randomUUID();
-    const body = { clientProtocolVersion: 1, operationId: withdrawnId, amountCents: 100,
+    const body = { clientProtocolVersion: 2, operationId: withdrawnId, amountCents: 100,
       reason: 'Abandon avant envoi de recette', password };
     const withdrawn = await http('POST', `/orders/${orderId}/refunds/withdraw`, tokens.owner, body);
     expect(withdrawn.status).toBe(200);

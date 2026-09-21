@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -136,6 +137,8 @@ export class OrdersService {
     delete payload.publicRecovery;
     delete payload.customerOwner;
     delete payload.customerSaleAttribution;
+    delete payload.loyaltyWebIntent;
+    delete payload.loyaltyWebProcessing;
     return payload;
   }
 
@@ -340,6 +343,12 @@ export class OrdersService {
         clientId: dto.clientId,
         customerOwner: recovery?.customerOwner ?? null,
         customerSaleAttribution,
+        // Persist even with the worker disabled: this admission owns one
+        // immutable operation. Old/null/non-attributed sales are never adopted.
+        loyaltyWebIntent: dto.channel === 'online' && customerSaleAttribution?.decision === 'attributed'
+          ? { version: 1, operationId: randomUUID() } : null,
+        loyaltyWebProcessing: dto.channel === 'online' && customerSaleAttribution?.decision === 'attributed'
+          ? { state: 'pending', dirty: true, attempts: 0, nextAttemptAt: new Date() } : null,
         loyaltyMemberId: dto.loyaltyMemberId ?? null,
         loyaltyEarnOperationId: dto.loyaltyEarnOperationId ?? null,
         loyaltyActorRef: dto.loyaltyMemberId ? actor : null,

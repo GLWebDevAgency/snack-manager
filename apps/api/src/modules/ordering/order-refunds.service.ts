@@ -4,7 +4,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { Model, Types } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order } from '@sm/db';
-import { orderAccessScope, ordersChannel, WS_EVENTS, OrderRefundRequestSchema, OrderRefundJournalSchema, type OrderRefundJournal, type OrderRefundRequest, type OrderRefundSummary } from '@sm/contracts';
+import { orderAccessScope, ordersChannel, WS_EVENTS, OrderRefundRequestSchema, OrderRefundJournalSchema,
+  OrderRefundAllocationRequestSchema, type OrderRefundAllocationRequest, type OrderRefundJournal, type OrderRefundRequest, type OrderRefundSummary } from '@sm/contracts';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { refundSummary } from './order-refunds.policy';
@@ -12,6 +13,7 @@ import { assertRefundProof, MAX_REFUND_OPERATIONS, REFUND_RECOVERY_WINDOW_MS, re
   type RefundOperation, type RefundProof, type RefundSnapshot } from './order-refund-flow.policy';
 import { CapacitesService } from '../../common/capacites';
 import { AuditService } from '../audit/audit.module';
+import { allocationMatches, assertAllocation, refundAllocationProjection, type RefundAllocationReceipt } from './order-refund-allocation.policy';
 
 export const STRIPE_REFUND_CLIENT = Symbol('STRIPE_REFUND_CLIENT');
 type Options = { stripeAccount?: string; idempotencyKey?: string };
@@ -47,7 +49,7 @@ export class OrderRefundsService {
   }
 
   private async read(filter: Record<string, unknown>): Promise<RefundSnapshot | null> {
-    return await this.orders.findOne(filter).select('+refundFlow +paymentFlow').read('primary')
+    return await this.orders.findOne(filter).select('+refundFlow +paymentFlow +customerSaleAttribution +loyaltyWebIntent').read('primary')
       .readConcern('majority').maxTimeMS(10_000).lean() as RefundSnapshot | null;
   }
 
@@ -79,12 +81,15 @@ export class OrderRefundsService {
   /** Every financial mutation fences hydrated saves, dispatch and handoff.
    * After a lost response, only the exact majority-committed CAS proves success. */
   private async change(order: RefundSnapshot, set: Record<string, unknown> = {}): Promise<RefundSnapshot | null> {
+    // Durable wake-up: no Redis dependency and no lease/state replacement.
+    if (order.loyaltyWebIntent?.version === 1) set = { ...set,
+      'loyaltyWebProcessing.dirty': true, 'loyaltyWebProcessing.nextAttemptAt': new Date() };
     const filter = { _id: order._id, tenantId: order.tenantId, __v: order.__v ?? { $exists: false },
       'payment.method': order.payment.method, 'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
       'payment.stripeAccountId': order.payment.stripeAccountId ?? null };
     try {
       return await this.orders.findOneAndUpdate(filter, { $set: set, $inc: { __v: 1, 'payment.refundSyncVersion': 1 } },
-        { new: true, writeConcern: DURABLE_WRITE, runValidators: true }).select('+refundFlow +paymentFlow').read('primary').lean() as RefundSnapshot | null;
+        { new: true, writeConcern: DURABLE_WRITE, runValidators: true }).select('+refundFlow +paymentFlow +customerSaleAttribution +loyaltyWebIntent').read('primary').lean() as RefundSnapshot | null;
     } catch {
       const observed = await this.fresh(order).catch(() => null);
       if (observed && observed.__v === (order.__v ?? 0) + 1
@@ -189,9 +194,17 @@ export class OrderRefundsService {
       try { this.context(order, client); } catch { enabled = false; }
     }
     const now = Date.now();
+    const allocated = refundAllocationProjection(order);
     const result = OrderRefundJournalSchema.safeParse({
       orderId: String(order._id), enabled,
       summary,
+      allocation: { basis: allocated.basis, remaining: allocated.remaining,
+        capacity: allocated.allocationCapacity, unallocated: allocated.unallocated },
+      allocations: (order.refundFlow?.allocations ?? []).map(receipt => ({
+        operationId: receipt.operationId, refundId: receipt.refundId, allocation: receipt.allocation,
+        state: receipt.state ?? 'recorded',
+        reason: receipt.reason, recordedAt: new Date(receipt.recordedAt).toISOString(),
+      })),
       operations: (order.refundFlow?.operations ?? []).map(operation => {
         const started = operation.requestStartedAt == null ? null : new Date(operation.requestStartedAt).getTime();
         const prepared = new Date(operation.preparedAt).getTime();
@@ -200,6 +213,7 @@ export class OrderRefundsService {
         return {
           orderId: String(order._id), operationId: operation.operationId,
           amountCents: operation.amountCents, reason: operation.reason,
+          allocation: operation.allocation ?? null,
           state, providerStatus: operation.refund?.status ?? null,
           canResume: enabled && operation.actorId === actorId && !operation.refund && !elapsed
             && ['prepared', 'creating'].includes(state),
@@ -228,6 +242,9 @@ export class OrderRefundsService {
         throw new ConflictException('Cette demande a déjà pu être envoyée. Vérifiez son remboursement ; elle ne peut plus être abandonnée.');
       }
       const flow = structuredClone(order.refundFlow ?? { version: 1 as const, operations: [] });
+      if (flow.allocations?.some(receipt => receipt.operationId === body.operationId)) {
+        throw new ConflictException('Cette opération désigne déjà une ventilation.');
+      }
       let operation = flow.operations.find(entry => entry.operationId === body.operationId);
       if (operation) {
         this.match(operation, actorId, body);
@@ -242,6 +259,7 @@ export class OrderRefundsService {
       } else {
         if (flow.operations.length >= MAX_REFUND_OPERATIONS) refundUnavailable();
         operation = { operationId: body.operationId, amountCents: body.amountCents, reason: body.reason, actorId,
+          ...(body.allocation ? { allocation: body.allocation } : {}),
           environment: client.environment, paymentIntentId: order.payment.stripePaymentIntentId!,
           accountId: order.payment.stripeAccountId ?? null,
           idempotencyKey: 'order-refund:' + String(order._id) + ':' + body.operationId,
@@ -269,8 +287,82 @@ export class OrderRefundsService {
     return refundUnavailable();
   }
 
+  /** Administrative evidence for an already observed provider refund. This
+   * records its allocation once; it never creates or retries a Stripe effect. */
+  async allocate(tenantId: string, orderId: string, refundId: string, actorId: string,
+    input: OrderRefundAllocationRequest): Promise<OrderRefundJournal> {
+    return this.allocationDecision(tenantId, orderId, refundId, actorId, input, 'recorded');
+  }
+
+  /** A delayed allocation POST must observe this immutable tombstone. Unlike a
+   * Stripe refund, allocation is one Mongo CAS and has no external dispatch. */
+  async withdrawAllocation(tenantId: string, orderId: string, refundId: string, actorId: string,
+    input: OrderRefundAllocationRequest): Promise<OrderRefundJournal> {
+    return this.allocationDecision(tenantId, orderId, refundId, actorId, input, 'withdrawn');
+  }
+
+  private async allocationDecision(tenantId: string, orderId: string, refundId: string, actorId: string,
+    input: OrderRefundAllocationRequest, state: 'recorded' | 'withdrawn'): Promise<OrderRefundJournal> {
+    const parsed = OrderRefundAllocationRequestSchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException('Ventilation invalide.');
+    if (!/^re_[A-Za-z0-9_]{1,252}$/.test(refundId)) throw new NotFoundException('Remboursement introuvable.');
+    const body = { ...parsed.data, operationId: parsed.data.operationId.toLowerCase() };
+    let order = await this.order(tenantId, orderId);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const flow = structuredClone(order.refundFlow ?? { version: 1 as const, operations: [] });
+      const receipts = flow.allocations ?? [];
+      const previous = receipts.find(r => r.operationId === body.operationId);
+      if (previous) {
+        if (previous.operationId !== body.operationId || previous.refundId !== refundId || previous.actorId !== actorId
+          || previous.reason !== body.reason || !allocationMatches(previous.allocation, body.allocation)) {
+          throw new ConflictException('Ce remboursement possède déjà une autre ventilation. Actualisez son journal.');
+        }
+        await this.auditAllocation(order, previous);
+        return this.journal(tenantId, orderId, actorId);
+      }
+      if (flow.operations.some(operation => operation.operationId === body.operationId) || receipts.length >= 128) {
+        throw new ConflictException('Cette opération ne peut pas créer une ventilation.');
+      }
+      if (state === 'recorded') {
+        if (receipts.some(r => r.refundId === refundId && r.state !== 'withdrawn')) {
+          throw new ConflictException('Ce remboursement possède déjà une autre ventilation. Actualisez son journal.');
+        }
+        const projection = refundAllocationProjection(order);
+        const target = projection.unallocated.find(row => row.refundId === refundId && row.canAllocate);
+        if (!target || !projection.allocationCapacity) {
+          throw new ConflictException('Aucune ventilation manquante ne correspond à ce remboursement.');
+        }
+        assertAllocation(body.allocation, target.amountCents);
+        if (body.allocation.merchandiseCents > projection.allocationCapacity.merchandiseCents
+          || body.allocation.deliveryCents > projection.allocationCapacity.deliveryCents) {
+          throw new ConflictException('La ventilation dépasse la part produits ou livraison disponible.');
+        }
+      }
+      const receipt: RefundAllocationReceipt = { operationId: body.operationId, refundId, allocation: body.allocation,
+        state, actorId, reason: body.reason, recordedAt: new Date() };
+      flow.allocations = [...receipts, receipt];
+      refundAllocationProjection({ ...order, refundFlow: flow });
+      const saved = await this.change(order, { refundFlow: flow });
+      if (saved) {
+        await this.auditAllocation(saved, receipt);
+        return this.journal(tenantId, orderId, actorId);
+      }
+      order = await this.fresh(order);
+    }
+    return refundUnavailable();
+  }
+
+  private async auditAllocation(order: RefundSnapshot, receipt: RefundAllocationReceipt): Promise<void> {
+    await this.audit.logOnce({ tenantId: String(order.tenantId),
+      actor: { sub: receipt.actorId, kind: 'user', role: 'owner' },
+      action: receipt.state === 'withdrawn' ? 'order.refund.allocation_withdraw' : 'order.refund.allocate', targetId: String(order._id),
+      meta: { operationId: receipt.operationId, refundId: receipt.refundId, allocation: receipt.allocation, reason: receipt.reason },
+    }, receipt.operationId);
+  }
+
   private match(operation: RefundOperation, actorId: string, body: OrderRefundRequest): void {
-    if (operation.amountCents !== body.amountCents || operation.reason !== body.reason || operation.actorId !== actorId) {
+    if (operation.amountCents !== body.amountCents || operation.reason !== body.reason || operation.actorId !== actorId
+      || !allocationMatches(operation.allocation, body.allocation)) {
       throw new ConflictException('Cette opération désigne déjà un autre remboursement.');
     }
   }
@@ -320,6 +412,9 @@ export class OrderRefundsService {
       this.context(order, client);
       if (!['paid', 'refunded'].includes(order.payment.status)) refundUnavailable();
       const flow = structuredClone(order.refundFlow ?? { version: 1 as const, operations: [] });
+      if (flow.allocations?.some(receipt => receipt.operationId === body.operationId)) {
+        throw new ConflictException('Cette opération désigne déjà une ventilation.');
+      }
       let operation = flow.operations.find((entry) => entry.operationId === body.operationId);
       if (!operation) {
         // Do not fabricate a pre-dispatch receipt for an older binary's call.
@@ -330,7 +425,18 @@ export class OrderRefundsService {
         if (body.amountCents > refundProjection(order).summary.remainingCents) {
           throw new ConflictException('Le remboursement dépasse le montant restant disponible.');
         }
+        if (body.allocation) {
+          assertAllocation(body.allocation, body.amountCents);
+          const remaining = refundAllocationProjection(order).remaining;
+          if (!remaining || body.allocation.merchandiseCents > remaining.merchandiseCents
+            || body.allocation.deliveryCents > remaining.deliveryCents) {
+            throw new ConflictException('La ventilation dépasse les montants disponibles. Vérifiez les remboursements précédents.');
+          }
+        } else if (order.customerSaleAttribution?.decision === 'attributed') {
+          throw new ConflictException('Précisez la part produits et livraison avant ce nouveau remboursement.');
+        }
         operation = { operationId: body.operationId, amountCents: body.amountCents, reason: body.reason, actorId,
+          ...(body.allocation ? { allocation: body.allocation } : {}),
           environment: client.environment, paymentIntentId: order.payment.stripePaymentIntentId!,
           accountId: order.payment.stripeAccountId ?? null, idempotencyKey: 'order-refund:' + orderId + ':' + body.operationId,
           preparedAt: new Date(), requestStartedAt: null, state: 'prepared' };

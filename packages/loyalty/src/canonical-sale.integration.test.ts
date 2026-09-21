@@ -190,7 +190,7 @@ integration('canonical sale uniqueness — genuine PostgreSQL and limited owner'
     await writeEarn(fixture.pool, member, 'pos', `pos-order:${randomUUID()}`);
     const before = await contents(fixture.pool, member.tenant);
     const journal = await fixture.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id');
-    expect(journal.rows).toHaveLength(7);
+    expect(journal.rows).toHaveLength(8);
     await fixture.upgrade(); await fixture.upgrade();
     expect((await fixture.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id')).rows).toEqual(journal.rows);
     expect(await contents(fixture.pool, member.tenant)).toEqual(before);
@@ -207,9 +207,10 @@ integration('canonical sale uniqueness — genuine PostgreSQL and limited owner'
       expect(journalBefore.rows).toHaveLength(6);
       await historical.upgrade();
       const journalAfter = await historical.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id');
-      expect(journalAfter.rows).toHaveLength(7);
+      expect(journalAfter.rows).toHaveLength(8);
       expect(journalAfter.rows.slice(0, 6)).toEqual(journalBefore.rows);
       expect(journalAfter.rows[6]).toMatchObject({ created_at: '1789040000000' });
+      expect(journalAfter.rows[7]).toMatchObject({ created_at: '1789978588970' });
       expect(await contents(historical.pool, member.tenant)).toEqual(before);
       for (const original of [sale, zeroSale]) await expect(writeEarn(historical.pool, member, 'online', `order:${original.toUpperCase()}`))
         .rejects.toMatchObject({ code: '23505', constraint: RECEIPT_INDEX });

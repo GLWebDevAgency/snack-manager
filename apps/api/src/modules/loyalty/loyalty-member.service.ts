@@ -64,6 +64,7 @@ import {
   consentState,
   desc,
   earnReceipts,
+  saleSettlements,
   eq,
   gt,
   hashLoyaltyQrToken,
@@ -1685,6 +1686,13 @@ export class LoyaltyMemberService {
     });
     try {
       return await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+        // Match the canonical-sale lock order of the historical writer before
+        // operation/program/member/wallet locks. The SQL trigger also protects
+        // still-running older binaries; those must drain before activation.
+        const canonicalSale = dto.externalRef && /^(pos-order|online-order|order):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(dto.externalRef);
+        if ((actor.source === 'pos' || actor.source === 'online') && canonicalSale) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${tenantRef} || ':' || ${canonicalSale[2]!.toLowerCase()}, 0))`);
+        }
         const claim = await claimOperation(tx, {
           tenantRef,
           operationId: dto.operationId,
@@ -2374,6 +2382,9 @@ export class LoyaltyMemberService {
           .limit(1)
           .for('share');
         if (!original) throw new NotFoundException('Écriture fidélité introuvable');
+        const [managedSale] = await tx.select({ id: saleSettlements.id }).from(saleSettlements)
+          .where(and(eq(saleSettlements.tenantRef, tenantRef), eq(saleSettlements.earnLedgerEntryId, original.id))).limit(1);
+        if (managedSale) throw new ConflictException('Ce gain suit les remboursements de la commande ; utilisez son dossier de rapprochement');
         if (original.kind !== 'earn' && original.kind !== 'redeem') {
           throw new ConflictException(
             'Seuls un gain ou une consommation peuvent être compensés',
@@ -3152,7 +3163,7 @@ export class LoyaltyMemberService {
         );
       const ledgerMetrics = await tx
         .select({
-          earnedUnits30d: sql<string>`coalesce(sum(case when ${ledgerEntries.kind} = 'earn' and ${reversalLedgerEntries.id} is null then ${ledgerEntries.deltaUnits} else 0 end), 0)`,
+          earnedUnits30d: sql<string>`coalesce(sum(case when ${ledgerEntries.kind} = 'earn' and ${reversalLedgerEntries.id} is null then ${ledgerEntries.deltaUnits} - coalesce(${saleSettlements.reversedUnits}, 0) else 0 end), 0)`,
           redeemedUnits30d: sql<string>`coalesce(sum(case when ${ledgerEntries.kind} = 'redeem' and ${reversalLedgerEntries.id} is null then -${ledgerEntries.deltaUnits} else 0 end), 0)`,
         })
         .from(ledgerEntries)
@@ -3163,6 +3174,7 @@ export class LoyaltyMemberService {
             eq(reversalLedgerEntries.reversedEntryId, ledgerEntries.id),
           ),
         )
+        .leftJoin(saleSettlements, and(eq(saleSettlements.tenantRef, ledgerEntries.tenantRef), eq(saleSettlements.earnLedgerEntryId, ledgerEntries.id)))
         .where(
           and(
             eq(ledgerEntries.tenantRef, tenantRef),

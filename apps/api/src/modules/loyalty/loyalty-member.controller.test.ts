@@ -38,6 +38,10 @@ import { LoyaltyOrderEarnProcessor } from './loyalty-order-earn.processor';
 import { LoyaltyPublicController } from './loyalty-public.controller';
 import { LoyaltyPublicService } from './loyalty-public.service';
 import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
+import { LoyaltyHistoricalSaleService } from './loyalty-historical-sale.service';
+import { LoyaltyWebSettlementProcessor } from './loyalty-web-settlement.processor';
+import { LoyaltySaleSettlementController } from './loyalty-sale-settlement.controller';
+import { LoyaltySaleSettlementService } from './loyalty-sale-settlement.service';
 import { LoyaltyController } from './loyalty.controller';
 import { LoyaltyModule } from './loyalty.module';
 
@@ -269,6 +273,7 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       LoyaltyController,
       LoyaltyMemberController,
       LoyaltyPublicController,
+      LoyaltySaleSettlementController,
     ]);
     expect(providers).toEqual([
       LoyaltyAdminService,
@@ -277,6 +282,9 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       LoyaltyOrderEarnProcessor,
       LoyaltyPublicService,
       LoyaltyPurchaseVerifier,
+      LoyaltyHistoricalSaleService,
+      LoyaltyWebSettlementProcessor,
+      LoyaltySaleSettlementService,
     ]);
   });
 

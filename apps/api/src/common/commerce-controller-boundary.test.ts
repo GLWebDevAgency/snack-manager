@@ -63,7 +63,7 @@ describe('commercial guard on real mixed controllers', () => {
 
   it('keeps financial routes owner-only independently from the subscribed function', () => {
     expect(Reflect.getMetadata('roles', OrderFinanceController)).toEqual(['owner']);
-    for (const method of ['summary', 'journal', 'refund', 'withdrawRefund', 'cancel']) {
+    for (const method of ['summary', 'journal', 'refund', 'withdrawRefund', 'allocateRefund', 'withdrawRefundAllocation', 'cancel']) {
       expect(Reflect.getMetadata('isPublic', (OrderFinanceController.prototype as unknown as Record<string, object>)[method]!)).not.toBe(true);
     }
   });
@@ -119,7 +119,7 @@ describe('commercial guard on real mixed controllers', () => {
       if (!(pipe instanceof OrderRefundMutationPipe)) throw new Error('Garde protocole absente de la route financière.');
       const business = { operationId: '11111111-1111-4111-8111-111111111111', amountCents: 100,
         reason: 'Produit indisponible', password: 'fixture-owner-password' };
-      const transformed = pipe.transform({ ...business, clientProtocolVersion: 1 });
+      const transformed = pipe.transform({ ...business, clientProtocolVersion: 2 });
       expect(transformed).toEqual(business);
       const result = { receipt: 'fixture-result' };
       const refunds = { request: vi.fn(async () => result), withdraw: vi.fn(async () => result) };

@@ -242,6 +242,18 @@ jobs:
           CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer
         run: pnpm --filter @sm/customer test:integration
 
+      - name: Tests MongoDB et PostgreSQL réels — gains web et compensations cumulées
+        env:
+          CUSTOMER_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          LOYALTY_WEB_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_web_loyalty
+        run: >-
+          pnpm --filter @sm/api exec vitest run
+          src/modules/loyalty/loyalty-historical-sale.integration.test.ts
+          src/modules/loyalty/loyalty-web-settlement.processor.integration.test.ts
+          src/modules/loyalty/loyalty-sale-settlement.http.integration.test.ts
+          --maxWorkers=1 --no-file-parallelism
+
       - name: Tests MongoDB réels — commandes privées et isolation des comptes
         env:
           CUSTOMER_ORDERS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_customer

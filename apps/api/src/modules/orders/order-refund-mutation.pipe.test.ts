@@ -10,8 +10,8 @@ const pipe = new OrderRefundMutationPipe();
 describe('refund client protocol boundary', () => {
   it.each([
     business, null, undefined, [], 'invalid',
-    ...[null, 0, '1', 2, true, {}, [1]].map(clientProtocolVersion => ({ ...business, clientProtocolVersion })),
-    Object.assign(Object.create({ clientProtocolVersion: 1 }), business),
+    ...[null, 0, '2', 1, 3, true, {}, [2]].map(clientProtocolVersion => ({ ...business, clientProtocolVersion })),
+    Object.assign(Object.create({ clientProtocolVersion: 2 }), business),
   ])('refuses an old or malformed protocol with a readable update instruction, case %#', value => {
     let error: unknown;
     try { pipe.transform(value); } catch (cause) { error = cause; }
@@ -23,22 +23,22 @@ describe('refund client protocol boundary', () => {
   });
 
   it('strips only transport metadata and returns the exact strict business request without mutating the caller', () => {
-    const input = Object.freeze({ ...business, clientProtocolVersion: 1 });
+    const input = Object.freeze({ ...business, clientProtocolVersion: 2 });
     const result = pipe.transform(input);
     expect(result).toEqual(business);
     expect(OrderRefundRequestSchema.parse(result)).toEqual(business);
     expect(result).not.toHaveProperty('clientProtocolVersion');
-    expect(input.clientProtocolVersion).toBe(1);
+    expect(input.clientProtocolVersion).toBe(2);
   });
 
   it('preserves the existing business normalization and stable operation UUID', () => {
-    expect(pipe.transform({ ...business, reason: ` ${business.reason} `, clientProtocolVersion: 1 })).toEqual(business);
+    expect(pipe.transform({ ...business, reason: ` ${business.reason} `, clientProtocolVersion: 2 })).toEqual(business);
   });
 
   it.each([
     { unexpected: true }, { amountCents: -1 }, { amountCents: 100_000_001 }, { amountCents: '250' },
     { reason: 'ab' }, { password: '' }, { operationId: 'invalid' },
   ])('uses strict business validation after protocol acceptance, case %#', patch => {
-    expect(() => pipe.transform({ ...business, ...patch, clientProtocolVersion: 1 })).toThrow(BadRequestException);
+    expect(() => pipe.transform({ ...business, ...patch, clientProtocolVersion: 2 })).toThrow(BadRequestException);
   });
 });

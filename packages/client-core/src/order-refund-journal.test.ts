@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrderRefundOperationView } from '@sm/contracts';
 import {
+  closeSupersededOrderRefundAllocationIntent, completeOrderRefundAllocationIntent, prepareOrderRefundAllocationIntent, readOrderRefundAllocationIntent, type OrderRefundAllocationIntent,
   completeOrderRefundIntent, ORDER_REFUND_STORAGE_KEY, prepareOrderRefundIntent,
   readOrderRefundIntent, type OrderRefundIntent,
 } from './order-refund-journal';
@@ -295,5 +296,79 @@ describe('stockage et données refusés', () => {
     expect(JSON.parse(values.get(ORDER_REFUND_STORAGE_KEY)!)).toEqual({ version: 1, intents: [intent()] });
     await completeOrderRefundIntent(webStore(), intent(), proof());
     expect(await readOrderRefundIntent(webStore(), ownerId, orderId)).toEqual({ state: 'none' });
+  });
+});
+
+
+describe('immutable refund allocations', () => {
+  const allocation = { version: 1 as const, merchandiseCents: 1000, deliveryCents: 250 };
+  const allocated = () => ({ ...intent(), allocation: { ...allocation } });
+  const historical = (): OrderRefundAllocationIntent => ({ ...allocated(), kind: 'allocation', refundId: 're_fixture' });
+  const receipt = () => ({ orderId, enabled: true,
+    summary: { refundedCents: 1250, pendingRefundCents: 0, remainingCents: 0, status: 'refunded', refunds: [] }, operations: [],
+    allocation: { basis: allocation, capacity: allocation, remaining: { version: 1, merchandiseCents: 0, deliveryCents: 0 }, unallocated: [] },
+    allocations: [{ operationId: uuid(1), refundId: 're_fixture', allocation, reason: intent().reason, recordedAt: '2026-09-21T10:00:00.000Z' }],
+  });
+  it('persists a deep copy across reload and refuses a different split under the same UUID', async () => {
+    const { store, open } = stores(); const request = allocated();
+    await prepareOrderRefundIntent(store, request); request.allocation.merchandiseCents = 1;
+    expect(await readOrderRefundIntent(open(), ownerId, orderId)).toEqual({ state: 'pending', intent: allocated() });
+    await expect(prepareOrderRefundIntent(store, { ...allocated(), allocation: { ...allocation, merchandiseCents: 1250, deliveryCents: 0 } })).rejects.toThrow();
+    await expect(completeOrderRefundIntent(store, allocated(), proof())).rejects.toThrow();
+    await expect(completeOrderRefundIntent(store, allocated(), proof({ allocation: { ...allocation, merchandiseCents: 1250, deliveryCents: 0 } }))).rejects.toThrow();
+    await completeOrderRefundIntent(store, allocated(), proof({ allocation }));
+    expect(await readOrderRefundIntent(store, ownerId, orderId)).toEqual({ state: 'none' });
+  });
+  it('never invents a split for legacy intent and accepts only a legacy exact proof', async () => {
+    const { store } = stores(); await prepareOrderRefundIntent(store, intent());
+    await expect(prepareOrderRefundIntent(store, allocated())).rejects.toThrow();
+    await expect(completeOrderRefundIntent(store, intent(), proof({ allocation }))).rejects.toThrow();
+    await completeOrderRefundIntent(store, intent(), proof({ allocation: null }));
+  });
+  it.each([{ ...allocation, deliveryCents: 249 }, { ...allocation, merchandiseCents: -1 }, { ...allocation, version: 2 }, { ...allocation, token: 'secret' }])('fails closed for malformed allocation %#', async invalid => {
+    const { store } = stores();
+    await expect(prepareOrderRefundIntent(store, { ...intent(), allocation: invalid } as OrderRefundIntent)).rejects.toThrow();
+  });
+  it('keeps historical allocation durable, private and mutually exclusive with refund intents', async () => {
+    browserLocks(); const { store, open } = stores();
+    const result = await Promise.allSettled([prepareOrderRefundAllocationIntent(store, historical()), prepareOrderRefundIntent(open(), intent())]);
+    expect(result.map(entry => entry.status)).toEqual(['fulfilled', 'rejected']);
+    expect(await readOrderRefundAllocationIntent(open(), ownerId, orderId)).toEqual({ state: 'pending', intent: historical() });
+    expect(await readOrderRefundIntent(store, ownerId, orderId)).toEqual({ state: 'blocked' });
+    expect(await readOrderRefundAllocationIntent(store, otherOwner, orderId)).toEqual({ state: 'blocked' });
+    await expect(completeOrderRefundIntent(store, historical(), proof({ allocation }))).rejects.toThrow();
+  });
+  it('acknowledges an exact withdrawn allocation without changing the saved split', async () => {
+    const { store } = stores(); await prepareOrderRefundAllocationIntent(store, historical());
+    const withdrawn = receipt();
+    await completeOrderRefundAllocationIntent(store, historical(), { ...withdrawn, allocations: [{ ...withdrawn.allocations[0], state: 'withdrawn' }] });
+    expect(await readOrderRefundAllocationIntent(store, ownerId, orderId)).toEqual({ state: 'none' });
+  });
+  it('closes a losing allocation only on explicit same-refund immutable proof and preserves newer intents', async () => {
+    const { store } = stores(); await prepareOrderRefundAllocationIntent(store, historical());
+    const original = receipt();
+    await expect(closeSupersededOrderRefundAllocationIntent(store, historical(), original)).rejects.toThrow();
+    const winner = { ...original, allocations: [{ ...original.allocations[0], operationId: uuid(2) }] };
+    await expect(closeSupersededOrderRefundAllocationIntent(store, historical(), { ...winner, orderId: 'f'.repeat(24) })).rejects.toThrow();
+    await expect(closeSupersededOrderRefundAllocationIntent(store, historical(), { ...winner, allocations: [{ ...winner.allocations[0], refundId: 're_other' }] })).rejects.toThrow();
+    await closeSupersededOrderRefundAllocationIntent(store, historical(), winner);
+    expect(await readOrderRefundAllocationIntent(store, ownerId, orderId)).toEqual({ state: 'none' });
+    await prepareOrderRefundIntent(store, { ...intent(), operationId: uuid(3) });
+    await expect(closeSupersededOrderRefundAllocationIntent(store, historical(), winner)).rejects.toThrow();
+  });
+  it('acknowledges only the enclosing order journal with an exact allocation receipt; absent is not proof', async () => {
+    const { store, open } = stores(); await prepareOrderRefundAllocationIntent(store, historical());
+    const valid = receipt();
+    const invalid = [null, valid.allocations[0], { ...valid, orderId: 'f'.repeat(24) }, { ...valid, allocations: [] },
+      { ...valid, allocations: [{ ...valid.allocations[0], reason: 'Other reason' }] },
+      { ...valid, allocations: [{ ...valid.allocations[0], refundId: 're_other' }] },
+      { ...valid, allocations: [{ ...valid.allocations[0], allocation: { ...allocation, merchandiseCents: 1250, deliveryCents: 0 } }] }];
+    for (const other of invalid) await expect(completeOrderRefundAllocationIntent(store, historical(), other)).rejects.toThrow();
+    expect((await readOrderRefundAllocationIntent(open(), ownerId, orderId)).state).toBe('pending');
+    await completeOrderRefundAllocationIntent(store, historical(), valid);
+    await completeOrderRefundAllocationIntent(open(), historical(), valid);
+    expect(await readOrderRefundAllocationIntent(store, ownerId, orderId)).toEqual({ state: 'none' });
+    await prepareOrderRefundIntent(store, { ...intent(), operationId: uuid(2) });
+    await expect(completeOrderRefundAllocationIntent(store, historical(), valid)).rejects.toThrow();
   });
 });

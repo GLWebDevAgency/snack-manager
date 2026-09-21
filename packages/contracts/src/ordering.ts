@@ -538,6 +538,8 @@ export const TENANT_AUDIT_ACTIONS = [
    */
   'order.refund',
   'order.refund.withdraw',
+  'order.refund.allocate',
+  'order.refund.allocation_withdraw',
 
   // ─── Prix de vente ───
   /**
@@ -616,6 +618,8 @@ export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.delivery_proof_rotate': 'Renouvellement de la preuve de remise',
   'order.refund': 'Remboursement',
   'order.refund.withdraw': 'Demande de remboursement abandonnée avant envoi',
+  'order.refund.allocate': 'Ventilation produits et livraison d’un remboursement',
+  'order.refund.allocation_withdraw': 'Abandon d’une ventilation de remboursement',
   'price.change': 'Changement de prix',
   'product.create': 'Produit ajouté à la carte',
   'product.delete': 'Produit retiré de la carte',

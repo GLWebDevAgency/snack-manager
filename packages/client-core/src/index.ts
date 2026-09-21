@@ -15,3 +15,5 @@ export * from './supplement-categories';
 export * from './customer-app-navigation';
 export * from './delivery-assignment';
 export * from './order-refund-journal';
+
+export * from './loyalty-sale-resolution-journal';
