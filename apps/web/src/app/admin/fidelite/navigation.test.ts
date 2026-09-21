@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { LOYALTY_NAVIGATION, isLoyaltyRouteActive } from "./navigation";
 
 describe("navigation fidélité", () => {
-  it("expose les quatre destinations manager dans l'ordre", () => {
+  it("expose les cinq destinations manager dans l'ordre", () => {
     expect(LOYALTY_NAVIGATION.map(({ href }) => href)).toEqual([
       "/admin/fidelite",
       "/admin/fidelite/programme",
       "/admin/fidelite/recompenses",
+      "/admin/fidelite/ventes",
       "/admin/fidelite/clients",
     ]);
   });
@@ -22,7 +23,7 @@ describe("navigation fidélité", () => {
     expect(
       isLoyaltyRouteActive(
         "/admin/fidelite/clients/123",
-        LOYALTY_NAVIGATION[3],
+        LOYALTY_NAVIGATION[4],
       ),
     ).toBe(true);
   });

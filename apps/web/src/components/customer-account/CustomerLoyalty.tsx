@@ -11,6 +11,15 @@ import './customer-account.css';
 
 const secondary = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:cursor-wait disabled:opacity-40';
 const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-extrabold text-onaccent disabled:cursor-not-allowed disabled:opacity-40';
+function OnlineLoyaltyConditions() {
+  return <details className="rounded-card border border-ink/10 bg-surface2 px-4 py-1">
+    <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold">Fidélité et commandes en ligne</summary>
+    <div className="space-y-2 pb-3 text-sm leading-6 text-mut">
+      <p>Pour une commande éligible, votre carte doit être liée à votre compte avant de commander. Le calcul porte sur les produits après remise, hors frais de livraison.</p>
+      <p>Les avantages sont confirmés après paiement et remise de la commande. Un remboursement des produits peut entraîner une correction du gain, selon les règles applicables à cette commande.</p>
+    </div>
+  </details>;
+}
 function runtime(slug: string, access: CustomerAccountAccess, currentAccess: () => CustomerAccountAccess | null) {
   let alive = false;
   const client = createCustomerLoyaltyClient({ access, currentAccess, request: customerAccountRequest(slug),
@@ -38,6 +47,7 @@ function EnrollmentOffer({ program, name, profileReady, changed, onProfile, onJo
       <h4 className="text-sm font-bold">Conditions du programme</h4>
       <p id={termsId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-mut">{program.termsSummary || 'Aucune condition complémentaire publiée.'}</p>
     </section>
+    <OnlineLoyaltyConditions />
     {!profileReady ? profileEditor ?? <div className="space-y-3 rounded-card border border-ink/15 p-4">
       <p className="text-sm leading-6 text-mut">Ajoutez votre prénom ou nom à votre profil pour créer une nouvelle carte. Si vous avez déjà une carte, vous pouvez la rattacher sans compléter ce champ.</p>
       <Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil <Icon name="arrow" size={14} /></Tap>
@@ -132,6 +142,7 @@ function AttachmentOffer({ slug, program, changed, onAttach, onCancel }: {
         <h4 className="text-sm font-bold">{program.name}</h4>
         <p id={termsId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-mut">{program.termsSummary || 'Aucune condition complémentaire publiée.'}</p>
       </section>
+      <OnlineLoyaltyConditions />
       <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-card border border-ink/15 p-4">
         <input id={id} type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} aria-describedby={termsId} className="mt-1 size-5 shrink-0 accent-[var(--cf-accent)]" />
         <span className="text-sm leading-6">{CUSTOMER_LOYALTY_ATTACHMENT_NOTICE}</span>
@@ -206,6 +217,7 @@ export function CustomerLoyalty({ slug, access, currentAccess, restaurantName, p
       {response.state === 'card' ? <><CardQr key={response.qrToken} token={response.qrToken} /><p className="text-center text-xs leading-5 text-mut">Présentez ce QR au restaurant. Il ne permet pas de se connecter à votre compte.</p>
         <Tap className={secondary + ' w-full'} onClick={client.hideCard}>Masquer ma carte</Tap></>
         : <Tap className={primary} onClick={() => void client.card()}><Icon name="qr" size={18} />Afficher ma carte</Tap>}
+      <OnlineLoyaltyConditions />
     </div>}
     {response?.state === 'name_required' && (profileEditor ?? <div className="space-y-3"><p role="status" className="text-sm leading-6 text-mut">Votre profil doit comporter un prénom ou nom pour créer une carte.</p><Tap className={secondary + ' w-full'} onClick={onProfile}>Compléter mon profil</Tap></div>)}
     {(response?.state === 'existing_card' || response?.state === 'attachment_refused') && <div className="space-y-3"><p role="status" className="rounded-card border border-ink/15 bg-surface2 p-4 text-sm leading-6 text-mut">{response.state === 'existing_card' ? 'Aucune nouvelle carte n’a été créée. Si vous avez déjà une carte de ce restaurant, rattachez-la ici à votre compte pour retrouver les mêmes points. Aucun rattachement automatique n’a été effectué.' : 'Cette carte ne peut pas être rattachée à ce compte. Vérifiez votre carte ou demandez l’aide du restaurant. Aucun rattachement n’a été effectué.'}</p>

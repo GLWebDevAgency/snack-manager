@@ -39,6 +39,35 @@ describe('journal privé des intentions de remboursement — ODM natif sans serv
     expect(value.get('reviewReason')).toBeUndefined();
     expect(value.get('_id')).toBeUndefined();
   });
+  it('conserve une ventilation séparée et privée sans réécrire une ancienne intention', () => {
+    const allocation = { version: 1, merchandiseCents: 1000, deliveryCents: 250 };
+    const receipt = { operationId: '064c1eb5-dd5e-4184-a086-5af5c1f39c13', refundId: 're_old', allocation,
+      actorId: 'allocation-owner', reason: 'Ventilation constatée', recordedAt: preparedAt };
+    const doc = order({ ...flow(), allocations: [receipt] });
+    expect(doc.validateSync()).toBeUndefined();
+    expect(doc.get('refundFlow.operations.0.allocation')).toBeUndefined();
+    expect(doc.toObject({ transform: false })).toHaveProperty('refundFlow.allocations', [receipt]);
+    for (const output of [doc.toObject(), doc.toJSON(), JSON.parse(JSON.stringify(doc))]) {
+      expect(output).not.toHaveProperty('refundFlow');
+      expect(JSON.stringify(output)).not.toContain(receipt.operationId);
+      expect(JSON.stringify(output)).not.toContain(receipt.actorId);
+    }
+  });
+  it.each([
+    { version: 2, merchandiseCents: 1000, deliveryCents: 250 },
+    { version: 1, merchandiseCents: '1000', deliveryCents: 250 },
+    { version: 1, merchandiseCents: -1, deliveryCents: 1251 },
+    { version: 1, merchandiseCents: 1000.5, deliveryCents: 249.5 },
+    { version: 1, merchandiseCents: 1000 },
+    { version: 1, merchandiseCents: 1000, deliveryCents: 250, unknown: true },
+  ])('refuse une ventilation malformée sans coercition %#', allocation => {
+    expect(order(flow({ allocation })).validateSync()).toBeDefined();
+  });
+  it('ne fabrique pas de journal de ventilation pour une ancienne commande', () => {
+    const doc = order(flow());
+    expect(doc.get('refundFlow.allocations')).toBeUndefined();
+    expect(Order.hydrate(doc.toObject({ transform: false })).get('refundFlow.allocations')).toBeUndefined();
+  });
   it.each(['prepared', 'creating', 'known', 'review_required'])('accepte l’état explicite %s et ses dates réelles', state => {
     const doc = order(flow({ state, requestStartedAt: preparedAt, providerCheckedAt: preparedAt,
       refund: proof(), reviewReason: 'provider_read_required', accountId: null }));

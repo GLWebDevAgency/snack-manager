@@ -60,12 +60,31 @@ beforeAll(async () => {
       if (path === base) { json(bankFailure ? { message: 'Banque indisponible' } : journal.summary, bankFailure ? 503 : 200); return; }
       if (path === `/api/orders/${id}`) { json(orderFailure ? { message: 'Commande indisponible' } : order, orderFailure ? 503 : 200); return; }
     }
+    if (request.method === 'POST' && /\/allocation(?:\/withdraw)?$/.test(path)) {
+      const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString()); posts.push({ path, body });
+      const withdrawing = path.endsWith('/withdraw');
+      const refundId = decodeURIComponent(path.replace(/\/withdraw$/, '').slice((base + '/').length, -'/allocation'.length));
+      const complete = () => {
+        if (journal.allocations.some(entry => entry.operationId === body.operationId)) { json(journal); return; }
+        if (!withdrawing && journal.allocations.some(entry => entry.refundId === refundId && entry.operationId !== body.operationId)) { json({ message: 'Répartition déjà enregistrée' }, 409); return; }
+        journal.allocations.push({ operationId: body.operationId, refundId, allocation: body.allocation, reason: body.reason, state: withdrawing ? 'withdrawn' : 'recorded', recordedAt: '2026-09-21T10:00:00.000Z' });
+        if (!withdrawing) journal.allocation.unallocated = journal.allocation.unallocated.filter(entry => entry.refundId !== refundId);
+        if (loseJournalAfterPost) journalUnavailable = true;
+        if (mode === 'ack-lost' || mode === 'uncertain') {
+          response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '10000' }); response.flushHeaders(); response.write('{'); setTimeout(() => response.destroy(), 10);
+        } else json({ recorded: true });
+      };
+      if (mode === 'hold-post') { held = complete; return; }
+      if (mode === 'uncertain') { response.writeHead(503).end(); return; }
+      complete(); return;
+    }
     if (request.method === 'POST' && [base, base + '/withdraw'].includes(path)) {
       const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = JSON.parse(Buffer.concat(chunks).toString()); posts.push({ path, body });
-      if (body.clientProtocolVersion !== 1) { json({ code: 'REFUND_CLIENT_UPDATE_REQUIRED', message: 'Actualisez cette page avant de demander un remboursement.' }, 409); return; }
+      if (body.clientProtocolVersion !== 2) { json({ code: 'REFUND_CLIENT_UPDATE_REQUIRED', message: 'Actualisez cette page avant de demander un remboursement.' }, 409); return; }
       const found = journal.operations.find(entry => entry.operationId === body.operationId);
-      const row = found ?? operation({ operationId: body.operationId, amountCents: body.amountCents, reason: body.reason });
+      const row = found ?? operation({ operationId: body.operationId, amountCents: body.amountCents, reason: body.reason, allocation: body.allocation ?? null });
       if (!found) journal.operations.push(row);
       row.state = 'creating'; row.canResume = true; journal.summary.remainingCents = 0;
       const loseResponse = () => { response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '10000' }); response.flushHeaders(); response.write('{'); setTimeout(() => response.destroy(), 10); };
@@ -90,14 +109,14 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(async () => {
-  journal = { orderId: id, enabled: true, summary: { refundedCents: 0, pendingRefundCents: 0, remainingCents: 1000, status: 'none', refunds: [] }, operations: [] };
+  journal = { orderId: id, enabled: true, summary: { refundedCents: 0, pendingRefundCents: 0, remainingCents: 1000, status: 'none', refunds: [] }, operations: [], allocation: { basis: { version: 1, merchandiseCents: 1000, deliveryCents: 0 }, remaining: { version: 1, merchandiseCents: 1000, deliveryCents: 0 }, capacity: { version: 1, merchandiseCents: 1000, deliveryCents: 0 }, unallocated: [] }, allocations: [] };
   posts = []; reads = []; faults = []; journalUnavailable = false; loseJournalAfterPost = false; auditFailure = false; mode = 'normal'; orderFailure = false; bankFailure = false; held = undefined; heldRead = undefined; holdRead = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.addInitScript(value => { if (!localStorage.getItem('sm.token.resto')) localStorage.setItem('sm.token.resto', value); }, token());
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
   await page.goto(origin + '/admin/orders');
 });
-afterEach(async () => { held?.(); heldRead?.(); await context.close(); expect(faults).toEqual([]); for (const post of posts) expect(post.body.clientProtocolVersion).toBe(1); });
+afterEach(async () => { held?.(); heldRead?.(); await context.close(); expect(faults).toEqual([]); for (const post of posts) expect(post.body.clientProtocolVersion).toBe(2); });
 afterAll(async () => { await browser?.close(); await new Promise<void>(resolve => server?.close(() => resolve())); });
 async function open(target = page) { await target.getByRole('button', { name: 'Ouvrir remboursements', exact: true }).click(); await target.getByRole('button', { name: 'Relire le journal', exact: true }).waitFor(); await expect.poll(() => target.getByRole('button', { name: 'Relire le journal', exact: true }).isEnabled()).toBe(true); }
 async function fill(target = page) { await target.getByLabel('Montant à rembourser (€)').fill('5,00'); await target.getByLabel('Motif', { exact: true }).fill('Produit indisponible'); await target.getByLabel('Votre mot de passe', { exact: true }).fill('local-password-fixture'); }
@@ -318,5 +337,152 @@ describe('durable refund modal', () => {
     const saved = await local(); await page.getByRole('button', { name: 'Retour', exact: true }).click(); heldRead!(); heldRead = undefined;
     await open(); await page.getByRole('button', { name: 'Reprendre le remboursement', exact: true }).waitFor();
     expect(posts).toEqual([]); expect(await local()).toBe(saved);
+  });
+});
+
+
+describe('allocation durable des remboursements', () => {
+  const split = { version: 1 as const, merchandiseCents: 800, deliveryCents: 200 };
+  function delivery() { journal.allocation.basis = split; journal.allocation.remaining = split; journal.allocation.capacity = split; }
+  function historical() {
+    delivery(); journal.enabled = false; journal.allocation.remaining = null; journal.summary.refundedCents = 500; journal.summary.remainingCents = 500;
+    journal.allocation.unallocated = [{ refundId: 're_history', amountCents: 500, providerStatus: 'succeeded', canAllocate: true }];
+  }
+  async function splitInputs(merchandise = '4,00', deliveryAmount = '1,00') {
+    await page.getByRole('radio', { name: 'Répartir', exact: true }).check();
+    await page.getByLabel('Part produits (€)', { exact: true }).fill(merchandise);
+    await page.getByLabel('Part livraison (€)', { exact: true }).fill(deliveryAmount);
+  }
+  it('requires an explicit split for a mixed partial and enforces sum and per-item limits', async () => {
+    delivery(); await open(); await fill();
+    expect(await page.getByRole('button', { name: 'Confirmer le remboursement', exact: true }).isEnabled()).toBe(false);
+    await splitInputs('2,00', '3,00');
+    expect(await page.getByRole('button', { name: 'Confirmer le remboursement', exact: true }).isEnabled()).toBe(false);
+    await page.getByLabel('Part livraison (€)', { exact: true }).fill('1,00');
+    expect(await page.getByRole('button', { name: 'Confirmer le remboursement', exact: true }).isEnabled()).toBe(false);
+    await page.getByLabel('Part produits (€)', { exact: true }).fill('4,00'); await send(); await settled();
+    expect(posts[0]!.body.allocation).toEqual({ version: 1, merchandiseCents: 400, deliveryCents: 100 });
+  });
+  it('preserves split and UUID across lost ACK, close, reload and retry', async () => {
+    delivery(); mode = 'uncertain'; await open(); await fill(); await splitInputs(); await send(); await settled();
+    const first = posts[0]!.body;
+    const stored = await local(); expect(stored).toContain('"merchandiseCents":400'); expect(stored).not.toContain('local-password-fixture');
+    await page.reload(); await open();
+    expect(await page.getByRole('radio').count()).toBe(0);
+    await page.getByLabel('Votre mot de passe').fill('local-password-fixture'); mode = 'normal';
+    await page.getByRole('button', { name: 'Reprendre le remboursement', exact: true }).click(); await settled();
+    expect(posts).toHaveLength(2); expect(posts[1]!.body).toEqual(first); expect(await local()).toBeNull();
+  });
+  it('replays a legacy intent under protocol2 without manufacturing an allocation', async () => {
+    const saved = { ownerId, orderId: id, operationId: operation().operationId, amountCents: 500, reason: operation().reason };
+    await page.evaluate(({ key, saved }) => localStorage.setItem(key, JSON.stringify({ version: 1, intents: [saved] })), { key: ORDER_REFUND_STORAGE_KEY, saved });
+    await open(); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Reprendre le remboursement', exact: true }).click(); await settled();
+    expect(posts[0]!.body).toMatchObject({ clientProtocolVersion: 2, operationId: saved.operationId, allocation: null });
+    expect(await local()).toBeNull();
+  });
+  it('can allocate a known provider receipt while Stripe mutations are closed, without refund POST', async () => {
+    historical(); await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click();
+    await splitInputs(); await page.getByLabel('Motif de la répartition').fill('Produits et livraison');
+    await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await settled();
+    expect(posts).toHaveLength(1); expect(posts[0]!.path).toBe(base + '/re_history/allocation');
+    expect(posts[0]!.body.allocation).toEqual({ version: 1, merchandiseCents: 400, deliveryCents: 100 });
+    expect(await local()).toBeNull(); expect(reads.filter(path => path === base)).toEqual([]);
+    await page.getByRole('region', { name: 'Répartitions enregistrées' }).waitFor();
+  });
+  it('keeps historical allocation body across unavailable journal and reload, then acknowledges without duplicate POST', async () => {
+    historical(); mode = 'ack-lost'; loseJournalAfterPost = true;
+    await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await settled();
+    expect(await local()).toContain('"kind":"allocation"'); expect(posts).toHaveLength(1);
+    journalUnavailable = false; await page.reload(); await open();
+    expect(await local()).toBeNull(); expect(posts).toHaveLength(1);
+    await page.getByRole('region', { name: 'Répartitions enregistrées' }).waitFor();
+  });
+  it('retries an unobserved historical allocation with the exact same UUID and split after reload', async () => {
+    historical(); mode = 'uncertain'; await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await settled();
+    const first = posts[0]!.body; expect(await local()).toContain(first.operationId as string);
+    await page.reload(); await open(); expect(await page.getByRole('radio').count()).toBe(0);
+    await page.getByLabel('Votre mot de passe').fill('local-password-fixture'); mode = 'normal';
+    await page.getByRole('button', { name: 'Reprendre la répartition', exact: true }).click(); await settled();
+    expect(posts).toHaveLength(2); expect(posts[1]!.body).toEqual(first); expect(await local()).toBeNull();
+  });
+  it('does not accept another historical allocation as the acknowledgement of its pending intent', async () => {
+    historical(); mode = 'uncertain'; await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await settled();
+    const saved = await local();
+    journal.allocations.push({ operationId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', refundId: 're_history', allocation: { version: 1, merchandiseCents: 500, deliveryCents: 0 }, reason: 'Autre opérateur', state: 'recorded' as const, recordedAt: '2026-09-21T11:00:00.000Z' }); journal.allocation.unallocated = [];
+    await page.reload(); await open();
+    expect(await local()).toBe(saved); expect(await page.getByRole('button', { name: 'Reprendre la répartition', exact: true }).isEnabled()).toBe(false);
+    expect(posts).toHaveLength(1);
+    await page.getByRole('button', { name: 'Fermer cette demande', exact: true }).click(); await settled();
+    expect(await local()).toBeNull(); expect(posts).toHaveLength(1); expect(journal.allocations[0]!.reason).toBe('Autre opérateur');
+  });
+  it('keeps a late losing POST rejected after explicit closure from another immutable receipt', async () => {
+    historical(); mode = 'hold-post'; await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await expect.poll(() => !!held).toBe(true);
+    await page.getByRole('button', { name: 'Retour', exact: true }).click();
+    const winner = { operationId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', refundId: 're_history', allocation: { version: 1 as const, merchandiseCents: 500, deliveryCents: 0 }, reason: 'Autre opérateur', state: 'recorded' as const, recordedAt: '2026-09-21T11:00:00.000Z' };
+    journal.allocations = [winner]; journal.allocation.unallocated = []; await open();
+    await page.getByRole('button', { name: 'Fermer cette demande', exact: true }).click(); await settled(); expect(await local()).toBeNull();
+    const rejection = page.waitForResponse(response => response.url().endsWith('/allocation') && response.status() === 409);
+    held!(); held = undefined; await rejection;
+    expect(journal.allocations).toEqual([winner]); expect(posts).toHaveLength(1); expect(await local()).toBeNull();
+  });
+  it('does not send a historical allocation when closed during the final read', async () => {
+    historical(); await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    holdRead = true; await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await expect.poll(() => !!heldRead).toBe(true);
+    await page.getByRole('button', { name: 'Retour', exact: true }).click(); heldRead!(); heldRead = undefined;
+    await open(); expect(posts).toEqual([]); expect(await local()).toContain('"kind":"allocation"');
+  });
+  it.each([320, 390, 1440])('keeps the explicit allocation usable at %ipx', async width => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+    delivery(); await open(); await fill(); await splitInputs();
+    const controls = await page.getByRole('dialog').evaluate(dialog => [...dialog.querySelectorAll('button,input')].map(element => {
+      const bounds = element.getBoundingClientRect(); return { tag: element.tagName, left: bounds.left, right: bounds.right };
+    }));
+    expect(controls.every(control => control.left >= 0 && control.right <= width), JSON.stringify(controls)).toBe(true);
+    await page.getByRole('radio', { name: 'Répartir', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(captures, `${width}-allocation-partial.png`) });
+    await page.getByRole('button', { name: 'Retour', exact: true }).click(); historical(); await open();
+    await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByRole('radio', { name: 'Répartir', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(captures, `${width}-allocation-historical.png`) });
+    expect(posts).toEqual([]);
+  });
+  it('abandons an impossible saved allocation with exact body and a durable withdrawn receipt', async () => {
+    historical(); mode = 'uncertain'; await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await settled(); const first = posts[0]!.body;
+    journal.allocation.unallocated[0]!.canAllocate = false; journal.allocation.capacity = { version: 1, merchandiseCents: 500, deliveryCents: 0 };
+    await page.reload(); await open(); await page.getByLabel('Votre mot de passe').fill('local-password-fixture'); mode = 'normal';
+    await page.getByRole('button', { name: 'Abandonner cette répartition', exact: true }).click(); await settled();
+    expect(posts[1]!.path).toBe(base + '/re_history/allocation/withdraw'); expect(posts[1]!.body).toEqual(first);
+    expect(journal.allocations[0]!.state).toBe('withdrawn'); expect(await local()).toBeNull();
+    await page.getByText('La répartition a été abandonnée.', { exact: false }).waitFor();
+  });
+  it('does not apply an allocation POST arriving after its withdrawal', async () => {
+    historical(); mode = 'hold-post'; await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click(); await expect.poll(() => !!held).toBe(true);
+    await page.getByRole('button', { name: 'Retour', exact: true }).click(); await open(); mode = 'normal';
+    await page.getByLabel('Votre mot de passe').fill('local-password-fixture'); await page.getByRole('button', { name: 'Abandonner cette répartition', exact: true }).click(); await settled();
+    const late = page.waitForResponse(response => response.url().endsWith('/allocation') && response.status() === 200); held!(); held = undefined; await late;
+    expect(posts).toHaveLength(2); expect(journal.allocations).toHaveLength(1); expect(journal.allocations[0]!.state).toBe('withdrawn'); expect(await local()).toBeNull();
+  });
+  it('blocks a historical mutation after identity changes during preflight', async () => {
+    historical(); await open(); await page.getByRole('button', { name: 'Préciser la répartition', exact: true }).click(); await splitInputs();
+    await page.getByLabel('Motif de la répartition').fill('Produits et livraison'); await page.getByLabel('Votre mot de passe').fill('local-password-fixture');
+    holdRead = true; await page.getByRole('button', { name: 'Confirmer la répartition', exact: true }).click();
+    await expect.poll(() => !!heldRead).toBe(true);
+    await page.evaluate(value => localStorage.setItem('sm.token.resto', value), token('d'.repeat(24))); heldRead!(); heldRead = undefined;
+    await settled(); expect(posts).toEqual([]); expect(await local()).toContain('"kind":"allocation"');
   });
 });

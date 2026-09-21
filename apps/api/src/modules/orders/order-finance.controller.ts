@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Header, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { OwnerOrderCancelSchema, type JwtPayload, type OrderRefundRequest, type OwnerOrderCancel } from '@sm/contracts';
+import { OwnerOrderCancelSchema, OrderRefundAllocationRequestSchema, type OrderRefundAllocationRequest,
+  type JwtPayload, type OrderRefundRequest, type OwnerOrderCancel } from '@sm/contracts';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
 import { Fonction } from '../../common/capacites';
@@ -49,6 +50,30 @@ export class OrderFinanceController {
     @Body(new OrderRefundMutationPipe()) body: OrderRefundRequest) {
     await this.owner.verify(actor, body.password);
     return this.refunds.withdraw(tenantId, id, actor.sub, body);
+  }
+
+  @Post(':id/refunds/:refundId/allocation')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async allocateRefund(@TenantId() tenantId: string, @Param('id') id: string,
+    @Param('refundId') refundId: string, @CurrentUser() actor: JwtPayload,
+    @Body(zod(OrderRefundAllocationRequestSchema)) body: OrderRefundAllocationRequest) {
+    await this.owner.verify(actor, body.password);
+    return this.refunds.allocate(tenantId, id, refundId, actor.sub, body);
+  }
+
+  @Post(':id/refunds/:refundId/allocation/withdraw')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async withdrawRefundAllocation(@TenantId() tenantId: string, @Param('id') id: string,
+    @Param('refundId') refundId: string, @CurrentUser() actor: JwtPayload,
+    @Body(zod(OrderRefundAllocationRequestSchema)) body: OrderRefundAllocationRequest) {
+    await this.owner.verify(actor, body.password);
+    return this.refunds.withdrawAllocation(tenantId, id, refundId, actor.sub, body);
   }
 
   @Post(':id/cancel-owner')

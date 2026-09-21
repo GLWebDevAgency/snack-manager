@@ -1,6 +1,7 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { customerOrderOwnerField } from './customer-order-owner.schema';
 import { customerSaleAttributionField } from './customer-sale-attribution.schema';
+import { loyaltyWebIntentField, LoyaltyWebProcessingSchema } from './loyalty-web-intent.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { OrderReadyNotificationSchema } from './order-ready-notification.schema';
 import { OrderRefundFlowSchema } from './order-refund-flow.schema';
@@ -69,6 +70,8 @@ function hidePrivateOrderFields(
 ): Record<string, unknown> {
   delete returned.customerOwner;
   delete returned.customerSaleAttribution;
+  delete returned.loyaltyWebIntent;
+  delete returned.loyaltyWebProcessing;
   delete returned.loyaltyMemberId;
   delete returned.loyaltyEarnOperationId;
   delete returned.loyaltyActorRef;
@@ -1002,6 +1005,8 @@ export const OrderSchema = new Schema(
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
     customerOwner: customerOrderOwnerField(),
     customerSaleAttribution: customerSaleAttributionField(),
+    loyaltyWebIntent: loyaltyWebIntentField(),
+    loyaltyWebProcessing: { type: LoyaltyWebProcessingSchema, default: null, select: false },
     /** Preuve de reprise publique, atomique avec la vente ; jamais adoptée après création. */
     publicRecovery: {
       type: new Schema({
@@ -1289,6 +1294,14 @@ OrderSchema.index(
 );
 OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnNextAttemptAt: 1, createdAt: 1 });
 OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
+OrderSchema.index({ tenantId: 1, 'loyaltyWebIntent.operationId': 1 }, { unique: true,
+  partialFilterExpression: { 'loyaltyWebIntent.operationId': { $type: 'string' } }, name: 'loyalty_web_intent_unique' });
+OrderSchema.index({ 'loyaltyWebProcessing.state': 1, 'loyaltyWebProcessing.dirty': 1, 'loyaltyWebProcessing.nextAttemptAt': 1, _id: 1 },
+  { name: 'loyalty_web_settlement_due' });
+OrderSchema.index({ 'loyaltyWebProcessing.state': 1, 'loyaltyWebProcessing.leaseUntil': 1 },
+  { name: 'loyalty_web_settlement_lease' });
+OrderSchema.index({ 'loyaltyWebProcessing.state': 1, 'loyaltyWebProcessing.dirty': 1, _id: 1 },
+  { name: 'loyalty_web_settlement_scan' });
 // Non unique : les commandes créées avant le champ portent toutes `null`, et
 // un index unique les ferait entrer en collision. La collision de deux jetons
 // de 192 bits tirés au hasard, elle, n'arrive pas.

@@ -371,6 +371,9 @@ export const operations = loyaltySchema.table(
   },
   (table) => [
     primaryKey({ columns: [table.tenantRef, table.operationId] }),
+    index('operations_sale_resolution_receipts_idx')
+      .on(table.tenantRef, sql`(${table.result}->>'clientId')`, sql`(${table.result}->>'resolutionActorRef')`, table.completedAt.desc())
+      .where(sql`${table.kind}='adjust' AND ${table.status}='completed' AND ${table.result} ? 'resolutionActorRef'`),
     check(
       'operations_status_result_shape',
       sql`(
@@ -401,6 +404,7 @@ export const earnReceipts = loyaltySchema.table(
     claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex('earn_receipts_tenant_id_uq').on(table.tenantRef, table.id),
     uniqueIndex('earn_receipts_tenant_source_external_ref_uq').on(
       table.tenantRef,
       table.source,
@@ -759,3 +763,51 @@ export const consentState = loyaltySchema.table(
     }).onDelete('restrict'),
   ],
 );
+
+/** Private, canonical sale state. Immutable attribution; cumulative correction projection. */
+export const saleSettlements = loyaltySchema.table('sale_settlements', {
+  id: uuid('id').primaryKey().defaultRandom(), tenantRef: text('tenant_ref').notNull(), clientId: uuid('client_id').notNull(),
+  earnOperationId: uuid('earn_operation_id').notNull(), memberId: uuid('member_id').notNull(), programId: uuid('program_id').notNull(),
+  rulesVersion: bigint('rules_version', { mode: 'number' }).notNull(), attribution: jsonb('attribution').notNull(),
+  attributionFingerprint: text('attribution_fingerprint').notNull(), eligiblePurchaseCents: bigint('eligible_purchase_cents', { mode: 'number' }).notNull(),
+  initialUnits: bigint('initial_units', { mode: 'number' }), earnReceiptId: uuid('earn_receipt_id'), earnLedgerEntryId: uuid('earn_ledger_entry_id'),
+  reversedUnits: bigint('reversed_units', { mode: 'number' }).notNull().default(0), waivedUnits: bigint('waived_units', { mode: 'number' }).notNull().default(0),
+  dueUnits: bigint('due_units', { mode: 'number' }).notNull().default(0),
+  latestObservationId: uuid('latest_observation_id'), latestFinancialFingerprint: text('latest_financial_fingerprint'),
+  latestOrderVersion: bigint('latest_order_version', { mode: 'number' }).notNull().default(0),
+  latestRefundSyncVersion: bigint('latest_refund_sync_version', { mode: 'number' }).notNull().default(0),
+  confirmedEligibleCents: bigint('confirmed_eligible_cents', { mode: 'number' }).notNull().default(0),
+  requiresResolution: boolean('requires_resolution').notNull().default(false),
+  status: text('status').notNull().default('pending'), reason: text('reason'), version: bigint('version', { mode: 'number' }).notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('sale_settlements_tenant_client_uq').on(t.tenantRef, t.clientId), uniqueIndex('sale_settlements_tenant_id_uq').on(t.tenantRef, t.id),
+  uniqueIndex('sale_settlements_tenant_operation_uq').on(t.tenantRef, t.earnOperationId),
+  index('sale_settlements_reconciliation_idx').on(t.tenantRef, t.status, t.updatedAt),
+  foreignKey({ columns: [t.tenantRef,t.memberId],foreignColumns:[members.tenantRef,members.id],name:'sale_settlements_member_fk' }).onDelete('restrict'),
+  foreignKey({ columns:[t.tenantRef,t.programId,t.rulesVersion],foreignColumns:[programVersions.tenantRef,programVersions.programId,programVersions.version],name:'sale_settlements_rule_fk' }).onDelete('restrict'),
+  check('sale_settlements_bounds', sql`${t.eligiblePurchaseCents} BETWEEN 0 AND 9007199254740991 AND ${t.reversedUnits} >= 0 AND ${t.waivedUnits} >= 0 AND ${t.dueUnits} >= 0 AND ${t.version} BETWEEN 0 AND 9007199254740991 AND ${t.latestOrderVersion} >= 0 AND ${t.latestRefundSyncVersion} >= 0 AND ${t.confirmedEligibleCents} BETWEEN 0 AND ${t.eligiblePurchaseCents} AND (${t.initialUnits} IS NULL OR (${t.initialUnits} BETWEEN 0 AND 9007199254740991 AND ${t.reversedUnits}+${t.waivedUnits}+${t.dueUnits} <= ${t.initialUnits}))`),
+  check('sale_settlements_initial_shape',sql`(${t.initialUnits} IS NULL AND ${t.earnReceiptId} IS NULL AND ${t.earnLedgerEntryId} IS NULL AND ${t.reversedUnits}=0 AND ${t.waivedUnits}=0) OR (${t.initialUnits}=0 AND ${t.earnReceiptId} IS NOT NULL AND ${t.earnLedgerEntryId} IS NULL) OR (${t.initialUnits}>0 AND ${t.earnReceiptId} IS NOT NULL AND ${t.earnLedgerEntryId} IS NOT NULL)`),
+  check('sale_settlements_status_shape',sql`(${t.status}='recorded' AND ${t.reason} IS NULL AND ${t.initialUnits} IS NOT NULL AND ${t.dueUnits}=0) OR (${t.status} IN ('pending','reconciliation') AND ${t.reason} IS NOT NULL) OR (${t.status}='pending' AND ${t.latestObservationId} IS NULL)`),
+]);
+export const saleObservations = loyaltySchema.table('sale_observations', {
+  tenantRef:text('tenant_ref').notNull(), observationId:uuid('observation_id').notNull(), saleId:uuid('sale_id').notNull(),
+  financialFingerprint:text('financial_fingerprint').notNull(), orderVersion:bigint('order_version',{mode:'number'}).notNull(),
+  refundSyncVersion:bigint('refund_sync_version',{mode:'number'}).notNull(), eligibleRefundedCents:bigint('eligible_refunded_cents',{mode:'number'}),
+  pendingRefundCents:bigint('pending_refund_cents',{mode:'number'}).notNull(), paidAndDelivered:boolean('paid_and_delivered').notNull(), proof:jsonb('proof').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[primaryKey({columns:[t.tenantRef,t.observationId]}),uniqueIndex('sale_observations_sale_fingerprint_uq').on(t.tenantRef,t.saleId,t.financialFingerprint),
+  foreignKey({columns:[t.tenantRef,t.saleId],foreignColumns:[saleSettlements.tenantRef,saleSettlements.id],name:'sale_observations_sale_fk'}).onDelete('restrict'),
+  check('sale_observations_bounds',sql`${t.orderVersion}>=0 AND ${t.refundSyncVersion}>=0 AND ${t.pendingRefundCents} BETWEEN 0 AND 9007199254740991 AND (${t.eligibleRefundedCents} IS NULL OR ${t.eligibleRefundedCents} BETWEEN 0 AND 9007199254740991)`),
+]);
+export const saleCorrections = loyaltySchema.table('sale_corrections', {
+  tenantRef:text('tenant_ref').notNull(), operationId:uuid('operation_id').notNull(), saleId:uuid('sale_id').notNull(), observationId:uuid('observation_id').notNull(),
+  kind:text('kind').notNull(), units:bigint('units',{mode:'number'}).notNull(), beforeReversedUnits:bigint('before_reversed_units',{mode:'number'}).notNull(),
+  afterReversedUnits:bigint('after_reversed_units',{mode:'number'}).notNull(),beforeWaivedUnits:bigint('before_waived_units',{mode:'number'}).notNull(),
+  afterWaivedUnits:bigint('after_waived_units',{mode:'number'}).notNull(),ledgerEntryId:uuid('ledger_entry_id'), actorRef:text('actor_ref'), reason:text('reason').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[primaryKey({columns:[t.tenantRef,t.operationId]}),uniqueIndex('sale_corrections_ledger_uq').on(t.ledgerEntryId),
+  foreignKey({columns:[t.tenantRef,t.saleId],foreignColumns:[saleSettlements.tenantRef,saleSettlements.id],name:'sale_corrections_sale_fk'}).onDelete('restrict'),
+  foreignKey({columns:[t.tenantRef,t.observationId],foreignColumns:[saleObservations.tenantRef,saleObservations.observationId],name:'sale_corrections_observation_fk'}).onDelete('restrict'),
+  foreignKey({columns:[t.tenantRef,t.operationId],foreignColumns:[operations.tenantRef,operations.operationId],name:'sale_corrections_operation_fk'}).onDelete('restrict'),
+  check('sale_corrections_shape',sql`${t.units}>0 AND ${t.units}<=9007199254740991 AND ${t.beforeReversedUnits}>=0 AND ${t.beforeWaivedUnits}>=0 AND ((${t.kind}='debit' AND ${t.afterReversedUnits}=${t.beforeReversedUnits}+${t.units} AND ${t.afterWaivedUnits}=${t.beforeWaivedUnits} AND ${t.ledgerEntryId} IS NOT NULL) OR (${t.kind}='waive' AND ${t.afterWaivedUnits}=${t.beforeWaivedUnits}+${t.units} AND ${t.afterReversedUnits}=${t.beforeReversedUnits} AND ${t.ledgerEntryId} IS NULL AND ${t.actorRef} IS NOT NULL))`),
+]);

@@ -1,4 +1,5 @@
 import type {
+  LoyaltySaleResolutionRequest, LoyaltySaleSettlement, LoyaltySaleSettlementList,
   LoyaltyAdminAdjustment,
   LoyaltyConsentEvent,
   LoyaltyConsentMutationResult,
@@ -37,6 +38,9 @@ import { api } from "../../../lib/api";
  * navigateur, ni logs de proxy, ni analytics d'URL ne voient ces secrets.
  */
 export const loyaltyApi = {
+  sales: (cursor: string | null = null) => api.get<LoyaltySaleSettlementList>(`/loyalty/sales?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { signal: AbortSignal.timeout(15_000) }),
+  sale: (orderId: string, resolutionId?: string) => api.get<LoyaltySaleSettlement>(`/loyalty/sales/${encodeURIComponent(orderId)}${resolutionId ? `?resolutionId=${encodeURIComponent(resolutionId)}` : ''}`, { signal: AbortSignal.timeout(15_000) }),
+  resolveSale: (orderId: string, body: LoyaltySaleResolutionRequest) => api.post<LoyaltySaleSettlement>(`/loyalty/sales/${encodeURIComponent(orderId)}/resolution`, body, { signal: AbortSignal.timeout(45_000) }),
   getProgram: () => api.get<LoyaltyProgramView | null>("/loyalty/program"),
   updateProgram: (body: LoyaltyProgramPut) =>
     api.put<LoyaltyProgramView>("/loyalty/program", body),

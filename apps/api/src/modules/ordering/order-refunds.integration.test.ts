@@ -9,6 +9,7 @@ import { OrderRefundsService, type RefundStripeClient } from './order-refunds.se
 import type { ProviderRefund } from './order-refunds.policy';
 import { paymentBarrier, paymentOutcome } from './order-payment-test-provider';
 import { AuditService } from '../audit/audit.module';
+import { loyaltyWebFixture } from '../loyalty/loyalty-web.test-fixture';
 
 const DATABASE_PREFIX = 'snackmanager_payment_test_';
 const RUN_ID = randomUUID().replaceAll('-', '');
@@ -217,6 +218,176 @@ integration('remboursements durables sur deux connexions Mongo standalone', () =
     return String(row._id);
   }
 
+  describe('ventilation durable et corrélée au remboursement', () => {
+    const allocation = (merchandiseCents: number, deliveryCents: number) => ({ version: 1 as const, merchandiseCents, deliveryCents });
+    const allocationBody = (merchandiseCents: number, deliveryCents: number) => ({ operationId: randomUUID(),
+      clientProtocolVersion: 2 as const, allocation: allocation(merchandiseCents, deliveryCents),
+      reason: 'Ventilation contrôlée depuis le reçu', password: 'never-journal-this-password' });
+    const deliveryOrder = () => seed({ totals: { subtotal: 1000, deliveryFee: 250, total: 1250 } });
+
+    it('fige la ventilation avant fournisseur et refuse une nouvelle ventilation sous le même UUID', async () => {
+      const id = await deliveryOrder(); const input = body({ allocation: allocation(100, 150) });
+      provider.hooks.beforeCreate = async () => {
+        expect((await read(id))?.refundFlow?.operations[0]).toMatchObject({ allocation: input.allocation, state: 'creating' });
+      };
+      await request(id, input); await request(id, input);
+      await expect(request(id, { ...input, allocation: allocation(150, 100) })).rejects.toThrow('autre remboursement');
+      expect(provider.createdCount).toBe(1);
+      expect(await service().journal(String(TENANT), id, ACTOR)).toMatchObject({
+        allocation: { remaining: allocation(900, 100), unallocated: [] },
+        operations: [{ operationId: input.operationId, allocation: input.allocation }] });
+    });
+
+    it('refuse une ventilation au-delà des frais réels avant tout effet fournisseur', async () => {
+      const id = await deliveryOrder();
+      await expect(request(id, body({ amountCents: 300, allocation: allocation(0, 300) }))).rejects.toThrow('montants disponibles');
+      expect(provider.createdCount).toBe(0);
+      expect((await read(id))?.payment).toMatchObject({ refundedCents: 0, pendingRefundCents: 0 });
+    });
+
+    it('ventile une preuve historique sans réécrire sa demande ni appeler Stripe, activation fermée comprise', async () => {
+      const id = await deliveryOrder(); const legacy = body(); await request(id, legacy);
+      const before = await read(id); const refundId = provider.rows[0]!.refund.id; const input = allocationBody(200, 50);
+      const closed = new OrderRefundsService(first, async () => null,
+        { publish } as unknown as Redis, { pourTenant: async () => capabilities } as never, audit as never);
+      provider.refunds.create.mockClear(); provider.refunds.list.mockClear();
+      const result = await closed.allocate(String(TENANT), id, refundId, ACTOR, input);
+      expect(result).toMatchObject({ enabled: false, allocation: { remaining: allocation(800, 200), unallocated: [] },
+        allocations: [{ operationId: input.operationId, refundId, allocation: input.allocation }] });
+      const after = await read(id);
+      expect(after?.refundFlow?.operations).toEqual(before?.refundFlow?.operations);
+      expect(after?.payment.refundedCents).toBe(250); expect(after?.payment.pendingRefundCents).toBe(0);
+      expect(provider.refunds.create).not.toHaveBeenCalled(); expect(provider.refunds.list).not.toHaveBeenCalled();
+      expect(JSON.stringify(after)).not.toContain(input.password);
+      expect(JSON.stringify(result)).not.toContain(ACTOR);
+      await expect(closed.allocate(String(TENANT), id, refundId, ACTOR, input)).resolves.toEqual(result);
+      await expect(closed.allocate(String(TENANT), id, refundId, '507f1f77bcf86cd799439033', input)).rejects.toThrow('autre ventilation');
+    });
+
+    it('deux opérateurs concurrents ne peuvent pas attribuer deux fois le même remboursement', async () => {
+      const id = await deliveryOrder(); await request(id, body()); const refundId = provider.rows[0]!.refund.id;
+      const results = await Promise.allSettled([
+        service(first).allocate(String(TENANT), id, refundId, ACTOR, allocationBody(200, 50)),
+        service(second).allocate(String(TENANT), id, refundId, ACTOR, allocationBody(150, 100)),
+      ]);
+      expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+      const journal = await service().journal(String(TENANT), id, ACTOR);
+      expect(journal.allocations).toHaveLength(1); expect(journal.allocation.unallocated).toHaveLength(0);
+      expect(journal.summary.refundedCents).toBe(250); expect(provider.createdCount).toBe(1);
+    });
+
+    it('récupère le reçu exact après perte ACK Mongo et ne change jamais son UUID', async () => {
+      const id = await deliveryOrder(); await request(id, body()); const refundId = provider.rows[0]!.refund.id;
+      const intercepted = interceptWrites(first, 'lose_ack'); const input = allocationBody(250, 0);
+      const result = await service(intercepted.proxy).allocate(String(TENANT), id, refundId, ACTOR, input);
+      expect(intercepted.injections()).toBeGreaterThan(0);
+      expect(result.allocations).toMatchObject([{ operationId: input.operationId, refundId, allocation: input.allocation }]);
+      expect(await service(second).allocate(String(TENANT), id, refundId, ACTOR, input)).toEqual(result);
+      expect(provider.createdCount).toBe(1);
+    });
+
+    it('refuse une ventilation de mauvais montant ou un UUID déjà utilisé par un remboursement', async () => {
+      const id = await deliveryOrder(); const initial = body(); await request(id, initial); const refundId = provider.rows[0]!.refund.id;
+      await expect(service().allocate(String(TENANT), id, refundId, ACTOR, allocationBody(200, 0))).rejects.toThrow('Ventilation');
+      await expect(service().allocate(String(TENANT), id, refundId, ACTOR,
+        { ...allocationBody(250, 0), operationId: initial.operationId })).rejects.toThrow('opération');
+      expect((await service().journal(String(TENANT), id, ACTOR)).allocations).toEqual([]);
+    });
+
+    it('abandonne une répartition devenue impossible sans libérer son UUID retardé', async () => {
+      const id = await deliveryOrder(); await request(id, body()); await request(id, body());
+      const [firstRefund, secondRefund] = provider.rows.map(row => row.refund.id);
+      const stale = allocationBody(0, 250);
+      await service().allocate(String(TENANT), id, secondRefund!, ACTOR, allocationBody(0, 250));
+      await expect(service(second).allocate(String(TENANT), id, firstRefund!, ACTOR, stale)).rejects.toThrow('dépasse');
+      provider.refunds.create.mockClear(); provider.refunds.list.mockClear();
+      const withdrawn = await serviceWithNativeAudit().withdrawAllocation(String(TENANT), id, firstRefund!, ACTOR, stale);
+      expect(withdrawn.allocations).toHaveLength(2);
+      expect(withdrawn.allocations[1]).toMatchObject({ operationId: stale.operationId, state: 'withdrawn', allocation: stale.allocation });
+      expect(withdrawn.allocation.unallocated).toMatchObject([{ refundId: firstRefund }]);
+      expect(await service(second).allocate(String(TENANT), id, firstRefund!, ACTOR, stale)).toEqual(withdrawn);
+      const corrected = await service().allocate(String(TENANT), id, firstRefund!, ACTOR, allocationBody(250, 0));
+      expect(corrected.allocations).toHaveLength(3); expect(corrected.allocation.unallocated).toHaveLength(0);
+      expect(corrected.allocation.remaining).toEqual(allocation(750, 0));
+      expect(await firstAudit.countDocuments({ action: 'order.refund.allocation_withdraw' })).toBe(1);
+      expect(provider.refunds.create).not.toHaveBeenCalled(); expect(provider.refunds.list).not.toHaveBeenCalled();
+    });
+
+    it('récupère un abandon réellement commité malgré ACK Mongo perdu, fournisseur fermé et refund annulé', async () => {
+      const id = await deliveryOrder(); const input = allocationBody(200, 50);
+      const intercepted = interceptWrites(first, 'lose_ack');
+      const closed = new OrderRefundsService(intercepted.proxy, async () => null,
+        { publish } as unknown as Redis, { pourTenant: async () => capabilities } as never, audit as never);
+      const result = await closed.withdrawAllocation(String(TENANT), id, 're_cancelled', ACTOR, input);
+      expect(intercepted.injections()).toBe(1);
+      expect(result.allocations).toMatchObject([{ operationId: input.operationId, state: 'withdrawn' }]);
+      expect(result.allocation.remaining).toEqual(allocation(1000, 250));
+      expect(await closed.allocate(String(TENANT), id, 're_cancelled', ACTOR, input)).toEqual(result);
+      await expect(closed.withdrawAllocation(String(TENANT), id, 're_cancelled', 'another-owner', input)).rejects.toThrow('autre ventilation');
+      await expect(closed.withdrawAllocation(String(TENANT), id, 're_cancelled', ACTOR, { ...input, allocation: allocation(250, 0) })).rejects.toThrow('autre ventilation');
+      expect(provider.refunds.create).not.toHaveBeenCalled(); expect(provider.refunds.list).not.toHaveBeenCalled();
+    });
+
+    it('ne transforme pas en abandon une répartition déjà enregistrée', async () => {
+      const id = await deliveryOrder(); await request(id, body()); const refundId = provider.rows[0]!.refund.id;
+      const input = allocationBody(200, 50);
+      const result = await service().allocate(String(TENANT), id, refundId, ACTOR, input);
+      expect(result.allocations[0]).toMatchObject({ state: 'recorded' });
+      expect(await service(second).withdrawAllocation(String(TENANT), id, refundId, ACTOR, input)).toEqual(result);
+    });
+
+    it('un abandon concurrent précède le CAS de la répartition retardée', async () => {
+      const id = await deliveryOrder(); await request(id, body()); const refundId = provider.rows[0]!.refund.id;
+      const input = allocationBody(200, 50), reached = paymentBarrier(), resume = paymentBarrier(); let held = false;
+      const proxy = new Proxy(first, { get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (property !== 'findOneAndUpdate') return typeof value === 'function' ? value.bind(target) : value;
+        return (...args: unknown[]) => {
+          const query = Reflect.apply(value, target, args) as Query<unknown, Order>, execute = query.exec.bind(query);
+          query.exec = async () => {
+            const update = args[1] as { $set?: { refundFlow?: { allocations?: { operationId: string; state: string }[] } } };
+            if (!held && update.$set?.refundFlow?.allocations?.some(row => row.operationId === input.operationId && row.state === 'recorded')) {
+              held = true; reached.release(); await resume.promise;
+            }
+            return execute();
+          };
+          return query;
+        };
+      } });
+      const running = paymentOutcome(service(proxy).allocate(String(TENANT), id, refundId, ACTOR, input));
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([reached.promise, new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => reject(new Error('Allocation CAS checkpoint not reached')), 3000);
+        })]);
+        await service(second).withdrawAllocation(String(TENANT), id, refundId, ACTOR, input);
+      } finally { clearTimeout(deadline); resume.release(); }
+      expect((await running).ok).toBe(true);
+      const journal = await service().journal(String(TENANT), id, ACTOR);
+      expect(journal.allocations).toMatchObject([{ operationId: input.operationId, state: 'withdrawn' }]);
+      expect(journal.allocation.unallocated).toMatchObject([{ refundId }]);
+      expect(provider.createdCount).toBe(1);
+    });
+
+    it('réveille durablement le gain web déjà traité sans écraser son état et exige une allocation nouvelle', async () => {
+      const fixture = loyaltyWebFixture(); const attribution = fixture.customerSaleAttribution!;
+      const owner = { ...attribution.owner, tenantRef: String(TENANT) };
+      const id = await seed({ clientId: fixture.clientId, customerOwner: owner,
+        customerSaleAttribution: { ...attribution, owner, tenantRef: String(TENANT),
+          basis: { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 1250, excludedChargeCents: 0, chargedTotalCents: 1250 } },
+        loyaltyWebIntent: fixture.loyaltyWebIntent,
+        loyaltyWebProcessing: { state: 'completed', dirty: false, attempts: 1, nextAttemptAt: new Date(Date.now() + 60_000) } });
+      await expect(request(id, body())).rejects.toThrow('part produits');
+      expect(provider.createdCount).toBe(0);
+      const before = Date.now(); await request(id, body({ allocation: allocation(250, 0) }));
+      const saved = await second.findById(id).select('+loyaltyWebProcessing').lean();
+      expect(saved?.loyaltyWebProcessing).toMatchObject({ state: 'completed', dirty: true, attempts: 1 });
+      expect(saved?.loyaltyWebProcessing?.nextAttemptAt?.getTime()).toBeGreaterThanOrEqual(before);
+      expect(provider.createdCount).toBe(1);
+    });
+  });
+
   describe('journal local : lecture seule du document financier réel', () => {
     function observeOnly() {
       commands = [];
@@ -251,10 +422,10 @@ integration('remboursements durables sur deux connexions Mongo standalone', () =
           { operationId: initial.operationId, state: 'known', providerStatus: 'succeeded', canResume: false },
           { operationId: subsequent.operationId, state: 'known', providerStatus: 'succeeded', canResume: false },
         ] });
-      expect(Object.keys(journal).sort()).toEqual(['enabled', 'operations', 'orderId', 'summary']);
+      expect(Object.keys(journal).sort()).toEqual(['allocation', 'allocations', 'enabled', 'operations', 'orderId', 'summary']);
       for (const operation of journal.operations) {
         expect(Object.keys(operation).sort()).toEqual([
-          'amountCents', 'canResume', 'operationId', 'orderId', 'preparedAt', 'providerStatus', 'reason', 'state',
+          'allocation', 'amountCents', 'canResume', 'operationId', 'orderId', 'preparedAt', 'providerStatus', 'reason', 'state',
         ]);
       }
       for (const secret of [ACTOR, ACCOUNT, INTENT, initial.password, 'idempotencyKey', 'metadata', 'paymentFlow', 'refundFlow']) {

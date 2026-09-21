@@ -94,6 +94,9 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
     const expected = await prepare.mock.results[0]!.value;
     const rawOrder = await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) });
     expect(rawOrder?.customerSaleAttribution).toEqual(expected);
+    expect(rawOrder?.loyaltyWebIntent).toMatchObject({ version: 1, operationId: expect.any(String) });
+    expect(rawOrder?.loyaltyWebProcessing).toMatchObject({ state: 'pending', attempts: 0 });
+    const webOperation = rawOrder?.loyaltyWebIntent?.operationId;
     expect(rawOrder).toMatchObject({ loyaltyMemberId: null, loyaltyEarnOperationId: null, loyaltyEarnState: null });
     const hydrated = await f.models.orders.findById(created._id).select('+customerSaleAttribution');
     expect(hydrated?.toObject({ transform: false }).customerSaleAttribution).toEqual(expected);
@@ -105,12 +108,15 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
     for (const output of outputs) {
       const json = JSON.stringify(output);
       expect(json).not.toContain('customerSaleAttribution');
+      expect(json).not.toContain('loyaltyWebIntent'); expect(json).not.toContain('loyaltyWebProcessing');
+      expect(json).not.toContain(webOperation!);
       if (expected.decision !== 'attributed') throw new Error('Expected attribution');
       for (const secret of [expected.memberId, expected.membershipOperationId, expected.programId]) expect(json).not.toContain(secret);
     }
     const disconnectedPG = vi.fn(async () => { throw new Error('PG unavailable after commit'); });
     expect(await create(b, body, OWNER, vi.fn(async () => OWNER), disconnectedPG)).toEqual(created);
     expect(disconnectedPG).not.toHaveBeenCalled();
+    expect((await f.models.orders.collection.findOne({ clientId: body.clientId }))?.loyaltyWebIntent?.operationId).toBe(webOperation);
   });
 
   it.each(['unavailable', 'wrong_account', 'wrong_total'] as const)('does not commit or permanently reject a failed attribution read (%s)', async failure => {
@@ -278,6 +284,25 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
     expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
       .toMatchObject({ state: 'committing', snapshot: { customerSaleAttribution: attribution } });
     expect(b.redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('retains the admission snapshot if an inserted ticket lost or replaced its exact web intent', async () => {
+    const body = f.request(); const block = blockedInsert(f.models.orders);
+    await expect(create(f.replica({ orders: block.model }), body, OWNER, vi.fn(async () => OWNER), async input => sale(input))).rejects.toThrow();
+    const admission = await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean();
+    const snapshot = admission!.snapshot as unknown as Record<string, unknown>;
+    expect(snapshot.loyaltyWebIntent).toMatchObject({ version: 1 });
+    await f.models.orders.collection.insertOne({ ...snapshot, loyaltyWebIntent: { version: 1, operationId: randomUUID() } } as never);
+    await expect(b.admissions.recover(TENANT, body.clientId, body.recoveryProof!)).rejects.toMatchObject({ status: 503 });
+    expect(await f.models.admissions.findById(orderAdmissionId(TENANT, body.clientId)).select(PRIVATE).lean())
+      .toMatchObject({ state: 'committing', snapshot: { loyaltyWebIntent: snapshot.loyaltyWebIntent } });
+    expect(b.redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('keeps a guest or explicit non-membership decision without a web gain intent', async () => {
+    const created = await create();
+    expect(await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) }))
+      .toMatchObject({ customerSaleAttribution: { decision: 'none' }, loyaltyWebIntent: null, loyaltyWebProcessing: null });
   });
 
   it('reads the exact minimal reorder snapshot without writing orders, admissions or publishing events', async () => {

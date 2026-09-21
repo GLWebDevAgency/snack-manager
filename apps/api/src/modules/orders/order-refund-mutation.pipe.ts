@@ -11,7 +11,7 @@ export class OrderRefundMutationPipe implements PipeTransform<unknown, OrderRefu
   transform(value: unknown): OrderRefundRequest {
     if (value === null || typeof value !== 'object' || Array.isArray(value)
       || !Object.hasOwn(value, 'clientProtocolVersion')
-      || (value as Record<string, unknown>).clientProtocolVersion !== 1) {
+      || (value as Record<string, unknown>).clientProtocolVersion !== 2) {
       throw new ConflictException({ code: 'REFUND_CLIENT_UPDATE_REQUIRED',
         message: 'Actualisez cette page avant de demander un remboursement.' });
     }

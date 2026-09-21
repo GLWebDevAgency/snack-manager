@@ -702,3 +702,5 @@ export * from './customer-sale-attribution';
 
 /** Canal Redis pub/sub par tenant. */
 export const ordersChannel = (tenantId: string) => `tenant:${tenantId}:orders`;
+
+export * from './loyalty-sale-settlement';

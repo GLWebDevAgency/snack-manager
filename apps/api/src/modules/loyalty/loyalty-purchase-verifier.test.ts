@@ -76,6 +76,11 @@ describe('LoyaltyPurchaseVerifier — preuve serveur du ticket POS', () => {
         status: 1,
         loyaltyMemberId: 1,
         'payment.status': 1,
+        'payment.refundedCents': 1,
+        'payment.pendingRefundCents': 1,
+        'payment.refunds.status': 1,
+        'refundFlow.operations.state': 1,
+        'refundFlow.operations.refund.status': 1,
         'totals.total': 1,
       },
     );
@@ -85,6 +90,11 @@ describe('LoyaltyPurchaseVerifier — preuve serveur du ticket POS', () => {
     ['commande en ligne', { ...eligibleOrder, channel: 'online' }],
     ['commande non payée', { ...eligibleOrder, payment: { status: 'pending' } }],
     ['commande remboursée', { ...eligibleOrder, payment: { status: 'refunded' } }],
+    ['commande partiellement remboursée encore paid', { ...eligibleOrder, payment: { status: 'paid', refundedCents: 1 } }],
+    ['commande avec réserve de remboursement', { ...eligibleOrder, payment: { status: 'paid', pendingRefundCents: 1 } }],
+    ['commande avec reçu sans agrégat', { ...eligibleOrder, payment: { status: 'paid', refunds: [{ status: 'succeeded' }] } }],
+    ['commande avec intention non résolue', { ...eligibleOrder, refundFlow: { operations: [{ state: 'creating' }] } }],
+    ['commande avec agrégat corrompu', { ...eligibleOrder, payment: { status: 'paid', refundedCents: -1 } }],
     ['commande annulée', { ...eligibleOrder, status: 'cancelled' }],
     ['commande encore ouverte', { ...eligibleOrder, status: 'ready' }],
     ['total corrompu', { ...eligibleOrder, totals: { total: 18.5 } }],
@@ -129,5 +139,11 @@ describe('LoyaltyPurchaseVerifier — preuve serveur du ticket POS', () => {
         claimedPurchaseCents: 1_850,
       }),
     ).resolves.toBe(1_850);
+  });
+  it('ne traite pas un abandon ou un échec définitif comme remboursement acquis', async () => {
+    const { verifier } = harness({ ...eligibleOrder, payment: { status: 'paid', refunds: [{ status: 'failed' }] },
+      refundFlow: { operations: [{ state: 'withdrawn' }, { state: 'known', refund: { status: 'failed' } }] } });
+    await expect(verifier.confirmedPurchaseCents({ tenantRef: TENANT, memberId: MEMBER_ID,
+      externalRef: EXTERNAL_REF, claimedPurchaseCents: 1_850 })).resolves.toBe(1_850);
   });
 });

@@ -1,5 +1,6 @@
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import type { OrderRefundSummary } from '@sm/contracts';
+import type { OrderRefundAllocation, OrderRefundSummary } from '@sm/contracts';
+import type { RefundAllocationReceipt } from './order-refund-allocation.policy';
 import { refundSummary, type ProviderRefund } from './order-refunds.policy';
 
 export type RefundProof = ProviderRefund & { currency: string; payment_intent: string };
@@ -7,19 +8,23 @@ export type RefundOperation = {
   operationId: string; amountCents: number; reason: string; actorId: string;
   environment: 'test' | 'live'; paymentIntentId: string; accountId: string | null;
   idempotencyKey: string; preparedAt: Date; requestStartedAt?: Date | null;
+  allocation?: OrderRefundAllocation | null;
   state: 'prepared' | 'creating' | 'known' | 'review_required' | 'withdrawn';
   refund?: RefundProof | null; providerCheckedAt?: Date | null; reviewReason?: string | null;
 };
-export type RefundFlow = { version: 1; operations: RefundOperation[] };
+export type RefundFlow = { version: 1; operations: RefundOperation[]; allocations?: RefundAllocationReceipt[] };
 export type StoredRefund = { id: string; amountCents: number; status: string; operationId?: string | null; reason?: string };
 export type RefundSnapshot = {
-  _id: unknown; tenantId: unknown; __v?: number; totals: { total: number };
+  _id: unknown; tenantId: unknown; __v?: number;
+  totals: { total: number; subtotal?: number; deliveryFee?: number; discount?: { amount?: number } | null };
   payment: {
     method: string; status: string; stripePaymentIntentId?: string | null; stripeAccountId?: string | null;
     refundSyncVersion?: number; refundedCents?: number; pendingRefundCents?: number; refunds?: StoredRefund[];
   };
   paymentFlow?: { attempt?: { environment: string } | null } | null;
   refundFlow?: RefundFlow | null;
+  customerSaleAttribution?: { decision: string } | null;
+  loyaltyWebIntent?: { version: number } | null;
 };
 const PROVIDER_STATES = new Set(['pending', 'requires_action', 'succeeded', 'failed', 'canceled']);
 export const MAX_REFUND_OPERATIONS = 128;

@@ -7,6 +7,7 @@ export * from './delivery-handoff.schema';
 export * from './media-empreinte';
 export * from './dining.schema';
 export * from './dining-pricing.schema';
+export * from './loyalty-web-intent.schema';
 
 import mongoose from 'mongoose';
 

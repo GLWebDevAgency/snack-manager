@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { ConflictException } from '@nestjs/common';
 import { Types, type Model } from 'mongoose';
 import type Redis from 'ioredis';
-import type { Order, PublicOrderAdmission } from '@sm/db';
+import { validLoyaltyWebIntent, type Order, type PublicOrderAdmission } from '@sm/db';
 import { CustomerSaleAttributionSchema, ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/contracts';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { assertOrderAdmissionBinding, isPublicOrderAdmission, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, type OrderAdmissionBinding } from './order-admission-identity';
@@ -39,7 +39,7 @@ export class OrderAdmissionJournal {
   }
 
   orderByClient(tenantId: string, clientId: string) {
-    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner +customerSaleAttribution').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner +customerSaleAttribution +loyaltyWebIntent').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 
   async authenticated(tenantId: string, clientId: string, binding: OrderAdmissionBinding) {
@@ -134,6 +134,11 @@ export class OrderAdmissionJournal {
         const materialized = CustomerSaleAttributionSchema.safeParse(actual);
         if (!expected.success || !materialized.success || !isDeepStrictEqual(expected.data, materialized.data)) throw uncertain();
       }
+      const actualIntent = order.toObject({ transform: false }).loyaltyWebIntent;
+      if (snapshot.loyaltyWebIntent == null) {
+        if (actualIntent != null) throw uncertain();
+      } else if (!validLoyaltyWebIntent(snapshot.loyaltyWebIntent) || !validLoyaltyWebIntent(actualIntent)
+        || !isDeepStrictEqual(snapshot.loyaltyWebIntent, actualIntent)) throw uncertain();
       void publishRedisBestEffort(this.redis, ordersChannel(tenantId), JSON.stringify({ event: WS_EVENTS.orderCreated, payload: order.toObject() }));
       try {
         await this.admissions.updateOne({ _id: admission._id, state: 'committing', orderId: order._id },
