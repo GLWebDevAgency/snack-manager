@@ -21,7 +21,7 @@ function setup(overrides: Record<string, unknown> = {}) {
   const audit = { log: vi.fn(async () => undefined) };
   const redis = { publish: vi.fn(async (_channel: string, _payload: string) => 1) };
   const payments = { cancelOrder: vi.fn(async () => { row.status = 'cancelled'; }) };
-  const service = new OrdersService({} as never, {} as never, {} as never, {} as never,
+  const service = new OrdersService({ findOne: vi.fn(() => ({ select: async () => row })) } as never, {} as never, {} as never, {} as never,
     redis as never, audit as never, {} as never, { pourTenant: async () => ['bo'] } as never,
     payments as never);
   vi.spyOn(service, 'byId').mockResolvedValue(row as never);

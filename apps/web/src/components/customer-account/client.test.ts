@@ -170,3 +170,28 @@ describe("Compte client — vues privées et mutations sérialisées", () => {
     expect(request.mock.calls.filter(([action]) => action === "session")).toHaveLength(3);
   });
 });
+
+describe('private rewards opt-in transport', () => {
+  it.each([false, true])('keeps the legacy path unless explicitly selected (%s)', async optIn => {
+    const selection = { browserRef: randomUUID(), publication: { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } };
+    const fetch = vi.fn().mockResolvedValue(Response.json({ state: 'unavailable', expiresAt: Date.now() + 60_000 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const request = customerAccountRequest('fixture', async () => selection.browserRef, async () => selection.publication);
+      await request('loyalty', { step: 'view' }, selection, optIn ? { orderRewards: true } : undefined);
+      expect(fetch).toHaveBeenCalledOnce();
+      const [url, init] = fetch.mock.calls[0]!;
+      expect(url).toBe(`/r/fixture/compte/fidelite${optIn ? '?orderRewards=1' : ''}`);
+      expect(JSON.parse(init.body)).toEqual({ step: 'view' });
+      expect(init.headers['x-sm-customer-browser-ref']).toBe(selection.browserRef);
+      expect(init.headers['x-sm-customer-operation-id']).toBe(selection.publication.expectedOperationId);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('cannot opt other account actions into rewards', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    try {
+      await expect(customerAccountRequest('fixture')('session', undefined, undefined, { orderRewards: true })).rejects.toMatchObject({ status: 400 });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});

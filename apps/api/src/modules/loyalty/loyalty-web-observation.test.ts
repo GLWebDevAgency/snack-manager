@@ -14,7 +14,47 @@ function online(order = loyaltyWebFixture()) {
   return order;
 }
 
+function zeroReward() {
+  const row = loyaltyWebFixture(), attribution = row.customerSaleAttribution!;
+  if (attribution.decision !== 'attributed') throw new Error('Attributed fixture required');
+  row.totals.discount = { amount: 1000 }; row.totals.total = 0;
+  attribution.basis = { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 0, excludedChargeCents: 0, chargedTotalCents: 0 };
+  row.counterCollection = null;
+  row.loyaltyReward = { version: 1, reservationId: randomUUID(), clientId: row.clientId, owner: attribution.owner,
+    memberId: attribution.memberId, programId: attribution.programId, rulesVersion: attribution.rulesVersion,
+    pricingHash: 'a'.repeat(64), benefit: { rewardId: randomUUID(), name: 'Récompense de recette', costUnits: 10,
+      kind: 'fixed_discount', amountCents: 1000, productRef: null, policy: 'one-reward-no-promotion-v1' } };
+  row.loyaltyRewardProcessing = { state: 'consumed', zeroPaid: true, orderVersion: row.__v };
+  return row;
+}
+
 describe('web loyalty observation — historical server proof only', () => {
+  it('accepts a zero total only from its exact consumed reward receipt, without inventing a cash or card payment', () => {
+    const row = zeroReward(), observed = loyaltyWebObservation(row);
+    expect(observed.observation).toMatchObject({ paidAndDelivered: true, eligibleRefundedCents: 0, pendingRefundCents: 0,
+      proof: { payment: { kind: 'zero_total_reward', amountCents: 0, rewardAmountCents: 1000 } } });
+    expect(observed.attribution.basis.eligiblePurchaseCents).toBe(0);
+    row.__v!++;
+    expect(loyaltyWebObservation(row).observation.financialFingerprint).toBe(observed.observation.financialFingerprint);
+  });
+  it.each([
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyReward = null; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing = null; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.state = 'reserved'; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.state = 'reversed'; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.zeroPaid = false; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.orderVersion = row.__v! + 1; },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { memberId: string }).memberId = randomUUID(); },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { clientId: string }).clientId = randomUUID(); },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { owner: { accountId: string } }).owner = { ...(row.loyaltyReward as { owner: { accountId: string } }).owner, accountId: randomUUID() }; },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { benefit: { amountCents: number } }).benefit.amountCents = 999; },
+    (row: LoyaltyWebObservedOrder) => { row.payment.stripePaymentIntentId = 'pi_conflicting'; },
+    (row: LoyaltyWebObservedOrder) => { row.payment.pendingRefundCents = 1; },
+  ])('does not infer a settled zero total from a partial, foreign or inconsistent reward proof %#', corrupt => {
+    const row = zeroReward(); corrupt(row);
+    expect(() => loyaltyWebObservation(row)).toThrow('payment_proof_invalid');
+  });
+
   it('accepts the immutable receipt of collection at the counter and the handoff separately', () => {
     const row = loyaltyWebFixture(), input = loyaltyWebObservation(row);
     expect(input).toMatchObject({ tenantRef: String(row.tenantId), clientId: row.clientId,

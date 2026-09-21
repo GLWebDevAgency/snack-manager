@@ -17,9 +17,10 @@ export function CustomerAccess({ state, flow, available, onSignup }: Props) {
   const [code, setCode] = useState(''), [saved, setSaved] = useState(false), [closing, setClosing] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const access = state.record?.access, phase = access?.phase;
+  const browserExpired = state.outcome === 'browser-expired';
   const protection = access?.method === 'recovery' ? access.protection : undefined;
   const initial = !access || ['completed', 'closed', 'expired'].includes(access.phase);
-  const title = initial ? 'Retrouver mon compte' : phase === 'prepared' && access?.method === 'recovery' ? 'Utiliser mon code de secours'
+  const title = browserExpired ? 'Reprendre la connexion' : initial ? 'Retrouver mon compte' : phase === 'prepared' && access?.method === 'recovery' ? 'Utiliser mon code de secours'
     : phase === 'protecting' ? protection?.stage === 'registration_required' ? 'Créer une nouvelle clé d’accès'
       : protection?.stage === 'assertion_required' ? 'Vérifier la nouvelle clé' : 'Conserver mon nouveau secours'
       : phase === 'failed' ? 'Connexion refusée' : 'Vérifier ma connexion';
@@ -39,6 +40,7 @@ export function CustomerAccess({ state, flow, available, onSignup }: Props) {
     <div><p className="mb-1 text-[11px] font-bold uppercase tracking-[.14em] text-accentink">Votre accès personnel</p>
       <h3 ref={heading} tabIndex={-1} className="font-display text-xl font-extrabold leading-tight outline-none">{title}</h3></div>
     {state.message && <p role="status" className="rounded-card border border-prep/25 bg-prep/10 p-3 text-sm leading-6 text-prept">{state.message}</p>}
+    {browserExpired ? <Tap className={primary} disabled={locked} onClick={() => void flow?.restartBrowser()}>Recommencer la connexion</Tap> : <>
     {phase === 'preparing' && state.outcome === 'uncertain' && <p className="text-xs leading-5 text-mut">Si la vérification ne permet pas de reprendre, fermez cette démarche puis recommencez. Un accès privé perdu ne sera pas recréé automatiquement.</p>}
     {initial && <>
       <p className="text-sm leading-6 text-mut">Reconnectez-vous avec la clé enregistrée pour ce site du restaurant. Aucun SMS n’est nécessaire.</p>
@@ -100,6 +102,7 @@ export function CustomerAccess({ state, flow, available, onSignup }: Props) {
           <Tap className={secondary} disabled={locked} onClick={() => { setClosing(false); void flow?.close(); }}>Fermer cette démarche</Tap></div>
       </> : <Tap className="min-h-11 text-left text-xs font-semibold text-mut underline underline-offset-4" disabled={state.busy} onClick={() => setClosing(true)}>Abandonner cette démarche</Tap>}
       <p className="mt-2 text-xs leading-5 text-mut">Revenir au menu met seulement cette démarche en pause. Vous pouvez toujours commander en invité.</p></div>
+    </>}
     </>}
   </section>;
 }

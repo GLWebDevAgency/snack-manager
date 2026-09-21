@@ -17,7 +17,7 @@ const KIND_LABEL = {
 
 function rewardBenefit(reward: LoyaltyRewardView): string {
   if (reward.kind === "fixed_discount") return fmtEuro(reward.valueCents);
-  if (reward.kind === "product") return reward.productRef ?? "Produit offert";
+  if (reward.kind === "product") return reward.productRef && /^[a-f0-9]{24}$/.test(reward.productRef) ? "Une unité du produit choisi, hors suppléments" : reward.productRef ?? "Produit offert";
   return reward.description || "Avantage remis au comptoir";
 }
 

@@ -8,7 +8,7 @@ type Action = CustomerAccountAction;
 const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create', 'order-reorder', 'loyalty'];
 export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
 export type CustomerAccountAccess = { selection: CustomerAccountSelection; expiresAt: number };
-export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
+export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection, options?: { orderRewards: true }) => Promise<unknown>) & {
   selection?: () => Promise<CustomerAccountSelection | null>;
 };
 export type CustomerAccountState = Readonly<{
@@ -28,8 +28,9 @@ export class CustomerAccountHttpError extends Error {
 export function customerAccountRequest(slug: string, selected: () => Promise<string | null> = () => selectedCustomerBrowser(slug),
   publication: () => Promise<CustomerAccountPublication | null> = () => selectedCustomerPublication(slug)): CustomerAccountRequest {
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
-  const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
+  const request: CustomerAccountRequest = async (action, body, expectedSelection, options) => {
     if (!valid) throw new CustomerAccountHttpError(400);
+    if (options && (action !== 'loyalty' || options.orderRewards !== true)) throw new CustomerAccountHttpError(400);
     if (['orders', 'order-detail', 'order-create', 'order-reorder', 'loyalty'].includes(action) && !expectedSelection) throw new CustomerAccountHttpError(409);
     const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", passkey: "cle-acces", recovery: "secours", session: "session", name: "profil", logout: "session", orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes', 'order-reorder': 'commandes/recommander', loyalty: 'fidelite' };
     const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", passkey: "POST", recovery: "POST", session: "GET", name: "PATCH", logout: "DELETE", orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST', 'order-reorder': 'POST', loyalty: 'POST' };
@@ -53,7 +54,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
       if ((browserRef !== null && await selected() !== browserRef)
         || (expected !== null && JSON.stringify(await publication()) !== JSON.stringify(expected))) throw new CustomerAccountHttpError(409);
     };
-    const response = await fetch(`/r/${slug}/compte/${paths[action]}`, {
+    const response = await fetch(`/r/${slug}/compte/${paths[action]}${options?.orderRewards ? '?orderRewards=1' : ''}`, {
       method: methods[action], credentials: "same-origin", cache: "no-store", redirect: "error",
       referrerPolicy: "no-referrer", signal: AbortSignal.timeout(customerAccountRequestTimeoutMs(action, 'browser')),
       headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }),

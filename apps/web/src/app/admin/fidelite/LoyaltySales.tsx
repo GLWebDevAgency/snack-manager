@@ -55,9 +55,9 @@ export function LoyaltySales() {
     finally { working.current = false; if (alive.current) setBusy(false); }
   }
   return <div className="space-y-4 p-4 md:p-[26px]">
-    <Panel title="Gains sur les ventes web" sub="Ventes attribuées à un compte client. Les reçus du journal fidélité confirment les mouvements." actions={<Btn variant="ghost" disabled={busy} onClick={() => void load()}>Actualiser</Btn>}>
-      <p className="mb-4 text-sm text-mut">Les produits après remise donnent des unités selon la règle conservée à la commande. La livraison est exclue. Un remboursement peut corriger le gain initial.</p>
-      {ready && items.length === 0 && <p className="text-sm text-mut">Aucune vente web attribuée à afficher.</p>}
+    <Panel title="Gains sur les ventes" sub="Ventes en ligne attribuées à un compte et corrections des gains de caisse. Les reçus du journal fidélité confirment les mouvements." actions={<Btn variant="ghost" disabled={busy} onClick={() => void load()}>Actualiser</Btn>}>
+      <p className="mb-4 text-sm text-mut">Chaque correction conserve la règle et le montant éligible du gain initial. Les gains en ligne excluent la livraison ; les anciens gains de caisse conservent leur assiette d’origine.</p>
+      {ready && items.length === 0 && <p className="text-sm text-mut">Aucune vente fidélité à afficher.</p>}
       <div className="space-y-3">{items.map(view => <article key={view.orderId} className="space-y-3 rounded-card border border-line2 p-4">
         <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">Commande n°{view.orderNumber}</h3><strong className="text-sm">{label(view)}</strong></div>
         {view.reason && <p className="text-sm text-mut">{REASON[view.reason]}</p>}

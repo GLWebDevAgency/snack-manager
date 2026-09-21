@@ -55,6 +55,20 @@ export function createCustomerBrowserPreparation(port: Port) {
     const next = { ...record, phase };
     await port.journal.write(next, record); port.changed?.(); return next;
   }
+  /** Observe the existing selector only. In particular an HTTP failure, a local
+   * deadline or an unfinished access does not authorize replacing its journal. */
+  async function inspect(): Promise<CustomerBrowserPreparationResult> {
+    if (!port.lock) return { kind: 'blocked' };
+    try {
+      return await port.lock(async () => {
+        const record = await port.journal.read();
+        if (!record) return { kind: 'absent' };
+        const preparation = await readServer(record, 'prepare');
+        if (preparation.state === 'expired') return { kind: 'expired', preparation };
+        return preparation.state === 'confirmed' ? { kind: 'ready', preparation } : { kind: 'uncertain' };
+      });
+    } catch { return { kind: 'uncertain' }; }
+  }
   async function advance(initial: CustomerBrowserJournal): Promise<CustomerBrowserPreparationResult> {
     let record = initial;
     let view = await readServer(record, 'prepare');
@@ -98,7 +112,7 @@ export function createCustomerBrowserPreparation(port: Port) {
       });
     } catch { return { kind: 'uncertain' }; }
   }
-  return { begin: () => run('begin'), resume: () => run('resume'), restartExpired: () => run('restart'), restoreMissingJournal };
+  return { begin: () => run('begin'), resume: () => run('resume'), restartExpired: () => run('restart'), restoreMissingJournal, inspect };
 }
 
 /** Same native lock as profile/logout, independent from checkout's journal. */

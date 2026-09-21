@@ -1,3 +1,4 @@
+import { assertOrderRewardReady } from './order-reward.policy';
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CollectOrderPaymentSchema, orderAccessScope, ordersChannel, WS_EVENTS, type CollectOrderPayment, type JwtPayload } from '@sm/contracts';
@@ -42,7 +43,7 @@ export class OrderCounterCollectionService {
     if (scope === 'none') throw new NotFoundException('Commande introuvable');
     const filter = { _id: id, tenantId, ...(scope === 'online' ? { channel: 'online' } : {}) };
     for (let retry = 0; retry < MAX_RETRIES; retry++) {
-      const order = await this.orders.findOne(filter).select('+paymentFlow +counterCollection')
+      const order = await this.orders.findOne(filter).select('+paymentFlow +counterCollection +loyaltyReward +loyaltyRewardProcessing')
         .read('primary').readConcern('majority').maxTimeMS(10_000);
       if (!order) throw new NotFoundException('Commande introuvable');
       if (order.counterCollection) {
@@ -52,6 +53,7 @@ export class OrderCounterCollectionService {
       }
       if (!['new', 'preparing', 'ready'].includes(order.status) || order.payment.status !== 'pending'
         || !canCollectOrderAtCounter(order)) this.conflict();
+      assertOrderRewardReady(order);
       const amount = order.totals.total;
       if (!Number.isSafeInteger(amount) || amount < 0 || amount > 100_000_000 || amount !== body.expectedTotalCents) this.conflict();
       const cashReceived = body.tender === 'cash' ? body.cashReceivedCents : null;
@@ -65,7 +67,7 @@ export class OrderCounterCollectionService {
       }, { $set: { counterCollection: receipt, 'payment.method': 'counter', 'payment.status': 'paid',
         'payment.tender': body.tender, 'payment.cashReceived': cashReceived, 'payment.changeGiven': changeGiven },
         $inc: { __v: 1 } }, { new: true, writeConcern: DURABLE_WRITE })
-        .select('+paymentFlow +counterCollection').read('primary');
+        .select('+paymentFlow +counterCollection +loyaltyReward +loyaltyRewardProcessing').read('primary');
       if (!collected) continue;
       await this.publishReceipt(collected);
       return collected;

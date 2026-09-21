@@ -43,6 +43,8 @@ import type {
   PublicSiteReview,
   SlotsResponse,
   DeliveryQuote,
+  PickupQuote,
+  PickupQuoteRequest,
   DeliveryQuoteRequest,
   PublicDeliverySettings,
   OrderDelivery,
@@ -624,6 +626,10 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
+  function quotePickup(slug: string, payload: PickupQuoteRequest): Promise<PickupQuote> {
+    return postJson<PickupQuote>(`/public/tenants/${encodeURIComponent(slug)}/orders/quote`, payload);
+  }
+
   function quoteDelivery(slug: string, payload: DeliveryQuoteRequest): Promise<DeliveryQuote> {
     return postJson<DeliveryQuote>(`/public/tenants/${encodeURIComponent(slug)}/delivery/quote`, payload);
   }
@@ -698,6 +704,7 @@ export function orderingApi(transport: Transport = httpTransport) {
     loadBrand,
     loadSlots,
     quoteDelivery,
+    quotePickup,
     createOrder,
     recoverOrder,
     abandonOrderAttempt,

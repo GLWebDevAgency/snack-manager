@@ -17,3 +17,5 @@ export async function connectDb(uri: string): Promise<typeof mongoose> {
 }
 
 export { mongoose };
+
+export * from './loyalty-pos-compensation.schema';

@@ -31,6 +31,8 @@ export const KEYS = {
   diningOperation: 'sm.pos.dining-operation.v1',
   /** Affectations directes à vérifier, protégées avant purge. */
   deliveryAssignments: DELIVERY_ASSIGNMENT_STORAGE_KEY,
+  /** Remboursements comptoir incertains : interdits de purge avant reçu terminal. */
+  counterRefunds: COUNTER_REFUND_STORAGE_KEY,
 } as const;
 
 /**
@@ -43,6 +45,7 @@ export const KEYS = {
  */
 import {
   DELIVERY_ASSIGNMENT_STORAGE_KEY,
+  COUNTER_REFUND_STORAGE_KEY,
   mutateStoreItem,
   uuid,
   type CartLine,
@@ -97,6 +100,8 @@ export interface DayEntry {
   paid: boolean;
   /** État serveur connu à la reprise ; paid garde la trace de l'encaissement historique. */
   refunded?: true;
+  /** Cumul confirmé par le serveur ; jamais les réserves ni une saisie locale. */
+  refundedCents?: number;
   /** Centimes — calcul local, le serveur fait autorité une fois synchronisé. */
   total: number;
   items: number;
@@ -642,7 +647,7 @@ export function buildOrderBody(params: {
  */
 export interface LocalJournalSummary {
   orders: number;
-  /** Total local remises déduites (centimes). */
+  /** Total local remises et remboursements confirmés déduits (centimes), dettes incluses. */
   ca: number;
   cash: number;
   card: number;
@@ -652,6 +657,9 @@ export interface LocalJournalSummary {
   /** Encaissements locaux dont le moyen n'a pas été saisi. */
   unspecified: number;
   discounts: number;
+  collected: number;
+  refunded: number;
+  netCollected: number;
 }
 
 const EMPTY_LOCAL_SUMMARY: LocalJournalSummary = {
@@ -663,16 +671,30 @@ const EMPTY_LOCAL_SUMMARY: LocalJournalSummary = {
   due: 0,
   unspecified: 0,
   discounts: 0,
+  collected: 0,
+  refunded: 0,
+  netCollected: 0,
 };
 
 export const LOCAL_JOURNAL_SCOPE_NOTICE =
-  'Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel. Les remboursements ne sont pas déduits de ce journal historique.';
+  'Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel. Seuls les remboursements confirmés et relus par cette caisse sont déduits. Les montants encaissés à l’origine restent visibles.';
+
+/** Les anciens tickets intégralement remboursés restent compatibles. */
+export function dayEntryRefundedCents(entry: DayEntry): number {
+  if (!entry.paid) return 0;
+  const collected = Math.max(0, entry.total - (entry.discount ?? 0));
+  if (entry.refunded) return collected;
+  return Number.isSafeInteger(entry.refundedCents) && entry.refundedCents! >= 0
+    ? Math.min(collected, entry.refundedCents!) : 0;
+}
 
 /** Calcule exclusivement ce qui est déjà présent dans le journal du poste. */
 export function zFromJournal(entries: DayEntry[]): LocalJournalSummary {
   const z = { ...EMPTY_LOCAL_SUMMARY };
   for (const entry of entries) {
-    const net = entry.total - (entry.discount ?? 0);
+    const collected = entry.total - (entry.discount ?? 0);
+    const refunded = dayEntryRefundedCents(entry);
+    const net = collected - refunded;
     z.orders += 1;
     z.ca += net;
     z.discounts += entry.discount ?? 0;
@@ -681,6 +703,9 @@ export function zFromJournal(entries: DayEntry[]): LocalJournalSummary {
       z.due += net;
       continue;
     }
+    z.collected += collected;
+    z.refunded += refunded;
+    z.netCollected += net;
     const tender = PAY_TENDER[entry.method];
     if (tender === 'cash') z.cash += net;
     else if (tender === 'card') z.card += net;

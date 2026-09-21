@@ -214,7 +214,7 @@ export async function checkoutCartFingerprint(snapshot: unknown): Promise<string
 }
 
 function businessPayload(value: unknown): CheckoutBusinessPayload {
-  if (!object(value) || !onlyKeys(value, ["fulfillment", "delivery", "lines", "payment", "pickup", "note", "promoCode"])) invalid();
+  if (!object(value) || !onlyKeys(value, ["fulfillment", "delivery", "lines", "payment", "pickup", "note", "promoCode", "reward", "expectedTotalCents"])) invalid();
   // Same schema as POST, but transient challenge/proof are never persisted here.
   const parsed = CreatePublicOrderSchema.safeParse({
     ...value, clientId: "00000000-0000-4000-8000-000000000000", turnstileToken: "journal-validation",

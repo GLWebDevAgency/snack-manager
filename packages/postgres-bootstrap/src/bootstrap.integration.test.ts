@@ -392,7 +392,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       });
       expect(protectedReport.issues).toEqual([]);
       // The manifest includes future objects; the 0008 bridge is still absent.
-      expect(protectedReport.objects).toHaveLength(116);
+      expect(protectedReport.objects).toHaveLength(123);
       for (const name of protectedTables) {
         await expect(freshMigrationPool.query(
           `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
@@ -464,7 +464,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationRole, runtimeRole,
       });
       expect(accessReport.issues).toEqual([]);
-      expect(accessReport.objects).toHaveLength(116);
+      expect(accessReport.objects).toHaveLength(123);
       expect((await freshMigrationPool.query(`SELECT 1 FROM pg_catalog.pg_constraint
         WHERE conrelid='customer.passkey_credentials'::regclass
           AND conname='passkey_credentials_parent_ref_tenant_ref_account_id_key'`)).rows).toEqual([]);
@@ -576,6 +576,15 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       expect((await freshMigrationPool.query(
         'SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
       )).rows).toEqual(afterFreshness);
+      const rewardFunctions = ['guard_order_reward_closure', 'preserve_order_reward_operation', 'preserve_order_reward_reservation',
+        'validate_order_reward_receipt', 'validate_order_reward_wallet'];
+      expect((await freshMigrationPool.query(`SELECT p.proname AS name,pg_get_userbyid(p.proowner) AS owner,
+        p.prorettype='trigger'::regtype AS returns_trigger,p.prosecdef AS security_definer,p.proconfig AS configuration,
+        has_function_privilege($1,p.oid,'EXECUTE') AS runtime_execute,has_function_privilege($2,p.oid,'EXECUTE') AS migrator_execute
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='loyalty' AND p.proname=ANY($3::text[]) ORDER BY p.proname`,
+      [runtimeRole,migrationRole,rewardFunctions])).rows).toEqual(rewardFunctions.map(name => ({ name, owner: migrationRole,
+        returns_trigger: true, security_definer: false, configuration: ['search_path=pg_catalog, pg_temp'],
+        runtime_execute: false, migrator_execute: true })));
       await freshMigrationPool.query('ALTER FUNCTION customer.guard_provider_freshness() RENAME TO provider_freshness_drift_probe');
       try {
         await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), { migrationRole,runtimeRole }))

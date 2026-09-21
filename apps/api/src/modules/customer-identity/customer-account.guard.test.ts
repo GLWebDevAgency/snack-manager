@@ -37,6 +37,19 @@ function fixture(action = 'session') {
 }
 afterEach(() => vi.useRealTimers());
 describe('customer dedicated signed boundary', () => {
+  it('authenticates the rewards opt-in inside the exact loyalty envelope', async () => {
+    const f = fixture('loyalty'); f.request.body.request = { step: 'view' }; f.request.body.orderRewards = 1; f.sign();
+    await expect(f.guard.canActivate(f.context)).resolves.toBe(true);
+    const changed = fixture('loyalty'); changed.request.body.request = { step: 'view' }; changed.sign();
+    changed.request.body.orderRewards = 1;
+    await expect(changed.guard.canActivate(changed.context)).rejects.toMatchObject({ status: 403 });
+    expect(changed.quota.reserve).not.toHaveBeenCalled();
+  });
+  it.each([0, 2, '1', true])('rejects signed invalid rewards opt-in %s before quota', async value => {
+    const f = fixture('loyalty'); f.request.body.request = { step: 'view' }; f.request.body.orderRewards = value; f.sign();
+    await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 400 });
+    expect(f.quota.reserve).not.toHaveBeenCalled();
+  });
   it('admits reorder only with its exact signed private envelope and unchanged HTTP quotas', async () => {
     const f = fixture('order-reorder'); f.request.body.request = { orderId: 'a'.repeat(24) }; f.sign();
     await expect(f.guard.canActivate(f.context)).resolves.toBe(true);

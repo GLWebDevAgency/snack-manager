@@ -9,6 +9,7 @@ import { LoyaltyController } from './loyalty.controller';
 import { LoyaltyPublicController } from './loyalty-public.controller';
 import { LoyaltyPublicService } from './loyalty-public.service';
 import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
+import { LoyaltyPosCompensationProcessor } from './loyalty-pos-compensation.processor';
 import { LoyaltyHistoricalSaleService } from './loyalty-historical-sale.service';
 import { LoyaltyWebSettlementProcessor } from './loyalty-web-settlement.processor';
 import { EncaissementModule } from '../encaissement/encaissement.module';
@@ -27,6 +28,7 @@ import { LoyaltySaleSettlementService } from './loyalty-sale-settlement.service'
     LoyaltyPurchaseVerifier,
     LoyaltyHistoricalSaleService,
     LoyaltyWebSettlementProcessor,
+    LoyaltyPosCompensationProcessor,
     LoyaltySaleSettlementService,
   ],
 })

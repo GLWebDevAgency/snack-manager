@@ -14,8 +14,8 @@ const join = { step: 'join', operationId: randomUUID(), programId: randomUUID(),
 const attach = { ...join, step: 'attach', termsNoticeVersion: CUSTOMER_LOYALTY_ATTACHMENT_NOTICE_VERSION, qrToken: randomBytes(32).toString('base64url') };
 const program = { id: join.programId, version: 1, name: 'Les habitués', mechanism: 'points', termsSummary: 'Conditions du restaurant.', unitLabelSingular: 'point', unitLabelPlural: 'points' };
 const member = { id: randomUUID(), joinedAt: '2026-09-09T12:00:00.000Z', qrGeneration: 1, balanceUnits: 0, unitLabelSingular: 'point', unitLabelPlural: 'points' };
-function request(body: unknown = { step: 'view' }, headers: Record<string, string> = {}) {
-  return new NextRequest(`${origin}/r/classfood/compte/fidelite`, { method: 'POST', headers: { origin, host: new URL(origin).host,
+function request(body: unknown = { step: 'view' }, headers: Record<string, string> = {}, query = '') {
+  return new NextRequest(`${origin}/r/classfood/compte/fidelite${query}`, { method: 'POST', headers: { origin, host: new URL(origin).host,
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-real-ip': '192.0.2.10',
     'x-sm-customer-browser-ref': browserRef, 'x-sm-customer-operation-id': expectedOperationId, 'x-sm-customer-check-id': expectedCheckId,
     cookie: cookies, ...headers }, body: JSON.stringify(body) });
@@ -30,6 +30,31 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe('private loyalty BFF — isolated upstream, real handler', () => {
+  it.each([false, true])('projects reserved units only for explicit rewards view (%s)', async optIn => {
+    const output = { state: 'member', member: { ...member, balanceUnits: 100, reservedUnits: 60 }, expiresAt: Date.now() + 60_000 };
+    upstream.mockResolvedValue(Response.json(output));
+    const response = await customerAccount(request({ step: 'view' }, {}, optIn ? '?orderRewards=1' : ''), context, 'loyalty');
+    expect(response.status).toBe(200);
+    const received = await response.json();
+    expect(received.member.balanceUnits).toBe(100);
+    if (optIn) expect(received.member.reservedUnits).toBe(60);
+    else expect(received.member).not.toHaveProperty('reservedUnits');
+    const sent = upstream.mock.calls[0]!;
+    expect(sent[0]).toBe(`${api}/public/customer/classfood/loyalty`);
+    const envelope = JSON.parse(String(sent[1]!.body));
+    if (optIn) expect(envelope.orderRewards).toBe(1);
+    else expect(envelope).not.toHaveProperty('orderRewards');
+    expect(envelope.request).toEqual({ step: 'view' });
+    const headers = new Headers(sent[1]!.headers);
+    const payload = ['customer-v1', headers.get('x-sm-customer-at'), 'classfood', 'loyalty', 'POST', '/public/customer/classfood/loyalty', origin,
+      headers.get('x-sm-customer-client'), createHash('sha256').update(String(sent[1]!.body)).digest('hex')].join('\0');
+    expect(headers.get('x-sm-customer-proof')).toBe(createHmac('sha256', Buffer.from(process.env.SM_CUSTOMER_RELAY_SIGNING_KEY!, 'base64')).update(payload).digest('base64url'));
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each(['?orderRewards=0', '?orderRewards=2', '?orderRewards=true', '?orderRewards=1&orderRewards=1', '?orderRewards=1&extra=1'])('rejects noncanonical opt-in %s before upstream', async query => {
+    expect((await customerAccount(request({ step: 'view' }, {}, query), context, 'loyalty')).status).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
   it.each(['view', 'join', 'attach', 'card'] as const)('%s carries only the strict request and signed current authority', async step => {
     const body = step === 'join' ? join : step === 'attach' ? attach : { step };
     const output = { expiresAt: Date.now() + 60_000, ...(step === 'view' ? { state: 'available', program, profileReady: true }

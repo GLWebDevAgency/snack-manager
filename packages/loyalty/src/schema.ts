@@ -20,6 +20,8 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  unique,
+  pgPolicy,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -318,6 +320,8 @@ export const wallets = loyaltySchema.table(
     memberId: uuid('member_id').notNull(),
     programId: uuid('program_id').notNull(),
     balanceUnits: bigint('balance_units', { mode: 'number' }).notNull().default(0),
+    /** Units held for an immutable checkout, unavailable to every debit writer. */
+    reservedUnits: bigint('reserved_units', { mode: 'number' }).notNull().default(0),
     lifetimeEarnedUnits: bigint('lifetime_earned_units', { mode: 'number' })
       .notNull()
       .default(0),
@@ -340,6 +344,7 @@ export const wallets = loyaltySchema.table(
       name: 'wallets_tenant_program_fk',
     }).onDelete('restrict'),
     check('wallets_balance_nonnegative', sql`${table.balanceUnits} >= 0`),
+    check('wallets_reserved_bounds', sql`${table.reservedUnits} BETWEEN 0 AND ${table.balanceUnits}`),
     check('wallets_lifetime_earned_nonnegative', sql`${table.lifetimeEarnedUnits} >= 0`),
     check('wallets_lifetime_redeemed_nonnegative', sql`${table.lifetimeRedeemedUnits} >= 0`),
     check('wallets_version_nonnegative', sql`${table.version} >= 0`),
@@ -766,6 +771,7 @@ export const consentState = loyaltySchema.table(
 
 /** Private, canonical sale state. Immutable attribution; cumulative correction projection. */
 export const saleSettlements = loyaltySchema.table('sale_settlements', {
+  origin: text('origin').notNull().default('web_attribution'),
   id: uuid('id').primaryKey().defaultRandom(), tenantRef: text('tenant_ref').notNull(), clientId: uuid('client_id').notNull(),
   earnOperationId: uuid('earn_operation_id').notNull(), memberId: uuid('member_id').notNull(), programId: uuid('program_id').notNull(),
   rulesVersion: bigint('rules_version', { mode: 'number' }).notNull(), attribution: jsonb('attribution').notNull(),
@@ -785,6 +791,7 @@ export const saleSettlements = loyaltySchema.table('sale_settlements', {
   index('sale_settlements_reconciliation_idx').on(t.tenantRef, t.status, t.updatedAt),
   foreignKey({ columns: [t.tenantRef,t.memberId],foreignColumns:[members.tenantRef,members.id],name:'sale_settlements_member_fk' }).onDelete('restrict'),
   foreignKey({ columns:[t.tenantRef,t.programId,t.rulesVersion],foreignColumns:[programVersions.tenantRef,programVersions.programId,programVersions.version],name:'sale_settlements_rule_fk' }).onDelete('restrict'),
+  check('sale_settlements_origin', sql`${t.origin} IN ('web_attribution','pos_receipt')`),
   check('sale_settlements_bounds', sql`${t.eligiblePurchaseCents} BETWEEN 0 AND 9007199254740991 AND ${t.reversedUnits} >= 0 AND ${t.waivedUnits} >= 0 AND ${t.dueUnits} >= 0 AND ${t.version} BETWEEN 0 AND 9007199254740991 AND ${t.latestOrderVersion} >= 0 AND ${t.latestRefundSyncVersion} >= 0 AND ${t.confirmedEligibleCents} BETWEEN 0 AND ${t.eligiblePurchaseCents} AND (${t.initialUnits} IS NULL OR (${t.initialUnits} BETWEEN 0 AND 9007199254740991 AND ${t.reversedUnits}+${t.waivedUnits}+${t.dueUnits} <= ${t.initialUnits}))`),
   check('sale_settlements_initial_shape',sql`(${t.initialUnits} IS NULL AND ${t.earnReceiptId} IS NULL AND ${t.earnLedgerEntryId} IS NULL AND ${t.reversedUnits}=0 AND ${t.waivedUnits}=0) OR (${t.initialUnits}=0 AND ${t.earnReceiptId} IS NOT NULL AND ${t.earnLedgerEntryId} IS NULL) OR (${t.initialUnits}>0 AND ${t.earnReceiptId} IS NOT NULL AND ${t.earnLedgerEntryId} IS NOT NULL)`),
   check('sale_settlements_status_shape',sql`(${t.status}='recorded' AND ${t.reason} IS NULL AND ${t.initialUnits} IS NOT NULL AND ${t.dueUnits}=0) OR (${t.status} IN ('pending','reconciliation') AND ${t.reason} IS NOT NULL) OR (${t.status}='pending' AND ${t.latestObservationId} IS NULL)`),
@@ -811,3 +818,50 @@ export const saleCorrections = loyaltySchema.table('sale_corrections', {
   foreignKey({columns:[t.tenantRef,t.operationId],foreignColumns:[operations.tenantRef,operations.operationId],name:'sale_corrections_operation_fk'}).onDelete('restrict'),
   check('sale_corrections_shape',sql`${t.units}>0 AND ${t.units}<=9007199254740991 AND ${t.beforeReversedUnits}>=0 AND ${t.beforeWaivedUnits}>=0 AND ((${t.kind}='debit' AND ${t.afterReversedUnits}=${t.beforeReversedUnits}+${t.units} AND ${t.afterWaivedUnits}=${t.beforeWaivedUnits} AND ${t.ledgerEntryId} IS NOT NULL) OR (${t.kind}='waive' AND ${t.afterWaivedUnits}=${t.beforeWaivedUnits}+${t.units} AND ${t.afterReversedUnits}=${t.beforeReversedUnits} AND ${t.ledgerEntryId} IS NULL AND ${t.actorRef} IS NOT NULL))`),
 ]);
+
+
+/** Private immutable checkout hold; no ledger entry exists until consumption. */
+export const orderRewardReservations = loyaltySchema.table('order_reward_reservations', {
+  tenantRef: text('tenant_ref').notNull(), clientId: uuid('client_id').notNull(), id: uuid('id').notNull(),
+  memberId: uuid('member_id').notNull(), programId: uuid('program_id').notNull(), rewardId: uuid('reward_id').notNull(),
+  rulesVersion: bigint('rules_version', { mode: 'number' }).notNull(), costUnits: bigint('cost_units', { mode: 'number' }).notNull(),
+  requestHash: text('request_hash').notNull(), snapshot: jsonb('snapshot').notNull(), state: text('state').notNull().default('reserved'),
+  ledgerEntryId: uuid('ledger_entry_id'), reversalEntryId: uuid('reversal_entry_id'), decisionProof: jsonb('decision_proof'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ name: 'order_reward_reservations_pk', columns: [t.tenantRef, t.clientId] }),
+  unique('order_reward_id_uq').on(t.tenantRef, t.id), unique('order_reward_ledger_uq').on(t.ledgerEntryId),
+  unique('order_reward_reversal_uq').on(t.reversalEntryId),
+  index('order_reward_active_wallet_idx').on(t.tenantRef, t.memberId, t.programId).where(sql`${t.state}='reserved'`),
+  foreignKey({ name: 'order_reward_wallet_fk', columns: [t.tenantRef, t.memberId, t.programId],
+    foreignColumns: [wallets.tenantRef, wallets.memberId, wallets.programId] }).onDelete('restrict'),
+  foreignKey({ name: 'order_reward_reward_fk', columns: [t.tenantRef, t.programId, t.rewardId],
+    foreignColumns: [rewards.tenantRef, rewards.programId, rewards.id] }).onDelete('restrict'),
+  foreignKey({ name: 'order_reward_rule_fk', columns: [t.tenantRef, t.programId, t.rulesVersion],
+    foreignColumns: [programVersions.tenantRef, programVersions.programId, programVersions.version] }).onDelete('restrict'),
+  foreignKey({ name: 'order_reward_ledger_fk', columns: [t.tenantRef, t.memberId, t.programId, t.ledgerEntryId],
+    foreignColumns: [ledgerEntries.tenantRef, ledgerEntries.memberId, ledgerEntries.programId, ledgerEntries.id] }).onDelete('restrict'),
+  foreignKey({ name: 'order_reward_reversal_fk', columns: [t.tenantRef, t.memberId, t.programId, t.reversalEntryId],
+    foreignColumns: [ledgerEntries.tenantRef, ledgerEntries.memberId, ledgerEntries.programId, ledgerEntries.id] }).onDelete('restrict'),
+  check('order_reward_rules_bounds', sql`${t.rulesVersion} BETWEEN 1 AND 9007199254740991`),
+  check('order_reward_cost_bounds', sql`${t.costUnits} BETWEEN 1 AND 1000000`),
+  check('order_reward_request_hash', sql`${t.requestHash} ~ '^[a-f0-9]{64}$'`),
+  check('order_reward_states', sql`${t.state} IN ('reserved','consumed','released','reversed')`),
+  check('order_reward_time_order', sql`${t.updatedAt} >= ${t.createdAt}`),
+  check('order_reward_state_shape', sql`(${t.state}='reserved' AND ${t.ledgerEntryId} IS NULL AND ${t.reversalEntryId} IS NULL AND ${t.decisionProof} IS NULL)
+    OR (${t.state}='released' AND ${t.ledgerEntryId} IS NULL AND ${t.reversalEntryId} IS NULL AND ${t.decisionProof} IS NOT NULL)
+    OR (${t.state}='consumed' AND ${t.ledgerEntryId} IS NOT NULL AND ${t.reversalEntryId} IS NULL AND ${t.decisionProof} IS NOT NULL)
+    OR (${t.state}='reversed' AND ${t.ledgerEntryId} IS NOT NULL AND ${t.reversalEntryId} IS NOT NULL AND ${t.decisionProof} IS NOT NULL)`),
+  pgPolicy('order_reward_tenant', { for: 'all', using: sql`${t.tenantRef}=current_setting('app.tenant_ref',true)`,
+    withCheck: sql`${t.tenantRef}=current_setting('app.tenant_ref',true)` }),
+]).enableRLS();
+
+/** Rejected admission tombstone; a delayed checkout cannot reserve afterwards. */
+export const orderRewardClosures = loyaltySchema.table('order_reward_closures', {
+  tenantRef: text('tenant_ref').notNull(), clientId: uuid('client_id').notNull(), proof: jsonb('proof').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [primaryKey({ name: 'order_reward_closures_pk', columns: [t.tenantRef, t.clientId] }),
+  pgPolicy('order_reward_closure_tenant', { for: 'all', using: sql`${t.tenantRef}=current_setting('app.tenant_ref',true)`,
+    withCheck: sql`${t.tenantRef}=current_setting('app.tenant_ref',true)` }),
+]).enableRLS();

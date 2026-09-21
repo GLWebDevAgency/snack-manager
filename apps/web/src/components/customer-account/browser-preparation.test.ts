@@ -30,6 +30,29 @@ function fixture() {
 }
 
 describe('Customer browser preparation — explicit, journaled, no provider', () => {
+  it('observes authoritative expiry without changing an uncertain access or its UUIDs', async () => {
+    const f = fixture(); f.record = { version: 1, browserRef: ref, phase: 'ready', access: {
+      operationId: other, attemptId: ref, method: 'passkey', phase: 'asserting', expiresAt: Date.now() - 604_800_000 } };
+    const before = structuredClone(f.record); f.state = 'expired';
+    expect(await f.client.inspect()).toMatchObject({ kind: 'expired' });
+    expect(f.record).toEqual(before); expect(f.journal.write).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
+    expect(f.request).toHaveBeenCalledExactlyOnceWith('browser', { step: 'prepare', browserRef: ref });
+    // Restart must obtain its own fresh proof, not reuse the observation.
+    f.request.mockRejectedValueOnce(new Error('Old proof is not authority'));
+    expect(await f.client.restartExpired()).toEqual({ kind: 'uncertain' });
+    expect(f.record).toEqual(before); expect(f.uuid).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'unconfirmed', 'wrong selector', 'changed journal', '401'] as const)('inspection never repairs %s', async fault => {
+    const f = fixture(); f.record = fault === 'missing' ? null : { version: 1, browserRef: ref, phase: 'ready' };
+    if (fault === 'wrong selector') f.request.mockResolvedValue({ ...f.view(), state: 'expired', browserRef: other });
+    if (fault === '401') f.request.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
+    if (fault === 'changed journal') f.request.mockImplementationOnce(async () => {
+      f.record = { version: 1, browserRef: other, phase: 'ready' }; return { ...f.view(), state: 'expired' };
+    });
+    expect(await f.client.inspect()).toEqual({ kind: fault === 'missing' ? 'absent' : 'uncertain' });
+    expect(f.journal.write).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
+    expect(f.events.every(event => event === 'prepare')).toBe(true);
+  });
   it('restores only a missing public browser selector, without issuing or selecting a private publication', async () => {
     const f = fixture(); const current = { ...f.view(), state: 'confirmed' as const, admissionExpiresAt: Date.now() - 1_000 };
     f.request.mockResolvedValue(current);

@@ -152,6 +152,18 @@ describe('encaissement de la commande existante', () => {
     expect(reconcileCollectedJournal([entry], order())).toEqual([entry]);
   });
 
+  it('rapproche les remboursements partiels serveur sans réduire le montant encaissé initial ni réouvrir une lecture tardive', () => {
+    const entry: DayEntry = { clientId: 'client-42', localNumber: 1, serverId: 'order-42', serverNumber: 42, mode: 'tel', method: 'especes', paid: true, total: 1250, items: 1, at: 1 };
+    const current = { ...paid(), payment: { ...paid().payment, refundedCents: 250 } };
+    const partial = reconcileCollectedJournal([entry], current);
+    expect(partial[0]).toMatchObject({ total: 1250, refundedCents: 250, paid: true });
+    expect(zFromJournal(partial)).toMatchObject({ collected: 1250, refunded: 250, netCollected: 1000, cash: 1000 });
+    expect(reconcileCollectedJournal(partial, paid())[0]?.refundedCents).toBe(250);
+    const historical = reconcileCollectedJournal([entry], { ...paid(), payment: { ...paid().payment, status: 'refunded' } });
+    expect(zFromJournal(historical)).toMatchObject({ collected: 1250, refunded: 1250, netCollected: 0 });
+    expect(reconcileCollectedJournal(historical, paid())).toEqual(historical);
+  });
+
   it('affiche les attentes longues en heures et jours sans minuteur de milliers de minutes', () => {
     expect(serviceAgeLabel(68)).toBe('01:08');
     expect(serviceAgeLabel(3601)).toBe('1 h 00 min');

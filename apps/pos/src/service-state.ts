@@ -46,7 +46,7 @@ export interface ServerOrderRow {
   clientId: string;
   createdAt?: string;
   status?: string;
-  payment?: { status?: string; method?: 'online' | 'counter'; tender?: PaymentTender | null; cashReceived?: number | null; changeGiven?: number | null };
+  payment?: { status?: string; method?: 'online' | 'counter'; tender?: PaymentTender | null; cashReceived?: number | null; changeGiven?: number | null; refundedCents?: number };
   trackingToken?: string | null;
   channel?: OrderChannel;
   type?: OrderType;

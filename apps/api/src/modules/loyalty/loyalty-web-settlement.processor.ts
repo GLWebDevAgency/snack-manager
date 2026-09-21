@@ -8,7 +8,7 @@ import { historicalSaleAttributionFingerprint, type HistoricalSaleSettlementInpu
 import { loyaltyWebObservation, LoyaltyWebObservationError, type LoyaltyWebObservedOrder } from './loyalty-web-observation';
 
 const WRITE = { w: 'majority' as const, j: true, wtimeout: 10_000 };
-const SELECT = '+loyaltyWebIntent +loyaltyWebProcessing +customerOwner +customerSaleAttribution +loyaltyMemberId +paymentFlow +counterCollection +deliveryHandoff +refundFlow';
+const SELECT = '+loyaltyWebIntent +loyaltyWebProcessing +customerOwner +customerSaleAttribution +loyaltyMemberId +paymentFlow +counterCollection +deliveryHandoff +refundFlow +counterRefundFlow +loyaltyReward +loyaltyRewardProcessing';
 const POLL_MS = 5_000, LEASE_MS = 60_000, SCAN_MS = 60_000, SCAN_PAGE = 50, MAX_BATCH = 25;
 type Claimed = LoyaltyWebObservedOrder & { loyaltyWebProcessing: {
   attempts: number; leaseToken: string; leaseUntil: Date;

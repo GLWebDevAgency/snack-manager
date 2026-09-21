@@ -7,12 +7,14 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { z } from 'zod';
 import {
   LoyaltyCustomerCardResolveSchema,
   type LoyaltyCustomerCardResolve,
@@ -42,8 +44,8 @@ export class LoyaltyPublicController {
   @Get()
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 120, ttl: 60_000 } })
-  catalog(@Param('slug') slug: string) {
-    return this.loyalty.catalog(slug);
+  catalog(@Param('slug') slug: string, @Query('orderRewards', zod(z.literal('1').optional())) orderRewards?: '1') {
+    return this.loyalty.catalog(slug, orderRewards === '1');
   }
 
   @Post('card')

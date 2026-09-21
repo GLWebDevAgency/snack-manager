@@ -32,6 +32,7 @@ export type OnlineOrderDependencies = {
  * Route adapters supply authority; this function never accepts a browser-selected owner. */
 export async function executeOnlineCheckout(deps: OnlineOrderDependencies, slug: string, body: CreatePublicOrder, request?: Request,
   customer?: Pick<CustomerCheckoutInput, 'owner' | 'beforeCommit' | 'sourceKey' | 'prepareLoyaltyAttribution'>) {
+    if (body.reward && !customer) throw new ForbiddenException('Connectez-vous à votre compte pour utiliser une récompense.');
     if (body.recoveryProof) {
       if (!deps.recoveryQuota) throw new ServiceUnavailableException('La reprise de commande est indisponible');
       if (customer) await enforceOrderRecoverySourceQuota(deps.recoveryQuota, slug, body.clientId, customer.sourceKey);
