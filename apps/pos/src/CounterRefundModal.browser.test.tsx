@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { CounterRefundJournal, CounterRefundOperationView } from '@sm/contracts';
 
 const orderId = 'd'.repeat(24), ownerId = `${'a'.repeat(24)}:user:${'b'.repeat(24)}`;
+const ELAPSED_PERMISSION_TEST = 'expires permission using elapsed time and never extends it using the device wall clock';
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string, js: string, captures: string;
 let operations: CounterRefundOperationView[], writes: { step: string; body: Record<string, unknown> }[], faults: string[];
 let lostStart: boolean, lostConfirm: boolean, holdStart: boolean, heldStart: { res: ServerResponse; value: unknown } | null;
@@ -86,11 +87,14 @@ beforeAll(async () => {
   if (!address || typeof address === 'string') throw Error('Fixture address missing'); origin = `http://127.0.0.1:${address.port}`;
   browser = await chromium.launch({ headless: true });
 }, 30_000);
-beforeEach(async () => {
+beforeEach(async ({ task }) => {
   operations = []; writes = []; faults = []; lostStart = false; lostConfirm = false; holdStart = false; heldStart = null; historyReads = 0; historyTruncated = false; enabled = true;
   context = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : (faults.push('External request refused'), route.abort()));
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
+  // Clock must own the timer APIs before React/RN mounts, not after native
+  // timers have already been scheduled (https://playwright.dev/docs/clock).
+  if (task.name === ELAPSED_PERMISSION_TEST) await page.clock.install();
   await page.goto(origin); await page.getByText('Disponible : 5,00 €', { exact: true }).waitFor();
 });
 afterEach(async () => { heldStart?.res.destroy(); await context.close(); expect(faults).toEqual([]); });
@@ -174,14 +178,29 @@ describe('counter refund POS — native controls, real HTTP and durable browser 
     await page.evaluate(() => { Object.defineProperty(navigator, 'onLine', { value: true, configurable: true }); window.dispatchEvent(new Event('online')); });
     expect(await page.getByText('Rendez une seule fois', { exact: false }).count()).toBe(0); expect(writes.filter(w => w.step === 'start')).toHaveLength(1);
   });
-  it('expires permission using elapsed time and never extends it using the device wall clock', async () => {
-    await page.clock.install(); await prepare(); await start(); await page.getByText('Rendez une seule fois', { exact: false }).waitFor();
-    await page.clock.setSystemTime(new Date(Date.now() - 86_400_000));
-    expect(await page.getByText('Rendez une seule fois', { exact: false }).count()).toBe(1);
-    await page.clock.fastForward(300_001);
-    await expect.poll(() => page.getByText('Rendez une seule fois', { exact: false }).count()).toBe(0);
-    expect(writes.filter(w => w.step === 'start')).toHaveLength(1);
-  });
+  it(ELAPSED_PERMISSION_TEST, async () => {
+    const started = performance.now();
+    const mark = (phase: string) => process.stdout.write(`Counter refund elapsed clock: ${phase} (${Math.round(performance.now() - started)}ms)\n`);
+    const permission = page.getByText('Rendez une seule fois', { exact: false });
+    try {
+      mark('prepare begin'); await prepare(); mark('prepared');
+      await start(); mark('start sent'); await permission.waitFor(); mark('permission rendered');
+      const before = await page.evaluate(() => ({ wall: Date.now(), elapsed: performance.now() }));
+      await page.clock.setSystemTime(new Date(before.wall - 86_400_000));
+      const shifted = await page.evaluate(() => ({ wall: Date.now(), elapsed: performance.now() }));
+      expect(shifted.wall).toBeLessThan(before.wall - 86_000_000);
+      expect(shifted.elapsed).toBeGreaterThanOrEqual(before.elapsed);
+      expect(shifted.elapsed - before.elapsed).toBeLessThan(300_000);
+      expect(await permission.count()).toBe(1); mark('wall clock moved back; permission retained');
+      await page.clock.fastForward(300_001); mark('elapsed time advanced');
+      expect(await page.evaluate(() => performance.now())).toBeGreaterThanOrEqual(shifted.elapsed + 300_001);
+      await expect.poll(() => permission.count()).toBe(0); mark('permission expired');
+      expect(writes.map(write => write.step)).toEqual(['prepare', 'start']);
+      expect(writes[1]!.body.operationId).toBe(writes[0]!.body.operationId);
+    } finally { mark('scenario finished'); }
+    // Several real HTTP/UI handshakes run before advancing virtual time. Keep
+    // the per-action 5s bounds, with a separate 10s budget for the whole flow.
+  }, 10_000);
   it('refuses preparation when durable storage cannot commit, before any financial POST', async () => {
     await page.getByLabel('Part produits (€)', { exact: true }).fill('1'); await page.getByLabel('Motif du remboursement', { exact: true }).fill('Article manquant'); await password();
     await page.evaluate(() => { const save = Storage.prototype.setItem; Storage.prototype.setItem = function(key, value) {
