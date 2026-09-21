@@ -43,6 +43,7 @@ import { LoyaltyWebSettlementProcessor } from './loyalty-web-settlement.processo
 import { LoyaltySaleSettlementController } from './loyalty-sale-settlement.controller';
 import { LoyaltySaleSettlementService } from './loyalty-sale-settlement.service';
 import { LoyaltyController } from './loyalty.controller';
+import { LoyaltyPosCompensationProcessor } from './loyalty-pos-compensation.processor';
 import { LoyaltyModule } from './loyalty.module';
 
 const TENANT = '65f000000000000000000001';
@@ -284,6 +285,7 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       LoyaltyPurchaseVerifier,
       LoyaltyHistoricalSaleService,
       LoyaltyWebSettlementProcessor,
+      LoyaltyPosCompensationProcessor,
       LoyaltySaleSettlementService,
     ]);
   });

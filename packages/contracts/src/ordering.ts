@@ -537,6 +537,11 @@ export const TENANT_AUDIT_ACTIONS = [
    * passe pas pour un oubli.
    */
   'order.refund',
+  'order.counter_refund.prepare',
+  'order.counter_refund.start',
+  'order.counter_refund.confirm',
+  'order.counter_refund.withdraw',
+  'order.counter_refund.no_effect',
   'order.refund.withdraw',
   'order.refund.allocate',
   'order.refund.allocation_withdraw',
@@ -617,6 +622,11 @@ export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.delivery_override': 'Remise dérogatoire de livraison',
   'order.delivery_proof_rotate': 'Renouvellement de la preuve de remise',
   'order.refund': 'Remboursement',
+  'order.counter_refund.prepare': 'Réservation d’un remboursement au comptoir',
+  'order.counter_refund.start': 'Autorisation du geste de remboursement au comptoir',
+  'order.counter_refund.confirm': 'Remboursement au comptoir attesté',
+  'order.counter_refund.withdraw': 'Demande comptoir abandonnée avant le geste',
+  'order.counter_refund.no_effect': 'Absence de remboursement comptoir attestée',
   'order.refund.withdraw': 'Demande de remboursement abandonnée avant envoi',
   'order.refund.allocate': 'Ventilation produits et livraison d’un remboursement',
   'order.refund.allocation_withdraw': 'Abandon d’une ventilation de remboursement',

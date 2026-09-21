@@ -14,7 +14,97 @@ function online(order = loyaltyWebFixture()) {
   return order;
 }
 
+function zeroReward() {
+  const row = loyaltyWebFixture(), attribution = row.customerSaleAttribution!;
+  if (attribution.decision !== 'attributed') throw new Error('Attributed fixture required');
+  row.totals.discount = { amount: 1000 }; row.totals.total = 0;
+  attribution.basis = { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 0, excludedChargeCents: 0, chargedTotalCents: 0 };
+  row.counterCollection = null;
+  row.paymentFlow = { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null };
+  row.loyaltyReward = { version: 1, reservationId: randomUUID(), clientId: row.clientId, owner: attribution.owner,
+    memberId: attribution.memberId, programId: attribution.programId, rulesVersion: attribution.rulesVersion,
+    pricingHash: 'a'.repeat(64), benefit: { rewardId: randomUUID(), name: 'Récompense de recette', costUnits: 10,
+      kind: 'fixed_discount', amountCents: 1000, productRef: null, policy: 'one-reward-no-promotion-v1' } };
+  row.loyaltyRewardProcessing = { state: 'consumed', zeroPaid: true, orderVersion: row.__v };
+  return row;
+}
+
+function cancelledZeroReward() {
+  const row = zeroReward();
+  const at = new Date('2030-01-01T12:00:00Z'), actor = '507f1f77bcf86cd799439099';
+  row.status = 'cancelled'; row.statusHistory = [{ status: 'cancelled', at, by: actor }];
+  row.paymentFlow!.phase = 'closed';
+  row.paymentFlow!.close = { operationId: randomUUID(), destination: 'cancel_order',
+    reason: 'Annulation avant retrait', requestedBy: actor, requestedAt: at };
+  return row;
+}
+
 describe('web loyalty observation — historical server proof only', () => {
+  it('accepts a zero total only from its exact consumed reward receipt, without inventing a cash or card payment', () => {
+    const row = zeroReward(), observed = loyaltyWebObservation(row);
+    expect(observed.observation).toMatchObject({ paidAndDelivered: true, eligibleRefundedCents: 0, pendingRefundCents: 0,
+      proof: { payment: { kind: 'zero_total_reward', amountCents: 0, rewardAmountCents: 1000 } } });
+    expect(observed.attribution.basis.eligiblePurchaseCents).toBe(0);
+    row.__v!++;
+    expect(loyaltyWebObservation(row).observation.financialFingerprint).toBe(observed.observation.financialFingerprint);
+  });
+  it.each([
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyReward = null; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing = null; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.state = 'reserved'; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.state = 'reversed'; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.zeroPaid = false; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.orderVersion = row.__v! + 1; },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { memberId: string }).memberId = randomUUID(); },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { clientId: string }).clientId = randomUUID(); },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { rulesVersion: number }).rulesVersion = 2; },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { owner: { accountId: string } }).owner = { ...(row.loyaltyReward as { owner: { accountId: string } }).owner, accountId: randomUUID() }; },
+    (row: LoyaltyWebObservedOrder) => { (row.loyaltyReward as { benefit: { amountCents: number } }).benefit.amountCents = 999; },
+    (row: LoyaltyWebObservedOrder) => { row.payment.stripePaymentIntentId = 'pi_conflicting'; },
+    (row: LoyaltyWebObservedOrder) => { row.payment.pendingRefundCents = 1; },
+  ])('does not infer a settled zero total from a partial, foreign or inconsistent reward proof %#', corrupt => {
+    const row = zeroReward(); corrupt(row);
+    expect(() => loyaltyWebObservation(row)).toThrow('payment_proof_invalid');
+  });
+
+  it('keeps a canonically cancelled offered order pending before and after reward restitution', () => {
+    const row = cancelledZeroReward(), before = loyaltyWebObservation(row);
+    expect(before.observation).toMatchObject({ paidAndDelivered: false, eligibleRefundedCents: 0,
+      pendingRefundCents: 0, proof: { handoff: null, payment: { kind: 'zero_total_reward' } } });
+    row.loyaltyRewardProcessing!.state = 'reversed'; row.__v!++;
+    expect(loyaltyWebObservation(row).observation.financialFingerprint).toBe(before.observation.financialFingerprint);
+  });
+  it.each([
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close = null; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close!.destination = 'counter'; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close!.operationId = 'invalid'; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close!.requestedBy = ''; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close!.requestedAt = new Date(NaN); },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.close!.reason = ''; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.phase = 'open'; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.origin = 'legacy_unknown'; },
+    (row: LoyaltyWebObservedOrder) => { row.paymentFlow!.version = 2; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.zeroPaid = false; },
+    (row: LoyaltyWebObservedOrder) => { row.loyaltyRewardProcessing!.state = 'reserved'; },
+    (row: LoyaltyWebObservedOrder) => { row.status = 'delivered'; },
+  ])('rejects a cancelled paid-zero order without its canonical closure and consumed proof %#', corrupt => {
+    const row = cancelledZeroReward(); corrupt(row);
+    expect(() => loyaltyWebObservation(row)).toThrow('payment_proof_invalid');
+  });
+  it('accepts a later earn-rule publication while keeping the original reservation version', () => {
+    const row = zeroReward(), attribution = row.customerSaleAttribution!;
+    if (attribution.decision !== 'attributed') throw new Error('Attributed fixture required');
+    attribution.rulesVersion++;
+    expect(loyaltyWebObservation(row).observation.paidAndDelivered).toBe(true);
+    expect((row.loyaltyReward as { rulesVersion: number }).rulesVersion).toBe(1);
+  });
+  it.each(['memberId', 'programId'] as const)('does not use version independence to accept a foreign %s', field => {
+    const row = zeroReward(), attribution = row.customerSaleAttribution!;
+    if (attribution.decision !== 'attributed') throw new Error('Attributed fixture required');
+    attribution.rulesVersion++; attribution[field] = randomUUID();
+    expect(() => loyaltyWebObservation(row)).toThrow('payment_proof_invalid');
+  });
+
   it('accepts the immutable receipt of collection at the counter and the handoff separately', () => {
     const row = loyaltyWebFixture(), input = loyaltyWebObservation(row);
     expect(input).toMatchObject({ tenantRef: String(row.tenantId), clientId: row.clientId,

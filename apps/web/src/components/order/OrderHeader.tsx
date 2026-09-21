@@ -8,8 +8,9 @@ import { BrandMark, Dot, Tap } from "./primitives";
 
 /** Presentation of the public restaurant identity; availability remains the
  * server's. An opening hour or review is never invented for the hero. */
-export function OrderHeader({ site, logoUrl, lockupUrl, account, onHeightChange }: {
+export function OrderHeader({ site, logoUrl, lockupUrl, account, onHeightChange, availabilityKnown = true, liveAvailability = false }: {
   site: Site; logoUrl: string | null; lockupUrl: string | null; account?: ReactNode; onHeightChange?: (height: number) => void;
+  availabilityKnown?: boolean; liveAvailability?: boolean;
 }) {
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -29,12 +30,14 @@ export function OrderHeader({ site, logoUrl, lockupUrl, account, onHeightChange 
     return () => view.removeEventListener("scroll", update);
   }, []);
   const firstSlot = site.slots?.slots.find(slot => !slot.full);
-  const reopen = !site.openNow ? nextOpeningLabel(site.tenant.hours) : null;
-  const status = site.ordering.paused ? "Commande en pause" : site.openNow
+  // Weekly hours belong to the initial catalogue snapshot. A live closed
+  // service must not promise reopening from that potentially old schedule.
+  const reopen = !liveAvailability && !site.openNow ? nextOpeningLabel(site.tenant.hours) : null;
+  const status = !availabilityKnown ? "Disponibilités à vérifier" : site.ordering.paused ? "Commande en pause" : site.openNow
     ? "Ouvert" : "Fermé";
-  const detail = site.ordering.paused ? null : site.openNow
+  const detail = !availabilityKnown || site.ordering.paused ? null : site.openNow
     ? firstSlot ? `retrait dès ${hhmm(firstSlot.iso)}` : null : reopen;
-  const subtitle = <p className="sm-order-status"><Dot tone={site.openNow && !site.ordering.paused ? "ok" : "mut"} />{status}{detail && <span> · {detail}</span>}</p>;
+  const subtitle = <p className="sm-order-status"><Dot tone={availabilityKnown && site.openNow && !site.ordering.paused ? "ok" : "mut"} />{status}{detail && <span> · {detail}</span>}</p>;
   return <header ref={headerRef} className="sm-order-header" data-scrolled={scrolled || undefined}>
     <div className="sm-order-header-inner">
       <Verrou balise="h1" src={lockupUrl} nom={site.tenant.name} hauteur={40} sous={subtitle}

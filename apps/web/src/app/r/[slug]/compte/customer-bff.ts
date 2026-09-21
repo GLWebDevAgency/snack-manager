@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
   CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CustomerAccountDeploymentTargetSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
   CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit, customerAccountResponseLimit,
-  CUSTOMER_VERIFICATION_TIMING, customerAccountRequestTimeoutMs,
+  CUSTOMER_VERIFICATION_TIMING, customerAccountRequestTimeoutMs, customerLoyaltyResponseForView,
   type CustomerEnrollment, type CustomerAccountAction } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 import { parseCustomerOrdersPage, parseCustomerOrderDetail, parseCustomerOrderReorder } from '../../../../components/customer-account/orders-response';
@@ -193,7 +193,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     ? AbortSignal.any([signal, AbortSignal.timeout(CUSTOMER_VERIFICATION_TIMING.relayPreflightMs)]) : signal;
   try {
     const { slug } = await within(context.params, admissionSignal);
-    if (slug.length > 63 || !SLUG.test(slug) || request.nextUrl.search
+    const orderRewards = action === 'loyalty' && request.nextUrl.search === '?orderRewards=1';
+    if (slug.length > 63 || !SLUG.test(slug) || (request.nextUrl.search && !orderRewards)
       || request.nextUrl.pathname !== `/r/${slug}/compte/${PATHS[action]}` || request.method !== METHODS[action]) return invalid();
     const origin = requestOrigin(request);
     const site = request.headers.get('sec-fetch-site');
@@ -263,7 +264,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
         return failure(403, 'CUSTOMER_RELAY_REFUSED', 'Ce domaine ne correspond pas au restaurant.');
       }
     }
-    const envelope = { request: parsed.data,
+    const envelope = { request: parsed.data, ...(orderRewards ? { orderRewards: 1 } : {}),
       ...(preparationRequest ? { candidateSecret,
         browserSecret: preparationRequest.step !== 'prepare' && browser.kind === 'valid' ? browser.value : null } : {}),
       ...(action !== 'status' && action !== 'browser' && selectedBrowser.success ? { browserRef: selectedBrowser.data } : {}),
@@ -317,7 +318,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       const selected = CustomerAccountBrowserRequests.loyalty.parse(parsed.data);
       if (result.expiresAt <= Date.now() || result.expiresAt > Date.now() + SESSION_MAX_MS
         || (result.state === 'card' && selected.step !== 'card')) return unavailable();
-      return privateResponse(NextResponse.json(result));
+      return privateResponse(NextResponse.json(customerLoyaltyResponseForView(result, orderRewards)));
     }
     if (action === 'orders') return privateResponse(NextResponse.json(parseCustomerOrdersPage(output.data, CustomerAccountBrowserRequests.orders.parse(parsed.data))));
     if (action === 'order-detail') return privateResponse(NextResponse.json(parseCustomerOrderDetail(output.data, CustomerAccountBrowserRequests['order-detail'].parse(parsed.data).orderId)));

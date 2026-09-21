@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OrderRewardSelectionSchema } from './order-reward';
 // `JwtPayload` et `AuthMe` (plus bas) nomment `UserRole` : `export *` republie
 // sans lier le nom localement, il faut donc l'importer en plus.
 import { type UserRole } from './comptes';
@@ -41,6 +42,7 @@ export * from './delivery-view-version';
 export * from './delivery-handoff';
 export * from './commerce';
 export * from './order-refunds';
+export * from './order-counter-refunds';
 export * from './order-counter';
 export * from './order-recovery';
 export * from './customer-orders';
@@ -377,6 +379,8 @@ export const CreateOrderPaymentSchema = z.object({
 export type CreateOrderPayment = z.infer<typeof CreateOrderPaymentSchema>;
 
 export const CreateOrderSchema = z.object({
+  reward: OrderRewardSelectionSchema.optional(),
+  expectedTotalCents: z.number().int().nonnegative().max(100_000_000).optional(),
   /** Clé d'idempotence générée par l'appareil — le rejeu offline ne crée jamais de doublon. */
   clientId: z.uuid(),
   /**
@@ -505,6 +509,7 @@ export type AbandonPublicOrder = z.infer<typeof AbandonPublicOrderSchema>;
 
 /** Devis informatif recalculé depuis le menu, sans montant fourni par le navigateur. */
 export const DeliveryQuoteRequestSchema = z.object({
+  reward: OrderRewardSelectionSchema.optional(),
   address: DeliveryAddressSchema,
   lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
   promoCode: z.string().trim().min(1).max(24).optional(),
@@ -704,3 +709,6 @@ export * from './customer-sale-attribution';
 export const ordersChannel = (tenantId: string) => `tenant:${tenantId}:orders`;
 
 export * from './loyalty-sale-settlement';
+
+export * from './order-reward';
+export * from './public-ordering-availability';

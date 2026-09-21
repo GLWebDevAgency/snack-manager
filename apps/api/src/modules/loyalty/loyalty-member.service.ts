@@ -2018,8 +2018,9 @@ export class LoyaltyMemberService {
           .limit(1)
           .for('update');
         if (!walletBefore) return corruptedWallet();
+        const availableUnits = walletBefore.balanceUnits - (walletBefore.reservedUnits ?? 0);
         const redemption = loyaltyDomain.redeemLoyaltyUnits(
-          walletBefore.balanceUnits,
+          availableUnits,
           reward.costUnits,
         );
         if (!redemption.ok) throw new ConflictException(redemption.error.message);
@@ -2030,7 +2031,7 @@ export class LoyaltyMemberService {
             await tx
               .update(wallets)
               .set({
-                balanceUnits: redemption.value.balanceAfter,
+                balanceUnits: walletBefore.balanceUnits - reward.costUnits,
                 lifetimeRedeemedUnits: safeUnitAddition(
                   walletBefore.lifetimeRedeemedUnits,
                   reward.costUnits,
@@ -2202,9 +2203,9 @@ export class LoyaltyMemberService {
         .for('update');
       if (!walletBefore) return corruptedWallet();
       const balanceAfter = safeUnitAddition(walletBefore.balanceUnits, dto.units);
-      if (balanceAfter < 0) {
+      if (balanceAfter < (walletBefore.reservedUnits ?? 0)) {
         throw new ConflictException(
-          `Solde insuffisant : ${walletBefore.balanceUnits} disponible, ${Math.abs(dto.units)} retiré`,
+          `Solde insuffisant : ${walletBefore.balanceUnits - (walletBefore.reservedUnits ?? 0)} disponible, ${Math.abs(dto.units)} retiré`,
         );
       }
 
@@ -2302,6 +2303,18 @@ export class LoyaltyMemberService {
 
     try {
       return await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+        // Same lock order as POS adoption: canonical sale, then member/wallet.
+        // This read identifies an immutable ledger entry; the later locked read
+        // still validates its complete identity before any movement.
+        const [target] = await tx.select({ kind: ledgerEntries.kind, source: ledgerEntries.source,
+          externalRef: ledgerEntries.externalRef }).from(ledgerEntries)
+          .where(and(eq(ledgerEntries.tenantRef, tenantRef), eq(ledgerEntries.id, originalEntryId),
+            eq(ledgerEntries.memberId, memberId))).limit(1);
+        const canonical = target?.kind === 'earn' && ['pos', 'online'].includes(target.source)
+          && target.externalRef && /^(pos-order|online-order|order):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(target.externalRef);
+        if (canonical) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${tenantRef} || ':' || ${canonical[2]!.toLowerCase()}, 0))`);
+        }
         const claim = await claimOperation(tx, {
           tenantRef,
           operationId: dto.operationId,
@@ -2384,6 +2397,8 @@ export class LoyaltyMemberService {
         if (!original) throw new NotFoundException('Écriture fidélité introuvable');
         const [managedSale] = await tx.select({ id: saleSettlements.id }).from(saleSettlements)
           .where(and(eq(saleSettlements.tenantRef, tenantRef), eq(saleSettlements.earnLedgerEntryId, original.id))).limit(1);
+        const managedReward = await tx.execute(sql`SELECT 1 FROM loyalty.order_reward_reservations WHERE tenant_ref=${tenantRef} AND ledger_entry_id=${original.id}::uuid`);
+        if (managedReward.rows.length) throw new ConflictException('Cette récompense suit sa commande ; annulez ou remboursez la commande pour restituer les points.');
         if (managedSale) throw new ConflictException('Ce gain suit les remboursements de la commande ; utilisez son dossier de rapprochement');
         if (original.kind !== 'earn' && original.kind !== 'redeem') {
           throw new ConflictException(
@@ -2426,9 +2441,9 @@ export class LoyaltyMemberService {
           walletBefore.balanceUnits,
           reversalDelta,
         );
-        if (balanceAfter < 0) {
+        if (balanceAfter < (walletBefore.reservedUnits ?? 0)) {
           throw new ConflictException(
-            `Compensation impossible : ${walletBefore.balanceUnits} unité(s) disponible(s), ${original.deltaUnits} à retirer`,
+            `Compensation impossible : ${walletBefore.balanceUnits - (walletBefore.reservedUnits ?? 0)} unité(s) disponible(s), ${original.deltaUnits} à retirer`,
           );
         }
         const lifetimeEarnedUnits =

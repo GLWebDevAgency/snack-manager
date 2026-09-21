@@ -1,7 +1,7 @@
 /** Encaisser une vente existante : réseau direct, identité durable, jamais de nouvelle vente. */
 import { CollectOrderPaymentSchema, type CollectOrderPayment } from '@sm/contracts';
 import { mmss, mutateStoreItem, SmApiError, type KeyValueStore } from '@sm/client-core';
-import { KEYS, type DayEntry, type PayMethod } from './pos-state';
+import { dayEntryRefundedCents, KEYS, type DayEntry, type PayMethod } from './pos-state';
 import type { ServerOrderRow } from './service-state';
 
 export function canCollectOrder(row: ServerOrderRow): boolean {
@@ -111,6 +111,10 @@ export function reconcileCollectedJournal(entries: readonly DayEntry[], row: Ser
     && !(entry.refunded && row.payment?.status !== 'refunded') ? {
     ...entry, paid: true, method,
     ...(row.payment?.status === 'refunded' ? { refunded: true as const } : {}),
+    refundedCents: Math.max(dayEntryRefundedCents(entry), row.payment?.status === 'refunded'
+      ? row.totals?.total ?? entry.total - (entry.discount ?? 0)
+      : Number.isSafeInteger(row.payment?.refundedCents) && row.payment!.refundedCents! >= 0
+        && row.payment!.refundedCents! <= (row.totals?.total ?? entry.total - (entry.discount ?? 0)) ? row.payment!.refundedCents! : 0),
     serverId: row._id, serverNumber: row.number,
     trackingToken: row.trackingToken ?? entry.trackingToken,
     total: (row.totals?.total ?? entry.total - (entry.discount ?? 0)) + (row.totals?.discount?.amount ?? entry.discount ?? 0),

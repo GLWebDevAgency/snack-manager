@@ -10,7 +10,7 @@ function harness() {
   const audit = { log: vi.fn() };
   const publish = vi.fn();
   const service = new OrdersService(
-    {} as never,
+    { findOne: () => ({ select: () => service.byId(TENANT, ORDER) }) } as never,
     {} as never,
     {} as never,
     {} as never,

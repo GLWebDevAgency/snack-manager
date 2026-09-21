@@ -49,6 +49,10 @@ import { siteConfigure } from './demo-retour';
 import { TopBar, type Vue } from './TopBar';
 import { ServicePanel } from './ServicePanel';
 import type { DeliveryAssignmentAccess } from './useDeliveryAssignment';
+import { CounterRefundModal, CounterRefundRecoveries } from './CounterRefundModal';
+import { counterRefundHttp, type CounterRefundAccess } from './counter-refund';
+import { reconcileCounterRefundSummary } from './journal-refunds';
+import type { CounterRefundJournal } from '@sm/contracts';
 import { applyConfirmedHandover, confirmCounterHandover, isCounterHandoverRole } from './service-handover';
 import { CollectPaymentModal } from './CollectPaymentModal';
 import { collectExistingOrder, collectionRecovery, pendingCollectionIds, reconcileCollectedJournal, withCollectionDeadline } from './service-payment';
@@ -183,6 +187,15 @@ export function PosScreen({
    */
   const [vue, setVue] = useState<Vue>('vente');
   const diningStaff = useMemo(() => diningOwner(session.token), [session.token]);
+  const [counterRefundId, setCounterRefundId] = useState<string | null>(null);
+  const [counterRefundRevision, setCounterRefundRevision] = useState(0);
+  const counterRefundAccess = useMemo<CounterRefundAccess | null>(() => {
+    const ownerId = deliveryAssignmentOwner(session.token);
+    return !DEMO && ownerId && ['owner', 'gerant', 'cogerant', 'caisse'].includes(session.staffRole) ? {
+      client, request: counterRefundHttp(API_URL, session.token), ownerId, role: session.staffRole, sessionKey: session.token,
+      onSessionExpired: () => onLock('Votre session a expiré. Reconnectez-vous pour vérifier le remboursement.'),
+    } : null;
+  }, [session.token, session.staffRole, onLock]);
   const deliveryAccess = useMemo<DeliveryAssignmentAccess | undefined>(() =>
     ['owner', 'gerant', 'cogerant', 'caisse'].includes(session.staffRole) ? {
       client, ownerId: DEMO ? 'demo:staff:demo' : deliveryAssignmentOwner(session.token),
@@ -591,6 +604,19 @@ export function PosScreen({
       push('État du paiement confirmé sur le serveur. Journal local à resynchroniser ; ne réencaissez pas.', 'warn');
     }
   }, [applyDayLog, dayLogWriter, push, setJournalDegraded]);
+
+  const reconcileRefundSummary = useCallback((view: CounterRefundJournal) => {
+    if (!handoverAlive.current) return;
+    void dayLogWriter.commit(() => dayLogRef.current,
+      entries => reconcileCounterRefundSummary(entries, view), applyDayLog).then(persisted => {
+      if (!persisted) throw new Error('Journal modifié.');
+    }).catch(() => {
+      if (!handoverAlive.current) return;
+      applyDayLog(reconcileCounterRefundSummary(dayLogRef.current, view));
+      setJournalDegraded(true);
+      push('Remboursement confirmé sur le serveur. Journal local à resynchroniser.', 'warn');
+    });
+  }, [applyDayLog, dayLogWriter, push]);
 
   const readServicePayment = useCallback(async (id: string): Promise<ServerOrderRow> => {
     try {
@@ -1588,6 +1614,7 @@ export function PosScreen({
 
       <PhoneOrderNotice key={phone.attempt?.clientId ?? 'none'} attempt={phone.attempt} error={phone.error}
         busy={phone.busy} brand={brand} onResume={phone.resume} onAbandon={phone.abandon} onRelease={phone.release} onFinish={phone.finish} />
+      {counterRefundAccess ? <CounterRefundRecoveries key={counterRefundAccess.ownerId} access={counterRefundAccess} revision={counterRefundRevision} onSelect={setCounterRefundId} /> : null}
       {dining.pending || dining.storageError ? <View style={{ padding: S.md, gap: S.sm, backgroundColor: palette.surface2 }}>
         <Text accessibilityRole="alert" style={{ color: palette.text }}>{dining.storageError ?? `Opération de salle à vérifier · ${dining.pending!.body.operationId}. Reprenez cette référence avant un nouvel envoi.`}</Text>
         {dining.ownerMismatch ? <Text accessibilityRole="alert" style={{ color: palette.text }}>Reconnectez l’équipier ayant commencé cette opération pour la reprendre.</Text> : null}
@@ -1612,6 +1639,8 @@ export function PosScreen({
           onCollect={(row) => setCollectionTarget({ id: row._id, number: row.number })} onHandover={confirmServiceHandover} /> : vue === 'service' ? (
           <ServicePanel
             deliveryAccess={deliveryAccess}
+            counterRefundAccess={counterRefundAccess ?? undefined}
+            onRefund={counterRefundAccess ? setCounterRefundId : undefined}
             commandes={serviceCommandes}
             now={now}
             brand={brand}
@@ -1733,6 +1762,7 @@ export function PosScreen({
             onResetJournal={resetJournal}
             onOpenTicket={setTicketFor}
             onOpenDiscount={setDiscountFor}
+            onRefund={counterRefundAccess ? entry => { if (entry.serverId) { setCloseOpen(false); setCounterRefundId(entry.serverId); } } : undefined}
           />
         ) : null}
 
@@ -1791,6 +1821,8 @@ export function PosScreen({
       {/* Au niveau racine : le panneau bloque aussi le dock compact et la
           barre haute. Aucune action d'encaissement ne reste cliquable derrière
           le panneau fidélité. */}
+      {counterRefundId && counterRefundAccess ? <CounterRefundModal key={`${counterRefundAccess.sessionKey}:${counterRefundId}`} orderId={counterRefundId}
+        access={counterRefundAccess} offline={offline} brand={brand} onJournal={reconcileRefundSummary} onClose={() => setCounterRefundId(null)} onChanged={() => setCounterRefundRevision(value => value + 1)} /> : null}
       {loyaltyOpen && mode !== 'tel' ? (
         <LoyaltyPanel
           brand={brand}

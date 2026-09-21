@@ -1,9 +1,13 @@
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import type { Product } from '@sm/db';
 import {
   BadRequestException,
   ConflictException,
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   LoyaltyRewardCreateSchema,
@@ -149,7 +153,16 @@ function versionValues(
 
 @Injectable()
 export class LoyaltyAdminService {
-  constructor(@Inject(LOYALTY_DB) private readonly db: LoyaltyDb) {}
+  constructor(@Inject(LOYALTY_DB) private readonly db: LoyaltyDb,
+    @Optional() @InjectModel('Product') private readonly products?: Model<Product>) {}
+
+  private async requireRewardProduct(tenantRef: string, dto: LoyaltyRewardCreate): Promise<void> {
+    if (dto.kind !== 'product') return;
+    if (!dto.productRef || !/^[a-f0-9]{24}$/.test(dto.productRef)
+      || !this.products || !await this.products.exists({ _id: dto.productRef, tenantId: tenantRef })) {
+      throw new BadRequestException('Choisissez un produit de la carte de ce restaurant.');
+    }
+  }
 
   getProgram(tenantRef: string): Promise<LoyaltyProgramView | null> {
     return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
@@ -224,7 +237,8 @@ export class LoyaltyAdminService {
     });
   }
 
-  createReward(tenantRef: string, dto: LoyaltyRewardCreate): Promise<LoyaltyRewardView> {
+  async createReward(tenantRef: string, dto: LoyaltyRewardCreate): Promise<LoyaltyRewardView> {
+    await this.requireRewardProduct(tenantRef, dto);
     return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
       const current = await currentProgram(tx, tenantRef);
       if (!current) {
@@ -269,6 +283,11 @@ export class LoyaltyAdminService {
         throw new BadRequestException(merged.error.issues.map((issue) => issue.message).join('. '));
       }
 
+      // Preserve editing of historical free-text rewards. A new product
+      // binding must always point at this tenant's actual menu entry.
+      if (merged.data.kind === 'product' && (current.kind !== 'product' || merged.data.productRef !== current.productRef)) {
+        await this.requireRewardProduct(tenantRef, merged.data);
+      }
       const row = mustRow(
         (
           await tx

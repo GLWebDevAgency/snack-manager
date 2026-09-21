@@ -21,7 +21,7 @@ export const CustomerLoyaltyProgramSchema = z.strictObject({ id: uuid, version: 
   mechanism: z.enum(['points', 'stamps']), termsSummary: z.string().max(6000),
   unitLabelSingular: z.string().min(1).max(80), unitLabelPlural: z.string().min(1).max(80) });
 export const CustomerLoyaltyMemberSchema = z.strictObject({ id: uuid, joinedAt: z.iso.datetime(), qrGeneration: integer.min(1),
-  balanceUnits: integer, unitLabelSingular: z.string().min(1).max(80), unitLabelPlural: z.string().min(1).max(80) });
+  balanceUnits: integer, reservedUnits: integer.optional(), unitLabelSingular: z.string().min(1).max(80), unitLabelPlural: z.string().min(1).max(80) });
 const expiresAt = z.number().int().positive().max(Number.MAX_SAFE_INTEGER - 604_800_000);
 const available = { program: CustomerLoyaltyProgramSchema, profileReady: z.boolean() };
 export const CustomerLoyaltyResponseSchema = z.discriminatedUnion('state', [
@@ -35,3 +35,11 @@ export const CustomerLoyaltyResponseSchema = z.discriminatedUnion('state', [
 export type CustomerLoyaltyResponse = z.infer<typeof CustomerLoyaltyResponseSchema>;
 export type CustomerLoyaltyProgram = z.infer<typeof CustomerLoyaltyProgramSchema>;
 export type CustomerLoyaltyMember = z.infer<typeof CustomerLoyaltyMemberSchema>;
+
+/** Older clients validate strict member DTOs. The extra balance component is
+ * projected only after an explicit, signed transport opt-in. */
+export function customerLoyaltyResponseForView(response: CustomerLoyaltyResponse, orderRewards = false): CustomerLoyaltyResponse {
+  if (orderRewards || !('member' in response)) return response;
+  const { reservedUnits: _reserved, ...member } = response.member;
+  return { ...response, member };
+}

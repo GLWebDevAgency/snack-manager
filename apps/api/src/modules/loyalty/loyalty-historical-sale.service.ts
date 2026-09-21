@@ -3,10 +3,12 @@ import { isDeepStrictEqual } from 'node:util';
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { CustomerSaleAttributionSchema } from '@sm/contracts';
 import { loyalty as domain, Money } from '@sm/domain';
-import { and, eq, sql, withLoyaltyTenant, saleSettlements, saleObservations, saleCorrections, operations, earnReceipts, ledgerEntries, wallets, programs, programVersions, members, type LoyaltyDb, type LoyaltyTx } from '@sm/loyalty';
+import { and, eq, sql, withLoyaltyTenant, saleSettlements, saleObservations, saleCorrections, operations, earnReceipts, ledgerEntries, wallets, programs, programVersions, members, type LoyaltyCryptoAdapter, type LoyaltyDb, type LoyaltyTx } from '@sm/loyalty';
 import { z } from 'zod';
-import { LOYALTY_DB } from '../../loyalty-db.module';
-import { HISTORICAL_SALE_PROOF_MAX_BYTES, historicalSaleAttributionFingerprint, historicalSaleFinancialFingerprint, type HistoricalSaleSettlementInput, type HistoricalSaleReceiptQuery, type HistoricalSaleResolutionInput, type HistoricalSaleSettlementResult, type HistoricalSaleReceipt, type HistoricalSalePendingReason, type HistoricalSaleReconciliationReason } from './loyalty-historical-sale.types';
+import { LOYALTY_CRYPTO, LOYALTY_DB } from '../../loyalty-db.module';
+import { HISTORICAL_SALE_PROOF_MAX_BYTES, historicalSaleAttributionFingerprint, historicalSaleFinancialFingerprint, type HistoricalSaleSettlementInput, type HistoricalSaleReceiptQuery, type HistoricalSaleResolutionInput, type HistoricalSaleSettlementResult, type HistoricalSaleReceipt, type HistoricalSalePendingReason, type HistoricalSaleReconciliationReason, type HistoricalSaleSource, type HistoricalPosSaleSettlementInput } from './loyalty-historical-sale.types';
+import { readPosSaleAttribution, samePosSaleProof, type PosSaleIdentity } from './loyalty-pos-sale.reader';
+type AnyInput = HistoricalSaleSettlementInput<HistoricalSaleSource>;
 type Sale = typeof saleSettlements.$inferSelect;
 type Wallet = typeof wallets.$inferSelect;
 const units = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -46,7 +48,7 @@ function result(s: Sale, replayed = false): HistoricalSaleSettlementResult {
         return storedResultSchema.parse({ kind: 'reconciliation', reason: s.reason, caseId: s.id, receipt: receipt(s) });
     return storedResultSchema.parse({ kind: 'pending', reason: s.reason, receipt: receipt(s) });
 }
-function inputFingerprint(input: HistoricalSaleSettlementInput) {
+function inputFingerprint(input: AnyInput) {
     return historicalSaleFinancialFingerprint({ attribution: input.attribution,
         eligibleRefundedCents: input.observation.eligibleRefundedCents, pendingRefundCents: input.observation.pendingRefundCents,
         paidAndDelivered: input.observation.paidAndDelivered, proof: input.observation.proof });
@@ -58,7 +60,8 @@ function inputFingerprint(input: HistoricalSaleSettlementInput) {
 export class LoyaltyHistoricalSaleService {
     constructor(
     @Inject(LOYALTY_DB)
-    private readonly db: LoyaltyDb) { }
+    private readonly db: LoyaltyDb,
+    @Inject(LOYALTY_CRYPTO) private readonly crypto?: LoyaltyCryptoAdapter) { }
     private async load(tx: LoyaltyTx, tenantRef: string, clientId: string, lock = false): Promise<Sale | undefined> {
         const query = tx.select().from(saleSettlements).where(and(eq(saleSettlements.tenantRef, tenantRef), eq(saleSettlements.clientId, clientId))).limit(1);
         return (await (lock ? query.for('update') : query))[0];
@@ -87,7 +90,21 @@ export class LoyaltyHistoricalSaleService {
         const parsed = inputSchema.parse(raw);
         if (parsed.attribution.decision !== 'attributed' || parsed.tenantRef !== parsed.attribution.tenantRef || parsed.clientId !== parsed.attribution.clientId)
             throw new BadRequestException('Photographie fidélité incohérente');
-        const input = raw;
+        return this.settle(raw);
+    }
+    async readPosSaleAttribution(input: PosSaleIdentity) {
+        if (!this.crypto) throw new ConflictException('Preuve POS indisponible');
+        return withLoyaltyTenant(this.db, input.tenantRef, tx => readPosSaleAttribution(tx, this.crypto!, input));
+    }
+    async settlePosSale(input: HistoricalPosSaleSettlementInput): Promise<HistoricalSaleSettlementResult> {
+        z.object(identity).parse(input);
+        observationSchema.parse(input.observation);
+        if (input.attribution.decision !== 'pos_receipt' || input.attribution.tenantRef !== input.tenantRef
+            || input.attribution.clientId !== input.clientId || input.attribution.receipt.operationId !== input.earnOperationId)
+            throw new BadRequestException('Photographie POS incohérente');
+        return this.settle(input);
+    }
+    private async settle(input: AnyInput): Promise<HistoricalSaleSettlementResult> {
         const a = input.attribution;
         const o = input.observation;
         if (Buffer.byteLength(JSON.stringify(o.proof)) > HISTORICAL_SALE_PROOF_MAX_BYTES || inputFingerprint(input) !== o.financialFingerprint
@@ -98,11 +115,21 @@ export class LoyaltyHistoricalSaleService {
             throw new BadRequestException('Preuve financière fidélité incohérente');
         const attributionFingerprint = historicalSaleAttributionFingerprint(a);
         return withLoyaltyTenant(this.db, input.tenantRef, async (tx) => {
+            // Adoption is serialized with both legacy earn and manual reversal.
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.tenantRef} || ':' || ${input.clientId},0))`);
+            if (a.decision === 'pos_receipt') {
+                if (!this.crypto) throw new ConflictException('Preuve POS indisponible');
+                const proof = await readPosSaleAttribution(tx, this.crypto, { tenantRef: input.tenantRef, clientId: input.clientId,
+                    memberId: a.memberId, operationId: input.earnOperationId, purchaseCents: a.basis.chargedTotalCents });
+                if (!samePosSaleProof(a, proof)) throw new ConflictException('Le reçu POS ne correspond pas à cette vente');
+            }
             // The insert trigger takes the canonical sale lock before member,
             // program and wallet locks, also excluding a legacy POS/online earn.
             await tx.insert(saleSettlements).values({ tenantRef: input.tenantRef, clientId: input.clientId, earnOperationId: input.earnOperationId,
                 memberId: a.memberId, programId: a.programId, rulesVersion: a.rulesVersion, attribution: a, attributionFingerprint,
-                eligiblePurchaseCents: a.basis.eligiblePurchaseCents }).onConflictDoNothing();
+                eligiblePurchaseCents: a.basis.eligiblePurchaseCents,
+                ...(a.decision === 'pos_receipt' ? { origin: 'pos_receipt', initialUnits: a.receipt.awardedUnits,
+                    earnReceiptId: a.receipt.id, earnLedgerEntryId: a.receipt.ledgerEntryId } : {}) }).onConflictDoNothing();
             let s = await this.load(tx, input.tenantRef, input.clientId, true);
             if (!s)
                 throw new ConflictException('Vente fidélité concurrente');
@@ -130,12 +157,15 @@ export class LoyaltyHistoricalSaleService {
             if (s.initialUnits === null && o.pendingRefundCents > 0)
                 return stop('pending', 'refund_pending');
             // Historical version and immutable ownership, not current contact/QR.
-            await tx.execute(sql `SELECT set_config('app.customer_parent_ref',${a.owner.parentRef},true)`);
-            const ownership = await tx.execute(sql `SELECT 1 FROM customer.loyalty_memberships WHERE parent_ref=${a.owner.parentRef}
-        AND tenant_ref=${s.tenantRef} AND account_id=${a.owner.accountId}::uuid AND member_id=${s.memberId}::uuid
-        AND operation_id=${a.membershipOperationId}::uuid`);
+            if (a.decision === 'attributed') {
+                await tx.execute(sql`SELECT set_config('app.customer_parent_ref',${a.owner.parentRef},true)`);
+                const ownership = await tx.execute(sql`SELECT 1 FROM customer.loyalty_memberships WHERE parent_ref=${a.owner.parentRef}
+                    AND tenant_ref=${s.tenantRef} AND account_id=${a.owner.accountId}::uuid AND member_id=${s.memberId}::uuid
+                    AND operation_id=${a.membershipOperationId}::uuid`);
+                if (!ownership.rows.length) return stop('reconciliation', 'historical_proof_conflict');
+            }
             const [storedRule] = await tx.select().from(programVersions).where(and(eq(programVersions.tenantRef, s.tenantRef), eq(programVersions.programId, s.programId), eq(programVersions.version, s.rulesVersion))).limit(1);
-            if (!ownership.rows.length || !storedRule)
+            if (!storedRule)
                 return stop('reconciliation', 'historical_proof_conflict');
             const rule: domain.LoyaltyEarnRule = storedRule.mechanism === 'points'
                 ? { mechanism: 'points', minimumPurchaseCents: storedRule.minimumPurchaseCents, maximumUnitsPerPurchase: storedRule.maximumUnitsPerPurchase, spendStepCents: storedRule.spendStepCents!, unitsPerStep: storedRule.unitsPerStep! }
@@ -154,11 +184,12 @@ export class LoyaltyHistoricalSaleService {
             const calculated = domain.calculateLoyaltyEarn({ status: 'active', earn: rule }, Money.fromCents(s.eligiblePurchaseCents));
             if (!calculated.ok)
                 return stop('reconciliation', 'historical_proof_conflict');
-            const initialUnits = s.eligiblePurchaseCents === 0 ? 0 : calculated.value.units;
+            const initialUnits = a.decision === 'attributed' && s.eligiblePurchaseCents === 0 ? 0 : calculated.value.units;
             if (s.initialUnits !== null && s.initialUnits !== initialUnits)
                 return stop('reconciliation', 'historical_proof_conflict');
             let wallet = await this.wallet(tx, s);
             if (s.initialUnits === null) {
+                if (a.decision !== 'attributed') return stop('reconciliation', 'historical_proof_conflict');
                 const previous = await tx.execute(sql `SELECT 1 FROM loyalty.earn_receipts WHERE tenant_ref=${s.tenantRef} AND source IN ('pos','online')
           AND external_ref ~* '^(pos-order|online-order|order):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND lower(split_part(external_ref,':',2))=${s.clientId}
           UNION ALL SELECT 1 FROM loyalty.ledger_entries WHERE tenant_ref=${s.tenantRef} AND kind='earn' AND source IN ('pos','online')
@@ -190,8 +221,8 @@ export class LoyaltyHistoricalSaleService {
             // latch; later wallet funding or another observation cannot retry it.
             const blocked = s.requiresResolution;
             s = await this.change(tx, s, { ...patch, confirmedEligibleCents: o.eligibleRefundedCents, dueUnits: due,
-                status: due ? 'reconciliation' : 'recorded', reason: due ? 'insufficient_balance' : null, requiresResolution: due > 0 && (blocked || wallet.balanceUnits < due) });
-            if (due && (blocked || wallet.balanceUnits < due))
+                status: due ? 'reconciliation' : 'recorded', reason: due ? 'insufficient_balance' : null, requiresResolution: due > 0 && (blocked || wallet.balanceUnits - wallet.reservedUnits < due) });
+            if (due && (blocked || wallet.balanceUnits - wallet.reservedUnits < due))
                 return result(s);
             if (due)
                 s = await this.correct(tx, s, wallet, o.observationId, 'debit', null, 'Correction de gain après remboursement');
@@ -273,7 +304,7 @@ export class LoyaltyHistoricalSaleService {
             if (member?.status !== 'active')
                 throw new ConflictException('Le membre fidélité doit être actif pour résoudre ce dossier');
             const wallet = await this.wallet(tx, s);
-            if (input.decision === 'retry' && wallet.balanceUnits < s.dueUnits) {
+            if (input.decision === 'retry' && wallet.balanceUnits - wallet.reservedUnits < s.dueUnits) {
                 await this.beginOperation(tx, s.tenantRef, input.operationId, 'adjust', fingerprint);
                 await this.completeOperation(tx, s.tenantRef, input.operationId, this.resolutionReceipt(input, result(s)));
                 return result(s);

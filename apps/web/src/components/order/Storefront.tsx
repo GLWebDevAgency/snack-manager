@@ -8,6 +8,7 @@ import { storefrontHighlights } from "./highlights";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSMTabTransition } from "@/components/ui/SMTabBar";
 import { OrderHeader, OrderHero } from "./OrderHeader";
+import { useOrderingAvailability } from "./useOrderingAvailability";
 import { OrderTabBar } from "./OrderTabBar";
 import { customerAppDestinations, customerAppViewFromPath, type CustomerAppView } from "@sm/client-core";
 import { Recommendations } from "./Recommendations";
@@ -236,7 +237,21 @@ export function Storefront({
     if (cart.lines.length > 0) jalonFunnel("panier");
   }, [cart.lines.length]);
 
-  const paused = site.ordering.paused;
+  const availability = useOrderingAvailability(site.tenant.slug, api, demo);
+  const availabilityKnown = demo || availability.status === "fresh";
+  const availabilityMessage = availability.status === "offline"
+    ? "Reconnectez-vous pour vérifier les disponibilités. Votre panier est conservé."
+    : "Les disponibilités doivent être vérifiées avant une nouvelle commande. Votre panier est conservé.";
+  // Only presentation receives live fields. Checkout retains its initial slots,
+  // delivery, cart and Stripe appearance, including an accepted payment.
+  const liveSite = useMemo<Site>(() => demo ? site : ({ ...site,
+    openNow: availability.data?.openNow ?? false,
+    ordering: availability.data?.ordering ?? { paused: true, message: availabilityMessage },
+    todayHours: availability.data?.todayHours ?? null,
+    slots: availability.data?.slots ?? null,
+    timezone: availability.data?.timezone ?? site.timezone,
+  }), [site, demo, availability.data, availabilityMessage]);
+  const paused = liveSite.ordering.paused;
   const blocked = paused || categories.length === 0;
 
   const inCart = useMemo(
@@ -361,11 +376,13 @@ export function Storefront({
           name={site.tenant.name}
           logoUrl={logoMarque}
           verrouUrl={verrouMarque}
-          openNow={site.openNow}
+          openNow={liveSite.openNow}
+          availabilityKnown={availabilityKnown}
+          paused={paused}
           onClose={showClose ? closeEmbed : null}
         />
       ) : (
-        <OrderHeader onHeightChange={setHeaderHeight} site={site} logoUrl={logoMarque} lockupUrl={verrouMarque}
+        <OrderHeader onHeightChange={setHeaderHeight} site={liveSite} availabilityKnown={availabilityKnown} liveAvailability={!demo} logoUrl={logoMarque} lockupUrl={verrouMarque}
           account={!demo && <Tap className="sm-order-icon" aria-label="Mon compte" disabled={navigationLocked}
             onClick={() => transition.selectTab("account")}><Icon name="user" size={18} /></Tap>} />
       )}
@@ -388,7 +405,7 @@ export function Storefront({
             onNavigationLockedChange={setLegacyLocked} /> : undefined} />}
         {(embed || demo) && activeTab === "loyalty" && loyaltyCatalog && <LoyaltyCardApp catalog={loyaltyCatalog} embedded legacyOnly
           onNavigationLockedChange={setLegacyLocked} />}
-        {!embed && activeTab === "menu" && <OrderHero site={site} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
+        {!embed && activeTab === "menu" && <OrderHero site={liveSite} tagline={brand.tagline} taglineSub={brand.taglineSub} src={hero} position={heroCadrage} alt={heroAlt} onOrder={scrollToMenu} />}
         {activeTab === "orders" && !demo && (embed ? deviceOrders : <CustomerOrdersPage slug={site.tenant.slug}
           restaurantName={site.tenant.name} mode={brand.mode} deviceOrders={deviceOrders} navigationLocked={ordersLocked}
           onNavigationLockedChange={setPrivateOrdersLocked} onCatalogVerified={updateCatalogue} onReordered={() => setTunnel(true)}
@@ -424,7 +441,10 @@ export function Storefront({
           </div>
         )}
 
-        {paused && <PauseCard site={site} />}
+        {!availabilityKnown && <div className="pt-5"><Banner tone="prep" icon="clock" title="Disponibilités à vérifier"
+          action={<Tap onClick={availability.refresh} disabled={availability.status === "checking" || availability.status === "offline"}>Vérifier</Tap>}>
+          {availabilityMessage}</Banner></div>}
+        {availabilityKnown && paused && <PauseCard site={liveSite} liveAvailability={!demo} />}
 
         {!embed && activeTab === "menu" && (
           <Highlights
@@ -490,7 +510,7 @@ export function Storefront({
                 de s’empiler sur 1 080 px de large. */}
             <div className="grid gap-x-6 lg:grid-cols-2 lg:items-start">
               {site.reviews.count > 0 && <Reviews site={site} />}
-              <Practical site={site} cityName={cityName} />
+              <Practical site={liveSite} cityName={cityName} availabilityKnown={availabilityKnown} />
             </div>
             <LegalFooter site={site} cityName={cityName} prixMono={prixMono} />
           </>
@@ -569,7 +589,7 @@ export function Storefront({
         prixMono={prixMono}
         cart={cart}
         paused={paused}
-        pauseMessage={site.ordering.message}
+        pauseMessage={liveSite.ordering.message}
         initialSlots={site.slots}
         delivery={site.delivery}
         embed={embed}
@@ -627,6 +647,8 @@ function EmbedHeader({
   logoUrl,
   verrouUrl,
   openNow,
+  availabilityKnown,
+  paused,
   onClose,
 }: {
   name: string;
@@ -634,13 +656,15 @@ function EmbedHeader({
   /** Le VERROU du masque — l’embarqué l’emploie comme la vitrine. */
   verrouUrl: string | null;
   openNow: boolean;
+  availabilityKnown: boolean;
+  paused: boolean;
   onClose: (() => void) | null;
 }) {
   /* L’état du service — sous le nom écrit comme sous le verrou. */
   const sousTitre = (
     <p className="flex items-center gap-1.5 text-[12px] font-semibold text-mut">
-      <Dot tone={openNow ? "ok" : "mut"} />
-      {openNow ? "Ouvert" : "Fermé"}
+      <Dot tone={availabilityKnown && openNow && !paused ? "ok" : "mut"} />
+      {!availabilityKnown ? "Disponibilités à vérifier" : paused ? "Commande en pause" : openNow ? "Ouvert" : "Fermé"}
     </p>
   );
   return (
@@ -692,9 +716,9 @@ function EmbedHeader({
  * puis donne les deux choses qui restent utiles — le téléphone et l’heure de
  * réouverture — sans jamais cacher la carte, qui reste consultable dessous.
  */
-function PauseCard({ site }: { site: Site }) {
+function PauseCard({ site, liveAvailability }: { site: Site; liveAvailability: boolean }) {
   const phone = site.tenant.phones[0];
-  const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
+  const reopen = liveAvailability || site.openNow ? null : nextOpeningLabel(site.tenant.hours);
   return (
     <div className="pt-5">
       <Surface className="overflow-hidden">
@@ -800,7 +824,7 @@ function Reviews({ site }: { site: Site }) {
   );
 }
 
-function Practical({ site, cityName }: { site: Site; cityName: string }) {
+function Practical({ site, cityName, availabilityKnown }: { site: Site; cityName: string; availabilityKnown: boolean }) {
   const week = weekSchedule(site.tenant.hours);
   const today = site.todayHours;
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -871,7 +895,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
                 Horaires
               </span>
               <span className="block text-[15px] font-semibold text-ink">
-                {site.openNow ? "Ouvert maintenant" : "Fermé actuellement"}
+                {!availabilityKnown ? "Disponibilités à vérifier" : site.openNow ? "Ouvert maintenant" : "Fermé actuellement"}
               </span>
             </span>
           </div>

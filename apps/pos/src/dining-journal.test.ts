@@ -47,7 +47,7 @@ describe('journal des commandes de table', () => {
   it('signale une reprise déjà remboursée sans créer une dette ni doubler son encaissement historique', () => {
     const refunded = diningJournalEntry(operation, { ...row, status: 'delivered', payment: { method: 'counter', status: 'refunded', tender: 'card' } });
     expect(refunded).toMatchObject({ paid: true, refunded: true, method: 'cb' });
-    expect(zFromJournal(appendDiningEntry([refunded], refunded))).toMatchObject({ orders: 1, ca: 1450, due: 0, card: 1450 });
+    expect(zFromJournal(appendDiningEntry([refunded], refunded))).toMatchObject({ orders: 1, ca: 0, due: 0, card: 0, collected: 1450, refunded: 1450, netCollected: 0 });
     const prior = diningJournalEntry(operation, { ...row, payment: { method: 'counter', status: 'paid', tender: 'card' } });
     expect(appendDiningEntry([prior], refunded)).toEqual([prior]);
     expect(reconcileCollectedJournal([refunded], { ...row, payment: { method: 'counter', status: 'paid', tender: 'card' } })[0].refunded).toBe(true);
@@ -63,7 +63,7 @@ describe('journal des commandes de table', () => {
     const reconciled = reconcileCollectedJournal(appendDiningEntry([pending], diningJournalEntry(operation, serverRefund)), serverRefund);
     expect(reconciled).toHaveLength(1);
     expect(reconciled[0]).toMatchObject({ paid: true, refunded: true, method: 'cb', total: 1450, discount: 200 });
-    expect(zFromJournal(reconciled)).toMatchObject({ orders: 1, ca: 1250, card: 1250, due: 0, discounts: 200 });
+    expect(zFromJournal(reconciled)).toMatchObject({ orders: 1, ca: 0, card: 0, due: 0, discounts: 200, collected: 1250, refunded: 1250, netCollected: 0 });
     expect(reconcileCollectedJournal(reconciled, { ...row, payment: { method: 'counter', status: 'paid', tender: 'cash' } })).toEqual(reconciled);
     expect(reconcileCollectedJournal([], serverRefund)).toEqual([]);
   });

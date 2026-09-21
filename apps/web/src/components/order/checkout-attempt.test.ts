@@ -56,8 +56,31 @@ beforeEach(async () => {
 });
 afterEach(async () => { await context?.close(); });
 afterAll(async () => {
-  await browser?.close();
-  if (server) await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  const started = performance.now();
+  const mark = (phase: string) => process.stdout.write(`Checkout journal cleanup: ${phase} (${Math.round(performance.now() - started)}ms)\n`);
+  try {
+    if (server) {
+      mark('http closing');
+      await new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        server.closeAllConnections();
+      });
+      expect(server.listening).toBe(false);
+      mark('http closed');
+    }
+  } finally {
+    if (browser) {
+      mark(`browser closing; contexts=${browser.contexts().length}`);
+      const disconnected = new Promise<void>(resolve => {
+        if (!browser.isConnected()) resolve();
+        else browser.once('disconnected', () => resolve());
+      });
+      await browser.close();
+      await disconnected;
+      expect(browser.isConnected()).toBe(false);
+      mark('browser disconnected');
+    }
+  }
 });
 
 const acquire = (target = page, tenant = "classfood") => target.evaluate(

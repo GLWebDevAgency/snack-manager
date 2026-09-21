@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { OrderRewardService } from './order-reward.service';
 import {
   BadRequestException,
   ConflictException,
@@ -76,6 +77,7 @@ export class OrdersService {
     private readonly payments: PaymentsService,
     @Optional() private readonly admissions?: PublicOrderAdmissionService,
     @Optional() @InjectModel('DiningOrderPricing') private readonly diningPricing?: Model<DiningOrderPricingRecord>,
+    @Optional() private readonly orderRewards?: OrderRewardService,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
@@ -132,11 +134,14 @@ export class OrdersService {
     delete payload.loyaltyEarnLeaseUntil;
     delete payload.paymentFlow;
     delete payload.counterCollection;
+    delete payload.counterRefundFlow;
     delete payload.diningServeReceipt;
     delete payload.diningServeRejections;
     delete payload.publicRecovery;
     delete payload.customerOwner;
     delete payload.customerSaleAttribution;
+    delete payload.loyaltyReward;
+    delete payload.loyaltyRewardProcessing;
     delete payload.loyaltyWebIntent;
     delete payload.loyaltyWebProcessing;
     return payload;
@@ -246,6 +251,7 @@ export class OrdersService {
     actor: string,
     deviceRef: string | null = null,
   ) {
+    if (dto.reward) throw new ForbiddenException('Cette récompense se choisit dans votre compte en ligne.');
     if (!['pos', 'phone'].includes(dto.channel)) throw new ForbiddenException('Le canal de cette route est caisse ou téléphone.');
     if (dto.channel === 'phone') {
       const attempt = StaffPhoneOrderAttemptRequestSchema.safeParse(dto);
@@ -318,22 +324,30 @@ export class OrdersService {
     // Le corps ne porte qu'un CODE : le montant est calculé ici contre la
     // promotion en base. Un client qui enverrait sa propre remise n'obtient
     // rien — même règle que pour les prix, et pour la même raison.
-      promotion = dining && pricingStore ? await pricingStore.reserve(tenantId, dining.identity, priced)
+      promotion = dto.reward ? null : dining && pricingStore ? await pricingStore.reserve(tenantId, dining.identity, priced)
         : await this.resoudrePromotion(tenantId, dto, subtotal, lines);
 
     // Ce que le client doit RÉELLEMENT — le seul montant qui fasse autorité
     // pour l'encaissement, le rendu monnaie et le ticket.
-    const subtotalAfterDiscount = subtotal - (promotion?.discount.amount ?? 0);
+    if (dto.reward && (!recovery?.customerOwner || !this.orderRewards || dto.promoCode)) throw new BadRequestException('Choisissez une récompense depuis votre compte.');
+    const reward = dto.reward ? await this.orderRewards!.prepare({ tenantRef: tenantId, clientId: dto.clientId,
+      binding: recovery!, selection: dto.reward, subtotal, lines }) : null;
+    const discount = reward ? { amount: reward.benefit.amountCents, reason: `Fidélité · ${reward.benefit.name}`, promotionId: null } : promotion?.discount ?? null;
+    const subtotalAfterDiscount = subtotal - (discount?.amount ?? 0);
 
       const number = await this.nextNumber(tenantId);
       const tenant = dto.type === 'delivery' ? await this.tenants.findById(tenantId).lean() : null;
       if (dto.type === 'delivery' && !tenant) throw new NotFoundException('Établissement introuvable');
       const delivery = computeDeliveryForOrder(tenant ?? {}, dto, subtotalAfterDiscount);
       const totalDu = subtotalAfterDiscount + (delivery?.feeCents ?? 0);
+      if (reward && dto.payment.method === 'online' && totalDu > 0 && totalDu < 50) {
+        throw new BadRequestException('Le montant restant est inférieur au minimum de paiement carte de 0,50 €. Ajoutez un produit ou choisissez le règlement au retrait.');
+      }
+      if (dto.expectedTotalCents !== undefined && totalDu !== dto.expectedTotalCents) throw new ConflictException('Le prix de votre panier a changé. Vérifiez le nouveau total avant de confirmer.');
       const customerSaleAttribution = recovery?.customerOwner
         ? await prepareCustomerSaleAttribution(prepareLoyaltyAttribution, Object.freeze({
           tenantRef: tenantId, clientId: dto.clientId, owner: Object.freeze({ ...recovery.customerOwner }),
-          totals: Object.freeze({ subtotalCents: subtotal, discountCents: promotion?.discount.amount ?? 0,
+          totals: Object.freeze({ subtotalCents: subtotal, discountCents: discount?.amount ?? 0,
             deliveryFeeCents: delivery?.feeCents ?? 0, totalCents: totalDu }),
         })) : null;
       const candidate = {
@@ -343,6 +357,8 @@ export class OrdersService {
         clientId: dto.clientId,
         customerOwner: recovery?.customerOwner ?? null,
         customerSaleAttribution,
+        loyaltyReward: reward,
+        loyaltyRewardProcessing: reward ? { state: 'pending', orderVersion: -1, zeroPaid: false } : null,
         // Persist even with the worker disabled: this admission owns one
         // immutable operation. Old/null/non-attributed sales are never adopted.
         loyaltyWebIntent: dto.channel === 'online' && customerSaleAttribution?.decision === 'attributed'
@@ -363,7 +379,7 @@ export class OrdersService {
         type: dto.type,
         ...(dining ? { dining: dining.context } : {}),
         lines,
-        totals: { subtotal, discount: promotion?.discount ?? null, deliveryFee: delivery?.feeCents ?? 0, total: totalDu },
+        totals: { subtotal, discount, deliveryFee: delivery?.feeCents ?? 0, total: totalDu },
         delivery,
         // LE TOTAL DÛ, remise comprise — jamais le sous-total.
         //
@@ -401,6 +417,12 @@ export class OrdersService {
           ? await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate, beforeCommit)
           : await this.admissions!.commitInternal(tenantId, dto.clientId, admissionBinding, candidate);
         if (!outcome.created) await this.rendreReservation(tenantId, promotion);
+        if (reward) {
+          await this.orderRewards!.reconcile(tenantId, dto.clientId);
+          const refreshed = await this.orders.findOne({ tenantId, clientId: dto.clientId });
+          if (!refreshed) throw new ServiceUnavailableException('La commande doit être reprise.');
+          return { ...outcome, order: refreshed };
+        }
         return outcome;
       }
       const order = await this.orders.create(candidate);
@@ -785,7 +807,11 @@ export class OrdersService {
     amount: number,
     reason: string,
   ) {
-    const order = await this.byId(tenantId, id);
+    // The attribution is private/select:false. Load it only for this command:
+    // changing its captured basis would permanently block settlement after pickup.
+    const order = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), _id: id })
+      .select('+paymentFlow +customerSaleAttribution +loyaltyReward');
+    if (!order) throw new NotFoundException('Commande introuvable');
     if (order.status === 'delivered' || order.status === 'cancelled') {
       throw new ConflictException(
         'Commande clôturée — une remise doit être posée avant la remise au client',
@@ -797,6 +823,10 @@ export class OrdersService {
     if (order.payment?.stripePaymentIntentId || order.paymentFlow?.origin !== 'created_v1' ||
       order.paymentFlow.phase !== 'open' || order.paymentFlow.attempt) {
       throw new ConflictException('Le paiement en ligne a déjà été initié. Utilisez un remboursement après confirmation du paiement.');
+    }
+    if ((order.customerSaleAttribution?.decision === 'attributed' || order.loyaltyReward != null)) {
+      throw new ConflictException({ code: 'ORDER_LOYALTY_BASIS_LOCKED',
+        message: 'Cette vente est déjà rattachée à la fidélité : son montant ne peut plus être modifié. Utilisez le parcours de remboursement après encaissement.' });
     }
     if (amount > order.totals.subtotal) {
       throw new BadRequestException(

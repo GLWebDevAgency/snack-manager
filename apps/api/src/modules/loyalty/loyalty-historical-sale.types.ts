@@ -7,8 +7,23 @@ export type HistoricalSaleAttribution = Extract<CustomerSaleAttribution, {
 export type HistoricalSaleJson = null | boolean | number | string | readonly HistoricalSaleJson[] | {
     readonly [key: string]: HistoricalSaleJson;
 };
+/** A POS receipt identifies a card, never a fabricated customer account. */
+export interface HistoricalPosSaleAttribution {
+    version: 1;
+    decision: 'pos_receipt';
+    tenantRef: string;
+    clientId: string;
+    memberId: string;
+    programId: string;
+    rulesVersion: number;
+    rule: HistoricalSaleAttribution['rule'];
+    basis: { policyVersion: 'legacy-pos-total-v1'; eligiblePurchaseCents: number; chargedTotalCents: number; excludedChargeCents: 0 };
+    receipt: { id: string; operationId: string; ledgerEntryId: string | null; awardedUnits: number; externalRef: string; requestFingerprint: string };
+}
+export type HistoricalSaleSource = HistoricalSaleAttribution | HistoricalPosSaleAttribution;
+export type HistoricalPosSaleSettlementInput = HistoricalSaleSettlementInput<HistoricalPosSaleAttribution>;
 export interface HistoricalSaleFinancialInput {
-    attribution: HistoricalSaleAttribution;
+    attribution: HistoricalSaleSource;
     eligibleRefundedCents: number | null;
     pendingRefundCents: number;
     paidAndDelivered: boolean;
@@ -24,11 +39,11 @@ export interface HistoricalSaleObservation {
     paidAndDelivered: boolean;
     proof: HistoricalSaleJson;
 }
-export interface HistoricalSaleSettlementInput {
+export interface HistoricalSaleSettlementInput<A extends HistoricalSaleSource = HistoricalSaleAttribution> {
     tenantRef: string;
     clientId: string;
     earnOperationId: string;
-    attribution: HistoricalSaleAttribution;
+    attribution: A;
     observation: HistoricalSaleObservation;
 }
 export interface HistoricalSaleReceiptQuery {
@@ -92,7 +107,7 @@ function canonical(value: unknown): string {
     }
     throw new Error('Invalid historical loyalty proof');
 }
-export function historicalSaleAttributionFingerprint(attribution: HistoricalSaleAttribution): string {
+export function historicalSaleAttributionFingerprint(attribution: HistoricalSaleSource): string {
     return createHash('sha256').update(canonical(attribution)).digest('hex');
 }
 export function historicalSaleFinancialFingerprint(input: HistoricalSaleFinancialInput): string {

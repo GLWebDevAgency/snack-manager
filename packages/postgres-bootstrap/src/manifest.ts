@@ -14,6 +14,7 @@ export const SUPPLY_INITIAL_MIGRATION = 1_787_074_510_723;
 export const LOYALTY_INITIAL_MIGRATION = 1_788_230_085_055;
 export const LOYALTY_EARN_RECEIPTS_MIGRATION = 1_788_236_557_128;
 export const LOYALTY_HISTORICAL_SALE_MIGRATION = 1_789_978_588_970;
+export const LOYALTY_ORDER_REWARD_MIGRATION = 1_790_000_000_000;
 export const CUSTOMER_INITIAL_MIGRATION = 1_788_854_400_000;
 export const CUSTOMER_PAID_BUDGET_MIGRATION = 1_788_861_600_000;
 export const CUSTOMER_BROWSER_CONTINUITY_MIGRATION = 1_788_870_000_000;
@@ -58,6 +59,10 @@ const introduced = (
  * un `COLLATE` non qualifié, son inventaire devra rejoindre ce préflight.
  */
 export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
+  ...['order_reward_reservations', 'order_reward_closures'].map(name =>
+    introduced('table', 'loyalty', name, 'loyalty', LOYALTY_ORDER_REWARD_MIGRATION)),
+  ...['preserve_order_reward_reservation', 'guard_order_reward_closure', 'validate_order_reward_wallet', 'validate_order_reward_receipt', 'preserve_order_reward_operation'].map(name =>
+    introduced('function', 'loyalty', name, 'loyalty', LOYALTY_ORDER_REWARD_MIGRATION)),
   ...['sale_settlements', 'sale_observations', 'sale_corrections'].map(name =>
     introduced('table', 'loyalty', name, 'loyalty', LOYALTY_HISTORICAL_SALE_MIGRATION)),
   ...['guard_managed_sale_claim', 'guard_managed_sale_reverse', 'preserve_sale_settlement', 'validate_sale_settlement', 'guard_sale_correction', 'preserve_sale_operation'].map(name =>

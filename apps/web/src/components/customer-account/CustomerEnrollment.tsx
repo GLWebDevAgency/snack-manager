@@ -70,6 +70,11 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   if (access || (accessAvailable && !started && !signupSelected)) return <CustomerAccess state={state} flow={flow} available={accessAvailable}
     {...(registrationAvailable && phase !== 'completed' && (!access || ['closed', 'expired'].includes(access.phase))
       ? { onSignup: () => { if (access) void flow?.begin(); else setSignupSelected(true); } } : {})} />;
+  if (state.outcome === 'browser-expired') return <section aria-label="Inscription protégée" aria-busy={state.busy} className="sm-account-card space-y-4">
+    <h3 ref={heading} tabIndex={-1} className="font-display text-xl font-extrabold outline-none">Reprendre votre accès</h3>
+    <p role="status" className="text-sm leading-6 text-mut">{state.message}</p>
+    <Tap className={primary} disabled={state.busy || state.storageError || !navigator.onLine} onClick={() => void flow?.restartBrowser()}>Recommencer sur ce navigateur</Tap>
+  </section>;
   if (phase === 'completed' || (!registrationAvailable && !verification)) return null;
 
   async function sendSms() {

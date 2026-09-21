@@ -77,11 +77,12 @@ export class LoyaltyPublicService {
     return { tenant, tenantRef, program, rewards: rewards.filter((reward) => reward.active) };
   }
 
-  async catalog(slug: string): Promise<LoyaltyPublicProgram> {
+  async catalog(slug: string, orderRewards = false): Promise<LoyaltyPublicProgram> {
     const { tenant, program, rewards } = await this.context(slug);
     // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
     const brand = marqueObservee(tenant);
     return LoyaltyPublicProgramSchema.parse({
+      ...(orderRewards ? { orderRewardsEnabled: process.env.LOYALTY_ORDER_REWARDS_ENABLED === 'true' } : {}),
       restaurant: {
         slug: String(tenant.slug),
         name: String(tenant.name),

@@ -221,7 +221,7 @@ jobs:
         run: |
           pnpm --filter @sm/postgres-bootstrap exec vitest run src/bootstrap.integration.test.ts
           pnpm --filter @sm/loyalty exec vitest run src/schema.integration.test.ts
-          pnpm --filter @sm/loyalty exec vitest run src/canonical-sale.integration.test.ts
+          pnpm --filter @sm/loyalty exec vitest run src/canonical-sale.integration.test.ts src/pos-sale-compensation.integration.test.ts src/order-reward-upgrade.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
 
       - name: Tests MongoDB et PostgreSQL réels — reprise des gains fidélité
@@ -251,6 +251,15 @@ jobs:
           pnpm --filter @sm/api exec vitest run
           src/modules/loyalty/loyalty-historical-sale.integration.test.ts
           src/modules/loyalty/loyalty-web-settlement.processor.integration.test.ts
+          src/modules/loyalty/loyalty-pos-compensation.integration.test.ts
+          src/modules/loyalty/loyalty-pos-compensation.processor.integration.test.ts
+          src/modules/loyalty/order-reward-locking.integration.test.ts
+          src/modules/loyalty/order-reward.store.integration.test.ts
+          src/modules/loyalty/order-reward-integrity.integration.test.ts
+          src/modules/orders/order-reward.integration.test.ts
+          src/modules/ordering/order-counter-refund.integration.test.ts
+          src/modules/orders/order-admission-journal.integration.test.ts
+          src/modules/orders/customer-order-discount.integration.test.ts
           src/modules/loyalty/loyalty-sale-settlement.http.integration.test.ts
           --maxWorkers=1 --no-file-parallelism
 

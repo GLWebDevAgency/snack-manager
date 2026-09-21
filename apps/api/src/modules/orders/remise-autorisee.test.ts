@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BadRequestException,
   ConflictException,
@@ -37,11 +37,12 @@ function build(subtotal = 10_000, status = 'new') {
     totals: { subtotal, discount: null as unknown, total: subtotal },
     payment: { status: 'pending', stripePaymentIntentId: null as string | null },
     paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null },
-    save: async () => {},
+    customerSaleAttribution: null as { decision: 'attributed' | 'not_attributed' } | null,
+    save: vi.fn(async () => {}),
     toObject: () => ({}),
   };
   const service = new OrdersService(
-    { findOne: () => ({ lean: async () => commande }) } as never,
+    { findOne: () => ({ lean: async () => commande, select: async () => commande }) } as never,
     {} as never,
     {} as never,
     {} as never,
@@ -51,9 +52,6 @@ function build(subtotal = 10_000, status = 'new') {
     { pourTenant: async () => ["bo"] } as never,
     {} as never,
   );
-  // `byId` lit la commande par une autre voie que `findOne().lean()` : on la
-  // court-circuite pour que le test porte sur la RÈGLE, pas sur l'accès Mongo.
-  (service as unknown as { byId: () => Promise<unknown> }).byId = async () => commande;
   return { service, commande, enregistre };
 }
 
@@ -106,6 +104,24 @@ describe('le plafond de remise par rôle', () => {
 });
 
 describe('ce que la remise exige encore', () => {
+  it('préserve la base d’une vente déjà attribuée à la fidélité avant encaissement', async () => {
+    const { service, commande, enregistre } = build();
+    commande.customerSaleAttribution = { decision: 'attributed' };
+    await expect(service.discount(TENANT, ORDER, gerant, 500, 'Geste commercial'))
+      .rejects.toMatchObject({ response: { code: 'ORDER_LOYALTY_BASIS_LOCKED' } });
+    expect(commande.totals).toEqual({ subtotal: 10_000, discount: null, total: 10_000 });
+    expect(commande.save).not.toHaveBeenCalled();
+    expect(enregistre).toEqual([]);
+  });
+
+  it('conserve la remise autorisée pour une vente explicitement non attribuée', async () => {
+    const { service, commande } = build();
+    commande.customerSaleAttribution = { decision: 'not_attributed' };
+    await service.discount(TENANT, ORDER, gerant, 500, 'Geste commercial');
+    expect(commande.totals.total).toBe(9_500);
+    expect(commande.save).toHaveBeenCalledOnce();
+  });
+
   it('ne réécrit pas un montant déjà associé à une intention Stripe', async () => {
     const { service, commande } = build();
     commande.payment.stripePaymentIntentId = 'pi_started';

@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
-import { DIRECTIONS } from '@sm/contracts';
-import { describe, expect, it, vi } from 'vitest';
+import { DIRECTIONS, LoyaltyPublicProgramSchema } from '@sm/contracts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenantsService } from '../tenants/tenants.service';
 import type { LoyaltyAdminService } from './loyalty-admin.service';
 import type { LoyaltyMemberService } from './loyalty-member.service';
@@ -358,5 +358,22 @@ describe('LoyaltyPublicService — compte et souscription', () => {
       derogationsCapacite: [DEROGATION],
       account: { status: 'suspended' },
     });
+  });
+});
+
+
+describe('public loyalty API-first response compatibility', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const legacySchema = LoyaltyPublicProgramSchema.omit({ orderRewardsEnabled: true });
+  it.each(['true', 'false'])('keeps the old strict catalogue when flag=%s without opt-in', async flag => {
+    vi.stubEnv('LOYALTY_ORDER_REWARDS_ENABLED', flag);
+    const { service } = build();
+    const result = await service.catalog('classfood');
+    expect(result).not.toHaveProperty('orderRewardsEnabled');
+    expect(legacySchema.safeParse(result).success).toBe(true);
+    const current = await service.catalog('classfood', true);
+    expect(current.orderRewardsEnabled).toBe(flag === 'true');
+    expect(LoyaltyPublicProgramSchema.safeParse(current).success).toBe(true);
+    expect(legacySchema.safeParse(current).success).toBe(false);
   });
 });

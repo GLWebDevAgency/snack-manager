@@ -44,7 +44,7 @@ beforeAll(async () => {
       if(params.has('order')){const raw=demoSite(new Date(),()=>0);raw.tenant.slug=params.has('demo')?'demo':'recette';raw.tenant.brand=catalog.restaurant.brand;
       raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
       if(params.has('paused'))raw.ordering={paused:true,message:'Commande momentanément indisponible.'};
-      const api=orderingApi({send:async()=>({status:200,body:raw})});const site=await api.loadSite('recette');node=<Storefront site={site} api={api} loyalty={params.has('withoutLoyalty')?null:resumeFidelite(catalog)} loyaltyCatalog={params.has('withoutLoyalty')?undefined:catalog} mode={params.has('embed')?'embed':'site'} demo={params.has('demo')}/>;if(params.has('demo'))node=<DemoStorefront site={site}/>}
+      const api=orderingApi({send:async request=>({status:200,body:request.path.endsWith('/availability')?{observedAt:new Date().toISOString(),openNow:raw.openNow,ordering:raw.ordering,todayHours:raw.todayHours,timezone:raw.timezone,slots:raw.slots}:raw})});const site=await api.loadSite('recette');node=<Storefront site={site} api={api} loyalty={params.has('withoutLoyalty')?null:resumeFidelite(catalog)} loyaltyCatalog={params.has('withoutLoyalty')?undefined:catalog} mode={params.has('embed')?'embed':'site'} demo={params.has('demo')}/>;if(params.has('demo'))node=<DemoStorefront site={site}/>}
       createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
     bundle: true, write: false, outdir: '/virtual-loyalty-account-entry', format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022',
     alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
@@ -132,7 +132,33 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => { releaseRestore?.(); releaseDelete?.(); releaseReorder?.(); await context?.close(); expect(faults).toEqual([]); });
-afterAll(async () => { await browser?.close(); if (server) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); });
+afterAll(async () => {
+  const started = performance.now();
+  const mark = (phase: string) => process.stdout.write(`Loyalty account cleanup: ${phase} (${Math.round(performance.now() - started)}ms)\n`);
+  try {
+    if (server) {
+      mark('http closing');
+      await new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        server.closeAllConnections();
+      });
+      expect(server.listening).toBe(false);
+      mark('http closed');
+    }
+  } finally {
+    if (browser) {
+      mark(`browser closing; contexts=${browser.contexts().length}`);
+      const disconnected = new Promise<void>(resolve => {
+        if (!browser.isConnected()) resolve();
+        else browser.once('disconnected', () => resolve());
+      });
+      await browser.close();
+      await disconnected;
+      expect(browser.isConnected()).toBe(false);
+      mark('browser disconnected');
+    }
+  }
+});
 
 const accountCalls = () => calls.filter(call => call.path.includes('/compte/'));
 const loyaltyCalls = () => accountCalls().filter(call => call.path.endsWith('/fidelite'));
