@@ -128,8 +128,26 @@ afterEach(async ({ task }) => {
   await context.close(); expect(errors).toEqual([]); expect(remote).toEqual([]);
 });
 afterAll(async () => {
-  await browser?.close();
-  if (server) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  const started = performance.now();
+  const checkpoint = (stage: string) => console.info('Delivery missions teardown', { stage, at: new Date().toISOString(), elapsedMs: Math.round(performance.now() - started) });
+  try {
+    if (server) {
+      checkpoint('http-stop-accepting');
+      const closed = new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      // Stop accepting first; then no new socket can race the forced close.
+      server.closeAllConnections();
+      checkpoint('http-connections-closed');
+      await closed; checkpoint('http-closed');
+    }
+  } finally {
+    if (browser) {
+      const disconnected = browser.isConnected()
+        ? new Promise<void>(resolve => browser.once('disconnected', () => resolve())) : Promise.resolve();
+      checkpoint('browser-close');
+      await browser.close();
+      await disconnected; checkpoint('browser-disconnected');
+    }
+  }
   if (evidenceDir) console.info(`Captures missions locales : ${evidenceDir}`);
 });
 async function openDriver() {

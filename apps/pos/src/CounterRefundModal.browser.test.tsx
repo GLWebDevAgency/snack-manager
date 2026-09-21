@@ -111,7 +111,7 @@ afterAll(async () => {
   } finally {
     if (browser) {
       mark(`browser closing; contexts=${browser.contexts().length}`);
-      const disconnected = new Promise<void>(resolve => { if (!browser.isConnected()) resolve(); else browser.once('disconnected', resolve); });
+      const disconnected = new Promise<void>(resolve => { if (!browser.isConnected()) resolve(); else browser.once('disconnected', () => resolve()); });
       await browser.close(); await disconnected;
       expect(browser.isConnected()).toBe(false);
       mark('browser disconnected');

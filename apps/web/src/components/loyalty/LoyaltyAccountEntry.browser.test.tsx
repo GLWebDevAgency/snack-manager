@@ -132,7 +132,33 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => { releaseRestore?.(); releaseDelete?.(); releaseReorder?.(); await context?.close(); expect(faults).toEqual([]); });
-afterAll(async () => { await browser?.close(); if (server) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); });
+afterAll(async () => {
+  const started = performance.now();
+  const mark = (phase: string) => process.stdout.write(`Loyalty account cleanup: ${phase} (${Math.round(performance.now() - started)}ms)\n`);
+  try {
+    if (server) {
+      mark('http closing');
+      await new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        server.closeAllConnections();
+      });
+      expect(server.listening).toBe(false);
+      mark('http closed');
+    }
+  } finally {
+    if (browser) {
+      mark(`browser closing; contexts=${browser.contexts().length}`);
+      const disconnected = new Promise<void>(resolve => {
+        if (!browser.isConnected()) resolve();
+        else browser.once('disconnected', () => resolve());
+      });
+      await browser.close();
+      await disconnected;
+      expect(browser.isConnected()).toBe(false);
+      mark('browser disconnected');
+    }
+  }
+});
 
 const accountCalls = () => calls.filter(call => call.path.includes('/compte/'));
 const loyaltyCalls = () => accountCalls().filter(call => call.path.endsWith('/fidelite'));

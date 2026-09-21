@@ -342,15 +342,32 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
     expect(post.headers['x-sm-customer-operation-id']).toBeUndefined();
     const local = await page.evaluate(() => window.checkoutAccountFixture.journal.readCheckoutRecovery('recette'));
     expect(local.active).toMatchObject({ state: 'uncertain', provenance: { kind: 'guest' }, clientId: post.body.clientId });
-    // Reload loses the response, not the request's identity. It remains guest
-    // even when the account service later becomes available again.
-    await page.reload(); heldCreate!.res.destroy(); heldCreate = null; holdCreate = false;
-    sessionUnavailable = false; rewardReads = []; rewardTtl = 60_000; rewardValue = 250; holdRewardQuote = false; heldRewardQuote = null; holdRewardMember = false; heldRewardMember = null; zeroPending = false; await page.evaluate(() => window.checkoutAccountFixture.refresh());
+    // Lose an admitted response after headers, so Chromium cannot retry the
+    // POST as an untouched socket. Checkout then makes one read-only recovery
+    // attempt automatically; settle that failed read before the reload below.
+    holdRecovery = true;
+    const responseStarted = page.waitForResponse(response => response.url().endsWith('/orders') && response.request().method() === 'POST');
+    heldCreate!.res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '4096' });
+    heldCreate!.res.write('{');
+    await responseStarted;
+    heldCreate!.res.destroy(); heldCreate = null; holdCreate = false;
+    await expect.poll(() => !!heldRecovery).toBe(true);
+    const reads = () => calls.filter(call => call.path.endsWith('/recovery'));
+    expect(reads()).toHaveLength(1);
+    expect(reads()[0]!.body).toEqual({ clientId: post.body.clientId, recoveryProof: post.body.recoveryProof });
+    json(heldRecovery!, { message: 'Lecture momentanément indisponible' }, 503); heldRecovery = null; holdRecovery = false;
+    await expect.poll(() => page.getByRole('button', { name: 'Retrouver ma commande', exact: true }).isEnabled()).toBe(true);
+    expect(posts()).toHaveLength(1);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.journal.readCheckoutRecovery('recette'))).toMatchObject({ active: local.active });
+    // The uncertain identity remains guest after reload, even when the account
+    // service becomes available. The explicit retry reads that same identity.
+    sessionUnavailable = false;
+    await page.reload();
     await page.waitForFunction(() => !!window.checkoutAccountFixture.access());
+    expect(reads()).toHaveLength(1);
     await activate(page.getByRole('button', { name: 'Retrouver ma commande', exact: true }));
-    await expect.poll(() => calls.filter(call => call.path.endsWith('/recovery')).length).toBe(1);
-    const read = calls.find(call => call.path.endsWith('/recovery'))!;
-    expect(read.body).toMatchObject({ clientId: post.body.clientId, recoveryProof: post.body.recoveryProof });
+    await expect.poll(() => reads().length).toBe(2);
+    expect(reads()[1]!.body).toEqual(reads()[0]!.body);
     expect(posts()).toHaveLength(1);
     await expect.poll(() => page.evaluate(async () => (await window.checkoutAccountFixture.journal.readCheckoutRecovery('recette')).active)).toMatchObject({ state: 'received', provenance: { kind: 'guest' } });
   }, 10_000);
