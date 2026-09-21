@@ -15,7 +15,9 @@ export type LoyaltyWebObservedOrder = RefundOrder & {
   customerOwner?: unknown; customerSaleAttribution?: CustomerSaleAttribution | null; loyaltyWebIntent?: LoyaltyWebIntent | null; loyaltyMemberId?: string | null;
   statusHistory?: readonly { status?: string; at?: Date; by?: string | null }[];
   counterCollection?: { operationId: string; amountCents: number; tender: string; collectedAt: Date } | null;
-  paymentFlow?: { version: number; phase: string; providerStatus?: string | null; attempt?: {
+  paymentFlow?: { version: number; origin?: string; phase: string; providerStatus?: string | null;
+    close?: { operationId: string; destination?: string; reason: string; requestedBy: string; requestedAt: Date } | null;
+    attempt?: {
     id: string; accountId?: string | null; environment: string; amountCents: number; currency: string;
     metadata: { orderId: string; tenantId: string; orderNumber: string }; requestStartedAt?: Date | null;
   } | null } | null;
@@ -40,23 +42,38 @@ function paymentProof(order: LoyaltyWebObservedOrder): HistoricalSaleJson {
     const parsed = OrderRewardSnapshotSchema.safeParse(order.loyaltyReward);
     const snapshot = parsed.success ? parsed.data : null;
     const attribution = order.customerSaleAttribution;
+    const flow = order.paymentFlow, close = flow?.close;
+    const cancelled = order.status === 'cancelled';
+    const cancellationProven = cancelled && flow?.phase === 'closed' && close?.destination === 'cancel_order'
+      && uuid(close.operationId) && id(close.requestedBy) && instant(close.requestedAt) !== null
+      && typeof close.reason === 'string' && close.reason.trim().length > 0;
+    const lifecycleProven = flow?.version === 1 && flow.origin === 'created_v1'
+      && (cancelled ? cancellationProven && ['consumed', 'reversed'].includes(order.loyaltyRewardProcessing?.state ?? '')
+        : flow.phase === 'open' && !close && order.loyaltyRewardProcessing?.state === 'consumed');
     if (!snapshot || !attribution || attribution.decision !== 'attributed'
       || snapshot.clientId !== order.clientId || snapshot.owner.tenantRef !== String(order.tenantId)
       || snapshot.owner.parentRef !== attribution.owner.parentRef || snapshot.owner.accountId !== attribution.owner.accountId
       || snapshot.memberId !== attribution.memberId || snapshot.programId !== attribution.programId
-      || snapshot.rulesVersion !== attribution.rulesVersion
+      // Reservation commits before attribution is captured. A publication in
+      // between may advance the earn rule without changing the canonical
+      // account/member/program or the historical reward debit. Zero earns no
+      // units under either rule; SQL still validates the exact attributed rule.
+      || snapshot.rulesVersion > attribution.rulesVersion
       || snapshot.benefit.amountCents !== order.totals.discount?.amount || (order.totals.discount as { promotionId?: unknown } | null)?.promotionId != null
-      || order.loyaltyRewardProcessing?.state !== 'consumed' || order.loyaltyRewardProcessing.zeroPaid !== true
+      || !lifecycleProven || order.loyaltyRewardProcessing?.zeroPaid !== true
       || !Number.isSafeInteger(order.loyaltyRewardProcessing.orderVersion) || order.loyaltyRewardProcessing.orderVersion! > order.__v!
       || order.loyaltyRewardProcessing.orderVersion! < 0 || order.payment.status !== 'paid'
-      || order.paymentFlow?.phase !== 'open' || order.paymentFlow.attempt || order.payment.stripePaymentIntentId
+      || flow?.attempt || order.payment.stripePaymentIntentId
       || order.counterCollection || order.counterRefundFlow?.operations.length
       || (order.payment.refundedCents ?? 0) !== 0 || (order.payment.pendingRefundCents ?? 0) !== 0
       || order.payment.refunds?.length || order.refundFlow?.operations.length) return invalid('payment_proof_invalid');
     // This private marker is written only after the canonical PG consume
-    // receipt. It never represents a card/cash transfer or a positive gain.
+    // receipt. A canonical cancellation stays unpaid-and-undelivered for
+    // earning, before and after restitution; replay does not mint a zero earn.
+    // Neither branch represents a card/cash transfer or a positive gain.
     return { kind: 'zero_total_reward', reservationId: snapshot.reservationId,
-      pricingHash: snapshot.pricingHash, amountCents: 0, rewardAmountCents: snapshot.benefit.amountCents };
+      pricingHash: snapshot.pricingHash, amountCents: 0, rewardAmountCents: snapshot.benefit.amountCents,
+      ...(cancelled ? { closure: { operationId: close!.operationId, destination: 'cancel_order', at: instant(close!.requestedAt) } } : {}) };
   }
   if (order.payment.method === 'counter') {
     const receipt = order.counterCollection;

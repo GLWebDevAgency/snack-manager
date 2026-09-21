@@ -13,6 +13,8 @@ import { LoyaltyAdminService } from '../loyalty/loyalty-admin.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { loyaltyDb } from '@sm/loyalty';
 import { publicRecoveryBinding } from './order-recovery';
+import type { PrepareCustomerSaleAttribution } from './customer-sale-attribution';
+import { loyaltyWebObservation, type LoyaltyWebObservedOrder } from '../loyalty/loyalty-web-observation';
 
 const pgTarget = process.env.LOYALTY_WEB_TEST_DATABASE_URL, mongoTarget = process.env.CUSTOMER_ORDERS_TEST_MONGO_URL;
 const integration = pgTarget && mongoTarget ? describe : describe.skip;
@@ -38,11 +40,11 @@ integration('reward checkout — actual Mongo + PostgreSQL boundaries', () => {
     const body = mongo.request({ reward: { rewardId, expectedCostUnits: 60 }, expectedTotalCents: 1250 - discount });
     const attribution = { ...earned.attribution, clientId: body.clientId, capturedAt: Date.now(),
       basis: { policyVersion: 'merchandise-net-v1' as const, eligiblePurchaseCents: 1250 - discount, excludedChargeCents: 0, chargedTotalCents: 1250 - discount } };
-    const create = () => replica.checkout.createForCustomer({ slug: 'isolated-capacity', body, owner: earned.attribution.owner,
+    const create = (prepareLoyaltyAttribution: PrepareCustomerSaleAttribution = async () => attribution) => replica.checkout.createForCustomer({ slug: 'isolated-capacity', body, owner: earned.attribution.owner,
       beforeCommit: async () => earned.attribution.owner, sourceKey: `customer:${randomBytes(32).toString('base64url')}`,
-      prepareLoyaltyAttribution: async () => attribution });
+      prepareLoyaltyAttribution });
     const wallet = async () => (await pg.admin.query('SELECT balance_units,reserved_units FROM loyalty.wallets WHERE tenant_ref=$1', [earned.tenantRef])).rows[0];
-    return { earned, mongo, rewards, replica, body, create, wallet, rewardId };
+    return { earned, mongo, rewards, replica, body, create, wallet, rewardId, attribution };
   }
   it('prices and consumes once, then earns only on the remainder after pickup', async () => {
     const f = await seed(); const created = await f.create();
@@ -164,11 +166,78 @@ integration('reward checkout — actual Mongo + PostgreSQL boundaries', () => {
     const f = await seed(1250), created = await f.create();
     const lifecycle = new OrderPaymentLifecycleService(f.mongo.models.orders);
     await lifecycle.cancel(created._id, f.earned.tenantRef, new Types.ObjectId().toHexString(), 'Annulation avant retrait', null);
+    const worker = () => new LoyaltyWebSettlementProcessor(f.mongo.models.orders, pg.service);
+    const read = () => f.mongo.models.orders.findById(created._id).select('+loyaltyRewardProcessing +loyaltyWebProcessing').lean();
+    expect(await worker().drain()).toMatchObject({ claimed: 1, reconciliation: 0, completed: 0, retried: 1 });
+    expect((await read())?.loyaltyRewardProcessing?.state).toBe('consumed');
+    expect((await read())?.loyaltyWebProcessing).toMatchObject({ state: 'pending', dirty: false,
+      nextAttemptAt: null, awardedUnits: null, lastError: 'payment_or_handoff_pending' });
+    expect(await f.wallet()).toEqual({ balance_units: '40', reserved_units: '0' });
+    const sale = async () => (await pg.admin.query(`SELECT initial_units,status,reason FROM loyalty.sale_settlements
+      WHERE tenant_ref=$1 AND client_id=$2`, [f.earned.tenantRef, f.body.clientId])).rows;
+    expect(await sale()).toEqual([{ initial_units: null, status: 'pending', reason: 'payment_or_handoff_pending' }]);
     await f.rewards.reconcile(f.earned.tenantRef, f.body.clientId);
+    expect((await read())?.loyaltyRewardProcessing?.state).toBe('reversed');
+    // Replay a lost Mongo acknowledgement after restitution using the exact
+    // financial versions; the pending SQL case must never turn into a gain.
+    await f.mongo.models.orders.collection.updateOne({ clientId: f.body.clientId }, {
+      $set: { 'loyaltyWebProcessing.dirty': true, 'loyaltyWebProcessing.nextAttemptAt': new Date() },
+    });
+    expect(await worker().drain()).toMatchObject({ claimed: 1, reconciliation: 0, completed: 0, retried: 1 });
     await lifecycle.cancel(created._id, f.earned.tenantRef, new Types.ObjectId().toHexString(), 'Annulation avant retrait', null);
     await f.rewards.reconcile(f.earned.tenantRef, f.body.clientId);
+    for (const elapsed of [65_000, 1_800_000]) {
+      vi.setSystemTime(Date.now() + elapsed);
+      expect((await worker().drain()).claimed).toBe(0);
+      expect(await sale()).toEqual([{ initial_units: null, status: 'pending', reason: 'payment_or_handoff_pending' }]);
+    }
+    expect((await pg.admin.query(`SELECT count(*)::int n FROM loyalty.earn_receipts
+      WHERE tenant_ref=$1 AND external_ref=$2`, [f.earned.tenantRef, `order:${f.body.clientId}`])).rows[0].n).toBe(0);
     expect(await f.wallet()).toEqual({ balance_units: '100', reserved_units: '0' });
     expect((await f.mongo.models.orders.findById(created._id))?.status).toBe('cancelled');
+  });
+  it.each(['delivered', 'cancelled'] as const)('keeps a %s zero order valid when a program publishes after the reward reservation commits', async status => {
+    const f = await seed(1250), admin = new LoyaltyAdminService(loyaltyDb(pg.app), f.mongo.models.products);
+    let entered!: () => void, release!: () => void;
+    const reserved = new Promise<void>(resolve => { entered = resolve; }), published = new Promise<void>(resolve => { release = resolve; });
+    const original = OrderRewardStore.prototype.reserve;
+    vi.spyOn(OrderRewardStore.prototype, 'reserve').mockImplementation(async function(this: OrderRewardStore, input) {
+      const snapshot = await original.call(this, input); entered(); await published; return snapshot;
+    });
+    const pending = f.create(async () => {
+      const current = await admin.getProgram(f.earned.tenantRef);
+      if (!current) throw new Error('Program fixture missing');
+      // The protected identity is fixture-owned; the rule/version comes from
+      // the actual publication, not a fabricated version number.
+      return { ...f.attribution, rulesVersion: current.rulesVersion, rule: current.earn };
+    });
+    await reserved;
+    try {
+      expect((await new OrderRewardStore(pg.app).read(f.earned.tenantRef, f.body.clientId))?.snapshot.rulesVersion).toBe(1);
+      const current = (await admin.getProgram(f.earned.tenantRef))!;
+      const next = await admin.putProgram(f.earned.tenantRef, { name: `${current.name} actualisé`, status: current.status,
+        unitLabelSingular: current.unitLabelSingular, unitLabelPlural: current.unitLabelPlural,
+        termsSummary: current.termsSummary, earn: { mechanism: 'stamps', minimumPurchaseCents: 0,
+          maximumUnitsPerPurchase: null, unitsPerVisit: 1 } });
+      expect(next.rulesVersion).toBe(2);
+    } finally { release(); }
+    const created = await pending;
+    const actor = { sub: new Types.ObjectId().toHexString(), tenantId: f.earned.tenantRef, role: 'owner' as const, kind: 'user' as const };
+    if (status === 'delivered') {
+      await f.replica.orders.updateStatus(actor.tenantId, created._id, 'ready', actor);
+      await f.replica.orders.updateStatus(actor.tenantId, created._id, 'delivered', actor);
+    } else await new OrderPaymentLifecycleService(f.mongo.models.orders).cancel(created._id, actor.tenantId, actor.sub, 'Annulation avant retrait', null);
+    const raw = await f.mongo.models.orders.collection.findOne({ clientId: f.body.clientId });
+    expect(raw?.loyaltyReward.rulesVersion).toBe(1); expect(raw?.customerSaleAttribution.rulesVersion).toBe(2);
+    expect(loyaltyWebObservation(raw as unknown as LoyaltyWebObservedOrder).observation.paidAndDelivered).toBe(status === 'delivered');
+    expect((await new LoyaltyWebSettlementProcessor(f.mongo.models.orders, pg.service).drain()).reconciliation).toBe(0);
+    const stored = (await pg.admin.query(`SELECT initial_units,status,reason FROM loyalty.sale_settlements
+      WHERE tenant_ref=$1 AND client_id=$2`, [f.earned.tenantRef, f.body.clientId])).rows;
+    expect(stored).toEqual([status === 'delivered' ? { initial_units: '0', status: 'recorded', reason: null }
+      : { initial_units: null, status: 'pending', reason: 'payment_or_handoff_pending' }]);
+    await f.rewards.reconcile(f.earned.tenantRef, f.body.clientId);
+    await new LoyaltyWebSettlementProcessor(f.mongo.models.orders, pg.service).drain();
+    expect(await f.wallet()).toEqual({ balance_units: status === 'delivered' ? '40' : '100', reserved_units: '0' });
   });
   it('a fully offered stamp-program visit earns no replacement stamp', async () => {
     const f = await seed(1250, { rule: { mechanism: 'stamps', minimumPurchaseCents: 0, maximumUnitsPerPurchase: null, unitsPerVisit: 100 } });
