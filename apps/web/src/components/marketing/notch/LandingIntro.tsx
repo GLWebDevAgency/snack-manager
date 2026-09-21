@@ -36,12 +36,15 @@ export function LandingIntro() {
           </h1>
           <p className={styles.description}>
             Des outils pour votre service. Un Atelier pour vos menus papier et TV.
+            Des services pour faire connaître votre restaurant : site internet, fiche Google,
+            réseaux sociaux et identité visuelle.
             Un accompagnement adapté à votre façon de travailler.
           </p>
           <div className={styles.actions}>
             <a className={styles.primary} href="#produit">Voir les applications <Arrow diagonal /></a>
             <a className={styles.secondary} href="#contact">Parlons de mon restaurant <Arrow /></a>
           </div>
+          <p className={styles.serviceNote}>Votre site et votre communication, avec ou sans nos logiciels.</p>
         </div>
 
         <div className={styles.cinema}>
