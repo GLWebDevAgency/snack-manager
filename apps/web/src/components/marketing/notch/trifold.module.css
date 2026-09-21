@@ -1,0 +1,84 @@
+/* The object keeps A4 landscape proportions at every breakpoint. Typography scales
+   with the paper container, not with the viewport or the selected presentation. */
+:global(.mk) .scene { --cycle: 18s; --fold-ease: cubic-bezier(.45, 0, .2, 1); position: relative; width: 100%; aspect-ratio: 297 / 210; container-type: inline-size; }
+:global(.mk) .camera { position: absolute; inset: 0; perspective: 1800px; perspective-origin: 50% 40%; }
+:global(.mk) .paper { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(12deg) rotateY(-9deg) rotateZ(-5deg); animation: presentation var(--cycle) var(--fold-ease) infinite; }
+:global(.mk) .leaf { position: absolute; top: 0; width: calc(100% / 3); height: 100%; transform-style: preserve-3d; }
+:global(.mk) .center { left: calc(100% / 3); }
+:global(.mk) .left { left: 0; transform-origin: 100% 50%; transform: translateZ(.7px) rotateY(0deg); animation: leftFold var(--cycle) var(--fold-ease) infinite; }
+:global(.mk) .right { left: calc(200% / 3); transform-origin: 0 50%; transform: translateZ(1.5px) rotateY(0deg); animation: rightFold var(--cycle) var(--fold-ease) infinite; }
+:global(.mk) .face { position: absolute; inset: 0; box-sizing: border-box; overflow: hidden; padding: 11% 10%; color: #28382d; background: #f2edde; backface-visibility: hidden; -webkit-backface-visibility: hidden; border: .5px solid #d5ceba; box-shadow: inset 0 0 0 .5px #ffffff80; }
+:global(.mk) .front { transform: translateZ(.15px); }
+:global(.mk) .back { transform: rotateY(180deg) translateZ(.15px); }
+:global(.mk) .face::after { content: ""; pointer-events: none; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, #77634604 0, #77634604 1px, transparent 1px, transparent 3px), linear-gradient(120deg, #fff8 0%, transparent 38%, #ab936c0c 100%); mix-blend-mode: multiply; }
+:global(.mk) .front::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, #44361c10, transparent 8%, transparent 92%, #44361c14); }
+:global(.mk) .left .front { background-color: #e9e4d4; }
+:global(.mk) .right .front { background-color: #e8dfcd; }
+:global(.mk) .runningHead { display: flex; justify-content: space-between; align-items: center; padding-bottom: 9%; border-bottom: .5px solid #35493250; font-size: .9cqw; letter-spacing: .14em; font-weight: 600; }
+:global(.mk) .face h3 { font-family: Georgia, 'Times New Roman', serif; font-size: 5cqw; line-height: 1.03; letter-spacing: -.055em; font-weight: 400; margin: 13% 0 0; }
+:global(.mk) .face h3 em { font-weight: 400; }
+:global(.mk) .intro { font-size: 1.15cqw; line-height: 1.6; color: #65705f; margin: 9% 0 0; }
+:global(.mk) .dishes { margin-top: 12%; }
+:global(.mk) .dish { padding: 6% 0; border-bottom: .5px solid #51624538; }
+:global(.mk) .dish > div { display: flex; align-items: baseline; justify-content: space-between; gap: 5%; font-size: 1.35cqw; line-height: 1.3; }
+:global(.mk) .dish strong { font-weight: 600; letter-spacing: -.02em; }
+:global(.mk) .dish > div > span { font-family: Georgia, serif; font-size: 1.6cqw; flex-shrink: 0; }
+:global(.mk) .dish p { font-size: 1.02cqw; line-height: 1.55; color: #65705f; margin: 3% 0 0; max-width: 94%; }
+:global(.mk) .menuNote { margin-top: 12%; padding-left: 9%; border-left: 1px solid #a69064; }
+:global(.mk) .menuNote > span { font-size: .82cqw; letter-spacing: .14em; color: #736245; }
+:global(.mk) .menuNote p { margin: 6% 0 0; font-family: Georgia, serif; font-style: italic; font-size: 1.55cqw; line-height: 1.4; }
+:global(.mk) .pageFoot { position: absolute; left: 10%; right: 10%; bottom: 5%; display: flex; justify-content: space-between; font-size: .74cqw; letter-spacing: .1em; border-top: .5px solid #66745540; padding-top: 5%; }
+:global(.mk) .bowlArt { position: absolute; top: 26%; left: 4%; width: 92%; }
+:global(.mk) .bowlArt img, :global(.mk) .dessertArt img, :global(.mk) .burgerArt img { display: block; width: 100%; height: auto; }
+:global(.mk) .starterDishes { position: absolute; top: 57%; left: 10%; right: 10%; }
+:global(.mk) .dessertArt { position: absolute; top: 29%; width: 80%; left: 10%; }
+:global(.mk) .dessertDishes { position: absolute; top: 57%; left: 10%; right: 10%; }
+:global(.mk) .smallCaps { font-size: .95cqw; letter-spacing: .15em; }
+:global(.mk) .signature { background: #d8d0b9; }
+:global(.mk) .signature h3 { margin-top: 25%; }
+:global(.mk) .burgerArt { position: absolute; top: 30%; width: 130%; left: -15%; }
+:global(.mk) .signature > p { position: absolute; left: 10%; right: 10%; bottom: 14%; font: italic 2.2cqw/1.4 Georgia, serif; text-align: center; }
+:global(.mk) .cover { background: #263e33; color: #f1e9d6; border-color: #637362; box-shadow: inset 0 0 0 .5px #e9e0bc40, inset -5px 0 8px #071c1440; }
+:global(.mk) .cover::after { background: repeating-linear-gradient(0deg, #ffffff04 0, #ffffff04 1px, transparent 1px, transparent 3px), linear-gradient(115deg, #ffffff10, transparent 45%, #020e1025); mix-blend-mode: normal; }
+:global(.mk) .coverBorder { position: absolute; inset: 3.5%; border: .5px solid #cbb78960; }
+:global(.mk) .coverTop { display: grid; gap: 1.2cqw; text-align: center; font-size: 1cqw; letter-spacing: .18em; padding-top: 6%; }
+:global(.mk) .coverTop > span:last-child { font-size: .66cqw; letter-spacing: .22em; color: #b8ba9e; }
+:global(.mk) .coverTitle { position: absolute; top: 22%; left: 12%; font: 9.6cqw/.9 Georgia, 'Times New Roman', serif; letter-spacing: -.075em; }
+:global(.mk) .coverTitle em { font-weight: 400; }
+:global(.mk) .coverTitle > span { display: block; margin-top: 13%; font: .74cqw/1.5 var(--font-geist-sans, Arial), sans-serif; letter-spacing: .15em; }
+:global(.mk) .seal { width: 13cqw; height: 13cqw; border: .5px solid #bca87890; border-radius: 50%; outline: .5px solid #bca87840; outline-offset: -1cqw; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: .85cqw; text-align: center; color: #cebc92; transform: rotate(-12deg); }
+:global(.mk) .seal > span { font-size: .7cqw; letter-spacing: .16em; }
+:global(.mk) .seal b { font: italic 2.2cqw/.98 Georgia, serif; letter-spacing: -.04em; }
+:global(.mk) .cover .seal { position: absolute; bottom: 16%; left: 50%; margin-left: -6.5cqw; }
+:global(.mk) .coverBottom { position: absolute; left: 10%; right: 10%; bottom: 6.5%; display: flex; flex-direction: column; align-items: center; gap: 1.3cqw; font-size: .75cqw; letter-spacing: .12em; color: #d2ccb8; }
+:global(.mk) .coverBottom i { display: block; width: 3cqw; height: .5px; background: #bca87890; }
+:global(.mk) .backCover { background: #263e33; color: #eee6d2; text-align: center; }
+:global(.mk) .backCover .seal { margin: 44% auto 0; }
+:global(.mk) .backCover > p { margin: 24% 0 0; font: italic 2cqw/1.5 Georgia, serif; }
+:global(.mk) .backSignature { position: absolute; bottom: 8%; left: 0; right: 0; font-size: .9cqw; letter-spacing: .18em; }
+:global(.mk) .groundShadow { position: absolute; left: 4%; right: 4%; bottom: -5%; height: 12%; border-radius: 50%; background: #020703; filter: blur(22px); opacity: .5; transform: scaleX(.4); animation: shadowSpread var(--cycle) var(--fold-ease) infinite; }
+
+/* A roll fold: the outside cover opens first, the tucked flap follows.
+   The offset keeps the two leaves on distinct planes when they are closed. */
+@keyframes leftFold { 0%, 32%, 84%, 100% { transform: translateZ(.7px) rotateY(180deg); } 49%, 72% { transform: translateZ(.7px) rotateY(0deg); } }
+@keyframes rightFold { 0%, 12%, 100% { transform: translateZ(1.5px) rotateY(-180deg); } 30%, 86% { transform: translateZ(1.5px) rotateY(0deg); } }
+@keyframes presentation { 0%, 12%, 100% { transform: rotateX(9deg) rotateY(-15deg) rotateZ(-6deg) scale(1.04); } 49%, 72% { transform: rotateX(10deg) rotateY(0deg) rotateZ(-3deg) scale(.96); } }
+@keyframes shadowSpread { 0%, 12%, 100% { transform: scaleX(.4); opacity: .55; } 49%, 72% { transform: scaleX(1); opacity: .4; } }
+:global(.mk) .scene[data-running="false"] *, :global(.mk) .scene[data-running="false"] *::after { animation-play-state: paused !important; }
+:global(.mk) .scene:not([data-view="auto"]) .paper, :global(.mk) .scene:not([data-view="auto"]) .leaf, :global(.mk) .scene:not([data-view="auto"]) .groundShadow { animation: none; transition: transform 1.2s var(--fold-ease), opacity 1.2s; }
+:global(.mk) .scene[data-view="open"] .paper { transform: rotateX(10deg) rotateY(0deg) rotateZ(-3deg) scale(.96); }
+:global(.mk) .scene[data-view="open"] .left { transform: translateZ(.7px) rotateY(0deg); transition-delay: 1.2s; }
+:global(.mk) .scene[data-view="open"] .right { transform: translateZ(1.5px) rotateY(0deg); }
+:global(.mk) .scene[data-view="open"] .groundShadow { transform: scaleX(1); opacity: .4; }
+:global(.mk) .scene[data-view="closed"] .paper { transform: rotateX(9deg) rotateY(-15deg) rotateZ(-6deg) scale(1.04); }
+:global(.mk) .scene[data-view="closed"] .left { transform: translateZ(.7px) rotateY(180deg); }
+:global(.mk) .scene[data-view="closed"] .right { transform: translateZ(1.5px) rotateY(-180deg); transition-delay: 1.2s; }
+@media (prefers-reduced-motion: reduce) {
+  :global(.mk) .scene[data-view="auto"] .paper { transform: rotateX(10deg) rotateY(0deg) rotateZ(-3deg) scale(.96); }
+  :global(.mk) .scene[data-view="auto"] .left { transform: translateZ(.7px) rotateY(0deg); }
+  :global(.mk) .scene[data-view="auto"] .right { transform: translateZ(1.5px) rotateY(0deg); }
+  :global(.mk) .scene[data-view="auto"] .groundShadow { transform: scaleX(1); opacity: .4; }
+}
+
+/* Restart the loop at the matching settled pose after a manual view. */
+:global(.mk) .scene[data-start="interior"] .paper, :global(.mk) .scene[data-start="interior"] .leaf, :global(.mk) .scene[data-start="interior"] .groundShadow { animation-delay: -8.82s; }
