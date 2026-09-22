@@ -1,4 +1,4 @@
-import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerVerificationIntentSchema,
+import { customerAccountTimestampWithinFutureBound, CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerVerificationIntentSchema,
   CustomerVerificationPublicResultSchema } from '@sm/contracts';
 import { customerBrowserJournal, type CustomerBrowserJournal, type CustomerBrowserJournalStore,
   type CustomerVerificationJournal } from './browser-journal';
@@ -72,8 +72,9 @@ export function createCustomerVerification(port: Port) {
       return { kind: 'uncertain' };
     }
     if (view.state === 'enrollment') {
+      const now = Date.now();
       if (view.enrollment.operationId !== choice.operationId || view.enrollment.checkId !== choice.checkId
-        || view.enrollment.expiresAt <= Date.now() || view.enrollment.expiresAt > Date.now() + 600_000) throw new Error('Enrollment changed');
+        || view.enrollment.expiresAt <= now || !customerAccountTimestampWithinFutureBound(view.enrollment.expiresAt, now, 600_000)) throw new Error('Enrollment changed');
       // An OTP attests a phone, not a protected account. Keep its exact check
       // selector for enrollment; only activation may later publish a session.
       await move(record, { ...metadata, phase: 'protecting', protection: choice.protection ?? {

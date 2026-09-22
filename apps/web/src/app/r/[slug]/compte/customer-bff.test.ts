@@ -107,8 +107,8 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     ['cookie emission', () => ({ preparation: preparation('issued'), emitCookie: true })],
     ['confirmed cookie emission', () => ({ preparation: preparation('confirmed'), emitCookie: true })],
     ['expired preparation', () => ({ preparation: { ...preparation('confirmed'), admissionExpiresAt: Date.now() - 1_000, expiresAt: Date.now() }, emitCookie: false })],
-    ['overlong lifetime', () => ({ preparation: { ...preparation('confirmed'), expiresAt: Date.now() + 604_801_000 }, emitCookie: false })],
-    ['overlong admission', () => ({ preparation: { ...preparation('confirmed'), admissionExpiresAt: Date.now() + 601_000 }, emitCookie: false })],
+    ['overlong lifetime', () => ({ preparation: { ...preparation('confirmed'), expiresAt: Date.now() + 604_831_000 }, emitCookie: false })],
+    ['overlong admission', () => ({ preparation: { ...preparation('confirmed'), admissionExpiresAt: Date.now() + 631_000 }, emitCookie: false })],
     ['private projection', () => ({ preparation: preparation('confirmed'), emitCookie: false, view: view() })],
   ] as const)('restore refuses %s without cookie mutation', async (_label, output) => {
     mockFetch.mockResolvedValue(Response.json(output()));
@@ -149,6 +149,61 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     expect(cookie).not.toContain('Max-Age'); expect(cookie).not.toContain('Domain=');
     const replay = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
     expect(replay.status).toBe(200); expect(replay.headers.get('set-cookie')).toBeNull();
+  });
+  it.each([1, 35, 30_000])('accepts an API clock %d ms ahead without renewing an intention cookie', async skew => {
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now);
+    const current = { operationId, state: 'open', expiresAt: now + 600_000 + skew };
+    mockFetch.mockResolvedValueOnce(Response.json({ intent: current, emitCookie: true }))
+      .mockResolvedValueOnce(Response.json({ intent: current, emitCookie: false }));
+    const response = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+    const cookie = response.headers.get('set-cookie')!;
+    expect(cookie).toContain(`Expires=${new Date(current.expiresAt).toUTCString()}`);
+    expect(cookie).not.toContain('Max-Age');
+    const replay = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(replay.status).toBe(200); expect(await replay.json()).toEqual(current);
+    expect(replay.headers.get('set-cookie')).toBeNull();
+  });
+  it.each([630_001, 0, -1])('still refuses an unusable intention lifetime %d ms without a proof cookie', async remaining => {
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now);
+    mockFetch.mockResolvedValue(Response.json({ intent: { operationId, state: 'open', expiresAt: now + remaining }, emitCookie: true }));
+    const response = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it('checks intention expiry after the whole response body arrives', async () => {
+    const now = Date.now(); const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    mockFetch.mockResolvedValue(new Response(new ReadableStream({ start(controller) { stream = controller; } }),
+      { headers: { 'Content-Type': 'application/json' } }));
+    const pending = intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    clock.mockReturnValue(now + 2_000);
+    stream.enqueue(new TextEncoder().encode(JSON.stringify({ intent: { operationId, state: 'open', expiresAt: now + 1_000 }, emitCookie: true })));
+    stream.close();
+    const response = await pending;
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it('keeps exact intention binding when the API clock is ahead', async () => {
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now);
+    mockFetch.mockResolvedValue(Response.json({ intent: { operationId: randomUUID(), state: 'open', expiresAt: now + 600_035 }, emitCookie: true }));
+    const response = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each([35, 30_000])('accepts browser admission and session bounds with %d ms of clock difference', async skew => {
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now);
+    const prepared = { ...preparation('confirmed'), expiresAt: now + 604_800_000 + skew, admissionExpiresAt: now + 600_000 + skew };
+    mockFetch.mockResolvedValueOnce(Response.json({ preparation: prepared, emitCookie: false }));
+    const restored = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie: boundCookies }), context);
+    expect(restored.status).toBe(200); expect(await restored.json()).toEqual(prepared);
+    expect(restored.headers.get('set-cookie')).toBeNull();
+    const current = { ...view(), expiresAt: now + 604_800_000 + skew };
+    mockFetch.mockResolvedValueOnce(Response.json(approved(current)));
+    const authenticated = await recover(req('resultat', 'POST', { operationId, checkId }, { cookie: boundCookies }), context);
+    expect(authenticated.status).toBe(200);
+    expect((await authenticated.json()).view.expiresAt).toBe(current.expiresAt);
+    const cookie = authenticated.headers.get('set-cookie')!;
+    expect(cookie).toContain(`Expires=${new Date(current.expiresAt).toUTCString()}`);
+    expect(cookie).not.toContain('Max-Age');
   });
   it('close uses only the browser binding and expires its own proof, never a newer session', async () => {
     const current = { operationId, state: 'closed', expiresAt: Date.now() + 600_000 };
@@ -670,7 +725,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1); expect(cancelled).toHaveBeenCalledTimes(1);
     } finally { timeout.mockRestore(); }
   });
-  it.each([0, 999, 604_800_001])('refuses an unusable or excessive session lifetime %d ms', async remaining => {
+  it.each([0, 999, 604_830_001])('refuses an unusable or excessive session lifetime %d ms', async remaining => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     const current = view(); current.expiresAt = Date.now() + remaining;
     mockFetch.mockResolvedValue(Response.json(approved(current)));
@@ -678,8 +733,8 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
   });
-  it('refuses a challenge beyond the ten-minute policy instead of extending it', async () => {
-    mockFetch.mockResolvedValue(Response.json({ challengeId: randomUUID(), expiresAt: Date.now() + 601_000 }));
+  it('refuses a challenge beyond the ten-minute policy and clock tolerance instead of extending it', async () => {
+    mockFetch.mockResolvedValue(Response.json({ challengeId: randomUUID(), expiresAt: Date.now() + 631_000 }));
     const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'challenge' },
       { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503);

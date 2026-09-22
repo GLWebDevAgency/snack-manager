@@ -155,6 +155,31 @@ async function toNewCode() {
   await page.getByRole('button', { name: 'Afficher mon nouveau secours', exact: true }).waitFor();
 }
 describe('customer credential access — native rendered browser', () => {
+  it.each([35, 30_000])('completes login with a server clock %i ms ahead and preserves its exact deadlines', async skew => {
+    const clientNow = Date.now();
+    await page.clock.setFixedTime(clientNow);
+    expiresAt = clientNow + 600_000 + skew;
+    browserExpires = clientNow + 604_800_000 + skew;
+    verifiedAt = clientNow + skew;
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(assertions).toBe(1);
+    expect(await journal()).toMatchObject({ access: { phase: 'completed', expiresAt, attemptId: publicationId } });
+    expect(steps.filter(step => step.startsWith('intention:'))).toEqual(['intention:prepare']);
+    expect(steps.filter(step => step.startsWith('cle-acces:'))).toEqual(['cle-acces:options', 'cle-acces:assert']);
+    expect(steps.some(step => /verification|confirmation|resultat|protection/.test(step))).toBe(false);
+  });
+  it('refuses excessive future clock skew before invoking credentials or replaying the intention', async () => {
+    const clientNow = Date.now();
+    await page.clock.setFixedTime(clientNow);
+    expiresAt = clientNow + 630_001;
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByText('Cette connexion n’est pas confirmée.', { exact: false }).waitFor();
+    expect(assertions).toBe(0);
+    expect(await journal()).toMatchObject({ access: { phase: 'preparing', expiresAt: null } });
+    expect(steps.filter(step => step.startsWith('intention:'))).toEqual(['intention:prepare']);
+    expect(steps.some(step => step.startsWith('cle-acces:'))).toBe(false);
+  });
   it('preserves a stale uncertain access until terminal browser proof, then explicitly reconnects with a new selector', async () => {
     // Start a genuine pending recovery, then model the seven-day browser expiry.
     await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).click();

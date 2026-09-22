@@ -1,4 +1,4 @@
-import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
+import { customerAccountTimestampWithinFutureBound, CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
   CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema,
   CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER,
   customerAccountResponseLimit, customerAccountRequestTimeoutMs, type CustomerAccountAction, type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
@@ -135,8 +135,9 @@ export function createCustomerAccountClient(port: Port) {
   }
   const parse = (raw: unknown) => {
     const result = CustomerAccountViewSchema.parse(raw);
-    if (result.expiresAt <= now() || result.expiresAt > now() + 7 * 86_400_000
-      || result.profile.phoneVerifiedAt > now()) throw new CustomerAccountHttpError(401);
+    const observedAt = now();
+    if (result.expiresAt <= observedAt || !customerAccountTimestampWithinFutureBound(result.expiresAt, observedAt, 7 * 86_400_000)
+      || !customerAccountTimestampWithinFutureBound(result.profile.phoneVerifiedAt, observedAt, 0)) throw new CustomerAccountHttpError(401);
     return result;
   };
   function invalidate(status: "idle" | "offline" | "guest" = "idle") {
@@ -199,9 +200,10 @@ export function createCustomerAccountClient(port: Port) {
         if (!sameSelection(selected, await selection())) { conflict = true; return; }
         if (!current(run)) return;
         port.announce?.();
-        const fresh = parse(await port.request("session", undefined, selected));
+        const freshRaw = await port.request("session", undefined, selected);
         if (!sameSelection(selected, await selection())) { conflict = true; return; }
         if (!current(run)) return;
+        const fresh = parse(freshRaw);
         if (!sameCustomerSession(viewed, fresh) || viewed.profile.revision !== fresh.profile.revision) { conflict = true; return; }
         const raw = await port.request(action, body.data, selected);
         if (!sameSelection(selected, await selection())) throw new CustomerAccountHttpError(409);

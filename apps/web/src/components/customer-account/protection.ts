@@ -1,4 +1,4 @@
-import { CustomerProtectionPublicResponseSchema, CustomerProtectionRequestSchema,
+import { customerAccountTimestampWithinFutureBound, CustomerProtectionPublicResponseSchema, CustomerProtectionRequestSchema,
   type CustomerEnrollment, type CustomerProtectionPublicResponse, type CustomerProtectionRequest } from '@sm/contracts';
 import { customerBrowserJournal, type CustomerBrowserJournal, type CustomerBrowserJournalStore,
   type CustomerProtectionJournal, type CustomerVerificationJournal } from './browser-journal';
@@ -41,12 +41,13 @@ export function createCustomerProtection(port: Port) {
     await unchanged(record, run);
     const result = CustomerProtectionPublicResponseSchema.parse(await port.request('protection', input));
     await unchanged(record, run);
+    const now = Date.now();
     if (result.state === 'authenticated') {
       if ((body.step !== 'activate' && body.step !== 'activation-result') || result.operationId !== body.operationId
-        || result.activationId !== body.activationId || result.view.expiresAt <= Date.now()
-        || result.view.expiresAt > Date.now() + 7 * 86_400_000) throw new Error('Invalid activation receipt');
+        || result.activationId !== body.activationId || result.view.expiresAt <= now
+        || !customerAccountTimestampWithinFutureBound(result.view.expiresAt, now, 7 * 86_400_000)) throw new Error('Invalid activation receipt');
     } else if (result.enrollment.operationId !== body.operationId || result.enrollment.checkId !== body.checkId
-      || result.enrollment.expiresAt <= Date.now() || result.enrollment.expiresAt > Date.now() + 600_000) throw new Error('Enrollment changed');
+      || result.enrollment.expiresAt <= now || !customerAccountTimestampWithinFutureBound(result.enrollment.expiresAt, now, 600_000)) throw new Error('Enrollment changed');
     return result;
   }
   async function accept(record: Record, result: CustomerProtectionPublicResponse, run: number,

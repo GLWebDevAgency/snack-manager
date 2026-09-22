@@ -8,7 +8,7 @@ const view = (name = "Camille", revision = 0, phoneE164 = "+33600000001") => ({
 });
 const deferred = <T>() => { let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
-function setup() {
+function setup(readNow: () => number = () => now) {
   let current = view(); let active = true;
   let selected = { browserRef: randomUUID(), publication: { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } };
   const selection = vi.fn(async () => structuredClone(selected));
@@ -21,13 +21,38 @@ function setup() {
   }), { selection });
   const announce = vi.fn();
   const lock = vi.fn(async (job: () => Promise<void>) => job());
-  const client = createCustomerAccountClient({ request, lock, announce, now: () => now, active: () => active });
+  const client = createCustomerAccountClient({ request, lock, announce, now: readNow, active: () => active });
   return { client, request, announce, lock, selection,
     changePublication: () => { selected = { ...selected, publication: { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } }; },
     change: (next: ReturnType<typeof view>) => { current = next; }, hide: () => { active = false; client.invalidate("idle"); } };
 }
 
 describe("Compte client — vues privées et mutations sérialisées", () => {
+  it.each(['name', 'logout'] as const)('revalide l’expiration après la dernière lecture du journal avant %s', async action => {
+    let observedAt = now;
+    const f = setup(() => observedAt); await f.client.refresh();
+    const selected = await f.selection(); let reads = 0;
+    f.selection.mockImplementation(async () => {
+      if (++reads === 2) observedAt += 60_000;
+      return structuredClone(selected);
+    });
+    expect(await (action === 'name' ? f.client.saveName('Nouveau nom') : f.client.logout())).toBe(false);
+    expect(f.request.mock.calls.filter(([called]) => called === action)).toHaveLength(0);
+    expect(f.client.getSnapshot()).toMatchObject({ status: 'guest', view: null });
+  });
+
+  it.each(['session', 'phone'] as const)('borne la date future %s sans modifier la preuve reçue', async target => {
+    for (const skew of [35, 30_000, 30_001]) {
+      const f = setup(), supplied = view();
+      if (target === 'session') supplied.expiresAt = now + 604_800_000 + skew;
+      else supplied.profile.phoneVerifiedAt = now + skew;
+      f.change(supplied); await f.client.refresh();
+      expect(f.client.getSnapshot().status).toBe(skew <= 30_000 ? 'authenticated' : 'guest');
+      expect(f.client.getSnapshot().view).toEqual(skew <= 30_000 ? supplied : null);
+      expect(f.client.currentAccess()?.expiresAt ?? null).toBe(skew <= 30_000 ? supplied.expiresAt : null);
+    }
+  });
+
   it('expose seulement la publication publique de la vue affichée, puis la retire à invalidation', async () => {
     const f = setup(); expect(f.client.currentAccess()).toBeNull(); await f.client.refresh();
     const snapshot = f.client.currentAccess()!;
