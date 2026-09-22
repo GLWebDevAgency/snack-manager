@@ -1,4 +1,4 @@
-import { CustomerAccountBrowserRequests, CustomerBrowserPreparationSchema, type CustomerBrowserPreparation } from '@sm/contracts';
+import { customerAccountTimestampWithinFutureBound, CustomerAccountBrowserRequests, CustomerBrowserPreparationSchema, type CustomerBrowserPreparation } from '@sm/contracts';
 import { customerAccountRequest, type CustomerAccountRequest } from './client';
 import { customerBrowserJournal, type CustomerBrowserJournal, type CustomerBrowserJournalStore } from './browser-journal';
 
@@ -30,7 +30,8 @@ export function createCustomerBrowserPreparation(port: Port) {
         if (await port.journal.read() !== null) return { kind: 'uncertain' };
         const now = Date.now();
         if (preparation.state !== 'confirmed' || preparation.expiresAt <= now
-          || preparation.expiresAt > now + 604_800_000 || preparation.admissionExpiresAt > now + 600_000) {
+          || !customerAccountTimestampWithinFutureBound(preparation.expiresAt, now, 604_800_000)
+          || !customerAccountTimestampWithinFutureBound(preparation.admissionExpiresAt, now, 600_000)) {
           return { kind: 'uncertain' };
         }
         // The strict transaction checks null again, including uncoordinated

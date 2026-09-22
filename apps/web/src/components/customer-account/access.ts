@@ -1,4 +1,4 @@
-import { CustomerPasskeyLoginPublicResponseSchema, CustomerPasskeyLoginRequestSchema, CustomerRecoveryPublicResponseSchema,
+import { customerAccountTimestampWithinFutureBound, CustomerPasskeyLoginPublicResponseSchema, CustomerPasskeyLoginRequestSchema, CustomerRecoveryPublicResponseSchema,
   CustomerRecoveryRequestSchema, CustomerVerificationIntentSchema, type CustomerPasskeyLoginRequest,
   type CustomerRecoveryRequest, type CustomerRecoveryPublicResponse, type CustomerPasskeyLoginPublicResponse } from '@sm/contracts';
 import { customerBrowserJournal, CustomerBrowserJournalSchema, type CustomerBrowserJournal, type CustomerBrowserJournalStore,
@@ -37,8 +37,9 @@ export function createCustomerAccess(port: Port) {
     await unchanged(record, run);
     const result = CustomerVerificationIntentSchema.parse(await port.request('intent', { step, operationId: record.access.operationId }));
     await unchanged(record, run);
-    if (result.operationId !== record.access.operationId || result.expiresAt > Date.now() + 600_000
-      || (step === 'prepare' ? result.state !== 'open' || result.expiresAt <= Date.now() : !['closed', 'expired'].includes(result.state))) throw new Error('Intent unconfirmed');
+    const now = Date.now();
+    if (result.operationId !== record.access.operationId || !customerAccountTimestampWithinFutureBound(result.expiresAt, now, 600_000)
+      || (step === 'prepare' ? result.state !== 'open' || result.expiresAt <= now : !['closed', 'expired'].includes(result.state))) throw new Error('Intent unconfirmed');
     return result;
   }
   async function request(record: Record, body: CustomerPasskeyLoginRequest | CustomerRecoveryRequest, run: number): Promise<Result> {
@@ -48,16 +49,17 @@ export function createCustomerAccess(port: Port) {
     const raw = await port.request(action, input);
     await unchanged(record, run);
     const result = action === 'passkey' ? CustomerPasskeyLoginPublicResponseSchema.parse(raw) : CustomerRecoveryPublicResponseSchema.parse(raw);
+    const now = Date.now();
     if (result.state === 'authenticated') {
       const id = action === 'passkey' && (body.step === 'assert' || body.step === 'result') ? body.attemptId
         : (body.step === 'activate' || body.step === 'activation-result') ? body.activationId : null;
-      if (!id || result.operationId !== body.operationId || result.publicationId !== id || result.view.expiresAt <= Date.now()
-        || result.view.expiresAt > Date.now() + 604_800_000) throw new Error('Publication changed');
+      if (!id || result.operationId !== body.operationId || result.publicationId !== id || result.view.expiresAt <= now
+        || !customerAccountTimestampWithinFutureBound(result.view.expiresAt, now, 604_800_000)) throw new Error('Publication changed');
     } else {
       const data = 'recovery' in result ? result.recovery : result;
-      if (data.operationId !== body.operationId || data.attemptId !== body.attemptId || data.expiresAt > Date.now() + 600_000
+      if (data.operationId !== body.operationId || data.attemptId !== body.attemptId || !customerAccountTimestampWithinFutureBound(data.expiresAt, now, 600_000)
         || (record.access.expiresAt !== null && data.expiresAt > record.access.expiresAt)
-        || (result.state !== 'failed' && data.expiresAt <= Date.now())) throw new Error('Attempt changed');
+        || (result.state !== 'failed' && data.expiresAt <= now)) throw new Error('Attempt changed');
       if (result.state === 'recovery-code' && (body.step !== 'recovery-code' || result.recovery.recoveryVersion !== body.expectedVersion + 1)) throw new Error('Rotation changed');
     }
     return result;

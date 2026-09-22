@@ -1,8 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerBrowserJournalSchema, customerPublicationOf, type CustomerBrowserJournal } from './browser-journal';
 import { createCustomerAccess } from './access';
 import type { CustomerAccountRequest } from './client';
+
+afterEach(() => vi.restoreAllMocks());
 
 const secret = () => randomBytes(32).toString('base64url');
 function fixture() {
@@ -51,6 +53,49 @@ function fixture() {
     inactive: () => { active = false; }, newClient: () => createCustomerAccess(port) };
 }
 describe('durable credential access controller', () => {
+  it.each([35, 30_000, 30_001])('bounds a newly prepared intention with %ims server clock skew without changing its IDs', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(), expiresAt = now + 600_000 + skew;
+    f.request.mockImplementationOnce(async (_action, body) => ({ operationId: (body as { operationId: string }).operationId, state: 'open', expiresAt }));
+    const result = await f.client.begin('passkey');
+    expect(result.kind).toBe(skew <= 30_000 ? 'prepared' : 'uncertain');
+    expect(f.stored().access).toMatchObject({ phase: skew <= 30_000 ? 'prepared' : 'preparing', expiresAt: skew <= 30_000 ? expiresAt : null });
+    expect(f.request).toHaveBeenCalledTimes(1); expect(f.passkeys.authenticate).not.toHaveBeenCalled();
+  });
+  it.each([35, 30_000, 30_001])('bounds first result recovery with %ims skew before promoting a preparing intention', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(); f.request.mockRejectedValueOnce(new Error('body lost')); await f.client.begin('passkey');
+    const old = f.stored().access!, expiresAt = now + 600_000 + skew;
+    f.request.mockResolvedValueOnce({ state: 'unresolved', operationId: old.operationId, attemptId: old.attemptId, expiresAt });
+    expect((await f.newClient().resume()).kind).toBe(skew <= 30_000 ? 'prepared' : 'uncertain');
+    expect(f.stored().access).toMatchObject({ operationId: old.operationId, attemptId: old.attemptId,
+      phase: skew <= 30_000 ? 'prepared' : 'preparing' });
+    expect(f.passkeys.authenticate).not.toHaveBeenCalled();
+  });
+  it.each([35, 30_000, 30_001])('bounds the authenticated receipt at seven days with %ims clock skew', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(); await f.client.begin('passkey'); const original = f.request.getMockImplementation()!;
+    f.request.mockImplementation(async (action, body) => {
+      const response = await original(action, body) as { state: string; view?: object };
+      return response.state === 'authenticated' ? { ...response, view: { ...response.view, expiresAt: now + 604_800_000 + skew } } : response;
+    });
+    expect((await f.client.login()).kind).toBe(skew <= 30_000 ? 'authenticated' : 'uncertain');
+    expect(customerPublicationOf(f.stored()) !== null).toBe(skew <= 30_000);
+  });
+  it.each(['intent', 'attempt', 'session'] as const)('never grants clock tolerance to an expired %s', async target => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(); if (target !== 'intent') await f.client.begin('passkey');
+    const original = f.request.getMockImplementation()!;
+    f.request.mockImplementation(async (action, body) => {
+      const response = await original(action, body) as { state: string; view?: object };
+      if (target === 'session') return response.state === 'authenticated' ? { ...response, view: { ...response.view, expiresAt: now } } : response;
+      return { ...response, expiresAt: now };
+    });
+    expect((await (target === 'intent' ? f.client.begin('passkey') : f.client.login())).kind).toBe('uncertain');
+    expect(customerPublicationOf(f.stored())).toBeNull();
+    if (target !== 'session') expect(f.passkeys.authenticate).not.toHaveBeenCalled();
+  });
+
   it('preserves the legacy publication until an explicit access intention masks it', async () => {
     const f = fixture(), old = f.stored().verification!;
     expect(customerPublicationOf(f.stored())).toEqual({ expectedOperationId: old.operationId, expectedCheckId: old.checkId });
@@ -151,10 +196,10 @@ describe('durable credential access controller', () => {
     expect(CustomerBrowserJournalSchema.safeParse({ ...record, access: { ...record.access, phase: 'protecting' } }).success).toBe(false);
     expect(CustomerBrowserJournalSchema.safeParse({ ...record, access: { ...record.access, method: 'recovery', phase: 'completed' } }).success).toBe(false);
   });
-  it('does not accept a reply which renews an admitted attempt expiry', async () => {
+  it.each([1, 35, 30_000])('does not accept a reply which renews an admitted attempt expiry by %ims', async extension => {
     const f = fixture(); await f.client.begin('passkey'); const a = f.stored().access!;
     const original = f.request.getMockImplementation()!;
-    f.request.mockImplementationOnce(async (action, body) => ({ ...(await original(action, body) as object), expiresAt: a.expiresAt! + 1_000 }));
+    f.request.mockImplementationOnce(async (action, body) => ({ ...(await original(action, body) as object), expiresAt: a.expiresAt! + extension }));
     expect((await f.client.login()).kind).toBe('uncertain'); expect(f.stored().access!.expiresAt).toBe(a.expiresAt);
     expect(f.passkeys.authenticate).not.toHaveBeenCalled();
   });

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
   CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CustomerAccountDeploymentTargetSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
   CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit, customerAccountResponseLimit,
-  CUSTOMER_VERIFICATION_TIMING, customerAccountRequestTimeoutMs, customerLoyaltyResponseForView,
+  CUSTOMER_VERIFICATION_TIMING, customerAccountRequestTimeoutMs, customerAccountTimestampWithinFutureBound, customerLoyaltyResponseForView,
   type CustomerEnrollment, type CustomerAccountAction } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 import { parseCustomerOrdersPage, parseCustomerOrderDetail, parseCustomerOrderReorder } from '../../../../components/customer-account/orders-response';
@@ -179,10 +179,10 @@ async function boundedJson(message: Request | Response, signal: AbortSignal, lim
   }
 }
 function discard(response: Response) { if (response.body) void response.body.cancel().catch(() => undefined); }
-function validEnrollment(enrollment: CustomerEnrollment, selected: { operationId: string; checkId: string | null }) {
-  const remaining = enrollment.expiresAt - Date.now();
+function validEnrollment(enrollment: CustomerEnrollment, selected: { operationId: string; checkId: string | null }, now: number) {
+  const remaining = enrollment.expiresAt - now;
   return enrollment.operationId === selected.operationId && enrollment.checkId === selected.checkId
-    && remaining > 0 && remaining <= 600_000;
+    && remaining > 0 && customerAccountTimestampWithinFutureBound(enrollment.expiresAt, now, 600_000);
 }
 
 export async function customerAccount(request: NextRequest, context: CustomerContext, action: Action): Promise<NextResponse> {
@@ -313,10 +313,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const raw = await boundedJson(response, signal, customerAccountResponseLimit(action));
     const output = CustomerAccountResponses[apiAction].safeParse(raw);
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
+    // Validate at complete receipt, allowing only bounded clock differences in
+    // future plausibility. Expiry, identity and absolute cookies stay exact.
+    const now = Date.now();
     if (action === 'loyalty') {
       const result = CustomerAccountResponses.loyalty.parse(output.data);
       const selected = CustomerAccountBrowserRequests.loyalty.parse(parsed.data);
-      if (result.expiresAt <= Date.now() || result.expiresAt > Date.now() + SESSION_MAX_MS
+      if (result.expiresAt <= now || !customerAccountTimestampWithinFutureBound(result.expiresAt, now, SESSION_MAX_MS)
         || (result.state === 'card' && selected.step !== 'card')) return unavailable();
       return privateResponse(NextResponse.json(customerLoyaltyResponseForView(result, orderRewards)));
     }
@@ -332,12 +335,12 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       // exact received credential's confirmed preparation. It must never issue,
       // renew or delete any cookie, nor return a session/publication/profile.
       if (preparationRequest.step === 'restore' && (preparation.state !== 'confirmed' || emitCookie)) return unavailable();
-      if (preparation.expiresAt > Date.now() + SESSION_MAX_MS
-        || preparation.admissionExpiresAt > Date.now() + 600_000
-        || (preparation.state !== 'expired' && preparation.expiresAt <= Date.now())
+      if (!customerAccountTimestampWithinFutureBound(preparation.expiresAt, now, SESSION_MAX_MS)
+        || !customerAccountTimestampWithinFutureBound(preparation.admissionExpiresAt, now, 600_000)
+        || (preparation.state !== 'expired' && preparation.expiresAt <= now)
         || (preparation.state === 'confirmed' && preparationRequest.step === 'confirm' && browser.kind !== 'valid')) return unavailable();
       if (emitCookie && (preparationRequest.step !== 'issue' || !candidateSecret
-        || preparation.admissionExpiresAt <= Date.now() || preparation.state !== 'issued')) return unavailable();
+        || preparation.admissionExpiresAt <= now || preparation.state !== 'issued')) return unavailable();
       const result = privateResponse(NextResponse.json(preparation));
       // Exactly one admitted issue may emit the candidate. Retrying prepare or
       // confirming receipt never rewrites cookies. Absolute expiry cannot slide
@@ -350,11 +353,11 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       if (!('intent' in output.data) || !('emitCookie' in output.data)
         || output.data.intent.operationId !== intentRequest?.operationId) return unavailable();
       const { intent, emitCookie } = output.data;
-      if (intent.expiresAt > Date.now() + 600_000
-        || (intent.state === 'open' && intent.expiresAt <= Date.now())
+      if (!customerAccountTimestampWithinFutureBound(intent.expiresAt, now, 600_000)
+        || (intent.state === 'open' && intent.expiresAt <= now)
         || (intentRequest.step === 'close' && intent.state !== 'closed' && intent.state !== 'expired')) return unavailable();
       if (emitCookie && (intentRequest.step !== 'prepare' || !candidateProof
-        || intent.state !== 'open' || intent.expiresAt <= Date.now())) return unavailable();
+        || intent.state !== 'open' || intent.expiresAt <= now)) return unavailable();
       const result = privateResponse(NextResponse.json(intent));
       if (emitCookie && candidateProof) result.cookies.set(intentCookieName(slug, intent.operationId), candidateProof,
         { ...cookieOptions(), expires: new Date(intent.expiresAt) });
@@ -366,13 +369,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       const recovered = CustomerAccountResponses.recover.parse(output.data);
       const selected = CustomerAccountBrowserRequests.recover.parse(parsed.data);
       if (recovered.operationId !== selected.operationId || recovered.checkId !== selected.checkId
-        || recovered.expiresAt > Date.now() + 600_000
-        || (!['expired', 'closed', 'failed'].includes(recovered.state) && recovered.expiresAt <= Date.now())) return unavailable();
-      if (recovered.state === 'enrollment' && !validEnrollment(recovered.enrollment, selected)) return unavailable();
+        || !customerAccountTimestampWithinFutureBound(recovered.expiresAt, now, 600_000)
+        || (!['expired', 'closed', 'failed'].includes(recovered.state) && recovered.expiresAt <= now)) return unavailable();
+      if (recovered.state === 'enrollment' && !validEnrollment(recovered.enrollment, selected, now)) return unavailable();
       if (recovered.state !== 'approved') return privateResponse(NextResponse.json(recovered));
       const { token, ...publicResult } = recovered;
-      const remaining = recovered.view.expiresAt - Date.now();
-      if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+      const remaining = recovered.view.expiresAt - now;
+      if (remaining < 1_000 || !customerAccountTimestampWithinFutureBound(recovered.view.expiresAt, now, SESSION_MAX_MS)) return unavailable();
       const result = privateResponse(NextResponse.json(publicResult));
       result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(recovered.view.expiresAt) });
       return result;
@@ -380,11 +383,11 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (action === 'check') {
       const checked = CustomerAccountResponses.check.parse(output.data);
       const selected = CustomerAccountBrowserRequests.check.parse(parsed.data);
-      if (checked.state === 'enrollment') return validEnrollment(checked.enrollment, selected)
+      if (checked.state === 'enrollment') return validEnrollment(checked.enrollment, selected, now)
         ? privateResponse(NextResponse.json(checked)) : unavailable();
       const { token, view } = checked;
-      const remaining = view.expiresAt - Date.now();
-      if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+      const remaining = view.expiresAt - now;
+      if (remaining < 1_000 || !customerAccountTimestampWithinFutureBound(view.expiresAt, now, SESSION_MAX_MS)) return unavailable();
       const result = privateResponse(NextResponse.json({ state: 'authenticated', view }));
       result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(view.expiresAt) });
       return result;
@@ -396,8 +399,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
         const publicationId = action === 'passkey' && (selected.step === 'assert' || selected.step === 'result') ? selected.attemptId
           : (selected.step === 'activate' || selected.step === 'activation-result') ? selected.activationId : null;
         if (!publicationId || result.operationId !== selected.operationId || result.publicationId !== publicationId) return unavailable();
-        const remaining = result.view.expiresAt - Date.now();
-        if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+        const remaining = result.view.expiresAt - now;
+        if (remaining < 1_000 || !customerAccountTimestampWithinFutureBound(result.view.expiresAt, now, SESSION_MAX_MS)) return unavailable();
         const { token, ...publicResult } = result;
         const response = privateResponse(NextResponse.json(publicResult));
         response.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(result.view.expiresAt) });
@@ -405,7 +408,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       }
       const metadata = 'recovery' in result ? result.recovery : result;
       if (metadata.operationId !== selected.operationId || metadata.attemptId !== selected.attemptId
-        || metadata.expiresAt > Date.now() + 600_000 || (result.state !== 'failed' && metadata.expiresAt <= Date.now())) return unavailable();
+        || !customerAccountTimestampWithinFutureBound(metadata.expiresAt, now, 600_000) || (result.state !== 'failed' && metadata.expiresAt <= now)) return unavailable();
       if (result.state === 'options' && (action !== 'passkey' || selected.step !== 'options' || result.options.allowCredentials.length !== 0)) return unavailable();
       if (result.state === 'registration-options' && (selected.step !== 'registration-options' || result.registrationId !== selected.registrationId)) return unavailable();
       if (result.state === 'assertion-options' && (selected.step !== 'assertion-options' || result.assertionId !== selected.assertionId)) return unavailable();
@@ -420,13 +423,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
         if ((selected.step !== 'activate' && selected.step !== 'activation-result')
           || protectedResult.operationId !== selected.operationId || protectedResult.activationId !== selected.activationId) return unavailable();
         const { token, ...publicResult } = protectedResult;
-        const remaining = publicResult.view.expiresAt - Date.now();
-        if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+        const remaining = publicResult.view.expiresAt - now;
+        if (remaining < 1_000 || !customerAccountTimestampWithinFutureBound(publicResult.view.expiresAt, now, SESSION_MAX_MS)) return unavailable();
         const result = privateResponse(NextResponse.json(publicResult));
         result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(publicResult.view.expiresAt) });
         return result;
       }
-      if (!validEnrollment(protectedResult.enrollment, selected)) return unavailable();
+      if (!validEnrollment(protectedResult.enrollment, selected, now)) return unavailable();
       if (protectedResult.state === 'registration-options' && (selected.step !== 'registration-options'
         || protectedResult.registrationId !== selected.registrationId)) return unavailable();
       if (protectedResult.state === 'assertion-options' && (selected.step !== 'assertion-options'
@@ -436,8 +439,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       // activation receipt above may publish a personal credential.
       return privateResponse(NextResponse.json(protectedResult));
     }
-    if ('expiresAt' in output.data && (output.data.expiresAt <= Date.now()
-      || output.data.expiresAt - Date.now() > (action === 'start' ? 600_000 : SESSION_MAX_MS))) return unavailable();
+    if ('expiresAt' in output.data && (output.data.expiresAt <= now
+      || !customerAccountTimestampWithinFutureBound(output.data.expiresAt, now, action === 'start' ? 600_000 : SESSION_MAX_MS))) return unavailable();
     return privateResponse(NextResponse.json(output.data));
   } catch { return action === 'status' ? closed() : unavailable(); }
 }
