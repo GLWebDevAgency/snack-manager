@@ -8,11 +8,11 @@ import type { useCustomerEnrollment } from './useCustomerEnrollment';
 
 const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-extrabold text-onaccent disabled:cursor-not-allowed disabled:opacity-40';
 const secondary = 'cf-press min-h-11 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40';
-type Props = ReturnType<typeof useCustomerEnrollment> & { available: boolean; onSignup?: () => void };
+type Props = ReturnType<typeof useCustomerEnrollment> & { available: boolean; onSignup?: () => void; signupUnavailable?: boolean };
 
 /** No personal account lookup by phone. Secrets are input/display memory only;
  * the parent owns pausing, locking and the public durable flow selection. */
-export function CustomerAccess({ state, flow, available, onSignup }: Props) {
+export function CustomerAccess({ state, flow, available, onSignup, signupUnavailable = false }: Props) {
   const id = useId(), heading = useRef<HTMLHeadingElement>(null);
   const [code, setCode] = useState(''), [saved, setSaved] = useState(false), [closing, setClosing] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -53,7 +53,8 @@ export function CustomerAccess({ state, flow, available, onSignup }: Props) {
         <Tap className="min-h-11 text-left text-sm font-semibold underline underline-offset-4" disabled={locked || !supported} onClick={() => void flow?.restore()}>Reprendre sur cet appareil</Tap>
         <p className="text-xs leading-5 text-mut">Retrouve seulement cet appareil, jamais un compte sans votre clé ou votre secours.</p>
       </div>}
-      {onSignup && <div className="border-t border-ink/10 pt-3"><p className="text-xs leading-5 text-mut">Vous n’avez pas encore de compte ?</p>
+      {signupUnavailable ? <p role="status" className="border-t border-ink/10 pt-3 text-sm leading-6 text-mut">Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.</p>
+        : onSignup && <div className="border-t border-ink/10 pt-3"><p className="text-xs leading-5 text-mut">Vous n’avez pas encore de compte ?</p>
         <Tap className="min-h-11 text-left text-sm font-semibold underline underline-offset-4" disabled={locked} onClick={onSignup}>Créer un compte protégé</Tap></div>}
     </>}
     {phase === 'prepared' && access?.method === 'recovery' && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit(false); }}>

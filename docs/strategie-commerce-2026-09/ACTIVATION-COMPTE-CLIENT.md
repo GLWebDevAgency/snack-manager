@@ -1,5 +1,36 @@
 # Préflight opérateur du compte client
 
+**Contrôle du 24 septembre 2026, staging `6d18f9c0` :** l'accès par clé et
+la continuité du compte restent distincts de l'envoi SMS. Le préflight de
+configuration refuse les attestations et la politique expirées le 14 septembre ;
+la preuve tarifaire a également dépassé sa durée de fraîcheur. La lecture SQL
+confirme un financement expiré et entièrement réservé : un envoi sur un,
+500 000 microUSD sur 500 000. Ces réservations ne sont pas une facture Twilio.
+Le GET du service Verify réussit et son empreinte correspond à la configuration.
+La Console affiche un compte actif et mis à niveau, SMS et Fraud Guard activés,
+mais demande un profil principal de conformité approuvé pour les nouveaux
+destinataires ; la page Trust Hub ne présente aucun profil principal existant.
+Aucune attestation, autorisation financière ou configuration n'a été renouvelée
+par ce contrôle ; aucune nouvelle inscription SMS n'est déclarée validée.
+
+Les capacités publiques `available`, `registrationAvailable` et
+`accessAvailable` sont indépendantes : le premier indique l'envoi SMS disponible,
+les deux autres l'ouverture des parcours d'inscription et d'accès. Un parcours
+d'inscription ouvert n'autorise pas à annoncer qu'un code peut être envoyé.
+L'interface doit prévenir dès l'entrée si un nouveau parcours ne peut pas
+envoyer son code, tout en préservant la connexion par clé, le secours et la
+reprise d'une inscription déjà vérifiée. Le serveur reste l'autorité au moment
+de chaque opération.
+
+Pour reprendre la recette d'inscription : faire approuver le profil demandé par
+Twilio, observer à nouveau les protections et tarifs, puis préparer une nouvelle
+autorisation financière bornée et ses attestations. Ne pas modifier les dates
+de l'autorisation consommée ni effacer ses réservations. Après activation
+explicite du nouveau financement, relire préflight et capacités, puis tester
+avec une identité de recette autorisée. Un compte déjà activé ne doit pas être
+réinscrit ou récupéré simplement pour compléter une recette. La connexion
+native avec une clé existante reste un contrôle séparé sur l'appareil du titulaire.
+
 **Contrôle du 20 septembre 2026 :** sur Classfood staging, la configuration
 d'accès compte est valide en mode `production_paid` (la cible reste staging).
 Le navigateur montre un compte existant authentifié, son profil vérifié et une
