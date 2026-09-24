@@ -118,10 +118,18 @@ describe('Storefront live availability',()=>{
  await page.frameLocator('iframe[title="Contrôle de recette"]').getByLabel('Preuve de recette').fill('preuve');
  answer=null;const before=reads.length;await page.getByRole('button',{name:/^Payer/}).click();
  await page.getByLabel('Carte de recette').fill('Champ conservé');await expect.poll(()=>reads.length).toBe(before+1);
- expect(await header().textContent()).toContain('Ouvert');json(reads.at(-1)!,snapshot);
+ expect(await header().textContent()).toContain('Ouvert · retrait dès');
  const initial=await page.evaluate(()=>({...window.availabilityFixture}));
- answer={...snapshot,ordering:{paused:true,message:'Cuisine en pause.'}};await event('focus');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
- await visibility('hidden');await visibility('visible');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
+ // res.end alone does not mean the browser consumed the held read. Wait for
+ // its distinct rendered result; the next browser task also follows the
+ // promise.finally microtask that releases the hook's singleflight.
+ json(reads.at(-1)!,{...snapshot,slots:{...snapshot.slots,slots:[]}});
+ await expect.poll(()=>header().textContent()).toBe('Ouvert');
+ const refreshed=reads.length;
+ answer={...snapshot,ordering:{paused:true,message:'Cuisine en pause.'}};await event('focus');
+ await expect.poll(()=>reads.length).toBe(refreshed+1);await expect.poll(()=>header().textContent()).toBe('Commande en pause');
+ await visibility('hidden');await expect.poll(()=>header().textContent()).toBe('Disponibilités à vérifier');
+ await visibility('visible');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
  expect(await page.getByLabel('Carte de recette').inputValue()).toBe('Champ conservé');
  expect(await page.evaluate(()=>({...window.availabilityFixture}))).toEqual(initial);expect(initial.mounts).toBe(1);expect(initial.unmounts).toBe(0);
  expect(await page.getByText('Commande en ligne suspendue',{exact:true}).count()).toBe(0);expect(writes).toHaveLength(2);
