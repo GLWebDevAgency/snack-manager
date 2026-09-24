@@ -118,9 +118,11 @@ describe('Storefront live availability',()=>{
  await page.frameLocator('iframe[title="Contrôle de recette"]').getByLabel('Preuve de recette').fill('preuve');
  answer=null;const before=reads.length;await page.getByRole('button',{name:/^Payer/}).click();
  await page.getByLabel('Carte de recette').fill('Champ conservé');await expect.poll(()=>reads.length).toBe(before+1);
- expect(await header().textContent()).toContain('Ouvert');json(reads.at(-1)!,snapshot);
+ const held=reads.at(-1)!;expect(await header().textContent()).toContain('Ouvert');
  const initial=await page.evaluate(()=>({...window.availabilityFixture}));
- answer={...snapshot,ordering:{paused:true,message:'Cuisine en pause.'}};await event('focus');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
+ // Complete the held read with the paused state. A second focus immediately
+ // after json() can be coalesced before the browser has consumed that response.
+ answer={...snapshot,ordering:{paused:true,message:'Cuisine en pause.'}};json(held,answer);await expect.poll(()=>header().textContent()).toBe('Commande en pause');
  await visibility('hidden');await visibility('visible');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
  expect(await page.getByLabel('Carte de recette').inputValue()).toBe('Champ conservé');
  expect(await page.evaluate(()=>({...window.availabilityFixture}))).toEqual(initial);expect(initial.mounts).toBe(1);expect(initial.unmounts).toBe(0);
