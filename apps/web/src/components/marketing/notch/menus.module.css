@@ -48,25 +48,24 @@
 :global(.mk) .experience[data-mode="ensemble"] .designRule, :global(.mk) .experience[data-mode="ensemble"] .designNote { display: none; }
 :global(.mk) .experience[data-mode="ensemble"] .paperRig { width: 43%; left: 32%; top: 53%; max-width: 560px; }
 :global(.mk) .experience[data-mode="ensemble"] .tvRig { width: 53%; left: 69%; top: 34%; opacity: 1; visibility: visible; transform: translate(-50%, -50%) rotate(2deg); }
-:global(.mk) .experience[data-mode="ensemble"] .tvCopy > strong { font-size: clamp(24px, 3.2vw, 48px); }
 :global(.mk) .experience .tvSlide, :global(.mk) .experience .tvFood { animation-play-state: paused; }
 :global(.mk) .experience[data-playing="true"]:not([data-mode="papier"]) .tvSlide, :global(.mk) .experience[data-playing="true"]:not([data-mode="papier"]) .tvFood { animation-play-state: running; }
 :global(.mk) .television { background: #080909; padding: 10px 10px 17px; border: 1px solid #57594b; border-radius: 16px; box-shadow: 0 34px 60px #0008, 0 1px 0 #9998 inset; position: relative; }
-:global(.mk) .tvScreen { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 5px; background: #1d281e; }
+:global(.mk) .tvScreen { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 5px; background: #1d281e; container-type: inline-size; }
 :global(.mk) .tvSlide { position: absolute; inset: 0; overflow: hidden; background: #233b2c; }
 :global(.mk) .tvSlideOne { animation: compositionOne 14s ease-in-out infinite; z-index: 2; }
 :global(.mk) .tvSlideTwo { background: #26362f; animation: compositionTwo 14s ease-in-out infinite; opacity: 0; z-index: 3; }
-:global(.mk) .tvCopy { position: absolute; left: 7%; top: 11%; z-index: 2; width: 52%; }
-:global(.mk) .tvCopy > span { font-size: clamp(6px, .7vw, 10px); letter-spacing: .16em; color: #d3d2b8; }
-:global(.mk) .tvCopy > strong { display: block; margin-top: 8%; font-size: clamp(24px, 5vw, 70px); letter-spacing: -.06em; line-height: .98; font-weight: 500; }
+:global(.mk) .tvCopy { position: absolute; left: 7%; top: 11%; z-index: 2; width: 52%; font-size: 1.6cqw; line-height: 1.5; }
+:global(.mk) .tvCopy > span { display: block; font-size: 1.35cqw; line-height: 1.4; letter-spacing: .16em; color: #d3d2b8; }
+:global(.mk) .tvCopy > strong { display: block; margin-top: 8%; font-size: 9cqw; letter-spacing: -.06em; line-height: .98; font-weight: 500; }
 :global(.mk) .tvCopy em { font-family: Georgia, serif; font-weight: 400; color: #d5b987; }
-:global(.mk) .tvCopy > p { margin: 8% 0 5%; font-size: clamp(10px, 1.3vw, 18px); }
-:global(.mk) .tvCopy > b { font-weight: 400; color: #c3c6b6; font-size: clamp(7px, .85vw, 12px); }
+:global(.mk) .tvCopy > p { margin: 8% 0 5%; font-size: 2.3cqw; }
+:global(.mk) .tvCopy > b { display: block; font-weight: 400; color: #c3c6b6; font-size: 1.6cqw; line-height: 1.5; }
 :global(.mk) .tvHalo { position: absolute; width: 61%; aspect-ratio: 1; border-radius: 50%; border: 1px solid #d6bd8233; right: -13%; top: -7%; background: #8d9f6240; box-shadow: 0 0 0 45px #d6bd8209; }
 :global(.mk) .tvFood { position: absolute; display: block; width: 72%; height: auto; right: -12%; top: 5%; object-fit: contain; filter: drop-shadow(0 30px 12px #0003); animation: foodFloat 7s ease-in-out infinite; }
 :global(.mk) .tvSlideTwo .tvFood { width: 76%; top: 4%; right: -14%; }
-:global(.mk) .compositionNumber { position: absolute; bottom: 16%; right: 5%; letter-spacing: .15em; font-size: clamp(7px, .8vw, 11px); color: #e0d4b8; }
-:global(.mk) .tvFooter { position: absolute; display: flex; justify-content: space-between; bottom: 0; left: 0; right: 0; padding: 2% 6%; color: #d1d5c0; background: #102517; font-size: clamp(5px, .6vw, 9px); letter-spacing: .13em; z-index: 4; }
+:global(.mk) .compositionNumber { position: absolute; bottom: 16%; right: 5%; letter-spacing: .15em; font-size: 1.4cqw; color: #e0d4b8; }
+:global(.mk) .tvFooter { position: absolute; display: flex; justify-content: space-between; bottom: 0; left: 0; right: 0; padding: 2% 6%; color: #d1d5c0; background: #102517; font-size: 1.15cqw; letter-spacing: .13em; z-index: 4; }
 :global(.mk) .tvStatus { width: 3px; height: 3px; position: absolute; bottom: 6px; left: 50%; background: #afc29e; border-radius: 50%; }
 :global(.mk) .tvStand { width: 31%; height: 14px; margin: 0 auto; border-radius: 0 0 50% 50%; background: linear-gradient(#373930, #12130f); box-shadow: 0 16px 28px #0005; }
 :global(.mk) .offerLedger { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 44px; border-top: 1px solid #d4cdbf; border-bottom: 1px solid #d4cdbf; }
@@ -140,10 +139,6 @@
 :global(.mk) .paperControls button { padding: 9px 12px; min-height: 44px; font-size: 10px; }
 :global(.mk) .tvRig { width: 89%; top: 48%; }
 :global(.mk) .television { border-radius: 9px; padding: 5px 5px 10px; }
-:global(.mk) .tvCopy > strong { font-size: clamp(26px, 6.3vw, 44px); }
-:global(.mk) .tvCopy > span { font-size: 5px; }
-:global(.mk) .tvCopy > p { font-size: 9px; }
-:global(.mk) .tvCopy > b { font-size: 6px; }
 :global(.mk) .tvStatus { bottom: 3px; width: 2px; height: 2px; }
 :global(.mk) .tvStand { height: 8px; }
 :global(.mk) .experience[data-mode="tv"] .sceneCaption { bottom: 30px; }
@@ -152,7 +147,6 @@
 :global(.mk) .motionControl { justify-self: start; font-size: 10px; min-height: 44px; }
 :global(.mk) .experience[data-mode="ensemble"] .tvRig { width: 72%; left: 59%; top: 37%; }
 :global(.mk) .experience[data-mode="ensemble"] .paperRig { width: 64%; left: 37%; top: 54%; }
-:global(.mk) .experience[data-mode="ensemble"] .tvCopy > strong { font-size: clamp(22px, 4.8vw, 30px); }
 :global(.mk) .offerLedger { grid-template-columns: 1fr; margin-top: 28px; }
 :global(.mk) .offer { display: grid; grid-template-columns: 1fr auto; column-gap: 20px; padding: 24px 0; }
 :global(.mk) .offer + .offer { border-left: 0; border-top: 1px solid #d4cdbf; padding: 24px 0; }
