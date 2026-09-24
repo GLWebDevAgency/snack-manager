@@ -24,8 +24,8 @@
 :global(.mk) .dish strong { font-weight: 600; letter-spacing: -.02em; }
 :global(.mk) .dish > div > span { font-family: Georgia, serif; font-size: 1.6cqw; flex-shrink: 0; }
 :global(.mk) .dish p { font-size: 1.02cqw; line-height: 1.55; color: #65705f; margin: 3% 0 0; max-width: 94%; }
-:global(.mk) .menuNote { margin-top: 12%; padding-left: 9%; border-left: 1px solid #a69064; }
-:global(.mk) .menuNote > span { font-size: .82cqw; letter-spacing: .14em; color: #736245; }
+:global(.mk) .menuNote { margin-top: 8%; padding-left: 9%; border-left: 1px solid #a69064; }
+:global(.mk) .menuNote > span { display: block; font-size: .82cqw; line-height: 1.4; letter-spacing: .14em; color: #736245; }
 :global(.mk) .menuNote p { margin: 6% 0 0; font-family: Georgia, serif; font-style: italic; font-size: 1.55cqw; line-height: 1.4; }
 :global(.mk) .pageFoot { position: absolute; left: 10%; right: 10%; bottom: 5%; display: flex; justify-content: space-between; font-size: .74cqw; letter-spacing: .1em; border-top: .5px solid #66745540; padding-top: 5%; }
 :global(.mk) .bowlArt { position: absolute; top: 26%; left: 4%; width: 92%; }
