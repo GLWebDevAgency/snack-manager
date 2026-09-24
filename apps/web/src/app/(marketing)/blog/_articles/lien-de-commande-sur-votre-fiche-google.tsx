@@ -1,226 +1,107 @@
-/*
- * `react/no-unescaped-entities` est désactivée ici, et par fichier : la prose
- * d'un article est du texte JSX (gras, emphase et renvois au milieu des
- * phrases), là où tout le reste du dépôt affiche des CHAÎNES venues de
- * `content.ts`, que la règle ne voit pas. Le raisonnement complet est dans
- * `_articles/blocs.tsx`, en tête de fichier.
- */
 /* eslint-disable react/no-unescaped-entities */
-import { Etape, Etapes, Note, Renvoi, Sources, Ui, type Source } from "./blocs";
-
-/**
- * Article pratique — le meilleur argument de la vitrine, déplié en mode d'emploi.
- *
- * ═══ CE QUI EST VÉRIFIÉ, ET CE QU'ON NE DIRA PAS ═══
- *
- * Toute la procédure est recopiée de la page d'aide Google (answer/10842217),
- * libellés d'interface compris et à l'identique — un libellé « amélioré » est un
- * libellé introuvable pour le lecteur qui a l'écran sous les yeux.
- *
- * DEUX PHRASES SONT INTERDITES DANS CET ARTICLE, et elles reviendraient toutes
- * seules si on ne les nommait pas :
- *
- *   · « Google retirera les liens des plateformes. » Rien ne le garantit, et
- *     nous n'avons aucun moyen de le tenir à la place de Google.
- *   · « Comptez X jours. » Google ne publie aucun délai de prise en compte.
- *     Un délai inventé se vérifie tout seul, et contre nous.
- *
- * Le fond commercial suit la règle de la maison : les plateformes sont un ATOUT
- * — elles amènent des clients qu'on n'aurait pas eus et elles portent les sacs.
- * On AJOUTE un lien, on n'en retire aucun.
- */
-
-const SOURCES: readonly Source[] = [
-  {
-    url: "https://support.google.com/business/answer/10842217?hl=fr",
-    libelle: "Google — Gérer les options de commande en ligne (aide Profil d'établissement)",
-    consultee: "21 août 2026",
-  },
-];
+import Link from "next/link";
+import { Etape, Etapes, Note, Renvoi, Ui } from "./blocs";
 
 export function corps() {
   return (
     <>
       <p className="bl-p">
-        Ouvrez votre restaurant sur Google, depuis un téléphone, comme le ferait un client à 19 h 40. Il y a de fortes
-        chances qu'un bouton de commande soit déjà là. Et il y a de fortes chances qu'il ne mène pas chez vous.
-      </p>
-      <p className="bl-p">
-        Ce bouton n'est pas une erreur, et ce n'est pas non plus une fatalité : Google vous laisse ajouter votre propre
-        lien de commande à votre fiche, et le désigner comme le lien <strong>préféré</strong>. C'est gratuit, ça se fait
-        depuis votre fiche d'établissement, et ça prend moins de temps que de composer un menu. Voici où cliquer,
-        exactement, et ce qu'il faut avoir préparé avant.
+        Une personne trouve votre restaurant sur Google, regarde votre carte et souhaite commander.
+        Le lien proposé doit l'amener au bon établissement, avec les bons horaires et un parcours utilisable.
+        Avant de modifier la fiche, vérifiez donc la destination. Une adresse correcte évite de demander au
+        client de chercher une seconde fois votre restaurant sur une autre page.
       </p>
 
-      <h2 className="bl-h2">Ce que votre client voit aujourd'hui</h2>
+      <h2 className="bl-h2" id="preparer">Préparer la fiche et la page de commande</h2>
       <p className="bl-p">
-        Sur une fiche de restaurant, Google agrège des <em>options de commande</em>. Elles viennent de fournisseurs
-        tiers connectés à votre établissement — les plateformes de commande et de livraison, principalement — et de tout
-        lien que vous avez vous-même renseigné. Le client, lui, ne voit pas cette plomberie : il voit un bouton, il
-        appuie, il atterrit quelque part.
+        Vous devez disposer de l'accès de gestion à une fiche validée. Préparez l'adresse complète de votre
+        page de commande, puis ouvrez-la sur un téléphone sans utiliser votre session de restaurateur.
+        Vérifiez le nom de l'établissement, l'adresse de retrait, la carte et les moyens de paiement.
       </p>
       <p className="bl-p">
-        C'est tout l'enjeu de l'affaire. Ce n'est pas une histoire de référencement, c'est une histoire de{" "}
-        <strong>destination du clic</strong>. Votre fiche fait déjà son travail : elle vous a trouvé le client. La seule
-        question qui reste est de savoir où ce client termine sa commande, et sous quelles conditions.
+        Google demande une page dédiée à l'établissement où le client peut effectuer l'action annoncée.
+        Un bouton de commande ne doit pas mener à un réseau social, un service de messagerie ou un
+        réducteur de liens. Consultez les <a className="bl-renvoi" href="https://support.google.com/business/answer/13769188?hl=fr">règles officielles relatives aux liens</a> avant l'ajout.
       </p>
+      <Note titre="Carte et commande ont deux rôles distincts">
+        Un lien « Menu » aide à choisir. Un lien de commande permet de sélectionner des produits et de
+        transmettre la commande. Un PDF de votre carte peut être utile, mais ne remplace pas ce parcours.
+      </Note>
 
-      <h2 className="bl-h2">Avant d'ouvrir l'interface : trois choses à avoir sous la main</h2>
-      <ul className="bl-liste">
-        <li>
-          <strong>L'accès à votre fiche d'établissement.</strong> Le compte Google qui gère l'établissement, celui qui
-          vous sert à répondre aux avis. Si c'est une agence ou un ancien salarié qui l'a, réglez ça d'abord : sans
-          accès, rien de ce qui suit n'est possible.
-        </li>
-        <li>
-          <strong>L'adresse exacte de votre page de commande.</strong> Pas la page d'accueil de votre site : la page qui
-          affiche la carte, prête à commander. Un client qui doit chercher « commander » après avoir cliqué sur
-          « Commander » a déjà perdu deux gestes, et souvent la patience.
-        </li>
-        <li>
-          <strong>Savoir ce que cette page accepte.</strong> Retrait seul ? Retrait et livraison ? Vous allez devoir le
-          déclarer, et une préférence déclarée que la page ne tient pas se retourne contre vous au premier essai.
-        </li>
-      </ul>
-
-      <h2 className="bl-h2">La procédure, étape par étape</h2>
+      <h2 className="bl-h2" id="ajouter">Ajouter le lien et choisir votre préférence</h2>
       <p className="bl-p">
-        Les libellés ci-dessous sont ceux de l'interface française, recopiés tels quels. Si le vôtre diffère, c'est que
-        Google a bougé son écran depuis notre dernière vérification — la date de consultation est en bas de page.
+        La <a className="bl-renvoi" href="https://support.google.com/business/answer/10842217?hl=fr">procédure Google de gestion des commandes</a> décrit les réglages suivants.
+        Leur présentation peut varier selon le pays et les options de votre fiche.
       </p>
-
       <Etapes>
-        <Etape titre="Ouvrez votre fiche d'établissement">
-          <p className="bl-p">
-            Depuis la recherche Google en étant connecté au compte gestionnaire, ou depuis la gestion de votre profil.
-            C'est le même endroit que pour modifier vos horaires.
-          </p>
+        <Etape titre="Ouvrir les options de commande">
+          <p className="bl-p">Connectez-vous avec le compte qui gère la fiche, puis ouvrez <Ui>Commande de repas</Ui>.</p>
         </Etape>
-        <Etape titre={"Sélectionnez « Commande de repas »"}>
-          <p className="bl-p">
-            C'est la section qui pilote tout : les fournisseurs tiers, vos propres liens, et le fait même d'accepter ou
-            non les commandes depuis la fiche. Vous y trouverez la liste des options déjà en place — souvent une
-            surprise, la première fois.
-          </p>
+        <Etape titre="Ajouter la destination">
+          <p className="bl-p">Choisissez <Ui>Ajouter un lien</Ui>, renseignez votre page directe et enregistrez.</p>
         </Etape>
-        <Etape titre="Ajoutez votre lien">
-          <p className="bl-p">
-            En bas de la liste des options, <Ui>Ajouter un lien</Ui> vous laisse coller l'adresse de votre page de
-            commande. Collez l'adresse complète, protocole compris, et ouvrez-la une fois dans un onglet privé avant de
-            valider : c'est le seul moyen de voir ce que verra un client qui n'a jamais commandé chez vous.
-          </p>
+        <Etape titre="Définir votre préférence">
+          <p className="bl-p">Sélectionnez ce lien, puis <Ui>Définir comme préféré</Ui>. Choisissez le retrait ou la livraison, selon les services réellement proposés, et enregistrez.</p>
         </Etape>
-        <Etape titre="Sélectionnez votre lien dans la liste, puis « Définir comme préféré »">
-          <p className="bl-p">
-            C'est l'étape qui compte, et c'est celle qu'on oublie : un lien ajouté sans être désigné comme préféré est
-            un lien de plus dans une liste, rien d'autre.
-          </p>
-        </Etape>
-        <Etape titre={"Réglez « À privilégier pour le retrait » et « À privilégier pour la livraison »"}>
-          <p className="bl-p">
-            Les deux se règlent séparément, et c'est une bonne nouvelle : vous pouvez déclarer votre page préférée{" "}
-            <strong>pour le retrait</strong> et laisser la livraison aux plateformes, qui la font. N'activez que ce que
-            votre page tient réellement.
-          </p>
-        </Etape>
-        <Etape titre="Enregistrez, puis vérifiez depuis un téléphone">
-          <p className="bl-p">
-            Pas depuis votre ordinateur, où vous êtes connecté à votre propre compte : depuis un téléphone, en navigation
-            privée, comme le ferait le client de 19 h 40. Faites le parcours en entier jusqu'au panier.
-          </p>
+        <Etape titre="Contrôler le résultat public">
+          <p className="bl-p">Consultez ensuite votre fiche dans la recherche et sur Maps, en dehors de l'interface de gestion. Ouvrez le lien et refaites le parcours côté client.</p>
         </Etape>
       </Etapes>
-
-      <Note titre="Le réglage qui répond à la vraie question">
-        Vous n'avez pas à choisir entre les plateformes et vous. « À privilégier pour le retrait » d'un côté, la
-        livraison de l'autre : chacun met en avant ce qu'il fait le mieux, sur la même fiche, sans que personne ne
-        disparaisse.
-      </Note>
-
-      <h2 className="bl-h2">Choisir la bonne adresse — là où la plupart se plantent</h2>
       <p className="bl-p">
-        Le lien vaut ce que vaut la page au bout. Quatre erreurs reviennent tout le temps :
+        Si vous ne voyez pas le même intitulé, consultez aussi l'aide Google sur les
+        <a className="bl-renvoi" href="https://support.google.com/business/answer/6218037?hl=fr"> liens des établissements locaux</a>.
+        L'affichage peut présenter le type de transaction, par exemple retrait et livraison, avant le choix du lien préféré.
       </p>
-      <ul className="bl-liste">
-        <li>
-          <strong>Pointer vers la page d'accueil.</strong> Le client a appuyé sur « Commander », il attend une carte, pas
-          une photo de devanture et un menu de navigation.
-        </li>
-        <li>
-          <strong>Pointer vers un PDF de la carte.</strong> Un PDF ne prend pas de commande, ne dit pas ce qui est en
-          rupture, et se lit mal sur un téléphone. C'est un catalogue, pas un tunnel.
-        </li>
-        <li>
-          <strong>Pointer vers une page qui n'est pas pensée pour le téléphone.</strong> L'écrasante majorité de ces
-          clics vient d'un mobile, souvent debout, souvent pressé.
-        </li>
-        <li>
-          <strong>Pointer vers une page qui ment sur vos horaires.</strong> Une page qui accepte une commande à 15 h
-          alors que la cuisine est fermée vous coûte un client, et un avis.
-        </li>
+
+      <h2 className="bl-h2" id="verifier">Tester ce que voit réellement votre client</h2>
+      <p className="bl-p">
+        Faites un contrôle en situation : téléphone tenu à une main, connexion mobile et aucune connaissance
+        de votre outil. Le client doit comprendre où il retire sa commande et à quel moment elle sera disponible.
+        Voici la grille que nous conseillons de parcourir avec un membre de l'équipe.
+      </p>
+      <ul className="bl-liste bl-check">
+        <li>La page s'ouvre sans erreur ni connexion réservée au personnel.</li>
+        <li>Le nom et l'adresse correspondent au restaurant recherché, y compris si vous avez plusieurs établissements.</li>
+        <li>Les horaires de retrait et les éventuelles fermetures sont cohérents avec votre service.</li>
+        <li>Les produits indisponibles et les suppléments sont compréhensibles avant validation.</li>
+        <li>Le récapitulatif distingue produits, frais éventuels et total à payer.</li>
+        <li>La confirmation indique la suite : réception, préparation et lieu de retrait selon le parcours prévu.</li>
       </ul>
       <p className="bl-p">
-        Si votre page de commande affiche les mêmes prix qu'en salle, connaît vos horaires et sait dire « plus de
-        tacos » à 22 h 30, ce lien travaille pour vous. Sinon, réglez la page d'abord — vous n'aurez pas deux fois le
-        premier clic. C'est <Renvoi section="commander">ce qu'on installe avec vous</Renvoi>, et ce qui rend la fiche
-        Google utile plutôt que décorative.
+        Pour préparer les opérations derrière ce lien, utilisez notre guide pour
+        <Link className="bl-renvoi" href="/blog/ouvrir-le-click-and-collect-sans-se-tromper"> ouvrir le click & collect</Link>.
+        Une page accessible ne suffit pas si l'équipe ignore où arrivent les commandes.
       </p>
 
-      <h2 className="bl-h2">Ce que ça fait, et ce que ça ne fait pas</h2>
+      <h2 className="bl-h2" id="lien-absent">Si le lien est absent ou refusé</h2>
       <p className="bl-p">
-        Soyons précis, parce que c'est là que les promesses commencent à déborder. Désigner votre lien comme préféré
-        indique votre préférence à Google sur votre propre fiche. Cela ne fait pas de vous le premier résultat local,
-        cela ne modifie pas votre position sur la carte, et cela n'oblige personne à cliquer chez vous.
+        Commencez par relever le message exact et le compte connecté. Contrôlez ensuite la validation de la
+        fiche, l'orthographe de l'adresse et la destination. Google vérifie les liens et peut retirer ceux
+        qui ne respectent pas ses règles. La page doit également être accessible à ses outils de vérification.
       </p>
       <p className="bl-p">
-        Cela ne fait pas non plus disparaître les autres options. L'interface propose bien une entrée{" "}
-        <Ui>Supprimer le lien</Ui> pour un fournisseur donné — nous ne conseillons pas de vous en servir, et nous ne
-        promettons aucun résultat si vous le faites. Un restaurateur qui vit d'une partie de son volume sur les
-        plateformes n'a aucun intérêt à fermer une porte qui lui amène des clients qu'il n'aurait pas eus.
-      </p>
-      <p className="bl-p">
-        L’affichage du lien sur Google ne dépend pas de Snack Manager. Vérifiez la fiche après la modification,
-        puis à nouveau quelques jours plus tard, avant de considérer l’accès comme disponible.
+        Évitez d'enchaîner des variantes du même lien sans diagnostic. Notez le lien saisi, la date du changement
+        et le résultat observé. Ces éléments rendent une demande d'assistance exploitable. Nous ne pouvons pas
+        annoncer un délai de publication ou garantir la présence du bouton : son affichage reste géré par Google.
       </p>
 
-      <h2 className="bl-h2">Quel intérêt pour votre commande directe ?</h2>
+      <h2 className="bl-h2" id="entretenir">Entretenir le lien dans la durée</h2>
       <p className="bl-p">
-        Parce que plusieurs canaux peuvent répondre à des besoins différents de vos clients.
+        Ajoutez ce contrôle à chaque changement de site, d'horaires ou d'outil de commande. Conservez un relevé
+        simple : date de vérification, adresse utilisée, anomalie constatée et personne chargée de la correction.
+        Pendant une fermeture exceptionnelle, vérifiez aussi la page située au bout du lien.
       </p>
       <p className="bl-p">
-        Une plateforme peut <strong>vous faire connaître</strong> et proposer un service de livraison selon votre contrat.
-        Comparez son apport et son coût avec ceux de vos autres canaux.
+        La préférence de commande est un réglage de parcours. Elle ne constitue pas une promesse de position
+        dans les résultats. Pour travailler le reste de votre présence, poursuivez avec
+        <Link className="bl-renvoi" href="/blog/visibilite-restaurant-google-site-internet"> notre méthode fiche Google et site de restaurant</Link>.
       </p>
       <p className="bl-p">
-        Votre lien direct, lui, <strong>entretient la relation</strong>. L'habitué retrouve votre carte et son
-        historique. Notre programme fidélité est proposé en pilote accompagné : cartes et récompenses configurables,
-        mais attribution automatique après commande en ligne et utilisation sécurisée des récompenses restent à finaliser.
+        Snack Manager propose une <Link className="bl-renvoi" href="/commande-en-ligne">page de commande avec son espace de gestion</Link>.
+        Si vous avez déjà une solution, <Link className="bl-renvoi" href="/atelier">l'Atelier peut aussi vous accompagner sur votre site et votre fiche Google</Link>,
+        avec ou sans nos logiciels. Les accès, réglages et livrables sont précisés avant l'intervention :
+        <Renvoi section="contact"> décrivez-nous votre besoin</Renvoi>.
       </p>
-      <p className="bl-p">
-        Votre fiche Google peut présenter ces différentes possibilités au même client. Elle mérite donc
-        une vérification régulière des liens, horaires et parcours proposés.
-      </p>
-
-      <h2 className="bl-h2">À revérifier une fois par trimestre</h2>
-      <ul className="bl-liste">
-        <li>Le lien préféré est-il toujours le vôtre ? Une intégration ajoutée entre-temps peut avoir peuplé la liste.</li>
-        <li>La page au bout du lien répond-elle toujours ? Un changement de site casse un lien sans prévenir personne.</li>
-        <li>Vos horaires sur la fiche et sur la page de commande disent-ils la même chose ?</li>
-        <li>Le parcours tient-il sur un téléphone, en 4G, en trois gestes ?</li>
-      </ul>
-
-      <Note titre="En une phrase">
-        Ajoutez votre lien, désignez-le comme préféré au moins pour le retrait, et vérifiez la page au bout depuis un
-        téléphone. Le reste de votre fiche travaille déjà pour vous.
-      </Note>
-
-      <p className="bl-p">
-        Sur ce point comme sur le reste, nous n'inventons pas de délai et nous ne promettons pas de résultat : nous
-        faisons le réglage avec vous pendant la mise en route, et vous repartez avec la procédure entre les mains. Si
-        vous voulez qu'on regarde votre fiche ensemble, <Renvoi section="contact">laissez-nous votre numéro</Renvoi>.
-      </p>
-
-      <Sources items={SOURCES} />
     </>
   );
 }

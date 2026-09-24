@@ -14,8 +14,9 @@ import { OnboardingStory } from "@/components/marketing/notch/OnboardingStory";
 import { MotionProvider } from "@/components/marketing/notch/Motion";
 import { ProjectNavigation } from "@/components/marketing/notch/ProjectNavigation";
 import "@/components/marketing/notch/landing.css";
-import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
+import { CONTACT_EMAIL, FAQ, PLANS, type ReseauPublié } from "@/components/marketing/content";
 import { lireReseaux } from "@/lib/reseaux";
+import { urlAbsolue } from "@/lib/site";
 
 /** Public narrative; the staging navigation and footer retain their visual contract. */
 export default async function LandingPage() {
@@ -62,7 +63,7 @@ export default async function LandingPage() {
       <script
         type="application/ld+json"
         // Données structurées : produit SaaS + FAQ, pour les extraits enrichis.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData()) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData(reseaux)).replace(/</g, "\\u003c") }}
       />
     </>
   );
@@ -84,8 +85,28 @@ function priceOf(plan: (typeof PLANS)[number]) {
   return String(plan.monthlyCents / 100);
 }
 
-function structuredData() {
+function structuredData(reseaux: readonly ReseauPublié[]) {
   return [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": urlAbsolue("/#organization"),
+      name: "Snack Manager",
+      url: urlAbsolue("/"),
+      logo: urlAbsolue("/icon.svg"),
+      email: CONTACT_EMAIL,
+      description: "Logiciels et accompagnement pour les restaurants : service, menus papier et TV, site internet et visibilité locale.",
+      ...(reseaux.length ? { sameAs: reseaux.map((reseau) => reseau.url) } : {}),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": urlAbsolue("/#website"),
+      name: "Snack Manager",
+      url: urlAbsolue("/"),
+      inLanguage: "fr-FR",
+      publisher: { "@id": urlAbsolue("/#organization") },
+    },
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
