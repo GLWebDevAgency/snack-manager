@@ -25,7 +25,9 @@ export function customerOrderStatus(order: CustomerOrderSummary, delivery?: Cust
   return statusLabels[order.status];
 }
 function Payment({ order }: { order: CustomerOrderSummary }) {
-  return <div className="space-y-1 text-xs leading-5 text-mut"><p>{order.payment.status === 'paid' ? 'Paiement confirmé' : order.payment.status === 'refunded' ? 'Paiement remboursé' : order.type === 'pickup' && order.payment.method === 'counter' ? 'À régler au comptoir' : 'À vérifier auprès du restaurant'}</p>
+  const nothingDue = order.totalCents === 0 && order.payment.status === 'paid'
+    && order.payment.refundedCents === 0 && order.payment.pendingRefundCents === 0;
+  return <div className="space-y-1 text-xs leading-5 text-mut"><p>{nothingDue ? 'Rien à régler' : order.payment.status === 'paid' ? 'Paiement confirmé' : order.payment.status === 'refunded' ? 'Paiement remboursé' : order.type === 'pickup' && order.payment.method === 'counter' ? 'À régler au comptoir' : 'À vérifier auprès du restaurant'}</p>
     {order.payment.refundedCents > 0 && <p>Remboursé : {euros(order.payment.refundedCents)}</p>}
     {order.payment.pendingRefundCents > 0 && <p>Remboursement en cours : {euros(order.payment.pendingRefundCents)}</p>}</div>;
 }

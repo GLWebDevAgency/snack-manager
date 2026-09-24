@@ -13,7 +13,7 @@ import type { OrderStatus } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
 import { Btn, Drawer, Icon, Pill, StatusBadge } from "@/components/ui";
-import { hasOnlinePaymentToRefund } from "./refund-eligibility";
+import { hasOnlinePaymentToRefund, isConfirmedFreeOrder } from "./refund-eligibility";
 import {
   CHANNEL_LABELS,
   TYPE_LABELS,
@@ -126,7 +126,7 @@ export function OrderDrawer({
           <StatusBadge status={order.status} />
           {isPaid(order) ? (
             <Pill className="bg-ok text-[#0B1F0E]">
-              {order.payment.method === "online" ? "Payée en ligne" : "Payée"}
+              {isConfirmedFreeOrder(order) ? "Rien à régler" : order.payment.method === "online" ? "Payée en ligne" : "Payée"}
             </Pill>
           ) : order.payment.status === "refunded" ? (
             <Pill variant="out">Remboursée</Pill>

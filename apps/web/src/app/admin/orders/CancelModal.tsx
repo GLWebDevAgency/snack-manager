@@ -10,6 +10,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Btn, Field, Input, Modal, useToast } from "@/components/ui";
 import { customerName, type Order } from "./types";
+import { isConfirmedFreeOrder } from "./refund-eligibility";
 
 const PIN_RE = /^\d{4,6}$/;
 
@@ -102,7 +103,11 @@ export function CancelModal({
             sera annulée définitivement. L’opération est journalisée (NF525) —
             saisissez votre {owner ? "mot de passe" : "PIN"} pour confirmer.
           </p>
-          {order.payment.method === "online" && order.payment.status === "paid" && (
+          {isConfirmedFreeOrder(order) ? (
+            <p className="rounded-ctrl bg-ink/5 p-3 text-sm text-mut" role="note">
+              Cette commande est offerte. Aucun paiement n’est à rembourser.
+            </p>
+          ) : order.payment.method === "online" && order.payment.status === "paid" && (
             <p className="rounded-ctrl bg-alert/10 p-3 text-sm text-alertt" role="note">
               Le paiement a déjà été encaissé. L’annulation ne rembourse pas le client : utilisez ensuite « Rembourser » dans la fiche commande.
             </p>
