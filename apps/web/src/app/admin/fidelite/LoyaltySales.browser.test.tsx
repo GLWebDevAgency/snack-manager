@@ -7,7 +7,7 @@ import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { LoyaltySaleSettlement } from '@sm/contracts';
+import type { LoyaltySaleSettlementV2 as LoyaltySaleSettlement } from '@sm/contracts';
 import { LOYALTY_SALE_RESOLUTION_STORAGE_KEY } from '@sm/client-core';
 const id = 'a'.repeat(24), tenant = 'b'.repeat(24), sub = 'c'.repeat(24), caseId = '11111111-1111-4111-8111-111111111111';
 const token = (subject = sub) => `fixture.${Buffer.from(JSON.stringify({ tenantId: tenant, sub: subject, kind: 'user', role: 'owner', exp: 2_000_000_000 })).toString('base64url')}.fixture`;
@@ -69,6 +69,24 @@ async function fill() { await page.getByRole('radio', { name: 'Laisser au client
 async function local() { return page.evaluate(key => localStorage.getItem(key), LOYALTY_SALE_RESOLUTION_STORAGE_KEY); }
 // Real components, HTTP adapter, shared journal and browser Web Locks. All HTTP stays on loopback.
 describe('web loyalty settlement operations', () => {
+  it('shows a cancelled offered sale without claiming a gain or offering a financial decision', async () => {
+    view = { orderId: id, orderNumber: 42, caseId, version: 2, state: 'not_earned', reason: 'cancelled_before_handoff',
+      initialUnits: null, reversedUnits: 0, waivedUnits: 0, retainedUnits: 0, dueUnits: 0, canResolve: false, canAllocate: false, resolutions: [] };
+    await page.reload();
+    await page.getByText('Sans gain — commande annulée', { exact: true }).waitFor();
+    expect(await page.getByText('Aucun gain enregistré', { exact: true }).count()).toBe(1);
+    await open();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('Sans gain — commande annulée', { exact: true }).waitFor();
+    expect(await dialog.getByText('Aucun gain enregistré', { exact: true }).count()).toBe(1);
+    expect(await dialog.getByText('En attente du paiement et de la remise confirmés.', { exact: true }).count()).toBe(0);
+    expect(await dialog.getByText('À confirmer', { exact: true }).count()).toBe(0);
+    expect(await dialog.getByRole('button', { name: 'Confirmer la décision', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Répartir le remboursement', exact: true }).count()).toBe(0);
+    expect(posts).toEqual([]); expect(await local()).toBeNull();
+    expect(reads.length).toBeGreaterThanOrEqual(2);
+    expect(reads.every(path => new URL(path, origin).searchParams.get('presentationVersion') === '2')).toBe(true);
+  });
   it('makes the current-only commercial decision explicit and clears only after an exact receipt', async () => {
     await open(); await fill(); await page.getByText('Cette décision ne couvre aucun remboursement futur', { exact: false }).waitFor();
     await page.getByRole('button', { name: 'Confirmer la décision', exact: true }).click(); await settled();

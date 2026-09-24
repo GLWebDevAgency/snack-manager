@@ -11,7 +11,7 @@ import mongoose, { Types, type Connection } from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MODELS } from '@sm/db';
 import { loyaltyDb } from '@sm/loyalty';
-import { LoyaltySaleSettlementSchema, type JwtPayload, type LoyaltySaleResolutionRequest } from '@sm/contracts';
+import { LoyaltySaleSettlementSchema, LoyaltySaleSettlementV2Schema, type JwtPayload, type LoyaltySaleResolutionRequest } from '@sm/contracts';
 import { AuthGuard } from '../../common/auth';
 import { CapaciteGuard, CapacitesService } from '../../common/capacites';
 import { SessionAccessService } from '../../common/session-access';
@@ -87,7 +87,28 @@ integration('loyalty sale settlement — real HTTP, SQL RLS and Mongo', () => {
     await app?.close(); vi.restoreAllMocks();
     try { if (db) { try { if (db.name === new URL(mongo!).pathname.slice(1) && await db.db!.collection('_run').findOne({ runId })) await db.dropDatabase(); } finally { await db.close(); } } } finally { await f?.close(); }
   });
-  async function get(auth = token) { const response = await fetch(`${origin}/loyalty/sales/${orderId}`, { headers: { authorization: `Bearer ${auth}` } }); return { response, body: await response.json() }; }
+  async function get(auth = token, query = '') { const response = await fetch(`${origin}/loyalty/sales/${orderId}${query}`, { headers: { authorization: `Bearer ${auth}` } }); return { response, body: await response.json() }; }
+  async function saveRow() { await models.Order.collection.replaceOne({ _id: new Types.ObjectId(orderId) }, { ...row, _id: new Types.ObjectId(orderId), number: 42 }); }
+  function offeredCancellation() {
+    const a = row.customerSaleAttribution!;
+    if (a.decision !== 'attributed') throw new Error('Attributed fixture required');
+    a.basis = { policyVersion: 'merchandise-net-v1', eligiblePurchaseCents: 0, excludedChargeCents: 0, chargedTotalCents: 0 };
+    row.totals = { subtotal: 1000, discount: { amount: 1000 }, deliveryFee: 0, total: 0 };
+    row.status = 'cancelled'; row.statusHistory = [{ status: 'cancelled', at: new Date('2030-01-01T12:00:00Z'), by: actorId }];
+    row.payment = { method: 'online', status: 'paid', refundedCents: 0, pendingRefundCents: 0, refundSyncVersion: 0, refunds: [] };
+    row.paymentFlow = { version: 1, origin: 'created_v1', phase: 'closed', attempt: null,
+      close: { operationId: randomUUID(), destination: 'cancel_order', reason: 'Annulation avant retrait', requestedBy: actorId, requestedAt: new Date('2030-01-01T12:00:00Z') } };
+    row.loyaltyReward = { version: 1, reservationId: randomUUID(), clientId: row.clientId, owner: a.owner,
+      memberId: a.memberId, programId: a.programId, rulesVersion: a.rulesVersion, pricingHash: 'a'.repeat(64),
+      benefit: { rewardId: randomUUID(), name: 'Récompense fixture', costUnits: 10, kind: 'fixed_discount', amountCents: 1000, productRef: null, policy: 'one-reward-no-promotion-v1' } };
+    row.loyaltyRewardProcessing = { state: 'consumed', zeroPaid: true, orderVersion: row.__v };
+  }
+  async function financialState() {
+    const tables = ['sale_settlements', 'sale_observations', 'sale_corrections', 'earn_receipts', 'ledger_entries', 'wallets', 'operations'] as const;
+    const state: Record<string, unknown> = {};
+    for (const table of tables) state[table] = (await f.admin.query(`SELECT to_jsonb(t) AS row FROM loyalty.${table} t WHERE tenant_ref=$1 ORDER BY to_jsonb(t)::text`, [tenant])).rows;
+    return state;
+  }
   async function post(body: unknown, auth = token) { const response = await fetch(`${origin}/loyalty/sales/${orderId}/resolution`, { method: 'POST', headers: { authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return { response, body: await response.json() }; }
   async function readyCase() {
     await f.service.settleHistoricalSale(loyaltyWebObservation(row));
@@ -119,6 +140,80 @@ integration('loyalty sale settlement — real HTTP, SQL RLS and Mongo', () => {
     expect((await get(foreign)).response.status).toBe(404);
     expect((await get(manager)).response.status).toBe(200);
     await models.Tenant.updateOne({ _id: tenant }, { $set: { standaloneLoyalty: false } }); expect((await get()).response.status).toBe(403);
+  });
+  it('presents a canonically cancelled offered sale without gain only to v2, before and after restitution, with no writes', async () => {
+    offeredCancellation(); await saveRow();
+    const settled = await f.service.settleHistoricalSale(loyaltyWebObservation(row));
+    expect(settled).toMatchObject({ kind: 'pending', reason: 'payment_or_handoff_pending', receipt: { initialUnits: null, earnReceiptId: null, earnLedgerEntryId: null } });
+    const before = await financialState(), beforeOrder = await models.Order.collection.findOne({ _id: new Types.ObjectId(orderId) });
+    const old = await get(); expect(old.response.status).toBe(200);
+    expect(LoyaltySaleSettlementSchema.parse(old.body)).toMatchObject({ state: 'waiting', reason: 'payment_or_handoff_pending', initialUnits: null });
+    const modern = await get(token, '?presentationVersion=2');
+    expect(modern.response.status).toBe(200); expect(modern.response.headers.get('cache-control')).toBe('private, no-store');
+    expect(LoyaltySaleSettlementV2Schema.parse(modern.body)).toMatchObject({ state: 'not_earned', reason: 'cancelled_before_handoff', initialUnits: null,
+      dueUnits: 0, retainedUnits: 0, canResolve: false, canAllocate: false, resolutions: [] });
+    expect(LoyaltySaleSettlementSchema.safeParse(modern.body).success).toBe(false);
+    for (const query of ['', '?presentationVersion=2']) {
+      const list = await fetch(`${origin}/loyalty/sales${query}`, { headers: { authorization: `Bearer ${token}` } });
+      const body = await list.json(); expect(list.status).toBe(200); expect(body.items).toEqual([query ? modern.body : old.body]);
+    }
+    expect((await get(manager, '?presentationVersion=2')).body).toEqual(modern.body);
+    expect((await get(foreign, '?presentationVersion=2')).response.status).toBe(404);
+    expect(await financialState()).toEqual(before); expect(await models.Order.collection.findOne({ _id: new Types.ObjectId(orderId) })).toEqual(beforeOrder);
+    // Restitution changes its separate journal, not the absence of a gain.
+    row.loyaltyRewardProcessing!.state = 'reversed'; row.__v!++; await saveRow();
+    expect((await get(token, '?presentationVersion=2')).body).toEqual(modern.body);
+    expect(await financialState()).toEqual(before); expect(rea.verify).not.toHaveBeenCalled();
+  });
+  it.each(['missing_reward', 'unknown_bank_attempt', 'pending_payment', 'legacy_total', 'unobserved', 'superseded', 'earned_zero'] as const)('does not close uncertain or already earned history: %s', async reason => {
+    offeredCancellation();
+    if (reason === 'earned_zero') {
+      row.status = 'delivered'; row.statusHistory = [{ status: 'delivered', at: new Date('2030-01-01T12:00:00Z'), by: actorId }];
+      row.paymentFlow!.phase = 'open'; row.paymentFlow!.close = null;
+      expect(await f.service.settleHistoricalSale(loyaltyWebObservation(row))).toMatchObject({ kind: 'recorded', receipt: { initialUnits: 0 } });
+      offeredCancellation();
+    }
+    if (reason !== 'unobserved') await f.service.settleHistoricalSale(loyaltyWebObservation(row));
+    if (reason === 'missing_reward') row.loyaltyReward = null;
+    if (reason === 'unknown_bank_attempt') row.paymentFlow!.attempt = { id: randomUUID(), environment: 'test', amountCents: 0, currency: 'eur', metadata: { orderId, tenantId: tenant, orderNumber: '42' } };
+    if (reason === 'pending_payment') row.payment.status = 'pending';
+    if (reason === 'legacy_total') row.totals = { subtotal: 1000, discount: null, deliveryFee: 0 } as typeof row.totals;
+    if (reason === 'superseded') row.paymentFlow!.close!.operationId = randomUUID();
+    await saveRow(); const before = await financialState();
+    const read = await get(token, '?presentationVersion=2'); expect(read.response.status).toBe(200);
+    expect(read.body.state).not.toBe('not_earned'); expect(read.body.reason).not.toBe('cancelled_before_handoff');
+    expect(read.body.canResolve).toBe(false); expect(read.body.canAllocate).toBe(false);
+    expect(await financialState()).toEqual(before);
+  });
+  it.each(['receipt', 'ledger'] as const)('keeps a pre-existing canonical legacy %s visible as a conflict', async history => {
+    offeredCancellation(); const a = row.customerSaleAttribution!;
+    if (a.decision !== 'attributed') throw new Error('Attributed fixture required');
+    const c = await f.app.connect();
+    try {
+      await c.query('BEGIN'); await c.query("SELECT set_config('app.tenant_ref',$1,true)", [tenant]);
+      const operation = randomUUID(), externalRef = `POS-ORDER:${row.clientId.toUpperCase()}`;
+      await c.query("INSERT INTO loyalty.operations(tenant_ref,operation_id,kind,request_fingerprint,status,result,completed_at) VALUES($1,$2,'earn',$3,'completed','{}',now())", [tenant, operation, 'c'.repeat(64)]);
+      if (history === 'receipt') await c.query("INSERT INTO loyalty.earn_receipts(tenant_ref,source,external_ref,operation_id,member_id) VALUES($1,'pos',$2,$3,$4)", [tenant, externalRef, operation, a.memberId]);
+      else {
+        const wallet = await c.query('UPDATE loyalty.wallets SET balance_units=1,lifetime_earned_units=1,version=version+1 WHERE tenant_ref=$1 RETURNING version', [tenant]);
+        await c.query("INSERT INTO loyalty.ledger_entries(tenant_ref,member_id,program_id,operation_id,kind,delta_units,balance_after,source,external_ref,rules_version,wallet_version,occurred_at) VALUES($1,$2,$3,$4,'earn',1,1,'online',$5,1,$6,now())", [tenant, a.memberId, a.programId, operation, externalRef, wallet.rows[0].version]);
+      }
+      await c.query('COMMIT');
+    } catch (error) { await c.query('ROLLBACK'); throw error; } finally { c.release(); }
+    await saveRow();
+    expect(await f.service.settleHistoricalSale(loyaltyWebObservation(row))).toMatchObject({ kind: 'pending', receipt: { initialUnits: null } });
+    const before = await financialState();
+    expect((await get(token, '?presentationVersion=2')).body).toMatchObject({ state: 'reconciliation', reason: 'canonical_sale_conflict', canResolve: false });
+    expect((await get()).body).toMatchObject({ state: 'waiting', reason: 'payment_or_handoff_pending' });
+    expect(await financialState()).toEqual(before);
+  });
+  it('rejects unsupported or repeated presentation versions on both read routes', async () => {
+    for (const suffix of ['presentationVersion=1', 'presentationVersion=3', 'presentationVersion=', 'presentationVersion=2&presentationVersion=2']) {
+      for (const path of [`/loyalty/sales?${suffix}`, `/loyalty/sales/${orderId}?${suffix}`]) {
+        const response = await fetch(`${origin}${path}`, { headers: { authorization: `Bearer ${token}` } }); expect(response.status).toBe(400);
+      }
+    }
+    expect(rea.verify).not.toHaveBeenCalled();
   });
   it('refuses manager decisions, invalid bodies and wrong passwords before writer effects', async () => {
     const view = await readyCase(), request = body(view);

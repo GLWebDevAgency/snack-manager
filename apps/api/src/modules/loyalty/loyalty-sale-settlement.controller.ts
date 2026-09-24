@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Header, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { LoyaltySaleSettlementReadQuerySchema, LoyaltySaleResolutionRequestSchema, LoyaltySaleSettlementQuerySchema, type JwtPayload, type LoyaltySaleResolutionRequest, type LoyaltySaleSettlementQuery } from '@sm/contracts';
+import { LoyaltySaleSettlementReadQuerySchema, LoyaltySaleResolutionRequestSchema, LoyaltySaleSettlementQuerySchema, type JwtPayload, type LoyaltySaleResolutionRequest, type LoyaltySaleSettlementQuery, type LoyaltySaleSettlementReadQuery } from '@sm/contracts';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
@@ -19,8 +19,8 @@ export class LoyaltySaleSettlementController {
   }
   @Get(':id')
   @Header('Cache-Control', 'private, no-store')
-  get(@TenantId() tenant: string, @Param('id') id: string, @CurrentUser() actor: JwtPayload, @Query(zod(LoyaltySaleSettlementReadQuerySchema)) query: { resolutionId?: string }) {
-    return this.sales.get(tenant, id, actor, query.resolutionId);
+  get(@TenantId() tenant: string, @Param('id') id: string, @CurrentUser() actor: JwtPayload, @Query(zod(LoyaltySaleSettlementReadQuerySchema)) query: LoyaltySaleSettlementReadQuery) {
+    return this.sales.get(tenant, id, actor, query.resolutionId, query.presentationVersion);
   }
   @Post(':id/resolution')
   @Header('Cache-Control', 'private, no-store')

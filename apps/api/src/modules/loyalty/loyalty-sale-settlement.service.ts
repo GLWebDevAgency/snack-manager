@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { roleSatisfait, LoyaltySaleResolutionReceiptSchema, LoyaltySaleSettlementSchema, type JwtPayload, type LoyaltySaleResolutionRequest, type LoyaltySaleSettlement, type LoyaltySaleSettlementList, type LoyaltySaleSettlementQuery } from '@sm/contracts';
+import { roleSatisfait, LoyaltySaleResolutionReceiptSchema, LoyaltySaleSettlementV2Schema, type JwtPayload, type LoyaltySaleResolutionRequest, type LoyaltySaleSettlementV2, type LoyaltySaleSettlementListV2, type LoyaltySaleSettlementQuery } from '@sm/contracts';
 import { posCompensationWake, type Order } from '@sm/db';
 import { and, desc, eq, operations, sql, withLoyaltyTenant, type LoyaltyDb } from '@sm/loyalty';
 import { Types, type Model } from 'mongoose';
@@ -52,6 +52,19 @@ export class LoyaltySaleSettlementService {
     return receipt ? { initialUnits: receipt.initialUnits, reversedUnits: receipt.reversedUnits, waivedUnits: receipt.waivedUnits,
       retainedUnits: receipt.retainedUnits, dueUnits: receipt.dueUnits } : EMPTY;
   }
+  private async hasCanonicalEarn(tenantRef: string, clientId: string): Promise<boolean> {
+    // A pending managed case can precede detection of a legacy receipt. Check
+    // both canonical histories before claiming that no gain was ever recorded.
+    return withLoyaltyTenant(this.db, tenantRef, async tx => {
+      const found = await tx.execute(sql`SELECT 1 FROM loyalty.earn_receipts WHERE tenant_ref=${tenantRef} AND source IN ('pos','online')
+        AND external_ref ~* '^(pos-order|online-order|order):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        AND lower(split_part(external_ref,':',2))=${clientId.toLowerCase()}
+        UNION ALL SELECT 1 FROM loyalty.ledger_entries WHERE tenant_ref=${tenantRef} AND kind='earn' AND source IN ('pos','online')
+        AND external_ref ~* '^(pos-order|online-order|order):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        AND lower(split_part(external_ref,':',2))=${clientId.toLowerCase()} LIMIT 1`);
+      return found.rows.length > 0;
+    });
+  }
   private async receipts(tenantRef: string, clientId: string, actor: JwtPayload, operationId?: string) {
     if (!owner(actor)) return [];
     return withLoyaltyTenant(this.db, tenantRef, async tx => {
@@ -79,7 +92,7 @@ export class LoyaltySaleSettlementService {
       ? this.historical.settlePosSale(input as HistoricalPosSaleSettlementInput)
       : this.historical.settleHistoricalSale(input as HistoricalSaleSettlementInput);
   }
-  private async project(order: ObservedOrder, actor: JwtPayload, resolutionId?: string): Promise<LoyaltySaleSettlement> {
+  private async project(order: ObservedOrder, actor: JwtPayload, resolutionId?: string, presentationVersion?: '2'): Promise<LoyaltySaleSettlementV2> {
     const base = { orderId: String(order._id), orderNumber: order.number, caseId: null, version: null, ...EMPTY,
       canResolve: false, canAllocate: false, resolutions: [] };
     const resolutions = /^[a-f0-9-]{36}$/i.test(order.clientId) ? await this.receipts(String(order.tenantId), order.clientId, actor, resolutionId) : [];
@@ -87,32 +100,47 @@ export class LoyaltySaleSettlementService {
     try { input = await this.observe(order); }
     catch (error) {
       if (!(error instanceof LoyaltyWebObservationError) && !(error instanceof LoyaltyPosObservationError)) throw error;
-      return LoyaltySaleSettlementSchema.parse({ ...base, resolutions, state: 'reconciliation', reason: error.code === 'financial_proof_too_large' ? 'financial_proof_too_large' : 'financial_proof_conflict' });
+      return LoyaltySaleSettlementV2Schema.parse({ ...base, resolutions, state: 'reconciliation', reason: error.code === 'financial_proof_too_large' ? 'financial_proof_too_large' : 'financial_proof_conflict' });
     }
     const outcome = await this.historical.readHistoricalSale(this.query(input));
     const exact = outcome.receipt?.attributionFingerprint === historicalSaleAttributionFingerprint(input.attribution)
       && outcome.receipt?.earnOperationId === input.earnOperationId && outcome.receipt?.observationId === input.observation.observationId
       && outcome.receipt?.financialFingerprint === input.observation.financialFingerprint;
     const canResolve = owner(actor) && enabled(order) && exact && outcome.kind === 'reconciliation' && outcome.reason === 'insufficient_balance';
-    return LoyaltySaleSettlementSchema.parse({ ...base, ...this.amounts(outcome), resolutions,
+    // This is a read-only presentation of a parked canonical case, never an
+    // invented zero-unit earn. The observation already checked the exact reward
+    // and cancellation proof; unknown payments and stale SQL receipts stay open.
+    const proof = input.observation.proof;
+    const payment = isRecord(proof) && isRecord(proof.payment) ? proof.payment : null;
+    const noGainCandidate = presentationVersion === '2' && order.channel === 'online' && order.status === 'cancelled'
+      && order.totals.total === 0 && input.observation.paidAndDelivered === false
+      && input.observation.eligibleRefundedCents === 0 && input.observation.pendingRefundCents === 0
+      && payment?.kind === 'zero_total_reward' && isRecord(payment.closure) && payment.closure.destination === 'cancel_order'
+      && exact && resolutions.length === 0 && outcome.kind === 'pending' && outcome.reason === 'payment_or_handoff_pending'
+      && outcome.receipt?.initialUnits === null && outcome.receipt.earnReceiptId === null && outcome.receipt.earnLedgerEntryId === null
+      && outcome.receipt.reversedUnits === 0 && outcome.receipt.waivedUnits === 0 && outcome.receipt.retainedUnits === 0 && outcome.receipt.dueUnits === 0;
+    const canonicalConflict = noGainCandidate && await this.hasCanonicalEarn(input.tenantRef, input.clientId);
+    const cancelledWithoutGain = noGainCandidate && !canonicalConflict;
+    return LoyaltySaleSettlementV2Schema.parse({ ...base, ...this.amounts(outcome), resolutions,
       caseId: outcome.receipt?.saleId ?? null, version: outcome.receipt?.version ?? null,
-      state: outcome.kind === 'pending' ? 'waiting' : outcome.kind, reason: outcome.kind === 'recorded' ? null : outcome.reason,
+      state: cancelledWithoutGain ? 'not_earned' : canonicalConflict ? 'reconciliation' : outcome.kind === 'pending' ? 'waiting' : outcome.kind,
+      reason: cancelledWithoutGain ? 'cancelled_before_handoff' : canonicalConflict ? 'canonical_sale_conflict' : outcome.kind === 'recorded' ? null : outcome.reason,
       canResolve: !!canResolve, canAllocate: owner(actor) && outcome.kind === 'reconciliation' && outcome.reason === 'allocation_unknown' });
   }
-  async list(tenantRef: string, actor: JwtPayload, query: LoyaltySaleSettlementQuery): Promise<LoyaltySaleSettlementList> {
+  async list(tenantRef: string, actor: JwtPayload, query: LoyaltySaleSettlementQuery): Promise<LoyaltySaleSettlementListV2> {
     this.assertActor(tenantRef, actor);
     const rows = await this.orders.find({ ...this.filter(tenantRef), ...(query.cursor ? { _id: { $lt: new Types.ObjectId(query.cursor) } } : {}) })
       .select(SELECT).sort({ _id: -1 }).limit(query.limit + 1).read('primary').readConcern('majority').maxTimeMS(10_000).lean() as ObservedOrder[];
-    const page = rows.slice(0, query.limit), items: LoyaltySaleSettlement[] = [];
+    const page = rows.slice(0, query.limit), items: LoyaltySaleSettlementV2[] = [];
     // Bound work per request and avoid a burst of concurrent SQL transactions.
-    for (const order of page) items.push(await this.project(order, actor));
+    for (const order of page) items.push(await this.project(order, actor, undefined, query.presentationVersion));
     return { items, nextCursor: rows.length > query.limit ? String(page.at(-1)!._id) : null };
   }
-  async get(tenantRef: string, orderId: string, actor: JwtPayload, resolutionId?: string): Promise<LoyaltySaleSettlement> {
+  async get(tenantRef: string, orderId: string, actor: JwtPayload, resolutionId?: string, presentationVersion?: '2'): Promise<LoyaltySaleSettlementV2> {
     this.assertActor(tenantRef, actor);
-    return this.project(await this.order(tenantRef, orderId), actor, resolutionId);
+    return this.project(await this.order(tenantRef, orderId), actor, resolutionId, presentationVersion);
   }
-  async resolve(tenantRef: string, orderId: string, actor: JwtPayload, body: LoyaltySaleResolutionRequest): Promise<LoyaltySaleSettlement> {
+  async resolve(tenantRef: string, orderId: string, actor: JwtPayload, body: LoyaltySaleResolutionRequest): Promise<LoyaltySaleSettlementV2> {
     this.assertActor(tenantRef, actor);
     if (!owner(actor)) throw new ConflictException('Décision réservée au propriétaire');
     const order = await this.order(tenantRef, orderId);
