@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { RESERVED_LABELS } from "@sm/domain";
+import { preventSearchIndexing } from "@/lib/search-indexing";
 
 /**
  * Multi-tenant par domaine + en-têtes de l’embed.
@@ -533,6 +534,9 @@ export async function proxy(request: NextRequest) {
       default:
         response = NextResponse.next();
     }
+  }
+  if (preventSearchIndexing({ host: request.headers.get("host"), pathname, hostType: hote.type })) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return appliquerPolitiqueCadre(pathname, response);
 }
