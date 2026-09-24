@@ -544,7 +544,9 @@ export function Storefront({
                 {recovery.active ? <Icon name="clock" size={16} /> : cart.count || <Icon name="clock" size={16} />}
               </span>
               <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
-                {recovery.active ? "Ma commande en cours" : cart.count ? "Voir mon panier" : "Retrouver ma commande"}
+                {/* Le reçu actif protège la reprise locale ; il ne dit pas si la commande est encore en cours. */}
+                {recovery.active ? recovery.active.state === "received" ? "Suivre ma commande" : "Retrouver ma commande"
+                  : cart.count ? "Voir mon panier" : "Retrouver ma commande"}
               </span>
               {!recovery.active && cart.count > 0 && <Money cents={cart.subtotal} mono={prixMono} className="text-[16px]" />}
               <Icon name="arrow" size={16} stroke={2.4} className="opacity-70" />
