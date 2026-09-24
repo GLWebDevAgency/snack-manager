@@ -41,9 +41,11 @@ Poursuivre avec un rythme soutenable : un guide approfondi toutes les deux semai
 
 Le travail utile porte sur des pages accessibles, indexables, correctement reliées et réellement informatives. Google indique qu’aucun fichier ou schéma spécifique IA n’est requis pour ses fonctionnalités IA. Il n’est donc pas prévu de générer un fichier llms.txt comme promesse de référencement. [Google : fonctionnalités IA](https://developers.google.com/search/docs/appearance/ai-features)
 
+Lors de l’activation de Search Console, vérifier aussi le réglage « Search generative AI » dans les paramètres de la propriété. Google documente l’inclusion par défaut, avec une possible valeur héritée d’une propriété parente ; le réglage réel de Snack Manager n’a pas été consulté. Ce contrôle concerne l’apparition dans les fonctionnalités IA de Search, et reste distinct de l’entraînement des modèles. Le rapport dédié permet de suivre les impressions IA lorsqu’il est disponible et contient assez de données. [Contrôle Google](https://support.google.com/webmasters/answer/16908024) · [Rapport de performances IA](https://support.google.com/webmasters/answer/16984139)
+
 Pour ChatGPT Search, vérifier que le site et son éventuel pare-feu laissent passer OAI-SearchBot. L’ouverture au robot de recherche ne nécessite pas de modifier une éventuelle décision concernant les robots d’entraînement. Les règles du dépôt ne suffisent pas à attester le comportement d’un CDN ou d’un pare-feu extérieur. [OpenAI : éditeurs et développeurs](https://help.openai.com/en/articles/12627856-publishers-and-developers-faq)
 
-Bing recommande notamment des URL canoniques, des liens explorables, un sitemap exact et des contenus fiables. Son rapport AI Performance permet d’observer les citations sur les expériences prises en charge ; ces citations ne prouvent pas un classement ni la causalité d’une modification. [Consignes Bing](https://www.bing.com/webmasters/help/bing-webmaster-guidelines-30fba23a) · [Rapport AI Performance](https://www.bing.com/webmasters/help/ai-performance-9f8e7d6c)
+Bing recommande notamment des URL canoniques, des liens explorables, un sitemap exact et des contenus fiables. Son rapport AI Performance permet d’observer les citations sur les expériences prises en charge ; ces citations ne prouvent pas un classement ni la causalité d’une modification. [Consignes Bing](https://www.bing.com/webmasters/help/bing-webmaster-guidelines-30fba23a) · [Présentation du rapport AI Performance](https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview)
 
 Aucun volume de trafic, classement, citation IA ou gain de conversion n’a été mesuré pendant cette refonte. Les données structurées décrivent les contenus ; elles ne promettent pas un affichage enrichi.
 
@@ -85,7 +87,27 @@ Textes de services prêts à adapter :
 
 Préparer le vrai logo, une couverture de marque, des captures actuelles en thème sombre et des photographies réelles d’accompagnement ou de supports livrés lorsque leur usage est autorisé. Identifier une démonstration comme telle ; ne pas la présenter comme une installation client. Ne pas importer de faux locaux ni d’équipe synthétique.
 
-Trois publications à préparer une fois la fiche validée : présentation de l’activité ; exemple documenté de menu papier/TV ; guide pour préparer un site de restaurant. Chaque publication mène à la page correspondant au sujet, avec un paramètre de campagne distinct. Publier quand il existe une information utile ou une réalisation documentée, pas pour simuler artificiellement une activité.
+Trois textes préparés ci-dessous, à publier après validation de la fiche et disponibilité des pages de destination en production. Les visuels doivent représenter l’offre décrite ; un exemple de démonstration reste identifié comme tel. Une réalisation client pourra remplacer l’un de ces textes lorsqu’elle sera documentée et autorisée.
+
+**Publication 1 — Présentation de l’activité**
+
+> Votre restaurant a plusieurs besoins. L’accompagnement doit partir du vôtre. Organiser les commandes, refaire la carte, présenter vos menus sur écran ou améliorer votre présence en ligne : Snack Manager réunit des logiciels et des prestations adaptées à votre établissement. Notre Atelier est accessible avec ou sans nos logiciels. Découvrez les offres, leurs inclusions et les options, puis parlons de votre projet.
+
+Bouton proposé : « En savoir plus ». Destination : `https://snackmanager.fr/offres?utm_source=google&utm_medium=organic&utm_campaign=business_profile&utm_content=presentation`.
+
+**Publication 2 — Menus papier et TV**
+
+> Des prix à mettre à jour, une carte devenue difficile à lire, un nouveau menu à présenter ? Nous concevons vos supports papier et TV à partir de votre offre et de votre identité. Le format, les livrables et les mises à jour sont définis avant le démarrage. L’impression, la livraison et le matériel éventuel sont chiffrés séparément. Notre guide vous aide à préparer un brief clair et à comparer les devis.
+
+Bouton proposé : « En savoir plus ». Destination : `https://snackmanager.fr/blog/refaire-menu-restaurant-papier-tv?utm_source=google&utm_medium=organic&utm_campaign=business_profile&utm_content=menus`.
+
+**Publication 3 — Visibilité du restaurant**
+
+> Quand un client cherche votre restaurant, trouve-t-il les bons horaires, une carte à jour et un moyen simple de vous contacter ? Votre fiche Google et votre site doivent raconter la même histoire. Notre guide rassemble les points à vérifier : informations pratiques, liens, photos, avis et parcours de réservation ou de commande. Vous pouvez aussi nous confier un projet de site ou de visibilité, avec ou sans les logiciels Snack Manager.
+
+Bouton proposé : « En savoir plus ». Destination : `https://snackmanager.fr/blog/visibilite-restaurant-google-site-internet?utm_source=google&utm_medium=organic&utm_campaign=business_profile&utm_content=visibilite`.
+
+Ces paramètres identifient l’origine des liens ; ils ne créent pas à eux seuls un dispositif de mesure. Vérifier leur collecte dans l’outil de mesure retenu avant d’annoncer des conversions attribuées. Publier quand il existe une information utile ou une réalisation documentée.
 
 Demander un avis honnête après une prestation, de façon identique à tous les clients concernés. Aucune récompense, sélection des seuls clients satisfaits ou faux avis. Répondre aux retours sans exposer de données privées. [Règles Google sur les contributions](https://support.google.com/contributionpolicy/answer/7400114?hl=fr)
 
@@ -94,7 +116,7 @@ Demander un avis honnête après une prestation, de façon identique à tous les
 1. Valider le rendu et les contrats techniques de cette branche, puis présenter le résultat sur staging. La production de la landing déjà validée est une livraison distincte.
 2. Confirmer ou créer les propriétés Search Console et Bing Webmaster Tools sous le compte du propriétaire. Utiliser la vérification de domaine quand l’accès DNS est disponible ; ne pas publier de code de vérification inventé.
 3. Après publication du blog, soumettre le sitemap de production et inspecter la home, le blog et les cinq guides. Observer les exclusions, pages découvertes et pages indexées.
-4. Relever une base datée : impressions et clics hors marque, pages d’entrée, demandes de contact attribuables, visites depuis la fiche Google, citations Bing AI si accessibles. Séparer données mesurées et hypothèses.
+4. Relever une base datée : impressions et clics hors marque, pages d’entrée, demandes de contact attribuables, visites depuis la fiche Google, impressions du rapport IA Google et citations Bing AI si accessibles. Séparer données mesurées et hypothèses ; ne pas additionner les rapports Google dont les données se recouvrent.
 5. Revoir à 30 puis 60 jours : contenu utile mais peu cliqué, intention mal couverte, questions commerciales récurrentes. Les moteurs choisissent les délais de crawl et l’affichage.
 
 Les comptes externes, la création ou gestion effective de la fiche, la vérification Google, les soumissions aux moteurs et les métriques historiques ne sont pas réalisés tant que les accès et informations nécessaires ne sont pas disponibles. Aucun email de prospection ou demande d’avis n’est envoyé par cette intervention.
