@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { Pool } from 'pg';
+import { POSTGRES_POOL } from '../../postgres.module';
+import { orderRewardBenefit } from '../loyalty/order-reward-benefit';
+import { orderRewardsEnabled } from '../orders/order-reward.policy';
+import { aLaCapacite, type PickupQuoteRequest, type PickupQuote } from '@sm/contracts';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
@@ -26,6 +31,7 @@ export class DeliveryService {
     private readonly audit: AuditService,
     @Inject(REDIS_PUB) private readonly redis: Redis,
     @InjectModel('Promotion') private readonly promotions: Model<Promotion>,
+    @Optional() @Inject(POSTGRES_POOL) private readonly pool?: Pool,
   ) {}
 
   private async tenantBySlug(slug: string) {
@@ -43,17 +49,44 @@ export class DeliveryService {
     if (!publicDeliverySettingsOf(tenant).available) {
       throw new ConflictException('La livraison est momentanément indisponible. Vous pouvez retirer votre commande au restaurant.');
     }
-    const ids = [...new Set(request.lines.map((line) => line.productId))];
-    const products = await this.products.find({ tenantId: tenant._id, _id: { $in: ids }, active: true }).lean();
-    const { subtotal, lines } = priceOrderLines(products, request.lines);
-    const candidates = await this.promotions.find(promotionCandidatesFilter(String(tenant._id), request.promoCode)).lean();
-    const promotion = selectCartPromotion(candidates, { subtotal, lines, channel: 'online', promoCode: request.promoCode, now: new Date() });
-    const discount = promotion ? { amount: promotion.amount, reason: promotion.reason } : null;
-    const subtotalNet = subtotal - (discount?.amount ?? 0);
+    const { subtotal, discount, subtotalNet } = await this.priceQuote(tenant, request);
     const result = ordering.quoteDelivery(deliverySettingsOf(tenant), request.address.postalCode, Money.fromCents(subtotalNet));
     if (!result.ok) throw new BadRequestException({ code: result.error.code, message: result.error.message });
     // Informatif : le quota n'est jamais réservé ici et sera revérifié à la création.
     return { ...result.value, originalSubtotalCents: subtotal, discount };
+  }
+
+  async quotePickup(slug: string, request: PickupQuoteRequest): Promise<PickupQuote> {
+    const tenant = await this.tenantBySlug(slug);
+    const { subtotal, discount, subtotalNet } = await this.priceQuote(tenant, request);
+    return { fulfillment: 'pickup', originalSubtotalCents: subtotal, subtotalCents: subtotalNet, totalCents: subtotalNet, discount };
+  }
+
+  private async priceQuote(tenant: Tenant & { _id: unknown }, request: PickupQuoteRequest) {
+    const ids = [...new Set(request.lines.map(line => line.productId))];
+    const products = await this.products.find({ tenantId: tenant._id, _id: { $in: ids }, active: true }).lean();
+    const { subtotal, lines } = priceOrderLines(products, request.lines);
+    let discount: { amount: number; reason: string } | null = null;
+    if (request.reward) {
+      if (request.promoCode || !this.pool || !orderRewardsEnabled() || !aLaCapacite(tenant, 'loyalty')
+        || !['trial','active'].includes(tenant.account?.status ?? '')) throw new ConflictException('Cette récompense ne peut pas être appliquée.');
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN'); await client.query("SELECT set_config('app.tenant_ref',$1,true)", [String(tenant._id)]);
+        const row = (await client.query(`SELECT r.* FROM loyalty.rewards r JOIN loyalty.programs p ON p.id=r.program_id AND p.tenant_ref=r.tenant_ref
+          WHERE r.tenant_ref=$1 AND r.id=$2 AND r.active=true AND p.status='active'`, [String(tenant._id), request.reward.rewardId])).rows[0];
+        if (!row || Number(row.cost_units) !== request.reward.expectedCostUnits) throw new ConflictException('Cette récompense a changé. Actualisez votre fidélité.');
+        const benefit = orderRewardBenefit({ id: row.id, name: row.name, costUnits: Number(row.cost_units), kind: row.kind,
+          valueCents: row.value_cents, productRef: row.product_ref }, lines, subtotal);
+        discount = { amount: benefit.amountCents, reason: `Fidélité · ${benefit.name}` };
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    } else {
+      const candidates = await this.promotions.find(promotionCandidatesFilter(String(tenant._id), request.promoCode)).lean();
+      const promotion = selectCartPromotion(candidates, { subtotal, lines, channel: 'online', promoCode: request.promoCode, now: new Date() });
+      discount = promotion ? { amount: promotion.amount, reason: promotion.reason } : null;
+    }
+    return { subtotal, discount, subtotalNet: subtotal - (discount?.amount ?? 0) };
   }
 
   async settings(tenantId: string): Promise<DeliverySettings> {

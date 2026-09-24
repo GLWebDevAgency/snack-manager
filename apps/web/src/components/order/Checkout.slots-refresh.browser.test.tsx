@@ -39,7 +39,7 @@ beforeAll(async () => {
       const response=await fetch('/slots?'+new URLSearchParams({slug,date:date??'',fulfillment}));
       const body=await response.json();fixture.settled.push(body.id);
       if(body.error)throw Error('Slots fixture unavailable');return SlotsResponseSchema.parse(body.slots);
-    },quoteDelivery:async()=>({zoneId:'zone',zoneName:'Zone de recette',feeCents:0,minimumOrderCents:0,subtotalCents:500,totalCents:500,estimatedMinutes:45}),
+    },quotePickup:async()=>({fulfillment:'pickup',originalSubtotalCents:500,subtotalCents:500,totalCents:500,discount:null}),quoteDelivery:async()=>({zoneId:'zone',zoneName:'Zone de recette',feeCents:0,minimumOrderCents:0,subtotalCents:500,totalCents:500,estimatedMinutes:45}),
       createOrder:forbid,paymentIntent:forbid,recoverOrder:forbid,abandonOrderAttempt:forbid};
     function App(){const[open,setOpen]=React.useState(true);const recovery=useCheckoutRecovery('recette',false,false);
       return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg text-ink">

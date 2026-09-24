@@ -23,6 +23,7 @@ let credential: Credential, mutations: number, assertions: number, closed: numbe
 let heldCode: Promise<void> | null, releaseCode: (() => void) | null;
 let heldLogin: Promise<void> | null, releaseLogin: (() => void) | null, logouts: number;
 let heldLogout: Promise<void> | null, releaseLogout: (() => void) | null;
+let expiredBrowserRef: string | null, browserInspectionFails: boolean;
 const profile = () => ({ expiresAt: browserExpires, profile: { name: null, phoneE164: '+33600000000', phoneVerifiedAt: verifiedAt, revision: 0 } });
 const recovery = () => ({ operationId, attemptId, expiresAt, stage, recoveryVersion: version });
 const auth = () => ({ state: 'authenticated', operationId, publicationId, view: profile() });
@@ -48,6 +49,7 @@ beforeEach(async () => {
   heldCode = null; releaseCode = null;
   heldLogin = null; releaseLogin = null; logouts = 0;
   heldLogout = null; releaseLogout = null;
+  expiredBrowserRef = null; browserInspectionFails = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
@@ -65,8 +67,12 @@ beforeEach(async () => {
         ? reply(profile()) : route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
     }
     steps.push(`${action}:${body.step ?? ''}`);
-    if (action === 'navigateur') { browserRef ||= body.browserRef;
+    if (action === 'navigateur') {
+      if (body.browserRef === expiredBrowserRef) return browserInspectionFails ? route.fulfill({ status: 503, json: {} })
+        : reply({ browserRef: expiredBrowserRef, state: 'expired', admissionExpiresAt: Date.now() - 604_800_000, expiresAt: Date.now() - 1 });
+      browserRef = body.browserRef;
       return reply({ browserRef, state: body.step === 'prepare' ? 'prepared' : body.step === 'issue' ? 'issued' : 'confirmed', admissionExpiresAt: expiresAt, expiresAt: browserExpires }); }
+    if (expiredBrowserRef && req.headers()['x-sm-customer-browser-ref'] === expiredBrowserRef) return route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
     if (action === 'intention') { operationId = body.operationId; if (body.step === 'close') closed++;
       return reply({ operationId, state: body.step === 'close' ? 'closed' : 'open', expiresAt }); }
     expect(body.operationId).toBe(operationId); attemptId = body.attemptId;
@@ -149,6 +155,54 @@ async function toNewCode() {
   await page.getByRole('button', { name: 'Afficher mon nouveau secours', exact: true }).waitFor();
 }
 describe('customer credential access — native rendered browser', () => {
+  it.each([35, 30_000])('completes login with a server clock %i ms ahead and preserves its exact deadlines', async skew => {
+    const clientNow = Date.now();
+    await page.clock.setFixedTime(clientNow);
+    expiresAt = clientNow + 600_000 + skew;
+    browserExpires = clientNow + 604_800_000 + skew;
+    verifiedAt = clientNow + skew;
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(assertions).toBe(1);
+    expect(await journal()).toMatchObject({ access: { phase: 'completed', expiresAt, attemptId: publicationId } });
+    expect(steps.filter(step => step.startsWith('intention:'))).toEqual(['intention:prepare']);
+    expect(steps.filter(step => step.startsWith('cle-acces:'))).toEqual(['cle-acces:options', 'cle-acces:assert']);
+    expect(steps.some(step => /verification|confirmation|resultat|protection/.test(step))).toBe(false);
+  });
+  it('refuses excessive future clock skew before invoking credentials or replaying the intention', async () => {
+    const clientNow = Date.now();
+    await page.clock.setFixedTime(clientNow);
+    expiresAt = clientNow + 630_001;
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByText('Cette connexion n’est pas confirmée.', { exact: false }).waitFor();
+    expect(assertions).toBe(0);
+    expect(await journal()).toMatchObject({ access: { phase: 'preparing', expiresAt: null } });
+    expect(steps.filter(step => step.startsWith('intention:'))).toEqual(['intention:prepare']);
+    expect(steps.some(step => step.startsWith('cle-acces:'))).toBe(false);
+  });
+  it('preserves a stale uncertain access until terminal browser proof, then explicitly reconnects with a new selector', async () => {
+    // Start a genuine pending recovery, then model the seven-day browser expiry.
+    await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).click();
+    await page.getByLabel('Votre code de secours', { exact: true }).waitFor();
+    const before = await journal(); expiredBrowserRef = browserRef; browserInspectionFails = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Vérifier la démarche en cours', exact: true }).click();
+    await page.getByText('Cette connexion n’est pas confirmée.', { exact: false }).waitFor();
+    expect(await journal()).toEqual(before);
+    expect(await page.getByRole('button', { name: 'Recommencer la connexion', exact: true }).count()).toBe(0);
+    browserInspectionFails = false;
+    await page.getByRole('button', { name: 'Vérifier la démarche en cours', exact: true }).click();
+    await page.getByRole('heading', { name: 'Reprendre la connexion', exact: true }).waitFor();
+    expect(await journal()).toEqual(before); expect(assertions).toBe(0); expect(mutations).toBe(0);
+    await page.getByRole('button', { name: 'Recommencer la connexion', exact: true }).click();
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).waitFor();
+    expect(await journal()).toMatchObject({ phase: 'ready', browserRef }); expect(browserRef).not.toBe(expiredBrowserRef);
+    expect((await journal() as { access?: unknown }).access).toBeUndefined();
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(assertions).toBe(1); expect(mutations).toBe(0);
+    expect(steps.filter(step => /verification|confirmation/.test(step))).toEqual([]);
+  });
   it('signs in using a real discoverable key while all SMS capabilities are closed', async () => {
     await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
     await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor(); expect(assertions).toBe(1);

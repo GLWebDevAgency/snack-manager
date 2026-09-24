@@ -17,6 +17,7 @@ const messages: Record<string, string> = {
   unavailable: 'La clé d’accès n’est pas disponible sur ce navigateur. Essayez un navigateur récent sur ce même domaine.',
   incorrect: 'Le code n’est pas correct. Vous pouvez saisir à nouveau les six chiffres reçus.',
   expired: 'Cette préparation a expiré. Aucun compte n’a été activé par cette étape.',
+  'browser-expired': 'L’accès de ce navigateur a expiré. Vous pouvez recommencer la connexion avec votre clé ou votre code de secours. Votre compte est conservé.',
   closed: 'Cette tentative a été fermée. Vous pouvez continuer en invité ou préparer une nouvelle inscription.',
   failed: 'Cette vérification ne peut pas aboutir. Fermez cette tentative avant de recommencer.',
   paused: 'La démarche est en pause. Son résultat devra être vérifié à votre retour.',
@@ -76,7 +77,14 @@ function runtime(slug: string) {
     const version = generation;
     publish({ busy: true, message: null, code: null, outcome: null });
     try {
-      const result = await work();
+      let result = await work();
+      // A stale browser cookie makes private result/close endpoints refuse the
+      // old access. Only its exact public terminal receipt can unlock restart.
+      // Inspection never issues a cookie or discards an uncertain journal.
+      if (active() && generation === version && ['uncertain', 'blocked', 'failed', 'expired'].includes(result.kind)) {
+        const browser = await preparation.inspect();
+        if (browser.kind === 'expired') result = { kind: 'browser-expired' };
+      }
       if (active() && generation === version) {
         await read(version);
         const accessMessages: Record<string, string> = {

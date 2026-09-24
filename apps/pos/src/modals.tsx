@@ -14,6 +14,7 @@ import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMoti
 import { useLayout } from './useLayout';
 import {
   LOCAL_JOURNAL_SCOPE_NOTICE,
+  dayEntryRefundedCents,
   MODE_LABEL,
   PAY_LABEL,
   type DayEntry,
@@ -882,6 +883,7 @@ export function CloseModal({
   onResetJournal,
   onOpenTicket,
   onOpenDiscount,
+  onRefund,
 }: {
   entries: DayEntry[];
   /** Ventilation des seules ventes présentes dans le journal de cette caisse. */
@@ -898,6 +900,7 @@ export function CloseModal({
   onResetJournal: () => void;
   onOpenTicket: (entry: DayEntry) => void;
   onOpenDiscount: (entry: DayEntry) => void;
+  onRefund?: (entry: DayEntry) => void;
 }) {
   const { sheet, palette, type } = useTheme();
   const L = useLayout();
@@ -959,7 +962,7 @@ export function CloseModal({
             ]}
           >
             <View style={{ flexShrink: 1 }}>
-              <Text style={type.eyebrow}>Total du journal de ce poste</Text>
+              <Text style={type.eyebrow}>Total net du journal de ce poste</Text>
               <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(12.5) }]}>
                 Hors commandes web, autres caisses et comptabilité globale.
               </Text>
@@ -977,8 +980,11 @@ export function CloseModal({
 
           {/* Ventilation des moyens saisis sur ce poste seulement. */}
           <View style={{ gap: 2 }}>
-            <StatRow label="Espèces" value={somme(z.cash)} />
-            <StatRow label="Carte bancaire" value={somme(z.card)} />
+            <StatRow label="Encaissé à l’origine" value={somme(z.collected)} />
+            <StatRow label="Remboursements confirmés" value={`− ${somme(z.refunded)}`} />
+            <StatRow label="Encaissé net" value={somme(z.netCollected)} />
+            <StatRow label="Espèces nettes" value={somme(z.cash)} />
+            <StatRow label="Carte bancaire nette" value={somme(z.card)} />
             <StatRow label="Titres-restaurant" value={somme(z.mealVoucher)} />
             <StatRow label="À encaisser au retrait" value={somme(z.due)} tone={palette.amber} />
             {/*
@@ -1064,7 +1070,7 @@ export function CloseModal({
           ) : (
             [...entries]
               .sort((a, b) => b.at - a.at)
-              .map((e) => <OrderRow key={e.clientId} entry={e} onTicket={onOpenTicket} onDiscount={onOpenDiscount} />)
+              .map((e) => <OrderRow key={e.clientId} entry={e} onTicket={onOpenTicket} onDiscount={onOpenDiscount} onRefund={onRefund} />)
           )}
         </ScrollView>
       )}
@@ -1076,10 +1082,12 @@ function OrderRow({
   entry,
   onTicket,
   onDiscount,
+  onRefund,
 }: {
   entry: DayEntry;
   onTicket: (e: DayEntry) => void;
   onDiscount: (e: DayEntry) => void;
+  onRefund?: (e: DayEntry) => void;
 }) {
   const { sheet, type, palette } = useTheme();
   const L = useLayout();
@@ -1110,7 +1118,7 @@ function OrderRow({
         </Text>
         <Text style={[type.mut, { fontSize: L.fs(12.5), marginTop: 2 }]}>
           {PAY_LABEL[entry.method]}
-          {entry.refunded ? ' · Remboursé · encaissement historique' : ''}
+          {dayEntryRefundedCents(entry) > 0 ? ` · remboursé ${euros(dayEntryRefundedCents(entry))}` : ''}
           {entry.serverId ? '' : ' · en file'}
           {entry.discount ? ` · remise ${euros(entry.discount)}` : ''}
         </Text>
@@ -1139,12 +1147,18 @@ function OrderRow({
           </Text>
         ) : null}
       </View>
-      <Text style={[type.num, { fontSize: L.fs(16), fontWeight: '800' }]}>
-        {euros(entry.total - (entry.discount ?? 0))}
-      </Text>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
+      <View style={{ flexShrink: 1 }}>
+        <Text style={[type.num, { fontSize: L.fs(16), fontWeight: '800' }]}>
+          {euros(entry.total - (entry.discount ?? 0))}{dayEntryRefundedCents(entry) > 0 ? ' encaissés' : ''}
+        </Text>
+        {dayEntryRefundedCents(entry) > 0 ? <Text style={type.mut}>
+          Net {euros(entry.total - (entry.discount ?? 0) - dayEntryRefundedCents(entry))}
+        </Text> : null}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         <MiniAction label="Ticket" onPress={() => onTicket(entry)} />
         <MiniAction label="Remise" onPress={() => onDiscount(entry)} />
+        {onRefund && entry.serverId && entry.paid ? <MiniAction label="Remboursement" onPress={() => onRefund(entry)} /> : null}
       </View>
     </View>
   );

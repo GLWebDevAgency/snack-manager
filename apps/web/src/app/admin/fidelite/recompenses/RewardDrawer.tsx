@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   LoyaltyRewardCreateSchema,
   type LoyaltyRewardCreate,
@@ -8,9 +8,10 @@ import {
   type LoyaltyRewardView,
 } from "@sm/contracts";
 import { Btn, Drawer, Field, Input, Select, Textarea, Toggle } from "@/components/ui";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { centsToInput, parseEuroInput, parsePositiveInteger } from "../form-utils";
 import { loyaltyApi } from "../data";
+import type { RawMenu } from "../../menu/product-normalize";
 
 type RewardDraft = {
   name: string;
@@ -80,6 +81,19 @@ export function RewardDrawer({
   const [draft, setDraft] = useState(() => initialDraft(reward));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [menu, setMenu] = useState<RawMenu | null>(null);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const [menuRequest, setMenuRequest] = useState(0);
+  useEffect(() => {
+    if (draft.kind !== "product") return;
+    const controller = new AbortController();
+    void api.get<RawMenu>("/menu", { signal: controller.signal }).then(value => {
+      if (!controller.signal.aborted) { setMenu(value); setMenuError(null); }
+    }).catch(() => { if (!controller.signal.aborted) setMenuError("La carte n’a pas pu être chargée."); });
+    return () => controller.abort();
+  }, [draft.kind, menuRequest]);
+  const products = [...(menu?.categories ?? []).flatMap(category => category.products ?? []), ...(menu?.uncategorized ?? [])];
+  const currentMissing = draft.productRef !== "" && !products.some(product => product._id === draft.productRef);
   const formId = `loyalty-reward-${reward?.id ?? "new"}`;
 
   function patch<K extends keyof RewardDraft>(key: K, value: RewardDraft[K]) {
@@ -153,15 +167,24 @@ export function RewardDrawer({
           </Field>
         )}
         {draft.kind === "product" && (
-          <Field label="Produit offert" htmlFor={`${formId}-product`} hint="Nom ou référence telle qu'elle apparaît sur votre carte">
-            <Input id={`${formId}-product`} value={draft.productRef} maxLength={120} onChange={(e) => patch("productRef", e.target.value)} />
+          <Field label="Produit offert" htmlFor={`${formId}-product`} hint="Une unité offerte, hors suppléments. Si le panier contient plusieurs tailles de ce produit, la moins chère est offerte.">
+            <Select id={`${formId}-product`} value={draft.productRef} disabled={!menu} onChange={(e) => patch("productRef", e.target.value)}>
+              <option value="">{menu ? "Choisir dans la carte" : "Chargement de la carte…"}</option>
+              {currentMissing && <option value={draft.productRef}>{/^[a-f0-9]{24}$/.test(draft.productRef) ? "Produit indisponible dans la carte" : `Ancienne désignation : ${draft.productRef}`}</option>}
+              {(menu?.categories ?? []).map(category => <optgroup key={category._id} label={category.name ?? "Catégorie"}>
+                {(category.products ?? []).map(product => <option key={product._id} value={product._id}>{product.name}{product.active === false ? " · masqué" : ""}</option>)}
+              </optgroup>)}
+              {(menu?.uncategorized?.length ?? 0) > 0 && <optgroup label="Sans catégorie">{menu!.uncategorized!.map(product => <option key={product._id} value={product._id}>{product.name}{product.active === false ? " · masqué" : ""}</option>)}</optgroup>}
+            </Select>
+            {menu && currentMissing && <p className="mt-2 text-xs text-mut">Rattachez cette récompense à un produit pour l’utiliser en commande en ligne. L’ancienne désignation reste conservée tant que vous ne la remplacez pas.</p>}
+            {menuError && <div className="mt-2 text-xs" role="alert">{menuError} <button type="button" className="underline" onClick={() => setMenuRequest(value => value + 1)}>Réessayer</button></div>}
           </Field>
         )}
 
         <div className="flex items-center justify-between gap-4 rounded-card border border-white/8 bg-[image:var(--cf-elev-gradient)] p-3.5">
           <div>
             <p className="text-sm font-bold text-ink">Récompense active</p>
-            <p className="mt-0.5 text-xs text-mut">Visible et utilisable par les clients.</p>
+            <p className="mt-0.5 text-xs text-mut">Visible sur la carte de fidélité. Les remises et les produits rattachés à la carte peuvent être utilisés en commande en ligne.</p>
           </div>
           <Toggle label="Récompense active" on={draft.active} onChange={(active) => patch("active", active)} />
         </div>

@@ -65,7 +65,7 @@ describe('protected enrollment BFF — real handler, isolated upstream', () => {
     if (fault === 'operation') current.operationId = randomUUID();
     if (fault === 'check') current.checkId = randomUUID();
     if (fault === 'expired') current.expiresAt = Date.now() - 1;
-    if (fault === 'too-long') current.expiresAt = Date.now() + 601_000;
+    if (fault === 'too-long') current.expiresAt = Date.now() + 631_000;
     const output = { state: 'enrollment', enrollment: current, ...(fault === 'private-field' ? { view: view() } : {}) };
     upstream.mockResolvedValue(Response.json(output));
     const response = await customerAccount(req(), context, 'protection');

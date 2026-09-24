@@ -25,7 +25,10 @@ integration('durable account–loyalty association — native SQL constraints', 
     // customer-only fixture does not gain unrestricted loyalty grants.
     if (!/^customer_test_[a-f0-9]{32}$/.test(f.role)) throw new Error('Disposable role required');
     await f.admin.query(`GRANT USAGE ON SCHEMA loyalty TO "${f.role}";
-      GRANT SELECT,INSERT,UPDATE,DELETE ON loyalty.members,loyalty.operations TO "${f.role}"`);
+      GRANT SELECT,INSERT,UPDATE,DELETE ON loyalty.members,loyalty.operations TO "${f.role}";
+      GRANT SELECT ON loyalty.order_reward_reservations TO "${f.role}"`);
+    // The invoker trigger on operations checks for a managed reward receipt at
+    // COMMIT. This fixture needs that RLS-scoped lookup, not permission to write holds.
   }, 20_000);
   afterAll(async () => { await f?.close(); });
 

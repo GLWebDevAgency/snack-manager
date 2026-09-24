@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
-  DeliveryDispatchSchema, DeliveryQuoteRequestSchema, DeliverySettingsSchema,
+  PickupQuoteRequestSchema, type PickupQuoteRequest, DeliveryDispatchSchema, DeliveryQuoteRequestSchema, DeliverySettingsSchema,
   type DeliveryDispatch, type DeliveryQuoteRequest, type DeliverySettings, type JwtPayload,
 } from '@sm/contracts';
 import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
@@ -24,6 +24,15 @@ export class DeliveryController {
   @Post('public/tenants/:slug/delivery/quote')
   quote(@Param('slug') slug: string, @Body(zod(DeliveryQuoteRequestSchema)) body: DeliveryQuoteRequest) {
     return this.delivery.quote(slug, body);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Post('public/tenants/:slug/orders/quote')
+  quotePickup(@Param('slug') slug: string, @Body(zod(PickupQuoteRequestSchema)) body: PickupQuoteRequest) {
+    return this.delivery.quotePickup(slug, body);
   }
 
   @Roles('owner', 'gerant')

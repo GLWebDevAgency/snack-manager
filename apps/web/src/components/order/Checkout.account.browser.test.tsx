@@ -10,6 +10,7 @@ import { chromium, type Browser, type BrowserContext, type Page, type Locator } 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedCustomerBrowserFixture } from '../customer-account/browser-journal.fixture';
 import type * as Journal from './checkout-attempt';
+import { marqueDeRepli } from '@sm/contracts';
 
 declare global { interface Window { checkoutAccountFixture: {
   journal: typeof Journal; clears: number; accountStatus: string; logout(): Promise<boolean>; refresh(): Promise<void>;
@@ -24,6 +25,15 @@ let authenticated: boolean, expiresAt: number, verifiedAt: number, holdCreate: b
 let heldCreate: { res: ServerResponse; body: unknown } | null, heldPayment: ServerResponse | null;
 let holdRecovery: boolean, heldRecovery: ServerResponse | null, accountReads: number;
 let heldAbandon: ServerResponse | null, createdTotal: number;
+let sessionUnavailable: boolean;
+let rewardReads: string[], rewardTtl: number, rewardValue: number;
+let holdRewardQuote: boolean, heldRewardQuote: { res: ServerResponse; value: unknown } | null;
+let holdRewardMember: boolean, heldRewardMember: { res: ServerResponse; value: unknown } | null;
+let zeroPending: boolean;
+const rewardId = '30000000-0000-4000-8000-000000000003';
+const catalog = () => ({ restaurant: { slug: 'recette', name: 'Restaurant de recette', brand: marqueDeRepli(null, null), brandColor: '#ae782a', logoUrl: null },
+  program: { name: 'Fidélité recette', mechanism: 'points', unitLabelSingular: 'point', unitLabelPlural: 'points', termsSummary: 'Conditions de recette' }, orderRewardsEnabled: true,
+  rewards: [{ id: rewardId, name: 'Récompense recette', description: 'Remise sur les produits', costUnits: 10, kind: 'fixed_discount', valueCents: rewardValue, productRef: null }] });
 const orderId = 'b'.repeat(24), iso = '2030-09-09T16:00:00.000Z';
 const slots = { date: '2030-09-09', timezone: 'Europe/Paris', intervalMin: 10, capacity: 4, leadTimeMin: 30,
   slots: [{ iso, label: '18:00', service: 'dinner', remaining: 4, full: false, load: 'calm' }], closedToday: false, nextOpenDate: null, closureReason: null, paused: false };
@@ -74,6 +84,7 @@ beforeAll(async () => {
           if(canClear&&!canClear())return false;f.clears++;setLines([]);return true})}}),[lines]);
       return <main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg text-ink"><h1>Checkout compte fixture</h1>
         <button onClick={()=>setOpen(true)}>Rouvrir</button><Checkout open={open} recovery={recovery} slug="recette" tenantName="Restaurant de recette" tenantAddress="Adresse de recette"
+          loyalty={location.search.includes('reward')?{chemin:'/r/recette/fidelite',programme:'Fidélité recette',uniteSingulier:'point',unitePluriel:'points',premiere:{nom:'Récompense recette',cout:10}}:null}
           stripeApparence={{}} mode="dark" prixMono={false} cart={cart} paused={false} pauseMessage={null} initialSlots={${JSON.stringify(slots)}}
           delivery={location.search.includes('delivery')?{available:true,zones:[],leadTimeMin:45,paymentRequired:'online'}:undefined}
           onClose={()=>setOpen(false)} onBrowse={()=>{}} onEditLine={()=>{}}/></main>}
@@ -81,7 +92,7 @@ beforeAll(async () => {
       // Fixed HTTP fixture: Monday noon in Europe/Paris, with bookable pickup slots regardless of runner time.
       const raw=demoSite(new Date('2030-09-09T10:00:00.000Z'),()=>0);raw.tenant.slug='recette';raw.tenant.brand=marqueDeRepli(null,null);
       raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
-      const api=orderingApi({send:async request=>({status:200,body:request.path.includes('/slots')?raw.slots:raw})});
+      const api=orderingApi({send:async request=>({status:200,body:request.path.endsWith('/availability')?{observedAt:new Date().toISOString(),openNow:raw.openNow,ordering:raw.ordering,todayHours:raw.todayHours,timezone:raw.timezone,slots:raw.slots}:request.path.includes('/slots')?raw.slots:raw})});
       node=<Storefront site={await api.loadSite('recette')} api={api} mode="embed" demo={false}/>;
     }createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
     bundle: true, write: false, outdir: '/virtual-account-checkout', platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic',
@@ -109,16 +120,34 @@ beforeAll(async () => {
     if (path === '/r/recette/compte/capacites') { json(res, { available: false }); return; }
     if (path === '/r/recette/compte/session') {
       if (req.method === 'DELETE') { authenticated = false; res.writeHead(204).end(); return; }
+      if (sessionUnavailable) { json(res, {}, 503); return; }
       json(res, authenticated ? { expiresAt, profile: { name: 'Compte Recette', phoneE164: '+33600000001', phoneVerifiedAt: verifiedAt, revision: 0 } } : {}, authenticated ? 200 : 401); return;
     }
+    if (path === '/api/public/tenants/recette/loyalty') { rewardReads.push(req.url!); json(res, catalog()); return; }
     if (path === '/api/public/tenants/recette/slots') { json(res, slots); return; }
     if (path === '/api/public/tenants/recette/order-notifications/config') { json(res, { available: false, publicKey: null }); return; }
     if (path === '/api/public/funnel' && req.method === 'POST') { res.writeHead(204).end(); return; }
     let raw = ''; for await (const chunk of req) raw += chunk.toString(); const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
     calls.push({ path, body, headers: req.headers });
+    if (path === '/r/recette/compte/fidelite') {
+      rewardReads.push(req.url!); const value = { state: 'member', expiresAt: Date.now() + rewardTtl,
+        member: { id: '40000000-0000-4000-8000-000000000004', joinedAt: '2026-09-21T12:00:00.000Z', qrGeneration: 1,
+          balanceUnits: 37, reservedUnits: 7, unitLabelSingular: 'point', unitLabelPlural: 'points' } };
+      if (holdRewardMember) { heldRewardMember = { res, value }; return; } json(res, value); return;
+    }
+    if (path === '/api/public/tenants/recette/orders/quote') {
+      const discount = body.reward ? { amount: rewardValue, reason: 'Récompense recette' } : null;
+      const value = { fulfillment: 'pickup', originalSubtotalCents: 500, subtotalCents: 500 - (discount?.amount ?? 0), totalCents: 500 - (discount?.amount ?? 0), discount };
+      if (holdRewardQuote && body.reward) { heldRewardQuote = { res, value }; return; } json(res, value); return;
+    }
     if (path === '/api/public/tenants/recette/delivery/quote') { json(res, deliveryQuote); return; }
     if (path === '/r/recette/compte/commandes' || path === '/api/public/tenants/recette/orders') {
       const value = order((body.payment as { method: string }).method, body.fulfillment === 'delivery');
+      if (body.reward) {
+        value.totals.total -= rewardValue;
+        value.totals.discount = { amount: rewardValue, reason: 'Récompense recette' } as unknown as null;
+        if (value.totals.total === 0 && !zeroPending) value.payment.status = 'paid';
+      }
       createdTotal = value.totals.total;
       const response = path.startsWith('/r/') ? { state: 'created', expiresAt, order: value } : value;
       if (holdCreate) { heldCreate = { res, body: response }; return; } json(res, response); return;
@@ -135,6 +164,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   faults = []; calls = []; authenticated = true; expiresAt = Date.now() + 300_000; verifiedAt = Date.now() - 1_000; holdCreate = false; holdPayment = false; heldCreate = null; heldPayment = null;
   holdRecovery = false; heldRecovery = null; heldAbandon = null; accountReads = 0; createdTotal = 500;
+  sessionUnavailable = false; rewardReads = []; rewardTtl = 60_000; rewardValue = 250; holdRewardQuote = false; heldRewardQuote = null; holdRewardMember = false; heldRewardMember = null; zeroPending = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', route => {
     const url = new URL(route.request().url());
@@ -145,7 +175,7 @@ beforeEach(async () => {
   await page.goto(origin + '/empty'); await seedCustomerBrowserFixture(page, 'recette'); await page.goto(origin);
   await page.waitForFunction(() => !!window.checkoutAccountFixture?.access());
 });
-afterEach(async () => { heldCreate?.res.destroy(); heldPayment?.destroy(); heldRecovery?.destroy(); heldAbandon?.destroy(); await context.close(); expect(faults).toEqual([]); });
+afterEach(async () => { heldRewardQuote?.res.destroy(); heldRewardMember?.res.destroy(); heldCreate?.res.destroy(); heldPayment?.destroy(); heldRecovery?.destroy(); heldAbandon?.destroy(); await context.close(); expect(faults).toEqual([]); });
 afterAll(async () => {
   await browser?.close();
   for (const fixture of [server, providerServer]) if (fixture) await new Promise<void>(resolve => { fixture.closeAllConnections(); fixture.close(() => resolve()); });
@@ -157,7 +187,7 @@ async function checkout(method: 'counter' | 'online' = 'counter', submit = true)
   await activate(page.getByRole('button', { name: /^Continuer · retrait/ }));
   await page.getByLabel('Prénom et nom', { exact: true }).fill('Compte Recette'); await page.getByLabel('Téléphone', { exact: true }).fill('0600000001');
   if (method === 'counter') await activate(page.getByRole('radio', { name: /Payer au comptoir/ }));
-  if (submit) await activate(page.getByRole('button', { name: method === 'counter' ? /^Confirmer la commande/ : /^Payer/ }));
+  if (submit) await activate(page.getByRole('button', { name: method === 'counter' ? /^Confirmer la commande/ : /^(Payer|Confirmer la commande)/ }));
 }
 const posts = () => calls.filter(call => call.path.endsWith('/commandes') || call.path.endsWith('/orders'));
 const payments = () => calls.filter(call => call.path.endsWith('/payment-intent'));
@@ -219,6 +249,138 @@ async function holdLock(name: string) {
 }
 
 describe('Checkout compte — vraie admission navigateur, sans fournisseur', () => {
+  it('opts in to the reward views, subtracts reservations and sends only the selected reward with the quoted total', async () => {
+    await page.goto(origin + '/?reward'); await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByText('30 points disponibles', { exact: true }).waitFor();
+    expect(rewardReads.sort()).toEqual(['/api/public/tenants/recette/loyalty?orderRewards=1', '/r/recette/compte/fidelite?orderRewards=1']);
+    await page.getByRole('radio', { name: /Récompense recette/ }).check();
+    await checkout(); await page.getByRole('link', { name: 'Suivre ma commande', exact: true }).waitFor();
+    expect(posts()).toHaveLength(1); expect(posts()[0]!.path).toBe('/r/recette/compte/commandes');
+    expect(posts()[0]!.body).toMatchObject({ reward: { rewardId, expectedCostUnits: 10 }, expectedTotalCents: 250 });
+    expect(JSON.stringify(posts()[0]!.body)).not.toMatch(/balanceUnits|reservedUnits|memberId|accountId/);
+  });
+  it('completes a server-paid zero total without starting a bank payment', async () => {
+    rewardValue = 500; await page.goto(origin + '/?reward'); await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByRole('radio', { name: /Récompense recette/ }).check();
+    await checkout('online'); await page.getByRole('heading', { name: 'C’est envoyé en cuisine', exact: true }).waitFor();
+    await page.getByText('Rien à régler', { exact: true }).waitFor();
+    expect(posts()).toHaveLength(1); expect(posts()[0]!.body.expectedTotalCents).toBe(0); expect(payments()).toHaveLength(0);
+    expect(await page.getByRole('button', { name: 'Confirmer Stripe fixture' }).count()).toBe(0);
+  });
+  it('removes the account reward before admitting an explicitly guest order and ignores its late quote', async () => {
+    holdRewardQuote = true;
+    await page.goto(origin + '/?reward'); await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByRole('radio', { name: /Récompense recette/ }).check();
+    await expect.poll(() => Boolean(heldRewardQuote)).toBe(true);
+    await checkout('counter', false);
+    await page.getByRole('checkbox', { name: 'Commander en invité', exact: true }).check();
+    await expect.poll(() => calls.filter(call => call.path.endsWith('/orders/quote') && !call.body.reward).length).toBeGreaterThanOrEqual(1);
+    json(heldRewardQuote!.res, heldRewardQuote!.value); heldRewardQuote = null;
+    expect(await page.getByText('30 points disponibles', { exact: true }).count()).toBe(0);
+    await activate(page.getByRole('button', { name: /^Confirmer la commande/ })); await page.getByRole('link', { name: 'Suivre ma commande', exact: true }).waitFor();
+    expect(posts()).toHaveLength(1); expect(posts()[0]!.path).toBe('/api/public/tenants/recette/orders');
+    expect(posts()[0]!.body).not.toHaveProperty('reward'); expect(posts()[0]!.body.expectedTotalCents).toBe(500);
+  });
+  it('keeps a zero order awaiting server settlement in recovery without announcing paid or requesting Stripe', async () => {
+    rewardValue = 500; zeroPending = true; await page.goto(origin + '/?reward');
+    await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByRole('radio', { name: /Récompense recette/ }).check(); await checkout('online');
+    await page.getByRole('link', { name: 'Suivre ma commande', exact: true }).waitFor();
+    expect(payments()).toHaveLength(0); expect(posts()).toHaveLength(1);
+    expect(await page.getByText('Rien à régler', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('heading', { name: 'C’est envoyé en cuisine', exact: true }).count()).toBe(0);
+  });
+  it('discards a loyalty response arriving after logout without exposing its balance or reattaching the account', async () => {
+    holdRewardMember = true; await page.goto(origin + '/?reward');
+    await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await expect.poll(() => Boolean(heldRewardMember)).toBe(true);
+    await page.evaluate(() => window.checkoutAccountFixture.logout());
+    json(heldRewardMember!.res, heldRewardMember!.value); heldRewardMember = null;
+    await page.waitForFunction(() => window.checkoutAccountFixture.accountStatus === 'guest');
+    expect(await page.getByText('30 points disponibles', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('radio', { name: /Récompense recette/ }).count()).toBe(0); expect(posts()).toHaveLength(0);
+  });
+  it.each([320, 390, 1440])('keeps the real reward selection readable and operable at %spx', async width => {
+    await page.setViewportSize({ width, height: 1000 }); await page.goto(origin + '/?reward');
+    await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByText('30 points disponibles', { exact: true }).waitFor();
+    const radio = page.getByRole('radio', { name: /Récompense recette/ }); await radio.check();
+    await expect.poll(() => calls.some(call => call.path.endsWith('/orders/quote') && Boolean(call.body.reward))).toBe(true);
+    expect(await radio.isChecked()).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await radio.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(captures, `reward-selection-${width}.png`), animations: 'disabled' });
+    expect(posts()).toHaveLength(0);
+  });
+  it('erases the private balance when its response expires while the account access remains valid', async () => {
+    rewardTtl = 1000; await page.goto(origin + '/?reward'); await page.clock.install();
+    await page.getByRole('button', { name: 'Voir mes récompenses', exact: true }).click();
+    await page.getByText('30 points disponibles', { exact: true }).waitFor();
+    await page.clock.fastForward(1500);
+    expect(await page.evaluate(() => !!window.checkoutAccountFixture.access())).toBe(true);
+    expect(await page.getByText('30 points disponibles', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('radio', { name: /Récompense recette/ }).count()).toBe(0);
+  });
+  it('allows an explicit new guest checkout during an account outage, pins it durably and recovers without a second POST', async () => {
+    sessionUnavailable = true; await page.evaluate(() => window.checkoutAccountFixture.refresh());
+    await page.waitForFunction(() => window.checkoutAccountFixture.accountStatus === 'unavailable');
+    await checkout('counter', false);
+    await activate(page.getByRole('button', { name: /^Confirmer la commande/ }));
+    await page.getByText('Votre compte ne peut pas être confirmé.', { exact: false }).waitFor();
+    expect(posts()).toHaveLength(0);
+    const choice = page.getByRole('checkbox', { name: 'Commander en invité', exact: true });
+    expect(await choice.isChecked()).toBe(false); await choice.check();
+    for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await choice.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(captures, `guest-choice-${width}.png`) });
+    }
+    holdCreate = true;
+    await activate(page.getByRole('button', { name: /^Confirmer la commande/ }));
+    await expect.poll(() => !!heldCreate).toBe(true);
+    expect(posts()).toHaveLength(1); const post = posts()[0]!;
+    expect(post.path).toBe('/api/public/tenants/recette/orders');
+    expect(post.headers['x-sm-customer-operation-id']).toBeUndefined();
+    const local = await page.evaluate(() => window.checkoutAccountFixture.journal.readCheckoutRecovery('recette'));
+    expect(local.active).toMatchObject({ state: 'uncertain', provenance: { kind: 'guest' }, clientId: post.body.clientId });
+    // Lose an admitted response after headers, so Chromium cannot retry the
+    // POST as an untouched socket. Checkout then makes one read-only recovery
+    // attempt automatically; settle that failed read before the reload below.
+    holdRecovery = true;
+    const responseStarted = page.waitForResponse(response => response.url().endsWith('/orders') && response.request().method() === 'POST');
+    heldCreate!.res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '4096' });
+    heldCreate!.res.write('{');
+    await responseStarted;
+    heldCreate!.res.destroy(); heldCreate = null; holdCreate = false;
+    await expect.poll(() => !!heldRecovery).toBe(true);
+    const reads = () => calls.filter(call => call.path.endsWith('/recovery'));
+    expect(reads()).toHaveLength(1);
+    expect(reads()[0]!.body).toEqual({ clientId: post.body.clientId, recoveryProof: post.body.recoveryProof });
+    json(heldRecovery!, { message: 'Lecture momentanément indisponible' }, 503); heldRecovery = null; holdRecovery = false;
+    await expect.poll(() => page.getByRole('button', { name: 'Retrouver ma commande', exact: true }).isEnabled()).toBe(true);
+    expect(posts()).toHaveLength(1);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.journal.readCheckoutRecovery('recette'))).toMatchObject({ active: local.active });
+    // The uncertain identity remains guest after reload, even when the account
+    // service becomes available. The explicit retry reads that same identity.
+    sessionUnavailable = false;
+    await page.reload();
+    await page.waitForFunction(() => !!window.checkoutAccountFixture.access());
+    expect(reads()).toHaveLength(1);
+    await activate(page.getByRole('button', { name: 'Retrouver ma commande', exact: true }));
+    await expect.poll(() => reads().length).toBe(2);
+    expect(reads()[1]!.body).toEqual(reads()[0]!.body);
+    expect(posts()).toHaveLength(1);
+    await expect.poll(() => page.evaluate(async () => (await window.checkoutAccountFixture.journal.readCheckoutRecovery('recette')).active)).toMatchObject({ state: 'received', provenance: { kind: 'guest' } });
+  }, 10_000);
+  it('does not expose a guest conversion or send a new request over a pending private C01 during an outage', async () => {
+    const id = await seedAttempt('account');
+    const before = await page.evaluate(id => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', id), id);
+    sessionUnavailable = true; await page.evaluate(() => window.checkoutAccountFixture.refresh());
+    await assertMasked();
+    expect(await page.getByRole('checkbox', { name: 'Commander en invité', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: /^Confirmer la commande/ }).count()).toBe(0);
+    expect(posts()).toHaveLength(0);
+    expect(await page.evaluate(id => window.checkoutAccountFixture.journal.readCheckoutAttemptForReconciliation('recette', id), id)).toEqual(before);
+  });
   it.each(['pointer', 'keyboard'] as const)('preserves the same account payment when focus returns from the native card iframe (%s)', async interaction => {
     await checkout('online');
     const confirm = page.getByRole('button', { name: 'Confirmer Stripe fixture', exact: true });

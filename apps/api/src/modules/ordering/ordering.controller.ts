@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Param, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, Param, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   SlotsQuerySchema,
@@ -116,5 +116,13 @@ export class OrderingController {
   @Get('public/tenants/:slug/site')
   publicSite(@Param('slug') slug: string, @Query(zod(SlotsQuerySchema)) query: SlotsQuery) {
     return this.site.build(slug, query.date);
+  }
+
+  /** Fresh status/capacity only, safe to update without remounting an active payment form. */
+  @Public()
+  @Get('public/tenants/:slug/availability')
+  @Header('Cache-Control', 'no-store')
+  publicAvailability(@Param('slug') slug: string) {
+    return this.site.availability(slug);
   }
 }

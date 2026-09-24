@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assertCanonicalSaleTestTarget, canonicalSaleTestFixture, inCanonicalSaleTenant } from './canonical-sale.test-fixture';
@@ -7,6 +9,10 @@ const raw = process.env.LOYALTY_CANONICAL_SALE_TEST_DATABASE_URL;
 const integration = raw ? describe : describe.skip;
 const RECEIPT_INDEX = 'earn_receipts_tenant_canonical_sale_uq';
 const LEDGER_INDEX = 'ledger_earn_canonical_sale_uq';
+// A latest-schema fixture must record every shipped migration, in order, with
+// the SQL hash and timestamp actually supplied to the real migrator.
+const expectedMigrationJournal = readMigrationFiles({ migrationsFolder: resolve(__dirname, '../drizzle') })
+  .map(({ hash, folderMillis }) => ({ hash, created_at: String(folderMillis) }));
 type Member = { tenant: string; member: string; program: string };
 type Source = 'pos' | 'online' | 'standalone' | 'admin' | 'system';
 
@@ -190,7 +196,7 @@ integration('canonical sale uniqueness — genuine PostgreSQL and limited owner'
     await writeEarn(fixture.pool, member, 'pos', `pos-order:${randomUUID()}`);
     const before = await contents(fixture.pool, member.tenant);
     const journal = await fixture.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id');
-    expect(journal.rows).toHaveLength(8);
+    expect(journal.rows.map(({ hash, created_at }) => ({ hash, created_at }))).toEqual(expectedMigrationJournal);
     await fixture.upgrade(); await fixture.upgrade();
     expect((await fixture.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id')).rows).toEqual(journal.rows);
     expect(await contents(fixture.pool, member.tenant)).toEqual(before);
@@ -207,14 +213,17 @@ integration('canonical sale uniqueness — genuine PostgreSQL and limited owner'
       expect(journalBefore.rows).toHaveLength(6);
       await historical.upgrade();
       const journalAfter = await historical.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id');
-      expect(journalAfter.rows).toHaveLength(8);
+      expect(journalAfter.rows.map(({ hash, created_at }) => ({ hash, created_at }))).toEqual(expectedMigrationJournal);
       expect(journalAfter.rows.slice(0, 6)).toEqual(journalBefore.rows);
       expect(journalAfter.rows[6]).toMatchObject({ created_at: '1789040000000' });
       expect(journalAfter.rows[7]).toMatchObject({ created_at: '1789978588970' });
-      expect(await contents(historical.pool, member.tenant)).toEqual(before);
+      // 0008 adds a zero reservation counter; every pre-existing financial
+      // value must remain byte-for-byte equal, including balances and versions.
+      const upgraded = { ...before, wallets: before.wallets.map(wallet => ({ ...wallet, reserved_units: '0' })) };
+      expect(await contents(historical.pool, member.tenant)).toEqual(upgraded);
       for (const original of [sale, zeroSale]) await expect(writeEarn(historical.pool, member, 'online', `order:${original.toUpperCase()}`))
         .rejects.toMatchObject({ code: '23505', constraint: RECEIPT_INDEX });
-      expect(await contents(historical.pool, member.tenant)).toEqual(before);
+      expect(await contents(historical.pool, member.tenant)).toEqual(upgraded);
       await historical.upgrade();
       expect((await historical.pool.query('SELECT * FROM drizzle.__drizzle_loyalty_migrations ORDER BY id')).rows).toEqual(journalAfter.rows);
     } finally { await historical.close(); }

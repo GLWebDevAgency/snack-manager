@@ -8,6 +8,7 @@ import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { OnlineOrderCheckoutService } from './online-order-checkout.service';
 import { CustomerOrderHistoryService } from './customer-order-history.service';
 import { capacityModels, seedCapacityFixture } from './order-capacity-test-fixtures';
+import type { OrderRewardService } from './order-reward.service';
 
 /** Only local disposable databases. No connection happens before validation. */
 export function customerOrdersTestDatabase(raw: string) {
@@ -51,12 +52,12 @@ export async function customerOrdersMongoFixture(raw: string, scope: { tenantId:
     await models.products.collection.insertOne({ _id: new Types.ObjectId(productId), tenantId: new Types.ObjectId(scope.tenantId),
       name: 'Article de recette', price: 1250, active: true, variants: [], optionGroups: [] } as never);
   }
-  function replica(overrides: { orders?: Model<Order>; admissions?: Model<PublicOrderAdmission> } = {}) {
+  function replica(overrides: { orders?: Model<Order>; admissions?: Model<PublicOrderAdmission>; orderRewards?: OrderRewardService } = {}) {
     const orderModel = overrides.orders ?? models.orders;
     const redis = { publish: vi.fn().mockResolvedValue(1) };
     const admissions = new PublicOrderAdmissionService(overrides.admissions ?? models.admissions, orderModel, redis as never, models.days, models.tenants);
     const orders = new OrdersService(orderModel, models.products, models.counters, models.promotions, redis as never,
-      {} as never, models.tenants, { pourTenant: async () => ['bo', 'online'] } as never, {} as never, admissions);
+      {} as never, models.tenants, { pourTenant: async () => ['bo', 'online'] } as never, {} as never, admissions, undefined, overrides.orderRewards);
     const tenants = { bySlug: async (slug: string) => {
       const tenant = await models.tenants.findOne({ slug });
       if (!tenant) throw new Error('Unknown fixture restaurant');

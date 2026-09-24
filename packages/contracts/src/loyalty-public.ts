@@ -37,6 +37,7 @@ export const LoyaltyPublicProgramSchema = z
         termsSummary: z.string(),
       })
       .strict(),
+    orderRewardsEnabled: z.boolean().optional(),
     rewards: z.array(
       z
         .object({

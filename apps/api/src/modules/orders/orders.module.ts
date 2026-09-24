@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { OrderRewardsModule } from './order-rewards.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrdersGateway } from './orders.gateway';
@@ -12,6 +13,8 @@ import { OrderFinanceController } from './order-finance.controller';
 import { EncaissementModule } from '../encaissement/encaissement.module';
 import { OrderCounterController } from './order-counter.controller';
 import { OrderCounterCollectionService } from './order-counter-collection.service';
+import { OrderCounterRefundController } from './order-counter-refund.controller';
+import { OrderCounterRefundService } from '../ordering/order-counter-refund.service';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { PublicOrderRecoveryController } from './public-order-recovery.controller';
 import { OnlineOrderCheckoutService } from './online-order-checkout.service';
@@ -21,9 +24,9 @@ import { DiningService } from './dining.service';
 import { DiningSchemaBootstrap } from './dining-schema-bootstrap';
 
 @Module({
-  imports: [TenantsModule, OrderingModule, EncaissementModule],
-  controllers: [OrdersController, OrderFinanceController, OrderCounterController, PublicOrderRecoveryController, DiningController],
-  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService, OnlineOrderCheckoutService, CustomerOrderHistoryService, DiningService, DiningSchemaBootstrap],
+  imports: [OrderRewardsModule, TenantsModule, OrderingModule, EncaissementModule],
+  controllers: [OrdersController, OrderFinanceController, OrderCounterController, OrderCounterRefundController, PublicOrderRecoveryController, DiningController],
+  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, OrderCounterRefundService, PublicOrderAdmissionService, OnlineOrderCheckoutService, CustomerOrderHistoryService, DiningService, DiningSchemaBootstrap],
   exports: [OnlineOrderCheckoutService],
 })
 export class OrdersModule {}

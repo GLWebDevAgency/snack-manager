@@ -17,6 +17,7 @@ import {
   CUSTOMER_PROVIDER_FRESHNESS_MIGRATION,
   LOYALTY_EARN_RECEIPTS_MIGRATION,
   LOYALTY_INITIAL_MIGRATION,
+  LOYALTY_ORDER_REWARD_MIGRATION,
   POSTGRES_MANAGED_OBJECTS,
   SUPPLY_INITIAL_MIGRATION,
   managedObjectKey,
@@ -723,14 +724,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 116 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(116);
+  it('énumère exactement les 123 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(123);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(57);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(59);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(32);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(116);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(37);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(123);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -761,6 +762,15 @@ describe('manifeste PostgreSQL versionné', () => {
         columns: ['id', 'hash', 'created_at'],
       },
     });
+  });
+
+  it('rattache les deux tables et les cinq gardes de récompense exclusivement à loyalty 0008', () => {
+    expect(POSTGRES_MANAGED_OBJECTS.filter(object => object.journal === 'loyalty' && object.introducedAt === LOYALTY_ORDER_REWARD_MIGRATION)
+      .map(object => `${object.kind}:${object.schema}.${object.name}`).sort()).toEqual([
+        'function:loyalty.guard_order_reward_closure', 'function:loyalty.preserve_order_reward_operation',
+        'function:loyalty.preserve_order_reward_reservation', 'function:loyalty.validate_order_reward_receipt',
+        'function:loyalty.validate_order_reward_wallet', 'table:loyalty.order_reward_closures', 'table:loyalty.order_reward_reservations',
+      ]);
   });
 
   it('inventorie séparément la table de préparation navigateur et sa fonction de garde', () => {
@@ -901,6 +911,7 @@ describe('manifeste PostgreSQL versionné', () => {
     );
     expect(loyalty.entries.find((entry) => entry.tag.startsWith('0000_'))?.when).toBe(
       LOYALTY_INITIAL_MIGRATION,
+  LOYALTY_ORDER_REWARD_MIGRATION,
     );
     expect(loyalty.entries.find((entry) => entry.tag.startsWith('0002_'))?.when).toBe(
       LOYALTY_EARN_RECEIPTS_MIGRATION,

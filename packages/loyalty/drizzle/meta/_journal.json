@@ -57,6 +57,20 @@
       "when": 1789978588970,
       "tag": "0007_historical_sale_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0008_order_reward_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790000000001,
+      "tag": "0009_pos_sale_compensation",
+      "breakpoints": true
     }
   ]
 }

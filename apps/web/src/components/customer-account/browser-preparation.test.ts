@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCustomerBrowserPreparation } from './browser-preparation';
 import { CustomerBrowserJournalSchema, type CustomerBrowserJournal } from './browser-journal';
+
+afterEach(() => vi.restoreAllMocks());
 
 const ref = '10000000-0000-4000-8000-000000000001';
 const other = '20000000-0000-4000-8000-000000000002';
@@ -30,6 +32,40 @@ function fixture() {
 }
 
 describe('Customer browser preparation — explicit, journaled, no provider', () => {
+  it.each(['expiresAt', 'admissionExpiresAt'] as const)('bounds restored %s metadata independently without storing an adjusted expiry', async field => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    for (const skew of [35, 30_000, 30_001]) {
+      const f = fixture(), limit = field === 'expiresAt' ? 604_800_000 : 600_000;
+      f.request.mockResolvedValue({ ...f.view(), state: 'confirmed', [field]: now + limit + skew });
+      expect((await f.client.restoreMissingJournal()).kind).toBe(skew <= 30_000 ? 'ready' : 'uncertain');
+      expect(f.record).toEqual(skew <= 30_000 ? { version: 1, browserRef: ref, phase: 'ready' } : null);
+      expect(f.request).toHaveBeenCalledExactlyOnceWith('browser', { step: 'restore' });
+    }
+  });
+
+  it('observes authoritative expiry without changing an uncertain access or its UUIDs', async () => {
+    const f = fixture(); f.record = { version: 1, browserRef: ref, phase: 'ready', access: {
+      operationId: other, attemptId: ref, method: 'passkey', phase: 'asserting', expiresAt: Date.now() - 604_800_000 } };
+    const before = structuredClone(f.record); f.state = 'expired';
+    expect(await f.client.inspect()).toMatchObject({ kind: 'expired' });
+    expect(f.record).toEqual(before); expect(f.journal.write).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
+    expect(f.request).toHaveBeenCalledExactlyOnceWith('browser', { step: 'prepare', browserRef: ref });
+    // Restart must obtain its own fresh proof, not reuse the observation.
+    f.request.mockRejectedValueOnce(new Error('Old proof is not authority'));
+    expect(await f.client.restartExpired()).toEqual({ kind: 'uncertain' });
+    expect(f.record).toEqual(before); expect(f.uuid).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'unconfirmed', 'wrong selector', 'changed journal', '401'] as const)('inspection never repairs %s', async fault => {
+    const f = fixture(); f.record = fault === 'missing' ? null : { version: 1, browserRef: ref, phase: 'ready' };
+    if (fault === 'wrong selector') f.request.mockResolvedValue({ ...f.view(), state: 'expired', browserRef: other });
+    if (fault === '401') f.request.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
+    if (fault === 'changed journal') f.request.mockImplementationOnce(async () => {
+      f.record = { version: 1, browserRef: other, phase: 'ready' }; return { ...f.view(), state: 'expired' };
+    });
+    expect(await f.client.inspect()).toEqual({ kind: fault === 'missing' ? 'absent' : 'uncertain' });
+    expect(f.journal.write).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
+    expect(f.events.every(event => event === 'prepare')).toBe(true);
+  });
   it('restores only a missing public browser selector, without issuing or selecting a private publication', async () => {
     const f = fixture(); const current = { ...f.view(), state: 'confirmed' as const, admissionExpiresAt: Date.now() - 1_000 };
     f.request.mockResolvedValue(current);
@@ -60,12 +96,13 @@ describe('Customer browser preparation — explicit, journaled, no provider', ()
   });
   it.each([
     ['expired', () => ({ expiresAt: Date.now() })],
-    ['overlong lifetime', () => ({ expiresAt: Date.now() + 604_801_000 })],
-    ['overlong admission', () => ({ admissionExpiresAt: Date.now() + 601_000 })],
+    ['overlong lifetime', () => ({ expiresAt: Date.now() + 604_830_001 })],
+    ['overlong admission', () => ({ admissionExpiresAt: Date.now() + 630_001 })],
     ['unknown private field', () => ({ token: 'not-a-browser-result' })],
     ['unexpected cookie instruction', () => ({ emitCookie: false })],
     ['invalid reference', () => ({ browserRef: 'invalid' })],
   ] as const)('restore refuses %s without any journal write', async (_label, patch) => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const f = fixture(); f.request.mockResolvedValue({ ...f.view(), state: 'confirmed', ...patch() });
     expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
     expect(f.journal.write).not.toHaveBeenCalled();

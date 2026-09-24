@@ -17,3 +17,4 @@ export * from './delivery-assignment';
 export * from './order-refund-journal';
 
 export * from './loyalty-sale-resolution-journal';
+export * from './counter-refund-journal';

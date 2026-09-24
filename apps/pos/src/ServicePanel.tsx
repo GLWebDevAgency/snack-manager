@@ -56,6 +56,8 @@ import {
 import { canConfirmCounterHandover } from './service-handover';
 import { DeliveryAssignmentPanel, DeliveryAssignmentRecoveries } from './DeliveryAssignmentPanel';
 import type { DeliveryAssignmentAccess } from './useDeliveryAssignment';
+import type { CounterRefundAccess } from './counter-refund';
+import { CounterRefundHistory } from './CounterRefundHistory';
 import { canCollectOrder, serviceAgeLabel } from './service-payment';
 import type {
   ActiveOrderStatus,
@@ -93,7 +95,9 @@ export function ServicePanel({
   truncatedStatuses,
   onConfirmHandover,
   onCollectPayment,
+  onRefund,
   deliveryAccess,
+  counterRefundAccess,
   offline,
 }: {
   commandes: ServiceCommande[];
@@ -110,7 +114,9 @@ export function ServicePanel({
   truncatedStatuses: ActiveOrderStatus[];
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
   onCollectPayment?: (row: ServerOrderRow) => void;
+  onRefund?: (orderId: string) => void;
   deliveryAccess?: DeliveryAssignmentAccess;
+  counterRefundAccess?: CounterRefundAccess;
   offline?: boolean;
 }) {
   const { palette, type } = useTheme();
@@ -144,6 +150,7 @@ export function ServicePanel({
       />
 
       <ScrollView contentContainerStyle={{ padding: pad, paddingBottom: L.sp(40), gap: L.sp(S.lg) }}>
+        {counterRefundAccess && onRefund ? <CounterRefundHistory access={counterRefundAccess} onSelect={onRefund} offline={!!offline} /> : null}
         {deliveryAccess ? <DeliveryAssignmentRecoveries key={deliveryAccess.ownerId} access={deliveryAccess} offline={!!offline} brand={brand} /> : null}
         {commandes.length === 0 ? (
           <EmptyState
@@ -206,6 +213,7 @@ export function ServicePanel({
           onClose={() => setDetailId(null)}
           onConfirmHandover={onConfirmHandover}
           onCollectPayment={onCollectPayment}
+          onRefund={onRefund}
           deliveryAccess={deliveryAccess}
           offline={offline}
         />
@@ -473,6 +481,7 @@ export function DetailCommande({
   onClose,
   onConfirmHandover,
   onCollectPayment,
+  onRefund,
   deliveryAccess,
   offline,
 }: {
@@ -482,6 +491,7 @@ export function DetailCommande({
   onClose: () => void;
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
   onCollectPayment?: (row: ServerOrderRow) => void;
+  onRefund?: (orderId: string) => void;
   deliveryAccess?: DeliveryAssignmentAccess;
   offline?: boolean;
 }) {
@@ -558,6 +568,8 @@ export function DetailCommande({
           </View>
         ) : null}
 
+        {onRefund && row.payment?.method === 'counter' && ['paid', 'refunded'].includes(row.payment.status ?? '') ? <Btn label="Remboursement comptoir" kind="ghost" disabled={!!offline}
+          onPress={() => { onClose(); onRefund(row._id); }} /> : null}
         {row.type === 'delivery' && deliveryAccess ? <DeliveryAssignmentPanel
           key={`${deliveryAccess.ownerId}:${row._id}`} missionId={row._id} access={deliveryAccess} offline={!!offline} brand={brand}
         /> : null}

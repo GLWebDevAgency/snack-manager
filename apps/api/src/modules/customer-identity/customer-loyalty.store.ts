@@ -33,7 +33,7 @@ type Attach = Extract<CustomerLoyaltyRequest, { step: 'attach' }>;
 type Operation = { kind: string; status: string; request_fingerprint: string; result: unknown; completed_at: Date | null };
 type Membership = { member_id: string; operation_id: string; request_hash: string };
 type MemberRow = { id: string; status: string; joined_at: Date; enrollment_handoff_at: Date | null;
-  qr_generation: string; balance_units?: string };
+  qr_generation: string; balance_units?: string; reserved_units?: string };
 type ProgramRow = { id: string; status: string; version: string; version_program_id: string | null;
   name: string; mechanism: string; terms_summary: string; unit_label_singular: string; unit_label_plural: string;
   minimum_purchase_cents: number; maximum_units_per_purchase: number | null;
@@ -143,7 +143,7 @@ async function ownedMemberRecord(ctx: CustomerLoyaltyReadContext, link: Membersh
     if (!attached.success || !equalHash(link.request_hash, attachmentFingerprint(ctx, attached.data, attached.data.presentedQrHash))) return unavailable();
     event = 'token_replaced'; notice = null; reason = attachmentReason; initialGeneration = attached.data.qrGeneration;
   } else return unavailable();
-  const row = (await ctx.client.query<MemberRow>(`SELECT m.id,m.status,m.joined_at,m.enrollment_handoff_at,m.qr_generation${includeBalance ? ',w.balance_units' : ''}
+  const row = (await ctx.client.query<MemberRow>(`SELECT m.id,m.status,m.joined_at,m.enrollment_handoff_at,m.qr_generation${includeBalance ? ',w.balance_units,w.reserved_units' : ''}
     FROM loyalty.members m JOIN loyalty.wallets w ON (w.tenant_ref,w.member_id)=(m.tenant_ref,m.id)
     WHERE m.tenant_ref=$1 AND m.id=$2 AND w.program_id=$3
       AND EXISTS (SELECT 1 FROM loyalty.membership_events e WHERE e.tenant_ref=m.tenant_ref AND e.member_id=m.id
@@ -159,7 +159,7 @@ async function ownedMember(ctx: CustomerLoyaltyReadContext, link: Membership, pr
   const row = await ownedMemberRecord(ctx, link, program, true);
   if (row.status !== 'active') return unavailable();
   const parsed = CustomerLoyaltyMemberSchema.safeParse({ id: row.id, joinedAt: row.joined_at.toISOString(), qrGeneration: Number(row.qr_generation),
-    balanceUnits: Number(row.balance_units), unitLabelSingular: program.unitLabelSingular, unitLabelPlural: program.unitLabelPlural });
+    balanceUnits: Number(row.balance_units), ...(Number(row.reserved_units) ? { reservedUnits: Number(row.reserved_units) } : {}), unitLabelSingular: program.unitLabelSingular, unitLabelPlural: program.unitLabelPlural });
   return parsed.success ? parsed.data : unavailable();
 }
 

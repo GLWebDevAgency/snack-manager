@@ -14,8 +14,10 @@ function validAccess(access: CheckoutAccountAccess | null, now: number): access 
 /** Capture synchronously from the view that owns the gesture, before any
  * fingerprint, lock or IndexedDB await. A previous C01 keeps its own provenance. */
 export function captureCheckoutProvenance(status: CustomerAccountState['status'], access: CheckoutAccountAccess | null,
-  enabled: boolean, now = Date.now()): CheckoutProvenance {
-  if (!enabled || status === 'guest' && access === null) return { kind: 'guest' };
+  enabled: boolean, now = Date.now(), explicitGuest = false): CheckoutProvenance {
+  // This choice belongs only to the creation gesture. Replays must use the
+  // provenance already committed in C01, even when today's account is offline.
+  if (explicitGuest || !enabled || status === 'guest' && access === null) return { kind: 'guest' };
   if (status !== 'authenticated' || !validAccess(access, now)) throw new CustomerAccountHttpError(409);
   return { kind: 'account', ...structuredClone(access) };
 }

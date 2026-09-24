@@ -43,6 +43,7 @@ import {
 import {
   DEMO_TENANT,
   assertDeliveryAssignmentsSettled,
+  assertCounterRefundsSettled,
   SmClient,
   QueueScopeRetiredError,
   demoStore,
@@ -104,6 +105,7 @@ export { KEYS };
 
 /** Lecture sous le verrou de purge : aucun journal direct ne passe par la file. */
 async function assertDirectOperationsSettled(store: KeyValueStore): Promise<void> {
+  await assertCounterRefundsSettled(store);
   await assertDeliveryAssignmentsSettled(store);
   await assertDiningPurgeSafe(store);
   await assertPhoneOrderPurgeSafe(store);

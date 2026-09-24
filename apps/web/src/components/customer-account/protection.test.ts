@@ -1,8 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerBrowserJournalSchema, type CustomerBrowserJournal } from './browser-journal';
 import { createCustomerProtection } from './protection';
 import type { CustomerAccountRequest } from './client';
+
+afterEach(() => vi.restoreAllMocks());
 
 const secret = () => randomBytes(32).toString('base64url');
 const recoveryCode = () => `SM1-${randomBytes(16).toString('hex').toUpperCase().match(/.{4}/g)!.join('-')}`;
@@ -46,6 +48,42 @@ function fixture() {
     newClient: () => createCustomerProtection(port), breakStorage: () => { broken = true; }, inactive: () => { active = false; } };
 }
 describe('protected enrollment controller — public journal, private ephemeral ceremonies', () => {
+  it.each([35, 30_000, 30_001])('bounds enrollment metadata with %ims clock skew before any native ceremony', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(), original = f.request.getMockImplementation()!;
+    f.request.mockImplementation(async (action, body) => {
+      const response = await original(action, body) as { enrollment: object };
+      return { ...response, enrollment: { ...response.enrollment, expiresAt: now + 600_000 + skew } };
+    });
+    expect((await f.client.register()).kind).toBe(skew <= 30_000 ? 'enrollment' : 'uncertain');
+    expect(f.passkeys.register).toHaveBeenCalledTimes(skew <= 30_000 ? 1 : 0);
+    expect(f.stored()!.verification!.phase).toBe('protecting');
+  });
+  it.each([35, 30_000, 30_001])('bounds activation session metadata with %ims clock skew', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(); await f.client.register(); await f.client.assert(); await f.client.recoveryCode();
+    const original = f.request.getMockImplementation()!;
+    f.request.mockImplementationOnce(async (action, body) => {
+      const response = await original(action, body) as { view: object };
+      return { ...response, view: { ...response.view, expiresAt: now + 604_800_000 + skew } };
+    });
+    expect((await f.client.activate(f.code)).kind).toBe(skew <= 30_000 ? 'authenticated' : 'uncertain');
+    expect(f.stored()!.verification!.phase).toBe(skew <= 30_000 ? 'completed' : 'protecting');
+  });
+  it.each(['enrollment', 'session'] as const)('still refuses truly expired %s metadata', async target => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture();
+    if (target === 'session') { await f.client.register(); await f.client.assert(); await f.client.recoveryCode(); }
+    const original = f.request.getMockImplementation()!;
+    f.request.mockImplementationOnce(async (action, body) => {
+      const response = await original(action, body) as { enrollment?: object; view?: object };
+      return target === 'session' ? { ...response, view: { ...response.view, expiresAt: now } }
+        : { ...response, enrollment: { ...response.enrollment, expiresAt: now } };
+    });
+    expect((await (target === 'session' ? f.client.activate(f.code) : f.client.register())).kind).toBe('uncertain');
+    expect(f.stored()!.verification!.phase).toBe('protecting');
+  });
+
   it('requires durable storage and Web Locks before invoking the browser or network', async () => {
     const f = fixture(); expect((await createCustomerProtection({ ...f.port, lock: undefined }).register()).kind).toBe('blocked');
     f.breakStorage(); expect((await f.client.register()).kind).toBe('uncertain');

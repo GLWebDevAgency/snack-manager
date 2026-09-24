@@ -1,3 +1,5 @@
+import { OrderRewardSnapshotSchema } from '../loyalty/order-reward.store';
+import { assertOrderRewardReady } from '../orders/order-reward.policy';
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -81,7 +83,7 @@ export class OrderPaymentLifecycleService {
   private read(id: string) {
     // A concurrent process must not act on a marker another writer has not yet
     // majority-committed (in particular requestStartedAt and the closed phase).
-    return this.orders.findById(id).select('+paymentFlow').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findById(id).select('+paymentFlow +loyaltyReward +loyaltyRewardProcessing +counterCollection').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 
   private change(order: OrderDocument, update: UpdateQuery<Order>) {
@@ -89,7 +91,7 @@ export class OrderPaymentLifecycleService {
       { _id: order._id, tenantId: order.tenantId, __v: order.__v ?? { $exists: false } },
       { ...update, $inc: { ...update.$inc, __v: 1 } },
       { new: true, writeConcern: DURABLE_WRITE },
-    ).select('+paymentFlow').read('primary');
+    ).select('+paymentFlow +loyaltyReward +loyaltyRewardProcessing +counterCollection').read('primary');
   }
 
   private conflict(): never {
@@ -150,6 +152,7 @@ export class OrderPaymentLifecycleService {
       let order = await this.read(orderId);
       if (!order) throw new NotFoundException('Commande introuvable');
       if (order.status === 'cancelled' || order.status === 'delivered' || order.payment?.status !== 'pending') return null;
+      assertOrderRewardReady(order);
       if (!order.paymentFlow) { await this.adopt(order, provider); continue; }
       const flow = order.paymentFlow;
       if (flow.phase !== 'open') this.conflict();
@@ -274,6 +277,18 @@ export class OrderPaymentLifecycleService {
     if (order.payment?.status !== 'pending') throw new ConflictException('Commande déjà réglée : utilisez le parcours de remboursement.');
   }
 
+  private offeredOrder(order: OrderDocument): boolean {
+    const reward = OrderRewardSnapshotSchema.safeParse(order.toObject({ transform: false }).loyaltyReward);
+    return reward.success && order.channel === 'online' && reward.data.clientId === order.clientId
+      && reward.data.owner.tenantRef === String(order.tenantId) && order.totals.total === 0
+      && order.totals.subtotal === reward.data.benefit.amountCents && (order.totals.deliveryFee ?? 0) === 0
+      && order.totals.discount?.amount === reward.data.benefit.amountCents && order.totals.discount.promotionId == null
+      && order.payment.status === 'paid' && order.loyaltyRewardProcessing?.zeroPaid === true
+      && ['consumed','reversed'].includes(order.loyaltyRewardProcessing.state)
+      && order.paymentFlow?.origin === 'created_v1' && ['open','closed'].includes(order.paymentFlow.phase)
+      && !order.paymentFlow.attempt && !order.payment.stripePaymentIntentId && !order.counterCollection;
+  }
+
   private async closePayment(
     orderId: string, tenantId: string, requestedBy: string, reason: string,
     provider: OrderPaymentProvider | null, destination: ClosingDestination,
@@ -281,6 +296,18 @@ export class OrderPaymentLifecycleService {
     for (let retry = 0; retry < MAX_CAS_RETRIES; retry++) {
       let order = await this.read(orderId);
       if (!order || String(order.tenantId) !== tenantId) throw new NotFoundException('Commande introuvable');
+      // A fully offered order has no money to refund. Its private consumed
+      // receipt permits cancellation before handoff and the reward worker
+      // restores the exact original debit. A bare paid/zero flag is not proof.
+      if (destination === 'cancel_order' && this.offeredOrder(order)) {
+        if (order.status === 'delivered') throw new ConflictException('Commande déjà remise.');
+        if (order.status === 'cancelled' && order.paymentFlow?.phase === 'closed') return order;
+        const closed = await this.change(order, { $set: { status: 'cancelled', 'paymentFlow.phase': 'closed',
+          'paymentFlow.close': { operationId: randomUUID(), destination, reason, requestedBy, requestedAt: new Date() } },
+          $push: { statusHistory: { status: 'cancelled', at: new Date(), by: requestedBy } } });
+        if (closed) return closed;
+        continue;
+      }
       this.assertClosureCandidate(order, destination);
       if (!order.paymentFlow) { await this.adopt(order, provider); continue; }
       if (order.paymentFlow.phase === 'closed' && order.status === 'cancelled') return order;

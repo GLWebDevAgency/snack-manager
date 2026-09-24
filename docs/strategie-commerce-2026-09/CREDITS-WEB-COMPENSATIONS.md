@@ -1,5 +1,7 @@
 # Crédits web et compensations de fidélité
 
+Suite : [parcours commande, récompenses et remboursements comptoir](PARCOURS-COMMANDE-FIDELITE.md).
+
 Lot du 21 septembre 2026. Ce document décrit le code et la procédure
 d’exploitation ; il ne vaut pas reçu de déploiement. Les résultats exécutés,
 la révision servie et l’ouverture effective du drapeau doivent être consignés
@@ -66,7 +68,7 @@ n’est pas transformée en nouvelle demande lors de la reprise.
 
 ## Exploitation dans le back-office
 
-Le parcours **Fidélité → Ventes web** affiche les gains, les corrections, les
+Le parcours **Fidélité → Ventes fidélité** affiche les gains, les corrections, les
 points conservés à titre commercial et les dossiers à traiter. Les lectures
 ne déclenchent aucune écriture financière. Elles sont limitées au restaurant
 courant, à la capacité fidélité et aux rôles propriétaire/gérant.

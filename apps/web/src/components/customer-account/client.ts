@@ -1,4 +1,4 @@
-import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
+import { customerAccountTimestampWithinFutureBound, CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
   CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema,
   CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER,
   customerAccountResponseLimit, customerAccountRequestTimeoutMs, type CustomerAccountAction, type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
@@ -8,7 +8,7 @@ type Action = CustomerAccountAction;
 const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create', 'order-reorder', 'loyalty'];
 export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
 export type CustomerAccountAccess = { selection: CustomerAccountSelection; expiresAt: number };
-export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
+export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection, options?: { orderRewards: true }) => Promise<unknown>) & {
   selection?: () => Promise<CustomerAccountSelection | null>;
 };
 export type CustomerAccountState = Readonly<{
@@ -28,8 +28,9 @@ export class CustomerAccountHttpError extends Error {
 export function customerAccountRequest(slug: string, selected: () => Promise<string | null> = () => selectedCustomerBrowser(slug),
   publication: () => Promise<CustomerAccountPublication | null> = () => selectedCustomerPublication(slug)): CustomerAccountRequest {
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
-  const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
+  const request: CustomerAccountRequest = async (action, body, expectedSelection, options) => {
     if (!valid) throw new CustomerAccountHttpError(400);
+    if (options && (action !== 'loyalty' || options.orderRewards !== true)) throw new CustomerAccountHttpError(400);
     if (['orders', 'order-detail', 'order-create', 'order-reorder', 'loyalty'].includes(action) && !expectedSelection) throw new CustomerAccountHttpError(409);
     const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", passkey: "cle-acces", recovery: "secours", session: "session", name: "profil", logout: "session", orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes', 'order-reorder': 'commandes/recommander', loyalty: 'fidelite' };
     const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", passkey: "POST", recovery: "POST", session: "GET", name: "PATCH", logout: "DELETE", orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST', 'order-reorder': 'POST', loyalty: 'POST' };
@@ -53,7 +54,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
       if ((browserRef !== null && await selected() !== browserRef)
         || (expected !== null && JSON.stringify(await publication()) !== JSON.stringify(expected))) throw new CustomerAccountHttpError(409);
     };
-    const response = await fetch(`/r/${slug}/compte/${paths[action]}`, {
+    const response = await fetch(`/r/${slug}/compte/${paths[action]}${options?.orderRewards ? '?orderRewards=1' : ''}`, {
       method: methods[action], credentials: "same-origin", cache: "no-store", redirect: "error",
       referrerPolicy: "no-referrer", signal: AbortSignal.timeout(customerAccountRequestTimeoutMs(action, 'browser')),
       headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }),
@@ -134,8 +135,9 @@ export function createCustomerAccountClient(port: Port) {
   }
   const parse = (raw: unknown) => {
     const result = CustomerAccountViewSchema.parse(raw);
-    if (result.expiresAt <= now() || result.expiresAt > now() + 7 * 86_400_000
-      || result.profile.phoneVerifiedAt > now()) throw new CustomerAccountHttpError(401);
+    const observedAt = now();
+    if (result.expiresAt <= observedAt || !customerAccountTimestampWithinFutureBound(result.expiresAt, observedAt, 7 * 86_400_000)
+      || !customerAccountTimestampWithinFutureBound(result.profile.phoneVerifiedAt, observedAt, 0)) throw new CustomerAccountHttpError(401);
     return result;
   };
   function invalidate(status: "idle" | "offline" | "guest" = "idle") {
@@ -198,9 +200,10 @@ export function createCustomerAccountClient(port: Port) {
         if (!sameSelection(selected, await selection())) { conflict = true; return; }
         if (!current(run)) return;
         port.announce?.();
-        const fresh = parse(await port.request("session", undefined, selected));
+        const freshRaw = await port.request("session", undefined, selected);
         if (!sameSelection(selected, await selection())) { conflict = true; return; }
         if (!current(run)) return;
+        const fresh = parse(freshRaw);
         if (!sameCustomerSession(viewed, fresh) || viewed.profile.revision !== fresh.profile.revision) { conflict = true; return; }
         const raw = await port.request(action, body.data, selected);
         if (!sameSelection(selected, await selection())) throw new CustomerAccountHttpError(409);

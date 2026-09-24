@@ -33,6 +33,17 @@ describe('checkout pinned account transport', () => {
   it.each(['idle', 'loading', 'authenticated', 'offline', 'error', 'unavailable'] as const)('does not silently turn unconfirmed %s into guest', status => {
     expect(() => captureCheckoutProvenance(status, null, true, now)).toThrow();
   });
+  it.each(['authenticated', 'loading', 'offline', 'error', 'unavailable'] as const)('explicitly creates a guest provenance during %s without adopting or changing the account', status => {
+    const original = structuredClone(access);
+    expect(captureCheckoutProvenance(status, access, true, now, true)).toEqual({ kind: 'guest' });
+    expect(access).toEqual(original);
+    const f = fixture(); f.change(null);
+    // The new choice is not an input to a replay: its immutable private C01
+    // still refuses any account outage instead of using the public endpoint.
+    return expect(createCheckoutAttemptOrder(f.port, attempt(), 'proof')).rejects.toMatchObject({ status: 409 }).then(() => {
+      expect(f.guestCreate).not.toHaveBeenCalled(); expect(f.accountRequest).not.toHaveBeenCalled();
+    });
+  });
   it('rejects expired or changed access, including the same publication after logout', () => {
     const provenance = { kind: 'account' as const, ...access };
     expect(checkoutAccessMatches(provenance, access, now)).toBe(true);

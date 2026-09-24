@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerBrowserJournalSchema, type CustomerBrowserJournal } from './browser-journal';
 import { createCustomerVerification } from './verification';
 import type { CustomerAccountRequest } from './client';
+
+afterEach(() => vi.restoreAllMocks());
 
 function fixture() {
   let stored: CustomerBrowserJournal | null = { version: 1, browserRef: randomUUID(), phase: 'ready' };
@@ -37,6 +39,23 @@ function fixture() {
 }
 
 describe('durable customer verification controller', () => {
+  it.each([35, 30_000, 30_001, -600_000])('validates enrollment expiry with %ims future skew without publishing a session', async skew => {
+    const now = 1_800_000_000_000; vi.spyOn(Date, 'now').mockReturnValue(now);
+    const f = fixture(); await f.client.begin(); await f.client.start('+33600000000', 'human');
+    const original = f.request.getMockImplementation()!;
+    f.request.mockImplementation(async (action, body) => {
+      if (action !== 'recover') return original(action, body);
+      const choice = f.stored()!.verification!, expiresAt = now + 600_000 + skew;
+      return { state: 'enrollment', operationId: choice.operationId, checkId: choice.checkId, challengeId: choice.challengeId,
+        expiresAt, enrollment: { operationId: choice.operationId, checkId: choice.checkId, expiresAt,
+          stage: 'registration_required', recoveryVersion: 0 } };
+    });
+    const accepted = skew >= 0 && skew <= 30_000;
+    expect((await f.client.check('123456')).kind).toBe(accepted ? 'enrollment' : 'uncertain');
+    expect(f.stored()!.verification!.phase).toBe(accepted ? 'protecting' : 'checking');
+    expect(JSON.stringify(f.stored())).not.toContain('phoneE164');
+  });
+
   it('requires browser preparation and a durable lock before creating any intention', async () => {
     const f = fixture(); expect(await createCustomerVerification({ ...f.port, lock: undefined }).begin()).toEqual({ kind: 'blocked' });
     f.reset(null); expect(await f.client.begin()).toEqual({ kind: 'uncertain' });

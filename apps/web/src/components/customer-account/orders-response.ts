@@ -1,14 +1,18 @@
-import { CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema, CustomerOrderReorderResponseSchema, type CustomerOrdersQuery } from '@sm/contracts';
+import { CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema, CustomerOrderReorderResponseSchema,
+  customerAccountTimestampWithinFutureBound, type CustomerOrdersQuery } from '@sm/contracts';
 
-function expiry(expiresAt: number, now: number, maximum: number) {
-  if (expiresAt <= now || expiresAt > Math.min(maximum, now + 7 * 86_400_000)) throw new Error('Invalid private order response');
+function expiry(expiresAt: number, now: number, maximum?: number) {
+  // Clock tolerance only applies to the local plausibility bound. A selected
+  // session's exact server deadline can never be renewed by an order response.
+  if (expiresAt <= now || !customerAccountTimestampWithinFutureBound(expiresAt, now, 7 * 86_400_000)
+    || (maximum !== undefined && (!Number.isSafeInteger(maximum) || expiresAt > maximum))) throw new Error('Invalid private order response');
 }
 /** UTC timestamps and opaque ids form a stable descending, exclusive cursor. */
 function before(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }) {
   const difference = Date.parse(a.createdAt) - Date.parse(b.createdAt);
   return difference < 0 || (difference === 0 && a.id < b.id);
 }
-export function parseCustomerOrdersPage(raw: unknown, query: CustomerOrdersQuery, now = Date.now(), maximum = now + 7 * 86_400_000) {
+export function parseCustomerOrdersPage(raw: unknown, query: CustomerOrdersQuery, now = Date.now(), maximum?: number) {
   const page = CustomerOrdersPageSchema.parse(raw);
   expiry(page.expiresAt, now, maximum);
   if (page.orders.length > query.limit) throw new Error('Invalid private order response');
@@ -25,14 +29,14 @@ export function parseCustomerOrdersPage(raw: unknown, query: CustomerOrdersQuery
     || page.nextCursor.createdAt !== previous.createdAt)) throw new Error('Invalid private order response');
   return page;
 }
-export function parseCustomerOrderDetail(raw: unknown, orderId: string, now = Date.now(), maximum = now + 7 * 86_400_000) {
+export function parseCustomerOrderDetail(raw: unknown, orderId: string, now = Date.now(), maximum?: number) {
   const response = CustomerOrderDetailResponseSchema.parse(raw);
   expiry(response.expiresAt, now, maximum);
   if (response.order._id !== orderId) throw new Error('Invalid private order response');
   return response;
 }
 
-export function parseCustomerOrderReorder(raw: unknown, orderId: string, now = Date.now(), maximum = now + 7 * 86_400_000) {
+export function parseCustomerOrderReorder(raw: unknown, orderId: string, now = Date.now(), maximum?: number) {
   const response = CustomerOrderReorderResponseSchema.parse(raw);
   expiry(response.expiresAt, now, maximum);
   if (response.orderId !== orderId) throw new Error('Invalid private order response');

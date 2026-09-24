@@ -1,10 +1,13 @@
+import { LoyaltyPosCompensationProcessingSchema } from './loyalty-pos-compensation.schema';
 import { Schema, type InferSchemaType } from 'mongoose';
 import { customerOrderOwnerField } from './customer-order-owner.schema';
 import { customerSaleAttributionField } from './customer-sale-attribution.schema';
+import { orderRewardField } from './order-reward.schema';
 import { loyaltyWebIntentField, LoyaltyWebProcessingSchema } from './loyalty-web-intent.schema';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { OrderReadyNotificationSchema } from './order-ready-notification.schema';
 import { OrderRefundFlowSchema } from './order-refund-flow.schema';
+import { OrderCounterRefundFlowSchema } from './order-counter-refund.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
 import { DeliveryHandoffSchema } from './delivery-handoff.schema';
@@ -70,8 +73,11 @@ function hidePrivateOrderFields(
 ): Record<string, unknown> {
   delete returned.customerOwner;
   delete returned.customerSaleAttribution;
+  delete returned.loyaltyReward;
+  delete returned.loyaltyRewardProcessing;
   delete returned.loyaltyWebIntent;
   delete returned.loyaltyWebProcessing;
+  delete returned.loyaltyPosCompensationProcessing;
   delete returned.loyaltyMemberId;
   delete returned.loyaltyEarnOperationId;
   delete returned.loyaltyActorRef;
@@ -84,6 +90,7 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnLeaseUntil;
   delete returned.paymentFlow;
   delete returned.refundFlow;
+  delete returned.counterRefundFlow;
   delete returned.counterCollection;
   delete returned.publicRecovery;
   delete returned.deliveryMission;
@@ -99,6 +106,7 @@ function hidePrivateAdmissionFields(_document: unknown, returned: Record<string,
   delete returned.channel;
   delete returned.proofHash;
   delete returned.payloadHash;
+  delete returned.loyaltyRewardAttempt;
   delete returned.snapshot;
   delete returned.validationOwner;
   delete returned.capacity;
@@ -1005,7 +1013,11 @@ export const OrderSchema = new Schema(
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
     customerOwner: customerOrderOwnerField(),
     customerSaleAttribution: customerSaleAttributionField(),
+    loyaltyReward: orderRewardField(),
+    loyaltyRewardProcessing: { type: new Schema({ state: { type: String, enum: ['pending','consumed','reversed'], required: true },
+      orderVersion: { type: Number, default: -1 }, zeroPaid: { type: Boolean, default: false } }, { _id: false }), default: null, select: false },
     loyaltyWebIntent: loyaltyWebIntentField(),
+    loyaltyPosCompensationProcessing: { type: LoyaltyPosCompensationProcessingSchema, default: null, select: false },
     loyaltyWebProcessing: { type: LoyaltyWebProcessingSchema, default: null, select: false },
     /** Preuve de reprise publique, atomique avec la vente ; jamais adoptée après création. */
     publicRecovery: {
@@ -1201,6 +1213,7 @@ export const OrderSchema = new Schema(
       select: false,
     },
     refundFlow: { type: OrderRefundFlowSchema, default: null, select: false },
+    counterRefundFlow: { type: OrderCounterRefundFlowSchema, default: null, select: false },
     status: {
       type: String,
       enum: ['new', 'preparing', 'ready', 'delivered', 'cancelled'],
@@ -1342,6 +1355,8 @@ export const PublicOrderAdmissionSchema = new Schema({
   tenantId: { type: Schema.Types.ObjectId, required: true },
   clientId: { type: String, required: true },
   customerOwner: customerOrderOwnerField(),
+  loyaltyRewardAttempt: { type: new Schema({ version: { type: Number, enum: [1], required: true },
+    nextAttemptAt: { type: Date, required: true }, done: { type: Boolean, required: true } }, { _id: false }), default: undefined, select: false },
   version: { type: Number, enum: [1], required: true },
   // Les anciens documents C01 sans kind restent publics. Le staff ne crée
   // aucune preuve de reprise publique ; l'origine ne fait pas partie de la clé unique.
@@ -2350,3 +2365,12 @@ export const MODELS = {
     collection: 'platformsettings',
   },
 } as const;
+
+OrderSchema.index({ channel: 1, loyaltyEarnState: 1, _id: 1 }, { name: 'loyalty_pos_compensation_scan' });
+OrderSchema.index({ 'loyaltyPosCompensationProcessing.state': 1, 'loyaltyPosCompensationProcessing.dirty': 1,
+  'loyaltyPosCompensationProcessing.nextAttemptAt': 1, _id: 1 }, { name: 'loyalty_pos_compensation_ready' });
+OrderSchema.index({ 'loyaltyPosCompensationProcessing.state': 1, 'loyaltyPosCompensationProcessing.leaseUntil': 1 },
+  { name: 'loyalty_pos_compensation_lease' });
+
+OrderSchema.index({ 'loyaltyReward.version': 1, _id: 1 }, { name: 'order_reward_scan' });
+PublicOrderAdmissionSchema.index({ 'loyaltyRewardAttempt.version': 1, 'loyaltyRewardAttempt.done': 1, 'loyaltyRewardAttempt.nextAttemptAt': 1, _id: 1 }, { name: 'order_reward_attempt_due' });

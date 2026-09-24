@@ -4,7 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { Types, type Model } from 'mongoose';
 import type Redis from 'ioredis';
 import { validLoyaltyWebIntent, type Order, type PublicOrderAdmission } from '@sm/db';
-import { CustomerSaleAttributionSchema, ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/contracts';
+import { CustomerSaleAttributionSchema, OrderRewardSnapshotSchema, ordersChannel, WS_EVENTS, type PublicOrderRejectionReason } from '@sm/contracts';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { assertOrderAdmissionBinding, isPublicOrderAdmission, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, type OrderAdmissionBinding } from './order-admission-identity';
 import { assertPublicRecoveryReplay, recoveryNotFound } from './order-recovery';
@@ -39,7 +39,7 @@ export class OrderAdmissionJournal {
   }
 
   orderByClient(tenantId: string, clientId: string) {
-    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner +customerSaleAttribution +loyaltyWebIntent').read('primary').readConcern('majority').maxTimeMS(10_000);
+    return this.orders.findOne({ tenantId, clientId }).select('+publicRecovery +customerOwner +customerSaleAttribution +loyaltyWebIntent +loyaltyReward').read('primary').readConcern('majority').maxTimeMS(10_000);
   }
 
   async authenticated(tenantId: string, clientId: string, binding: OrderAdmissionBinding) {
@@ -139,6 +139,17 @@ export class OrderAdmissionJournal {
         if (actualIntent != null) throw uncertain();
       } else if (!validLoyaltyWebIntent(snapshot.loyaltyWebIntent) || !validLoyaltyWebIntent(actualIntent)
         || !isDeepStrictEqual(snapshot.loyaltyWebIntent, actualIntent)) throw uncertain();
+      // A discounted order cannot become payable if its reserved reward was
+      // lost or replaced by an older writer. Keep C01's winning snapshot until
+      // the exact private reward survives, including absence on old orders.
+      const actualReward = order.toObject({ transform: false }).loyaltyReward;
+      if (snapshot.loyaltyReward == null) {
+        if (actualReward != null) throw uncertain();
+      } else {
+        const expected = OrderRewardSnapshotSchema.safeParse(snapshot.loyaltyReward);
+        const materialized = OrderRewardSnapshotSchema.safeParse(actualReward);
+        if (!expected.success || !materialized.success || !isDeepStrictEqual(expected.data, materialized.data)) throw uncertain();
+      }
       void publishRedisBestEffort(this.redis, ordersChannel(tenantId), JSON.stringify({ event: WS_EVENTS.orderCreated, payload: order.toObject() }));
       try {
         await this.admissions.updateOne({ _id: admission._id, state: 'committing', orderId: order._id },
