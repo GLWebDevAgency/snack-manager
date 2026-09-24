@@ -1,203 +1,79 @@
-/*
- * `react/no-unescaped-entities` est désactivée ici, et par fichier : la prose
- * d'un article est du texte JSX (gras, emphase et renvois au milieu des
- * phrases), là où tout le reste du dépôt affiche des CHAÎNES venues de
- * `content.ts`, que la règle ne voit pas. Le raisonnement complet est dans
- * `_articles/blocs.tsx`, en tête de fichier.
- */
-/* eslint-disable react/no-unescaped-entities */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Photo } from "@/components/marketing/Photo";
-import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
-import { CTA_CALLBACK, CTA_DEMO, ancre } from "@/components/marketing/content";
-import { urlAbsolue } from "@/lib/site";
-import { ARTICLES, BLOG_PATH, cheminArticle, dateEnClair } from "./_articles/registre";
 import { lireReseaux } from "@/lib/reseaux";
+import { ARTICLES, BLOG_PATH, cheminArticle, dateEnClair } from "./_articles/registre";
+import { BlogCta } from "./_components/BlogCta";
+import { blogSchema, jsonLd } from "./_lib/metadata";
+import styles from "./blog.module.css";
 
-/**
- * L'INDEX DU BLOG (`/blog`).
- *
- * ═══ POURQUOI CETTE PAGE EXISTE ═══
- *
- * La refonte a ramené la vitrine de dix-sept sections à onze : environ 1 200
- * mots de surface de référencement en moins. Le blog les rend — mais en
- * répondant à des recherches RÉELLES au lieu de répéter la vitrine. Un article
- * qui reformule la page d'accueil ne se lit pas, ne se partage pas, et ne
- * remonte pas non plus : c'est du poids mort qui coûte une page à maintenir.
- *
- * D'où trois articles seulement, et trois sujets sur lesquels nous avons quelque
- * chose de vrai à dire — une procédure vérifiée dans l'aide de Google, une
- * mécanique de tarif expliquée sans faire le procès de personne, et des réglages
- * de service qu'on ne trouve nulle part parce qu'ils ne s'apprennent qu'en
- * cuisine.
- *
- * ═══ L'EN-TÊTE ET LE PIED SONT CEUX DE LA LANDING ═══
- *
- * `SiteHeader` et `SiteFooter` sont rendus ici tels quels : le blog n'est pas un
- * sous-site, c'est une route de plus. Tous leurs liens sont déjà absolus
- * (`ancre()`, content.ts), donc ils fonctionnent depuis `/blog` comme depuis
- * `/`. `RevealObserver` accompagne les classes `.rv` — sans lui, tout ce qui en
- * porte une resterait invisible.
- */
-
-const TITRE = "Le blog — Snack Manager";
-const CHAPO =
-  "Des conseils pour les restaurateurs indépendants : présenter sa carte, comparer les coûts de commande et organiser le click & collect.";
-
+const TITRE = "Guides restaurateurs : menus, visibilité et commande directe";
+const DESCRIPTION = "Des guides pratiques pour refaire votre menu, améliorer votre visibilité sur Google, comparer vos coûts et organiser la commande directe de votre restaurant.";
 export const metadata: Metadata = {
-  title: TITRE,
-  description: CHAPO,
+  title: `${TITRE} — Snack Manager`, description: DESCRIPTION,
   alternates: { canonical: BLOG_PATH },
-  openGraph: {
-    type: "website",
-    locale: "fr_FR",
-    url: BLOG_PATH,
-    siteName: "Snack Manager",
-    title: TITRE,
-    description: CHAPO,
-  },
+  openGraph: { type: "website", locale: "fr_FR", url: BLOG_PATH, siteName: "Snack Manager", title: TITRE, description: DESCRIPTION, images: [{ url: "/blog/partage", width: 1200, height: 630, alt: "Le carnet des restaurateurs — Snack Manager" }] },
+  twitter: { card: "summary_large_image", title: TITRE, description: DESCRIPTION, images: ["/blog/partage"] },
   robots: { index: true, follow: true },
 };
-
 export default async function BlogIndexPage() {
-  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
-  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
-  // vide et la rangée disparaît — la page, elle, s'affiche.
   const reseaux = await lireReseaux();
-
-  return (
-    <>
-      {/*
-       * La seule ancre nue légitime d'une page de blog : elle vise un élément
-       * de CETTE page. Depuis `/blog`, `#articles` résout en `/blog#articles`,
-       * ce qui est exactement la cible voulue. Tout lien vers une section de la
-       * landing, lui, passe par `ancre()` — sans quoi il résoudrait contre
-       * `/blog` et ne ferait rien du tout, silencieusement.
-       */}
-      <a href="#articles" className="mk-skip">
-        Aller au contenu
-      </a>
-
-      <SiteHeader />
-
-      <main id="top">
-        <section className="section bl-index" id="articles">
-          <div className="section-head rv">
-            <span className="badge">Le blog</span>
-            <h1 className="h2">Des repères pour gérer votre restaurant</h1>
-            <p className="subheading">{CHAPO}</p>
+  const vedette = ARTICLES.find((a) => a.categorie === "Menus papier & TV") ?? ARTICLES[0];
+  const categories = [...new Set(ARTICLES.map((a) => a.categorie))];
+  return <>
+    <a href="#guides" className="mk-skip">Aller aux guides</a>
+    <SiteHeader />
+    <main id="top" className={styles.page}>
+      <header className={styles.indexHead}>
+        <p className={styles.eyebrow}><span aria-hidden="true" /> Le carnet des restaurateurs</p>
+        <h1 className={styles.indexTitle}>Votre restaurant.<br /><em>Des réponses concrètes.</em></h1>
+        <div className={styles.introRow}>
+          <p>Une carte à refaire. Une fiche Google à améliorer. Des commandes à mieux organiser. Des guides pour prendre la prochaine décision, simplement.</p>
+          <Link href="/blog/la-redaction" className={styles.textLink}>Comment nous préparons nos guides <span aria-hidden="true">↗</span></Link>
+        </div>
+      </header>
+      {vedette && <section aria-label="Le guide à découvrir" className={styles.feature}>
+        <div className={styles.featureCopy}>
+          <p className={styles.eyebrow}>À la une <span aria-hidden="true">/</span> {vedette.categorie}</p>
+          <h2><Link href={cheminArticle(vedette.slug)}>{vedette.titre}</Link></h2>
+          <p>{vedette.chapo}</p>
+          <Link className={styles.readLink} href={cheminArticle(vedette.slug)}>Lire le guide <span aria-hidden="true">↗</span></Link>
+          <p className={styles.meta}>{vedette.minutes} min de lecture · {dateEnClair(vedette.modifieLe ?? vedette.publieLe)}</p>
+        </div>
+        <div className={styles.featureVisual} aria-hidden="true">
+          <div className={styles.paperBack} />
+          <div className={styles.paperFront}>
+            <span className={styles.paperLabel}>LA CARTE</span>
+            <Photo shot={vedette.photo} decorative eager sizes="400px" />
+            <span className={styles.paperLine} /><span className={styles.paperLineShort} />
+            <span className={styles.paperCaption}>Pensée pour être choisie.</span>
           </div>
-
-          <ul className="bl-cards rv">
-            {ARTICLES.map((article) => (
-              <li className="bl-card spot" key={article.slug}>
-                <Link className="bl-cardlink" href={cheminArticle(article.slug)}>
-                  {/*
-                   * LA VIGNETTE OCCUPE LA HAUTEUR DE LA CARTE, ELLE N'EN AJOUTE
-                   * PAS. Elle prend une colonne à gauche et s'étire sur la
-                   * hauteur que le texte fixe déjà : c'est la seule forme qui
-                   * distingue les trois cartes d'un coup d'œil sans allonger un
-                   * index qui ne mesure que 1 932 px. Un bandeau en tête de
-                   * carte aurait coûté trois fois 390 px, soit un cinquième de
-                   * page pour un besoin que le brief classe lui-même dernier.
-                   *
-                   * Décorative : le titre et le chapô sont juste à côté, dans le
-                   * même lien. Une image annoncée ici ferait entendre deux fois
-                   * le même article à qui navigue au lecteur d'écran.
-                   */}
-                  <span className="bl-cardmedia">
-                    <Photo shot={article.photo} decorative sizes="214px" />
-                    {/* Le raccord du bord droit sur le fond de la carte : sans
-                        lui, la vignette s'arrête sur une arête verticale nette
-                        contre le texte. Même procédé que `.of-mediafeather`. */}
-                    <span className="bl-cardfeather" aria-hidden="true" />
-                  </span>
-
-                  <div className="bl-cardbody">
-                    <p className="bl-meta">
-                      <time dateTime={article.publieLe}>{dateEnClair(article.publieLe)}</time>
-                      <span aria-hidden="true"> · </span>
-                      <span>{article.minutes} min de lecture</span>
-                    </p>
-                    <h2 className="bl-cardtitre">{article.titre}</h2>
-                    <p className="bl-cardchapo">{article.chapo}</p>
-                    <span className="bl-cardcta">
-                      Lire l'article
-                      <span aria-hidden="true"> →</span>
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-
-          {/*
-           * LE SEUL APPEL À L'ACTION DE LA PAGE, ET IL RENVOIE À LA LANDING.
-           *
-           * Le blog ne convertit pas, il attire. Y recopier un formulaire, une
-           * grille de prix ou un comparatif, ce serait rouvrir la vitrine à un
-           * deuxième endroit — c'est-à-dire garantir qu'un jour les deux se
-           * contrediront. On renvoie donc, et par `ancre()`, jamais par une
-           * ancre nue qui résoudrait contre `/blog`.
-           */}
-          <aside className="bl-outro rv">
-            <p className="bl-outrotitre">Découvrez les applications Snack Manager.</p>
-            <p className="bl-outroline">
-              Explorez les interfaces et leurs démonstrations avec des données d’exemple depuis la page d’accueil.
-            </p>
-            <div className="bl-outroctas">
-              {/* Les libellés viennent de content.ts : la page en portait six pour deux destinations. */}
-              <Link className="btn light" href={ancre("produit").href}>
-                {CTA_DEMO}
-              </Link>
-              <Link className="btn dark" href={ancre("contact").href}>
-                {CTA_CALLBACK}
-              </Link>
-            </div>
-          </aside>
-        </section>
-      </main>
-
-      <SiteFooter reseaux={reseaux} />
-      <RevealObserver />
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(donneesStructurees()) }}
-      />
-    </>
-  );
-}
-
-/**
- * `Blog` + la liste de ses billets.
- *
- * `blogPost` porte les mêmes champs que la page d'article publie de son côté :
- * un moteur qui lit l'index sait déjà quoi trouver au bout de chaque lien, et
- * les deux ne peuvent pas diverger puisque les deux lisent `ARTICLES`.
- */
-function donneesStructurees() {
-  return {
-    "@context": "https://schema.org",
-    "@type": "Blog",
-    "@id": urlAbsolue(BLOG_PATH),
-    name: "Le blog de Snack Manager",
-    description: CHAPO,
-    inLanguage: "fr-FR",
-    publisher: { "@type": "Organization", name: "Snack Manager", url: urlAbsolue("/") },
-    blogPost: ARTICLES.map((article) => ({
-      "@type": "BlogPosting",
-      "@id": urlAbsolue(cheminArticle(article.slug)),
-      url: urlAbsolue(cheminArticle(article.slug)),
-      headline: article.titre,
-      description: article.chapo,
-      datePublished: article.publieLe,
-      dateModified: article.modifieLe ?? article.publieLe,
-      inLanguage: "fr-FR",
-      author: { "@type": "Organization", name: "Snack Manager" },
-    })),
-  };
+          <span className={styles.visualCaption}>Papier · Écran · Même identité</span>
+        </div>
+      </section>}
+      <section id="guides" className={styles.library} aria-labelledby="guides-titre">
+        <div className={styles.libraryHead}><h2 id="guides-titre">De quoi avez-vous besoin ?</h2><span>{ARTICLES.length} guides pratiques</span></div>
+        <nav className={styles.topics} aria-label="Thèmes du carnet">
+          {categories.map((categorie, i) => <a key={categorie} href={`#theme-${i}`}>{categorie} <span aria-hidden="true">↘</span></a>)}
+        </nav>
+        {categories.map((categorie, i) => <section key={categorie} id={`theme-${i}`} className={styles.category} aria-labelledby={`titre-theme-${i}`}>
+          <div className={styles.categoryLabel}><span aria-hidden="true">{String(i + 1).padStart(2, "0")}</span><h3 id={`titre-theme-${i}`}>{categorie}</h3></div>
+          <ul className={styles.articleList}>{ARTICLES.filter((a) => a.categorie === categorie).map((article) => <li key={article.slug}>
+            <Link className={styles.articleCard} href={cheminArticle(article.slug)}>
+              <div className={styles.cardImage}><Photo shot={article.photo} decorative sizes="180px" /></div>
+              <div className={styles.cardBody}>
+                <p className={styles.meta}>{article.minutes} min de lecture</p><h4>{article.titre}</h4><p>{article.chapo}</p>
+                <span className={styles.cardArrow}>Lire le guide <span aria-hidden="true">↗</span></span>
+              </div>
+            </Link>
+          </li>)}</ul>
+        </section>)}
+      </section>
+      <BlogCta />
+    </main>
+    <SiteFooter reseaux={reseaux} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(blogSchema(DESCRIPTION)) }} />
+  </>;
 }

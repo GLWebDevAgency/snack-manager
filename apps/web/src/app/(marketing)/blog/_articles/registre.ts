@@ -1,295 +1,202 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
-// Type seul : `Shot` décrit déjà `{ src, alt }` pour toute la vitrine, et le
-// blog n'a aucune raison d'en redéclarer un jumeau. L'import ne coûte rien au
-// paquet — il disparaît à la compilation.
 import type { Shot } from "@/components/marketing/content";
 import { corps as corpsClickCollect } from "./ouvrir-le-click-and-collect-sans-se-tromper";
 import { corps as corpsFicheGoogle } from "./lien-de-commande-sur-votre-fiche-google";
 import { corps as corpsPrixApplis } from "./pourquoi-les-prix-sont-plus-chers-sur-les-applis";
+import { corps as corpsMenus } from "./refaire-menu-restaurant-papier-tv";
+import { corps as corpsVisibilite } from "./visibilite-restaurant-google-site-internet";
 
-/**
- * ═══ LE BLOG NE COÛTE PAS UNE DÉPENDANCE, ET C'EST LE PREMIER CHOIX ═══
- *
- * Un article est un MODULE TSX : il exporte `corps()`, une fonction qui rend son
- * texte, et ce fichier lui accole ses métadonnées. Pas de MDX, pas de parseur
- * markdown, pas de plugin de build, pas une ligne ajoutée à `package.json`.
- *
- * Le dépôt est un monorepo pnpm en `node-linker=hoisted` servi par Turbopack :
- * chaque dépendance de build y a déjà coûté du temps, et un parseur de contenu
- * en coûterait deux fois — une fois à l'installer, une fois le jour où il ne
- * suivra pas une version de Next. Ce que MDX apporterait ici, c'est d'écrire
- * `## Titre` au lieu de `<h2 className="bl-h2">` ; ce qu'il ferait perdre, c'est
- * le typage du contenu, la vérification des liens internes par `Renvoi`, et la
- * capacité d'un article à LIRE une constante du produit — l'article sur les
- * commissions affiche `COMMISSIONS` (content.ts) au lieu de recopier des taux
- * qui divergeraient de la vitrine à la première révision.
- *
- * La contrepartie est assumée : écrire un article demande de savoir taper du
- * JSX. Nous sommes deux, et le blog sert le référencement, pas une rédaction.
- *
- * ═══ CE FICHIER EST LE SEUL SOMMAIRE ═══
- *
- * `/blog` et `/blog/[slug]` lisent tous les deux `ARTICLES`. Un article publié
- * sans être inscrit ici n'existe nulle part — et surtout, il ne peut pas
- * exister à moitié : la page de liste et la génération statique des routes
- * viennent de la même table.
- */
+export type ArticleSource = {
+  readonly titre: string;
+  readonly url: string;
+  readonly consulteLe: string;
+};
 
 export type Article = {
-  /** Segment d'URL — sans accent ni apostrophe, il vit dans une adresse. */
   readonly slug: string;
-  /** Le `h1` de l'article ET le `<title>` de l'onglet. Écrit ici, nulle part ailleurs. */
   readonly titre: string;
-  /** Le chapô : première chose lue sur la liste, et la meta description. Une à trois phrases. */
   readonly chapo: string;
-  /** Date de publication, en ISO 8601 — c'est aussi ce que reçoit `datePublished`. */
+  readonly categorie: string;
+  readonly reponseCourte: string;
   readonly publieLe: string;
-  /** Date de la dernière révision éditoriale effective. */
+  /** Une date change seulement après une révision effective du contenu. */
   readonly modifieLe?: string;
-  /** Mots-clés de la page. Ils décrivent l'article, ils ne répètent pas ceux de la vitrine. */
   readonly motsCles: readonly string[];
-  /**
-   * LA PHOTOGRAPHIE DE L'ARTICLE — UNE PAR SUJET, DEUX EMPLOIS.
-   *
-   * Elle sert de fond à l'en-tête de l'article ET de vignette à sa carte dans
-   * l'index : un seul fichier, deux usages, et surtout un seul endroit où le
-   * choix se décide. Une image déclarée dans la page d'index et une autre dans
-   * la page d'article, ce serait la faute que ce registre existe pour empêcher —
-   * deux tables qui finissent par ne plus dire la même chose.
-   *
-   * ═══ TOUTES DÉCORATIVES, ET C'EST UNE RÈGLE, PAS UN OUBLI ═══
-   *
-   * `alt` vaut `""` sur les trois, et les composants passent `decorative` (qui
-   * ajoute `aria-hidden` sur l'enveloppe, voir `Photo.tsx`). Aucune ne PORTE
-   * l'information de l'article : le chapô la porte, deux lignes plus bas, et il
-   * est déjà lu. Décrire un burger à voix haute avant le titre de l'article,
-   * c'est allonger le trajet vers le texte sans rien apprendre à personne.
-   *
-   * ═══ ET AUCUNE N'EST LÉGENDÉE COMME UN CLIENT ═══
-   *
-   * Ce sont des photographies libres (Pexels, usage commercial sans
-   * attribution — le registre des licences est `public/photos/libre/
-   * PROVENANCE.md`). Aucune ne montre un établissement que nous servons, aucune
-   * n'est présentée comme une référence, un résultat ni un cas. Elles ne sont
-   * pas non plus documentaires : ce sont des ambiances, sombres et chaudes, et
-   * la seule chose qu'elles ont à faire est de ne rien affirmer.
-   */
+  readonly sections: readonly { readonly id: string; readonly titre: string }[];
+  readonly sources: readonly ArticleSource[];
+  readonly lies: readonly string[];
+  /** Illustrations décoratives. Photos libres : public/photos/libre/PROVENANCE.md. */
   readonly photo: Shot;
-  /** Le corps, en composant serveur. Appelé une fois par rendu. */
   readonly corps: () => ReactElement;
 };
 
-/**
- * Un article, plus ce qu'on en calcule.
- *
- * `mots` n'est pas un détail d'implémentation exposé par paresse : les données
- * structurées publient un `wordCount`, et le déduire des minutes (× 200) le
- * ferait mentir de tout l'arrondi. On publie le comptage, l'affichage publie
- * les minutes.
- */
 export type ArticlePublie = Article & { readonly mots: number; readonly minutes: number };
 
-/**
- * LES TROIS ARTICLES, DANS L'ORDRE OÙ ILS ONT ÉTÉ ÉCRITS.
- *
- * Ils portent la même date de publication, et ce n'est pas un oubli : ils sont
- * sortis ensemble. Antidater le deuxième et le troisième pour obtenir un joli
- * dégradé de dates serait fabriquer une histoire — la même faute, en plus petit,
- * que le compteur « 3 places prises » que la vitrine a fini par retirer.
- *
- * Le tri ci-dessous est donc STABLE : à date égale, c'est cet ordre-ci qui
- * décide, et il place en tête celui qui répond à la recherche la plus concrète.
- */
+const DATE_REVISION = "2026-09-24";
+const source = (titre: string, url: string): ArticleSource => ({ titre, url, consulteLe: DATE_REVISION });
+
+/** Registre unique : index, pages statiques, sitemap et données structurées. Pas de CMS ni de requête client. */
 const SOURCES: readonly Article[] = [
   {
-    slug: "lien-de-commande-sur-votre-fiche-google",
-    titre: "Mettre votre lien de commande sur votre fiche Google, et le marquer comme préféré",
-    chapo:
-      "Sur votre fiche Google, le bouton de commande existe déjà — et il ne mène pas forcément chez vous. Vous pouvez y ajouter votre propre lien et le désigner comme préféré. Voici où cliquer, exactement.",
-    publieLe: "2026-08-21",
-    modifieLe: "2026-09-13",
-    motsCles: [
-      "fiche Google restaurant",
-      "lien de commande Google",
-      "Google Business Profile commande de repas",
-      "commande en ligne restaurant",
-      "click and collect Google",
+    slug: "refaire-menu-restaurant-papier-tv",
+    titre: "Refaire votre menu de restaurant : du papier aux écrans TV",
+    chapo: "Brief, mise en page, données de vente, impression et diffusion : préparez une carte lisible et un devis clair pour chaque support.",
+    categorie: "Menus papier & TV",
+    reponseCourte: "Partez d'une carte de référence, puis adaptez la lecture à chaque support. Validez le papier à taille réelle et la TV depuis la place du client. Séparez conception, impression, matériel et diffusion dans le devis.",
+    publieLe: DATE_REVISION,
+    motsCles: ["refonte menu restaurant", "menu trois volets", "menu TV restaurant", "création carte restaurant"],
+    sections: [
+      { id: "brief", titre: "Préparer un brief qui évite les allers-retours" },
+      { id: "papier", titre: "Concevoir le papier à taille réelle" },
+      { id: "tv", titre: "Construire une lecture stable sur TV" },
+      { id: "ventes", titre: "Choisir les mises en avant à partir de vos données" },
+      { id: "devis", titre: "Séparer conception, fabrication et diffusion dans le devis" },
+      { id: "validation", titre: "Valider, publier et tenir les versions à jour" },
     ],
-    // Deux mains la nuit, un téléphone tenu, l'index prêt à toucher l'écran.
-    // L'écran est un APLAT BLANC VIERGE : aucune interface, aucune application
-    // reconnaissable, aucun logo sur l'appareil. C'est ce qui la rend
-    // admissible sous un article qui explique où cliquer dans Google — une
-    // capture de la vraie fiche daterait le jour où Google redessine son
-    // interface, et prêterait à notre page une copie d'écran qui n'est pas à
-    // nous.
+    sources: [source("Service Public Entreprendre — réglementation des bars et restaurants", "https://entreprendre.service-public.gouv.fr/vosdroits/F22387")],
+    lies: ["visibilite-restaurant-google-site-internet", "pourquoi-les-prix-sont-plus-chers-sur-les-applis", "ouvrir-le-click-and-collect-sans-se-tromper"],
+    photo: { src: "/illustrations/food/bowl.svg", alt: "" },
+    corps: corpsMenus,
+  },
+  {
+    slug: "visibilite-restaurant-google-site-internet",
+    titre: "Visibilité du restaurant : relier votre fiche Google et votre site",
+    chapo: "Fiche Google, site, avis, réseaux et moteurs IA : une méthode concrète pour être trouvé, donner confiance et faciliter la visite ou la commande.",
+    categorie: "Visibilité locale",
+    reponseCourte: "Commencez par des informations cohérentes : carte, horaires, adresse et lien d'action. Reliez votre fiche Google, votre site et vos réseaux, puis suivez les demandes réelles. Aucune optimisation ne garantit une position ou une citation par une IA.",
+    publieLe: DATE_REVISION,
+    motsCles: ["référencement restaurant", "visibilité restaurant Google", "site internet restaurant", "fiche Google restaurant"],
+    sections: [
+      { id: "diagnostic", titre: "Faire le tour de votre présence actuelle" },
+      { id: "fiche-google", titre: "Compléter la fiche Google sans la surcharger" },
+      { id: "site", titre: "Construire un site qui répond avant de convaincre" },
+      { id: "avis-reseaux", titre: "Relier avis, réseaux sociaux et visite réelle" },
+      { id: "moteurs-ia", titre: "Préparer une information compréhensible par les moteurs IA" },
+      { id: "mesurer", titre: "Mesurer les actions utiles au restaurant" },
+      { id: "accompagnement", titre: "Choisir un accompagnement avec des livrables clairs" },
+    ],
+    sources: [
+      source("Google — représenter fidèlement votre établissement", "https://support.google.com/business/answer/3038177?hl=fr"),
+      source("Google — facteurs du classement local", "https://support.google.com/business/answer/7091?hl=fr"),
+      source("Google — recueillir les avis de vos clients", "https://support.google.com/business/answer/3474122?hl=fr"),
+      source("Google Search Central — fonctionnalités IA et référencement", "https://developers.google.com/search/docs/appearance/ai-features"),
+      source("Google Search Central — guide des fonctions de recherche générative", "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide"),
+      source("OpenAI — FAQ pour les éditeurs et développeurs", "https://help.openai.com/en/articles/12627856-publishers-and-developers-faq"),
+    ],
+    lies: ["lien-de-commande-sur-votre-fiche-google", "refaire-menu-restaurant-papier-tv", "ouvrir-le-click-and-collect-sans-se-tromper"],
+    photo: { src: "/illustrations/food/thai-noodles.svg", alt: "" },
+    corps: corpsVisibilite,
+  },
+  {
+    slug: "lien-de-commande-sur-votre-fiche-google",
+    titre: "Ajouter votre lien de commande à votre fiche Google",
+    chapo: "Préparez votre page de commande, ajoutez le lien à votre fiche et vérifiez le parcours public. La méthode et les points à contrôler si le lien est refusé.",
+    categorie: "Visibilité locale",
+    reponseCourte: "Depuis une fiche validée, ouvrez les options de commande, ajoutez votre lien et choisissez votre préférence de retrait ou livraison si disponible. Vérifiez ensuite le parcours public sur téléphone : l'affichage dépend des options de votre fiche et de Google.",
+    publieLe: "2026-08-21",
+    modifieLe: DATE_REVISION,
+    motsCles: ["fiche Google restaurant", "lien de commande Google", "click and collect Google"],
+    sections: [
+      { id: "preparer", titre: "Préparer la fiche et la page de commande" },
+      { id: "ajouter", titre: "Ajouter le lien et choisir votre préférence" },
+      { id: "verifier", titre: "Tester ce que voit réellement votre client" },
+      { id: "lien-absent", titre: "Si le lien est absent ou refusé" },
+      { id: "entretenir", titre: "Entretenir le lien dans la durée" },
+    ],
+    sources: [
+      source("Google — options de commande en ligne", "https://support.google.com/business/answer/10842217?hl=fr"),
+      source("Google — liens des établissements locaux", "https://support.google.com/business/answer/6218037?hl=fr"),
+      source("Google — règles des liens d'établissement", "https://support.google.com/business/answer/13769188?hl=fr"),
+    ],
+    lies: ["ouvrir-le-click-and-collect-sans-se-tromper", "visibilite-restaurant-google-site-internet", "pourquoi-les-prix-sont-plus-chers-sur-les-applis"],
     photo: { src: "/photos/libre/blog-telephone-main-nuit.webp", alt: "" },
     corps: corpsFicheGoogle,
   },
   {
     slug: "pourquoi-les-prix-sont-plus-chers-sur-les-applis",
     titre: "Pourquoi un même repas peut coûter plus cher sur une appli",
-    chapo:
-      "Prix des plats, commissions, paiement et livraison : distinguez les coûts pour comparer les canaux de commande de votre restaurant.",
+    chapo: "Prix des plats, frais client et coûts du restaurant : comparez les canaux de commande avec vos relevés, sans appliquer un taux de commission universel.",
+    categorie: "Commande directe",
+    reponseCourte: "Le total dépend des prix des plats, des promotions et des frais facturés au client. Pour le restaurant, comparez la contribution après les coûts de chaque canal, à service équivalent. Une commande directe conserve aussi des frais.",
     publieLe: "2026-08-21",
-    modifieLe: "2026-09-13",
-    motsCles: [
-      "commission plateforme livraison",
-      "prix Uber Eats plus cher",
-      "frais de service livraison",
-      "commande en direct restaurant",
-      "marge restaurant livraison",
+    modifieLe: DATE_REVISION,
+    motsCles: ["commission plateforme livraison", "prix repas application", "coût commande directe restaurant"],
+    sections: [
+      { id: "decomposer", titre: "Décomposer le prix et les frais" },
+      { id: "comparer", titre: "Comparer des commandes équivalentes" },
+      { id: "exemple", titre: "Un exemple de comparaison, sans taux présenté comme universel" },
+      { id: "direct", titre: "Ce que coûte aussi la commande directe" },
+      { id: "decider", titre: "Choisir le rôle de chaque canal" },
+      { id: "mesurer", titre: "Le relevé à préparer chaque mois" },
     ],
-    // RÉSERVE ASSUMÉE : l'article parle de kebab, la photo montre un burger.
-    // Les scènes de kebab libres ouvertes pour ce sujet portaient toutes une
-    // broche, une enseigne ou une carte étrangère dans le cadre, et une
-    // enseigne lisible sous un article intitulé « pourquoi c'est plus cher sur
-    // l'appli » désignerait un établissement nommé. Celle-ci ne désigne
-    // personne : un burger et un cornet de frites sur fond noir plein, aucun
-    // emballage, aucune marque, aucun texte.
+    sources: [source("Uber Eats France — tarification des menus et frais commerçant", "https://merchants.ubereats.com/fr/fr/resources/articles/menu-pricing/")],
+    lies: ["ouvrir-le-click-and-collect-sans-se-tromper", "lien-de-commande-sur-votre-fiche-google", "refaire-menu-restaurant-papier-tv"],
     photo: { src: "/photos/libre/blog-burger-frites-fond-noir.webp", alt: "" },
     corps: corpsPrixApplis,
   },
   {
     slug: "ouvrir-le-click-and-collect-sans-se-tromper",
-    titre: "Ouvrir le click and collect sans se tromper",
-    chapo:
-      "Créneaux, capacité, carte en ligne et retrait : les points à préparer avec votre équipe pour démarrer progressivement.",
+    titre: "Ouvrir le click & collect : préparer la carte, la cuisine et le retrait",
+    chapo: "Capacité, produits, paiement, réception et retrait : préparez un premier service maîtrisable, puis élargissez à partir de ce que vous observez.",
+    categorie: "Organisation du service",
+    reponseCourte: "Ouvrez d'abord un service et une carte que votre équipe maîtrise. Vérifiez la capacité, la réception des commandes, le paiement et la remise au comptoir. Testez aussi les incidents, puis augmentez progressivement le périmètre.",
     publieLe: "2026-08-21",
-    modifieLe: "2026-09-13",
-    motsCles: [
-      "click and collect restaurant",
-      "créneaux de retrait",
-      "temps de préparation commande",
-      "ouvrir la commande en ligne",
-      "snack à emporter",
+    modifieLe: DATE_REVISION,
+    motsCles: ["click and collect restaurant", "organisation retrait commande", "commande en ligne cuisine"],
+    sections: [
+      { id: "perimetre", titre: "Choisir un premier service maîtrisable" },
+      { id: "capacite", titre: "Définir la capacité avec la cuisine" },
+      { id: "carte", titre: "Préparer les informations avant la commande" },
+      { id: "parcours-equipe", titre: "Organiser le trajet de la commande au comptoir" },
+      { id: "paiement", titre: "Tester le règlement et les exceptions" },
+      { id: "lancement", titre: "Lancer, observer, puis élargir" },
     ],
-    // Le guichet de retrait, éclairé, en service, vu de l'extérieur la nuit :
-    // c'est exactement le moment dont l'article parle. RÉSERVE : c'est un
-    // camion et pas une devanture fixe — le cadrage est serré sur la fenêtre
-    // (ni roue, ni hayon, ni plaque), mais le sujet reste reconnaissable. La
-    // personne à l'intérieur est de profil, tête baissée, et occupe moins d'un
-    // dixième du cadre ; aucune enseigne, aucun prix, aucun logo.
+    sources: [source("DGCCRF — informations sur les denrées alimentaires", "https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/etiquetage-des-denrees-alimentaires-les-regles-connaitre")],
+    lies: ["lien-de-commande-sur-votre-fiche-google", "pourquoi-les-prix-sont-plus-chers-sur-les-applis", "refaire-menu-restaurant-papier-tv"],
     photo: { src: "/photos/libre/blog-fenetre-service-nuit.webp", alt: "" },
     corps: corpsClickCollect,
   },
 ];
 
-/* ── Temps de lecture ────────────────────────────────────────── */
-
-/**
- * ═══ LE TEMPS DE LECTURE SE CALCULE, IL NE SE SAISIT PAS ═══
- *
- * Un « 6 min » tapé à la main dans les métadonnées est vrai le jour où on
- * l'écrit et faux à la première relecture qui ajoute deux paragraphes — sans que
- * rien ne le signale, exactement comme les prix recopiés que `content.ts` a fini
- * par centraliser. On compte donc les mots du corps réel.
- *
- * Le corps est un ARBRE d'éléments React, pas une chaîne : on le parcourt, on
- * additionne les mots des nœuds textuels. Deux limites, connues et acceptées :
- * le texte passé en `props` (les titres d'étapes, les libellés de `Note`) n'est
- * pas compté, et le contenu rendu à l'intérieur d'un composant ne l'est pas non
- * plus — seuls comptent ses `children`, c'est-à-dire ce que l'article a
- * réellement écrit. C'est une ESTIMATION affichée en minutes rondes ; la
- * précision au mot près n'aurait aucun sens de toute façon.
- */
-const MOTS_PAR_MINUTE = 200;
-
+/** Estimation issue du texte JSX et des titres des briques éditoriales, sans appeler de composant client. */
 function motsDe(node: ReactNode): number {
-  if (typeof node === "string") {
-    const propre = node.trim();
-    return propre === "" ? 0 : propre.split(/\s+/).length;
-  }
+  if (typeof node === "string") return node.trim() === "" ? 0 : node.trim().split(/\s+/).length;
   if (typeof node === "number") return 1;
   if (Array.isArray(node)) return node.reduce<number>((total, enfant) => total + motsDe(enfant as ReactNode), 0);
   if (isValidElement(node)) {
-    const props = node.props as { children?: ReactNode };
-    return motsDe(props.children);
+    const props = node.props as { children?: ReactNode; titre?: string };
+    return motsDe(props.children) + motsDe(props.titre);
   }
-  // `null`, `undefined`, `boolean` : React ne les rend pas, on ne les compte pas.
   return 0;
 }
 
-/** Minutes rondes, au moins une — « 0 min de lecture » ne veut rien dire. */
-function minutesDe(mots: number): number {
-  return Math.max(1, Math.round(mots / MOTS_PAR_MINUTE));
-}
-
-/* ── La table publiée ────────────────────────────────────────── */
-
-/**
- * Du plus récent au plus ancien. `Array.prototype.sort` est stable depuis
- * ES2019 : à date égale, l'ordre de `SOURCES` est conservé, ce qui est
- * précisément le comportement voulu (voir le commentaire de `SOURCES`).
- */
 export const ARTICLES: readonly ArticlePublie[] = [...SOURCES]
   .sort((a, b) => b.publieLe.localeCompare(a.publieLe))
   .map((article) => {
     const mots = motsDe(article.corps());
-    return { ...article, mots, minutes: minutesDe(mots) };
+    return { ...article, mots, minutes: Math.max(1, Math.round(mots / 200)) };
   });
 
-/** L'article d'un slug, ou `undefined` — la page appelle alors `notFound()`. */
 export function articleParSlug(slug: string): ArticlePublie | undefined {
-  return ARTICLES.find((a) => a.slug === slug);
+  return ARTICLES.find((article) => article.slug === slug);
 }
 
-/** Les autres articles, pour le pied d'article. Jamais celui qu'on est en train de lire. */
+/** Le maillage éditorial est choisi par sujet ; les autres guides complètent si nécessaire. */
 export function autresArticles(slug: string): readonly ArticlePublie[] {
-  return ARTICLES.filter((a) => a.slug !== slug);
+  const lies = articleParSlug(slug)?.lies ?? [];
+  const prioritaires = lies.flatMap((lie) => {
+    const article = articleParSlug(lie);
+    return article && article.slug !== slug ? [article] : [];
+  });
+  return [...prioritaires, ...ARTICLES.filter((article) => article.slug !== slug && !lies.includes(article.slug))];
 }
 
-/* ── Adresses ────────────────────────────────────────────────── */
-
-/**
- * Le chemin du blog est le NOM DU DOSSIER, `app/(marketing)/blog` — le groupe
- * `(marketing)` ne paraît pas dans l'adresse publique. On l'écrit ici une fois
- * pour que rien d'autre n'ait à le savoir.
- */
 export const BLOG_PATH = "/blog";
-
 export const cheminArticle = (slug: string): string => `${BLOG_PATH}/${slug}`;
 
-/*
- * L'ORIGINE PUBLIQUE N'EST PLUS ICI. Ce fichier redéclarait
- * `process.env.NEXT_PUBLIC_SITE_URL ?? "https://snackmanager.fr"`, déjà écrit
- * dans le layout du groupe et dans la page Offres : trois copies du même repli,
- * dont deux suivraient un changement de domaine et une non. Elle vit désormais
- * dans `@/lib/site` (`SITE_URL`, `urlAbsolue`), que le plan de site et le
- * fichier robots lisent aussi — eux ne pouvaient de toute façon pas importer
- * quoi que ce soit d'ici, ils vivent à la racine de `app/`.
- */
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"] as const;
 
-/* ── Dates ───────────────────────────────────────────────────── */
-
-const MOIS = [
-  "janvier",
-  "février",
-  "mars",
-  "avril",
-  "mai",
-  "juin",
-  "juillet",
-  "août",
-  "septembre",
-  "octobre",
-  "novembre",
-  "décembre",
-] as const;
-
-/**
- * « 2026-08-21 » → « 21 août 2026 ».
- *
- * ET SÛREMENT PAS `toLocaleDateString`. Même raison que `euros()` dans
- * `content.ts` : le formatage ICU du français a changé d'une version de Node à
- * l'autre, et un caractère d'écart entre le rendu serveur et le rendu navigateur
- * casse l'hydratation de la page entière. Une table de douze mois ne change
- * jamais d'avis.
- *
- * La fonction LÈVE sur une date mal formée plutôt que d'afficher « NaN
- * undefined » : une date de publication fausse dans les données structurées est
- * exactement le genre d'erreur qu'on ne voit qu'en lisant le code source de sa
- * propre page.
- */
+/** Format stable entre Node et le navigateur, sans différences de ponctuation ICU. */
 export function dateEnClair(iso: string): string {
   const [annee, mois, jour] = iso.split("-").map(Number);
   const nomDuMois = MOIS[mois - 1];

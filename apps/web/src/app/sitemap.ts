@@ -27,26 +27,27 @@ import { urlAbsolue } from "@/lib/site";
  *
  * Le plan ne porte QUE la vitrine publique. `/admin`, `/sm`, `/board`, `/t/[id]`
  * et `/embed/[slug]` sont des surfaces d'exploitation ou de suivi de commande :
- * elles n'ont rien à faire dans un index de moteur, et `app/robots.ts` les
- * refuse explicitement. `/r/[slug]` — la vitrine d'un restaurant client — n'y
+ * elles n'ont rien à faire dans un index de moteur, et le proxy les exclut
+ * avec `X-Robots-Tag`. `/r/[slug]` — la vitrine d'un restaurant client — n'y
  * est pas non plus : elle est servie sous le domaine du restaurateur (voir
  * `src/proxy.ts`), c'est donc à SON plan de site de la porter, pas au nôtre.
  *
  * ═══ LES DATES ═══
  *
- * `lastModified` des articles vient de leur date de publication réelle
- * (`publieLe`). Les trois pages de vitrine n'ont pas de date de révision
+ * `lastModified` des articles vient de leur dernière révision éditoriale,
+ * ou de leur publication lorsqu'ils n'ont pas été révisés. Les pages de vitrine
+ * n'ont pas de date de révision
  * suivie : leur donner `new Date()` reviendrait à jurer à chaque déploiement
  * qu'elles ont changé — un signal qu'un moteur finit par cesser de croire. On
  * ne déclare donc pas ce qu'on ne sait pas.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
-  /**
-   * L'article le plus récent date le blog. Les trois sont sortis le même jour
-   * aujourd'hui, mais `ARTICLES` est trié du plus récent au plus ancien : la
-   * ligne suivante restera juste quand le quatrième arrivera.
-   */
-  const dernierArticle = ARTICLES[0]?.publieLe;
+  // Dates ISO : la dernière révision peut concerner un article ancien,
+  // indépendamment de l'ordre de publication du registre.
+  const derniereRevision = ARTICLES.reduce<string | undefined>((derniere, article) => {
+    const date = article.modifieLe ?? article.publieLe;
+    return !derniere || date > derniere ? date : derniere;
+  }, undefined);
 
   return [
     {
@@ -74,17 +75,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
     {
       url: urlAbsolue(BLOG_PATH),
-      lastModified: dernierArticle,
-      // L'index n'est qu'un sommaire ; ce sont les articles qui répondent aux
-      // recherches. Le mettre au même rang qu'eux les concurrencerait.
+      lastModified: derniereRevision,
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      url: urlAbsolue(`${BLOG_PATH}/la-redaction`),
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
     ...ARTICLES.map((article) => ({
       url: urlAbsolue(cheminArticle(article.slug)),
-      lastModified: article.publieLe,
-      // Un article publié ne bouge plus, sauf relecture. « yearly » dit la
-      // vérité et laisse le moteur dépenser son budget d'exploration ailleurs.
+      lastModified: article.modifieLe ?? article.publieLe,
       changeFrequency: "yearly" as const,
       priority: 0.7,
     })),
