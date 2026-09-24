@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { MENUS_OFFERS, MENU_PRINT_NOTE } from "../menu-offers";
 import { MotionControl, useSceneMotion } from "./Motion";
+import { TrifoldMenu, type PaperView } from "./TrifoldMenu";
 import styles from "./menus.module.css";
 
 const MODES = [
@@ -12,35 +13,6 @@ const MODES = [
   { id: "tv", label: "TV", need: "menu-tv", detail: "Deux compositions. Une présence à l’écran.", scope: "Bibliothèque existante · une orientation · jusqu’à 40 références · 2 séries de corrections" },
   { id: "ensemble", label: "Ensemble", need: "carte-tv", detail: "Papier et TV. Une même identité.", scope: "Le trois-volets + 2 compositions TV + un diagnostic et 3 actions proposées" },
 ] as const;
-
-/** Illustrations of delivered supports, deliberately not a mock software editor. */
-function FoldedMenu() {
-  return <div className={styles.paperRig} aria-hidden="true">
-    <div className={styles.paper}>
-      <div className={`${styles.leaf} ${styles.leftLeaf}`}>
-        <div className={styles.coverMark}>LA<br />CARTE<span>À VOTRE IMAGE.</span></div>
-        <span className={styles.coverRule} />
-        <p>Le goût des<br /><em>bonnes choses.</em></p>
-        <span className={styles.paperFoot}>À partager. À savourer.</span>
-      </div>
-      <div className={`${styles.leaf} ${styles.middleLeaf}`}>
-        <span className={styles.paperKicker}>LE PLAISIR DE CHOISIR</span>
-        <h3>Nos<br /><em>classiques.</em></h3>
-        <div className={styles.menuLine}><strong>Le burger signature</strong><span>Une recette généreuse.</span></div>
-        <div className={styles.menuLine}><strong>La salade César</strong><span>Fraîcheur et gourmandise.</span></div>
-        <div className={styles.menuLine}><strong>Le plat du moment</strong><span>Selon l’inspiration du chef.</span></div>
-        <div className={styles.paperSeal}>LA CARTE<br /><b>DE VOTRE<br />RESTAURANT</b></div>
-      </div>
-      <div className={`${styles.leaf} ${styles.rightLeaf}`}>
-        <span className={styles.paperKicker}>L’ENVIE DU MOMENT</span>
-        <h3>Simplement<br /><em>généreux.</em></h3>
-        <div className={styles.paperFood}><Image src="/illustrations/food/smash-burger.svg" unoptimized alt="" width={240} height={165} sizes="(max-width: 600px) 130px, 230px" /></div>
-        <p>Une belle recette.<br />Une place de choix.</p>
-        <span className={styles.paperFoot}>Sur place · à emporter</span>
-      </div>
-    </div>
-  </div>;
-}
 
 function TelevisionMenu() {
   return <div className={styles.tvRig} aria-hidden="true">
@@ -67,9 +39,18 @@ function TelevisionMenu() {
 }
 
 export function MenuExperience() {
-  const { ref, playing } = useSceneMotion({ count: 1 });
+  const { ref, playing, reduced } = useSceneMotion({ count: 1 });
   const [mode, setMode] = useState(0);
+  const [paperView, setPaperView] = useState<PaperView>("auto");
+  const [animationStart, setAnimationStart] = useState<"cover" | "interior">("cover");
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function selectPaperView(view: PaperView) {
+    if (view === "auto" && paperView !== "auto") {
+      setAnimationStart(paperView === "open" ? "interior" : "cover");
+    }
+    setPaperView(view);
+  }
 
   function navigateTabs(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next = index;
@@ -94,14 +75,26 @@ export function MenuExperience() {
         <div className={styles.tabs} role="tablist" aria-label="Explorer les supports de menu">
           {MODES.map((item, index) => <button key={item.id} id={`menu-tab-${item.id}`} ref={(element) => { tabs.current[index] = element; }} type="button" role="tab" aria-selected={mode === index} aria-controls="menu-support-preview" tabIndex={mode === index ? 0 : -1} onClick={() => setMode(index)} onKeyDown={(event) => navigateTabs(event, index)}><span className={styles.tabNumber}>0{index + 1}</span>{item.label}</button>)}
         </div>
-        <span className={styles.stageLabel}>PENSÉ POUR VOTRE CARTE</span>
+        <span className={styles.stageLabel}><span /> L’ATELIER SNACK MANAGER</span>
       </div>
       <div className={styles.stage} id="menu-support-preview" role="tabpanel" tabIndex={0} aria-labelledby={`menu-tab-${MODES[mode].id}`}>
-        <span className={styles.stageWord} aria-hidden="true">À LA CARTE.</span>
-        <FoldedMenu />
+        <div className={styles.artDirection} aria-hidden="true">
+          <span className={styles.edition}>0{mode + 1} / {mode === 0 ? "L’OBJET PAPIER" : mode === 1 ? "LA CARTE À L’ÉCRAN" : "UNE IDENTITÉ, DEUX SUPPORTS"}</span>
+          <p>{mode === 0 ? <>Du caractère.<br /><em>À chaque pli.</em></> : mode === 1 ? <>Votre carte.<br /><em>En grand.</em></> : <>Le même esprit.<br /><em>Partout.</em></>}</p>
+          <span className={styles.designRule} />
+          <span className={styles.designNote}>{mode === 0 ? <>Une couverture qui attire.<br />Un intérieur qui donne envie.</> : mode === 1 ? <>Vos recettes au premier plan.<br />Votre identité, à l’écran.</> : <>Du comptoir à l’écran.<br />Une même signature.</>}</span>
+        </div>
+        <div className={styles.paperRig}><TrifoldMenu view={paperView} playing={playing && mode !== 1} animationStart={animationStart} /></div>
         <TelevisionMenu />
-        <div className={styles.supportTag} aria-hidden="true"><span />{mode === 0 ? "TROIS VOLETS / SIX FACES" : mode === 1 ? "DEUX COMPOSITIONS / UNE IDENTITÉ" : "DEUX SUPPORTS / UNE MÊME CARTE"}</div>
-        <p className={styles.previewDescription}>{MODES[mode].detail}</p>
+        <div className={styles.sceneCaption}>
+          <div className={styles.supportTag} aria-hidden="true"><span />{mode === 0 ? "TROIS VOLETS · SIX FACES" : mode === 1 ? "DEUX COMPOSITIONS · UNE IDENTITÉ" : "PAPIER & TV · UNE MÊME CARTE"}</div>
+          <p className={styles.previewDescription}>{MODES[mode].detail}</p>
+        </div>
+        {mode !== 1 && <div className={styles.paperControls} role="group" aria-label="Présentation du menu papier">
+          <button type="button" aria-pressed={paperView === "closed"} onClick={() => selectPaperView("closed")}>Couverture</button>
+          <button type="button" aria-pressed={paperView === "open" || (reduced && paperView === "auto")} onClick={() => selectPaperView("open")}>Intérieur</button>
+          {!reduced && <button type="button" aria-pressed={paperView === "auto"} onClick={() => selectPaperView("auto")}><span aria-hidden="true">▷</span> Animation</button>}
+        </div>}
       </div>
       <div className={styles.stageBottom}><p>Exemples de présentation. Votre création est adaptée à votre identité.</p><MotionControl className={styles.motionControl} /></div>
     </div>
