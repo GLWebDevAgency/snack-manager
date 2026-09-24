@@ -24,6 +24,7 @@ let heldCode: Promise<void> | null, releaseCode: (() => void) | null;
 let heldLogin: Promise<void> | null, releaseLogin: (() => void) | null, logouts: number;
 let heldLogout: Promise<void> | null, releaseLogout: (() => void) | null;
 let expiredBrowserRef: string | null, browserInspectionFails: boolean;
+let registrationAvailable: boolean;
 const profile = () => ({ expiresAt: browserExpires, profile: { name: null, phoneE164: '+33600000000', phoneVerifiedAt: verifiedAt, revision: 0 } });
 const recovery = () => ({ operationId, attemptId, expiresAt, stage, recoveryVersion: version });
 const auth = () => ({ state: 'authenticated', operationId, publicationId, view: profile() });
@@ -34,7 +35,7 @@ beforeAll(async () => {
     import{marqueDeRepli}from'@sm/contracts';import{styleDuMasque}from'../masque/styleDuMasque';
     createRoot(document.getElementById('root')).render(<main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1><CustomerAccountEntry slug="recette" restaurantName="Le Comptoir"/><button>Commander en invité</button></main>);` },
     bundle: true, write: false, outdir: '/virtual-customer-access', format: 'iife', platform: 'browser', jsx: 'automatic', target: 'es2022',
-    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"' } }),
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': '"fixture-only"' } }),
   readFile(cssPath, 'utf8').then(source => postcss([tailwind({ base: fileURLToPath(new URL('../../..', import.meta.url)) })]).process(source, { from: cssPath }))]);
   js = bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text;
   css = styles.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '');
@@ -50,6 +51,7 @@ beforeEach(async () => {
   heldLogin = null; releaseLogin = null; logouts = 0;
   heldLogout = null; releaseLogout = null;
   expiredBrowserRef = null; browserInspectionFails = false;
+  registrationAvailable = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
@@ -60,7 +62,7 @@ beforeEach(async () => {
     if (!url.pathname.startsWith('/r/recette/compte/')) { faults.push('Unexpected route'); return route.abort(); }
     const action = url.pathname.split('/').at(-1), body = req.method() === 'GET' ? {} : req.postDataJSON();
     const reply = (json: unknown) => route.fulfill({ json, headers: { 'cache-control': 'private, no-store' } });
-    if (action === 'capacites') return reply({ available: false, registrationAvailable: false, accessAvailable: available });
+    if (action === 'capacites') return reply({ available: false, registrationAvailable, accessAvailable: available });
     if (action === 'session') {
       if (req.method() === 'DELETE') { publicationId = null; logouts++; if (heldLogout) await heldLogout; return route.fulfill({ status: 204 }); }
       return publicationId && req.headers()['x-sm-customer-check-id'] === publicationId && req.headers()['x-sm-customer-operation-id'] === operationId
@@ -208,6 +210,53 @@ describe('customer credential access — native rendered browser', () => {
     await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor(); expect(assertions).toBe(1);
     expect(steps.some(step => /verification|confirmation|resultat|protection/.test(step))).toBe(false);
     expect(await journal()).toMatchObject({ access: { method: 'passkey', phase: 'completed', attemptId: publicationId } });
+  });
+  it('keeps real passkey login available when registration is allowed but new SMS enrollment is unavailable', async () => {
+    registrationAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(assertions).toBe(1); expect(mutations).toBe(0);
+    expect(steps.some(step => /verification|confirmation|resultat|protection/.test(step))).toBe(false);
+  });
+  it.each(['closed', 'expired'] as const)('does not begin signup from an existing %s access while SMS enrollment is unavailable', async terminal => {
+    registrationAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).click();
+    await page.getByLabel('Votre code de secours', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Abandonner cette démarche', exact: true }).click();
+    await page.getByRole('button', { name: 'Fermer cette démarche', exact: true }).click();
+    await page.getByRole('heading', { name: 'Retrouver mon compte', exact: true }).waitFor();
+    if (terminal === 'expired') {
+      // Restore the other supported terminal journal shape. This is a local UI
+      // fixture, not a claim that the close endpoint returns an expired phase.
+      await page.evaluate(async expectedOperation => new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('sm-customer-preparation-v1'); open.onerror = () => reject(new Error('Journal unavailable'));
+        open.onsuccess = () => { const db = open.result, tx = db.transaction('preparations', 'readwrite'), store = tx.objectStore('preparations');
+          const read = store.get('recette'); read.onsuccess = () => {
+            const value = read.result;
+            if (value?.access?.phase !== 'closed' || value.access.operationId !== expectedOperation) { tx.abort(); return; }
+            value.access.phase = 'expired'; store.put(value, 'recette');
+          };
+          tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = tx.onerror = () => { db.close(); reject(new Error('Journal changed')); };
+        };
+      }), operationId);
+      await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+      await page.getByRole('heading', { name: 'Retrouver mon compte', exact: true }).waitFor();
+    }
+    const receipt = await journal(), priorSteps = [...steps];
+    expect(receipt).toMatchObject({ access: { phase: terminal, operationId } });
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    expect(await journal()).toEqual(receipt); expect(steps).toEqual(priorSteps);
+    expect(closed).toBe(1); expect(assertions).toBe(0); expect(mutations).toBe(0);
   });
   it('reloads after a lost login response and recovers its receipt without another assertion', async () => {
     loseLogin = true; await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).click();

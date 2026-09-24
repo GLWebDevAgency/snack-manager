@@ -17,7 +17,7 @@ import { useDevicePreferences } from "./device-preferences-store";
 import { DevicePreferencesSheet } from "../customer-account/DevicePreferencesSheet";
 import { usePathname } from "next/navigation";
 import { OrderInstall } from "./OrderInstall";
-import { navigateOrderView, useEmbeddedOrderView, useOrderInstallationRequest, useOrderNavigationLock } from "./order-navigation";
+import { navigateOrderView, useEmbeddedOrderView, useOrderDocumentTitle, useOrderInstallationRequest, useOrderNavigationLock } from "./order-navigation";
 import "./order-v2.css";
 import { logoPour, TYPE_PAIRS, WebsiteUrlSchema, type LoyaltyPublicProgram } from "@sm/contracts";
 import { cx } from "@/lib/cx";
@@ -326,6 +326,14 @@ export function Storefront({
   }
 
   const cityName = cityOf(site.tenant.address);
+  const documentTitles: Record<CustomerAppView, string> = {
+    menu: `${site.tenant.name} — Commander en ligne${cityName ? ` à ${cityName}` : ""}`,
+    search: "Rechercher un produit",
+    orders: "Mes commandes",
+    account: "Mon compte",
+    loyalty: `${loyaltyCatalog?.program.name ?? loyalty?.programme ?? "Fidélité"} — ${site.tenant.name}`,
+  };
+  useOrderDocumentTitle(embed || demo ? null : documentTitles[activeTab]);
 
   // La photo d’accueil choisie par le restaurateur prime sur les produits à l’affiche.
   // Le cadrage et le texte alternatif viennent de sa médiathèque.

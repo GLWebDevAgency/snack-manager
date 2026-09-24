@@ -77,7 +77,7 @@ import { VIBRATION_PALIER, VIBRATION_SCAN, vibrer } from "./haptique";
 import { SignatureSnackManager } from "./SignatureSnackManager";
 import { CustomerAccountPage } from "../customer-account/CustomerAccountPage";
 import { CustomerServiceNotice, type CustomerUnavailableService } from "../customer-account/CustomerServiceNotice";
-import { navigateOrderView, useOrderNavigationLock } from "../order/order-navigation";
+import { navigateOrderView, useOrderDocumentTitle, useOrderNavigationLock } from "../order/order-navigation";
 import { OrderTabBar } from "../order/OrderTabBar";
 import { SMTabBarSpacer } from "../ui/SMTabBar";
 
@@ -158,6 +158,8 @@ export function LoyaltyCardApp({ catalog, embedded = false, legacyOnly = false, 
   const slug = catalog.restaurant.slug;
   const pathname = usePathname();
   const activeView = !embedded && (pathname?.endsWith("/compte") || (!pathname && initialView === "account")) ? "account" : "loyalty";
+  useOrderDocumentTitle(embedded || slug === "demo" ? null : activeView === "account"
+    ? "Mon compte" : `${catalog.program.name} — ${catalog.restaurant.name}`);
   const [accountLocked, setAccountLocked] = useState(false);
   const cheminVitrine = orderingAvailable ? `/r/${encodeURIComponent(slug)}` : null;
   const loyaltyHref = `/r/${encodeURIComponent(slug)}/fidelite`;

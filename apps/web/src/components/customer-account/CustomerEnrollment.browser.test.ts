@@ -20,7 +20,7 @@ let browser: Browser, context: BrowserContext, page: Page, js: string, css: stri
 let faults: string[], steps: string[], operationId: string, checkId: string, activationId: string | null, browserRef: string,
   challengeId: string, expiresAt: number, browserExpires: number, stage: string, recoveryVersion: number, recoveryCode: string,
   challenge: string, userId: string, credential: Credential | null, sms: number, activated: number, loseActivation: boolean, registrationAvailable: boolean;
-let smsAvailable: boolean, heldCode: Promise<void> | null, releaseCode: (() => void) | null;
+let smsAvailable: boolean, accessAvailable: boolean, heldCode: Promise<void> | null, releaseCode: (() => void) | null;
 let profileName: string | null, profileRevision: number, verifiedAt: number, loyaltyJoined: boolean, loseJoin: boolean;
 let loyaltyRequests: Record<string, unknown>[];
 declare global { interface Window { enrollmentCompletionFixture: { sources: Array<string | undefined>; rerender(): void } } }
@@ -38,7 +38,7 @@ beforeAll(async () => {
     createRoot(document.getElementById('root')).render(<main style={styleDuMasque(marqueDeRepli(null,null))} className="min-h-dvh bg-bg p-4 text-ink"><h1>Restaurant de recette</h1>{new URLSearchParams(location.search).has('unstable')?<UnstableCallback/>:<CustomerAccountEntry slug="recette" restaurantName="Le Comptoir" loyaltyHref={new URLSearchParams(location.search).has('loyalty')?'/r/recette/fidelite':undefined}/>}<button>Commander en invité</button></main>);` },
     bundle: true, write: false, outdir: '/virtual-customer-enrollment', format: 'iife', platform: 'browser', jsx: 'automatic', target: 'es2022',
     alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
-    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': '"fixture-only"' },
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': 'globalThis.enrollmentSiteKey' },
     plugins: [{ name: 'isolated-human-widget', setup(builder) {
       builder.onResolve({ filter: /^next\/script$/ }, () => ({ path: 'script', namespace: 'fixture' }));
       builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ resolveDir: root, contents: `import{useEffect}from'react';
@@ -55,20 +55,20 @@ beforeEach(async () => {
   expiresAt = Date.now() + 300_000; browserExpires = Date.now() + 3_600_000; stage = 'registration_required'; recoveryVersion = 0;
   recoveryCode = `SM1-${randomBytes(16).toString('hex').toUpperCase().match(/.{4}/g)!.join('-')}`;
   challenge = opaque(); userId = opaque(); credential = null; sms = 0; activated = 0; loseActivation = false; registrationAvailable = true;
-  smsAvailable = true; heldCode = null; releaseCode = null;
+  smsAvailable = true; accessAvailable = false; heldCode = null; releaseCode = null;
   profileName = null; profileRevision = 0; verifiedAt = Date.now() - 1000; loyaltyJoined = false; loseJoin = false; loyaltyRequests = [];
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
     if (url.origin !== origin) { faults.push('External request refused'); return route.abort(); }
-    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recette locale compte protégé</title><style>${css}</style><div id="root"></div><script src="/app.js"></script></html>` });
+    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recette locale compte protégé</title><style>${css}</style><div id="root"></div><script>globalThis.enrollmentSiteKey=${JSON.stringify(url.searchParams.has('without-site-key') ? '' : 'fixture-only')}</script><script src="/app.js"></script></html>` });
     if (url.pathname === '/app.js') return route.fulfill({ contentType: 'text/javascript', body: js });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204 });
     const action = url.pathname.split('/').at(-1);
     if (!url.pathname.startsWith('/r/recette/compte/')) { faults.push('Unexpected local request'); return route.abort(); }
     const body = req.method() === 'GET' ? {} : req.postDataJSON();
     const reply = (json: unknown) => route.fulfill({ json, headers: { 'cache-control': 'private, no-store' } });
-    if (action === 'capacites') return reply({ available: smsAvailable, registrationAvailable, accessAvailable: false });
+    if (action === 'capacites') return reply({ available: smsAvailable, registrationAvailable, accessAvailable });
     if (action === 'session') return activationId && req.headers()['x-sm-customer-check-id'] === activationId
       ? reply(profile()) : route.fulfill({ status: 401, json: { code: 'CUSTOMER_UNAUTHORIZED' } });
     steps.push(`${action}:${body.step ?? ''}`);
@@ -132,7 +132,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { try { await context?.close(); } finally { expect(faults).toEqual([]); } });
 afterAll(async () => { await browser?.close(); });
-async function toRecovery() {
+async function verifyPhone() {
   await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).click();
   await page.getByLabel('Numéro de mobile', { exact: true }).fill('0600000000');
   await page.getByRole('button', { name: 'Envoyer mon code SMS', exact: true }).click();
@@ -140,7 +140,11 @@ async function toRecovery() {
   if (capture) await page.screenshot({ path: join(capture, 'otp-empty-390.png') });
   await page.getByLabel('Code SMS à six chiffres', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Vérifier mon téléphone', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer ma clé d’accès', exact: true }).waitFor();
   if (capture) { await page.getByRole('button', { name: 'Créer ma clé d’accès', exact: true }).waitFor(); await page.screenshot({ path: join(capture, 'key-required-390.png') }); }
+}
+async function toRecovery() {
+  await verifyPhone();
   await page.getByRole('button', { name: 'Créer ma clé d’accès', exact: true }).click();
   await page.getByRole('button', { name: 'Utiliser ma clé d’accès', exact: true }).click();
   await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).waitFor();
@@ -231,13 +235,82 @@ describe('protected customer enrollment — rendered native browser', () => {
     expect(await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).count()).toBe(0);
     expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0); expect(sms).toBe(0); expect(steps).toEqual([]);
   });
-  it('keeps a prepared enrollment usable but does not send when SMS admission is closed', async () => {
-    smsAvailable = false; await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+  it.each([false, true])('announces initial SMS closure without preparing a new enrollment (access available: %s)', async accessReady => {
+    smsAvailable = false; accessAvailable = accessReady;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('heading', { name: accessReady ? 'Retrouver mon compte' : 'Créer un compte protégé', exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Reprendre sur cet appareil', exact: true }).isEnabled()).toBe(true);
+    if (accessReady) {
+      expect(await page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }).isEnabled()).toBe(true);
+      expect(await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).isEnabled()).toBe(true);
+    }
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
+    expect(steps).toEqual([]); expect(sms).toBe(0);
+    await page.getByRole('button', { name: 'Reprendre sur cet appareil', exact: true }).click();
+    await page.getByText(/Cet appareil n’a pas pu être repris/).waitFor();
+    expect(steps).toEqual(['navigateur:restore']);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
+    expect(await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    expect(sms).toBe(0);
+  });
+  it.each([false, true])('does not offer new enrollment without the public human-check key (access available: %s)', async accessReady => {
+    accessAvailable = accessReady;
+    await page.goto(`${origin}/?without-site-key=1`); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Reprendre sur cet appareil', exact: true }).isEnabled()).toBe(true);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
+    expect(steps).toEqual([]); expect(sms).toBe(0);
+  });
+  it('allows a new enrollment only after SMS availability is read as restored', async () => {
+    smsAvailable = false; accessAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(steps).toEqual([]);
+    smsAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).click();
+    expect(steps).toEqual([]);
     await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).click();
+    await page.getByLabel('Numéro de mobile', { exact: true }).waitFor();
+    expect(steps.filter(step => step === 'intention:prepare')).toHaveLength(1);
+    expect(sms).toBe(0);
+  });
+  it('keeps a prepared enrollment usable but does not send when SMS admission is closed', async () => {
+    await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).click();
+    await page.getByLabel('Numéro de mobile', { exact: true }).waitFor();
+    const existingOperation = operationId, priorSteps = [...steps];
+    smsAvailable = false; accessAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
     await page.getByLabel('Numéro de mobile', { exact: true }).fill('0600000000');
     expect(await page.getByRole('button', { name: 'Envoyer mon code SMS', exact: true }).isDisabled()).toBe(true);
     await page.getByText('L’envoi de SMS n’est pas disponible.', { exact: false }).waitFor(); expect(sms).toBe(0);
+    expect(operationId).toBe(existingOperation); expect(steps).toEqual(priorSteps);
   });
+  it.each([false, true])('resumes protection after OTP with SMS closed, without a new intention (registration allowed: %s)', async registrationReady => {
+    await verifyPhone();
+    const existingOperation = operationId, existingCheck = checkId;
+    const preparationSteps = steps.filter(step => /^(navigateur|intention):/.test(step));
+    smsAvailable = false; registrationAvailable = registrationReady; accessAvailable = true;
+    await page.reload(); await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Créer ma clé d’accès', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Vérifier l’étape en cours', exact: true }).click();
+    await page.getByRole('button', { name: 'Créer ma clé d’accès', exact: true }).click();
+    await page.getByRole('button', { name: 'Utiliser ma clé d’accès', exact: true }).click();
+    await page.getByRole('button', { name: 'Afficher mon code de secours', exact: true }).click();
+    await page.getByRole('button', { name: 'Je l’ai conservé, masquer le code', exact: true }).click();
+    await page.getByLabel('Ressaisissez votre code de secours', { exact: true }).fill(recoveryCode);
+    await page.getByRole('button', { name: 'Activer mon compte protégé', exact: true }).click();
+    await page.getByRole('heading', { name: 'Votre profil', exact: true }).waitFor();
+    expect(operationId).toBe(existingOperation); expect(checkId).toBe(existingCheck);
+    expect(steps.filter(step => /^(navigateur|intention):/.test(step))).toEqual(preparationSteps);
+    expect(sms).toBe(1); expect(activated).toBe(1);
+  }, 25_000);
   it('explicit device resumption without a cookie keeps signup possible and never fabricates a journal or session', async () => {
     await page.getByRole('button', { name: 'Reprendre sur cet appareil', exact: true }).click();
     await page.getByText(/Cet appareil n’a pas pu être repris/).waitFor();

@@ -50,7 +50,22 @@ beforeAll(async () => {
     import{Storefront}from'../order/Storefront';import{orderingApi,httpTransport}from'../order/api';import{demoSite}from'../order/demo/fixture';
     import{LoyaltyCardApp}from'../loyalty/LoyaltyCardApp';import{marqueDeRepli,LoyaltyPublicProgramSchema}from'@sm/contracts';
     const brand=marqueDeRepli(null,null);const catalog=LoyaltyPublicProgramSchema.parse({restaurant:{slug:'recette',name:'Le Comptoir',brand,brandColor:'#c9a15a',logoUrl:null},program:{name:'La carte du Comptoir',mechanism:'points',unitLabelSingular:'point',unitLabelPlural:'points',termsSummary:'Récompenses à demander au comptoir.'},rewards:[]});
-    async function start(){let node;if(location.pathname==='/loyalty'){node=<LoyaltyCardApp catalog={catalog}/>;}else{const raw=demoSite(new Date(),()=>0);raw.tenant.slug='recette';raw.tenant.brand=brand;raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};const api=orderingApi({send:async request=>request.path.endsWith('/availability')?{status:200,body:{observedAt:new Date().toISOString(),openNow:raw.openNow,ordering:raw.ordering,todayHours:raw.todayHours,timezone:raw.timezone,slots:raw.slots}}:request.path.endsWith('/site')?{status:200,body:raw}:httpTransport.send(request)});const site=await api.loadSite('recette');node=<Storefront site={site} api={api} loyalty={{chemin:'/r/recette/fidelite',programme:catalog.program.name,uniteSingulier:'point',unitePluriel:'points',premiere:null}}/>;}createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
+    async function start(){
+      const path=location.pathname;let node;
+      if(path.startsWith('/loyalty')){node=<LoyaltyCardApp catalog={catalog} embedded={path==='/loyalty-embed'}/>;}
+      else{
+        const raw=demoSite(new Date(),()=>0);raw.tenant.slug='recette';raw.tenant.brand=brand;
+        if(path==='/storefront-loyalty')raw.tenant.name=catalog.restaurant.name;
+        raw.menu={categories:[{_id:'${'c'.repeat(24)}',name:'Boissons',products:[{_id:'${'d'.repeat(24)}',name:'Canette recette',price:150,available:true,stockout:false,variants:[],optionGroups:[],ingredients:[],supplements:[],photoUrl:null}]}]};
+        const api=orderingApi({send:async request=>request.path.endsWith('/availability')?{status:200,body:{observedAt:new Date().toISOString(),openNow:raw.openNow,ordering:raw.ordering,todayHours:raw.todayHours,timezone:raw.timezone,slots:raw.slots}}:request.path.endsWith('/site')?{status:200,body:raw}:httpTransport.send(request)});
+        const site=await api.loadSite('recette');
+        if(path==='/storefront-loyalty')history.replaceState(null,'','/r/recette/fidelite');
+        node=<Storefront site={site} api={api} mode={path==='/storefront-embed'?'embed':'site'} demo={path==='/storefront-demo'}
+          loyaltyCatalog={path==='/storefront-loyalty'?catalog:undefined}
+          loyalty={{chemin:'/r/recette/fidelite',programme:catalog.program.name,uniteSingulier:'point',unitePluriel:'points',premiere:null}}/>;
+      }
+      createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>);
+    }start();` },
     define: { ...options.define, 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
     plugins: [{ name: 'local-navigation-provider-boundaries', setup(builder) {
       builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture-navigation' }));
@@ -74,7 +89,7 @@ beforeAll(async () => {
     if (request.url === '/navigation.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(navigationBundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
     if (request.url === '/style.css') { response.setHeader('Content-Type', 'text/css'); response.end(css.css + (bundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '') + (navigationBundle.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '')); return; }
     if (request.url === '/favicon.ico') { response.writeHead(204).end(); return; }
-    if (['/', '/real', '/storefront', '/loyalty'].includes(request.url ?? '') || request.url?.startsWith('/page')) { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer account UI fixture</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/${request.url === '/real' ? 'real' : request.url === '/' || request.url?.startsWith('/page') ? 'app' : 'navigation'}.js"></script></html>`); return; }
+    if (['/', '/real', '/storefront', '/storefront-loyalty', '/storefront-embed', '/storefront-demo', '/loyalty', '/loyalty-embed'].includes(request.url ?? '') || request.url?.startsWith('/page')) { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${['/loyalty', '/storefront-loyalty'].includes(request.url ?? '') ? 'La carte du Comptoir — Le Comptoir' : 'Customer account UI fixture'}</title><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/${request.url === '/real' ? 'real' : request.url === '/' || request.url?.startsWith('/page') ? 'app' : 'navigation'}.js"></script></html>`); return; }
     if (request.url === '/api/public/funnel') { response.writeHead(204).end(); return; }
     response.writeHead(404).end();
   });
@@ -142,6 +157,9 @@ describe('customer entry placement — real Storefront and loyalty components', 
     const panelId = await panel.getAttribute('id');
     expect(panelId).toBeTruthy();
     const stablePanel = await panel.elementHandle();
+    // An initial server title may describe a partial-service fallback. Native
+    // tab presentation must leave it intact until the first navigation.
+    expect(await page.title()).toBe('Customer account UI fixture');
     expect(await page.getByRole('main').getByRole('tabpanel').count()).toBe(1);
     expect(await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.getAttribute('aria-controls')))).toEqual(Array(4).fill(panelId));
     await panel.getByRole('article', { name: 'Canette recette', exact: true }).getByRole('button', { name: /^Canette recette/ }).click();
@@ -150,20 +168,68 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await page.getByRole('tab', { name: 'Carte', exact: true }).focus();
     await page.keyboard.press('ArrowRight');
     await page.getByRole('tabpanel', { name: 'Rechercher', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Rechercher un produit');
     await page.getByRole('searchbox').fill('canette');
     expect(await page.getByRole('tab', { name: 'Rechercher', exact: true }).getAttribute('aria-selected')).toBe('true');
     await page.getByRole('tab', { name: 'Rechercher', exact: true }).focus();
     await page.keyboard.press('ArrowRight');
     await page.getByRole('tabpanel', { name: 'Commandes', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mes commandes');
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goBack();
     await page.getByRole('tabpanel', { name: 'Rechercher', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Rechercher un produit');
+    await page.goForward();
+    await page.getByRole('tabpanel', { name: 'Commandes', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mes commandes');
+    await page.goBack();
+    await page.getByRole('tabpanel', { name: 'Rechercher', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Rechercher un produit');
+    await page.goBack();
+    await page.getByRole('tabpanel', { name: 'Carte', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Le Comptoir — Commander en ligne à Rouen');
     await page.setViewportSize({ width: 320, height: 568 });
     expect(await stablePanel!.evaluate(element => element.isConnected)).toBe(true);
     expect(await page.getByRole('tabpanel').getAttribute('id')).toBe(panelId);
     expect(await cart.innerText()).toMatch(/1,50/);
     expect(await page.getByRole('dialog').count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(requests.mutations).toEqual([]);
+  });
+  it('updates the title from loyalty to orders and through native history without replacing the storefront panel', async () => {
+    const requests = await navigationFixture(true); await page.goto(`${origin}/storefront-loyalty`);
+    const panel = page.getByRole('main').getByRole('tabpanel', { name: 'Fidélité', exact: true });
+    await panel.waitFor();
+    const stablePanel = await panel.elementHandle();
+    await expect.poll(() => page.title()).toBe('La carte du Comptoir — Le Comptoir');
+    await page.getByRole('tab', { name: 'Commandes', exact: true }).click();
+    await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mes commandes');
+    expect(new URL(page.url()).pathname).toBe('/r/recette/commandes');
+    await page.goBack();
+    await panel.waitFor();
+    await expect.poll(() => page.title()).toBe('La carte du Comptoir — Le Comptoir');
+    await page.goForward();
+    await page.getByRole('tabpanel', { name: 'Commandes', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mes commandes');
+    expect(await stablePanel!.evaluate(element => element.isConnected)).toBe(true);
+    expect(requests.mutations).toEqual([]);
+  });
+  it.each(['storefront-embed', 'storefront-demo'])('preserves the host title during tab navigation in %s', async path => {
+    const requests = await navigationFixture(false); await page.goto(`${origin}/${path}`);
+    await page.getByRole('tabpanel', { name: 'Carte', exact: true }).waitFor();
+    expect(await page.title()).toBe('Customer account UI fixture');
+    await page.getByRole('tab', { name: 'Rechercher', exact: true }).click();
+    await page.getByRole('searchbox').fill('canette');
+    await page.getByRole('tab', { name: 'Commandes', exact: true }).click();
+    await page.getByRole('tabpanel', { name: 'Commandes', exact: true }).waitFor();
+    expect(await page.title()).toBe('Customer account UI fixture');
+    expect(requests.mutations).toEqual([]);
+  });
+  it('leaves the host title intact when the loyalty card is embedded', async () => {
+    const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty-embed`);
+    await page.getByText('Solde de Camille recette', { exact: true }).waitFor();
+    expect(await page.title()).toBe('Customer account UI fixture');
     expect(requests.mutations).toEqual([]);
   });
   it.each([320, 390, 1440])('keeps ordering primary and personal entries aligned at %ipx', async width => {
@@ -206,13 +272,16 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
     await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mon compte');
     await page.getByText('La connexion et la création de compte sont indisponibles pour le moment.').waitFor();
     expect(await page.getByRole('dialog').count()).toBe(0);
     await page.getByRole('tab', { name: 'Commandes', exact: true }).click();
     await page.getByRole('heading', { name: 'Mes commandes', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mes commandes');
     expect(await page.getByRole('dialog').count()).toBe(0);
     await page.goBack();
     await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mon compte');
     expect(requests.accountRequests.every(request => request === 'GET /r/recette/compte/capacites')).toBe(true);
     expect(requests.mutations).toEqual([]);
   });
@@ -230,6 +299,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
     await page.getByText('Solde de Camille recette', { exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('La carte du Comptoir — Le Comptoir');
     const panelId = await page.getByRole('main').getByRole('tabpanel', { name: 'Fidélité', exact: true }).getAttribute('id');
     expect(panelId).toBeTruthy();
     expect(await page.getByRole('tab', { name: 'Fidélité', exact: true }).getAttribute('aria-controls')).toBe(panelId);
@@ -246,9 +316,16 @@ describe('customer entry placement — real Storefront and loyalty components', 
     }
     await page.getByRole('tab', { name: 'Compte', exact: true }).click();
     await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mon compte');
     expect(await page.getByRole('dialog').count()).toBe(0);
     expect(await page.getByRole('link', { name: 'Fidélité du restaurant', exact: true }).count()).toBe(0);
     expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(0);
+    await page.goBack();
+    await page.getByRole('tabpanel', { name: 'Fidélité', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('La carte du Comptoir — Le Comptoir');
+    await page.goForward();
+    await page.getByRole('tabpanel', { name: 'Compte', exact: true }).waitFor();
+    await expect.poll(() => page.title()).toBe('Mon compte');
     expect(requests.mutations).toEqual([]);
   });
   it.each([['storefront', 'Carte'], ['loyalty', 'Fidélité']])('returns to the actual destination through the common navigation on %s', async (path, label) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { customerAppPath, type CustomerAppView } from "@sm/client-core";
 
 export type OrderView = CustomerAppView;
@@ -20,6 +20,18 @@ export function useOrderInstallationRequest() { return useSyncExternalStore(subs
  * have reloadable routes; native history preserves the live cart controller. */
 export function useEmbeddedOrderView() {
   return useSyncExternalStore(subscribe, queryView, serverView);
+}
+
+/** Keep the initial server title, including temporary-service fallbacks. Native
+ * history then changes only the title when the displayed tab changes, without
+ * replacing controllers. Embedded/demo callers pass null to retain their host. */
+export function useOrderDocumentTitle(title: string | null) {
+  const previous = useRef(title);
+  useEffect(() => {
+    if (previous.current === title) return;
+    previous.current = title;
+    if (title !== null) document.title = title;
+  }, [title]);
 }
 
 /** Keep an acknowledged private mutation on its current screen. App buttons

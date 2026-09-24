@@ -48,7 +48,8 @@ beforeAll(async () => {
       createRoot(document.getElementById('root')).render(<React.StrictMode>{node}</React.StrictMode>)}start();` },
     bundle: true, write: false, outdir: '/virtual-loyalty-account-entry', format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022',
     alias: { react: fileURLToPath(new URL('../../../node_modules/react', import.meta.url)), 'react-dom': fileURLToPath(new URL('../../../node_modules/react-dom', import.meta.url)) },
-    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_API_URL': '"/api"' },
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_API_URL': '"/api"',
+      'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': '"fixture-only"' },
     plugins: [{ name: 'local-next-adapters', setup(builder) {
       builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'loyalty-fixture' }));
       builder.onLoad({ filter: /^navigation$/, namespace: 'loyalty-fixture' }, () => ({ contents: `import{useSyncExternalStore}from'react';const subscribe=cb=>{window.addEventListener('sm:order-navigation',cb);window.addEventListener('popstate',cb);return()=>{window.removeEventListener('sm:order-navigation',cb);window.removeEventListener('popstate',cb)}};export const usePathname=()=>useSyncExternalStore(subscribe,()=>location.pathname,()=>'/');const navigate=url=>{history.pushState({},'',url);window.dispatchEvent(new Event('sm:order-navigation'))};export const useRouter=()=>({push:navigate,replace:navigate});`, resolveDir: directory }));
@@ -90,7 +91,12 @@ beforeEach(async () => {
   await context.route(`${origin}/r/**`, async route => {
     const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
     const body: unknown = request.postData() ? request.postDataJSON() : null;
-    if (!/\/(card-session|capacites|session|fidelite|orders|profil|recherche|detail|recommander)$/.test(path) || (path.endsWith('/fidelite') && method==='GET')) return route.continue();
+    if (!/\/(card-session|capacites|session|fidelite|orders|profil|recherche|detail|recommander)$/.test(path) || (path.endsWith('/fidelite') && method==='GET')) {
+      if (path.includes('/compte/') && method !== 'GET') {
+        calls.push({ path, method, body }); faults.push('Unexpected account mutation'); return route.abort();
+      }
+      return route.continue();
+    }
     calls.push({ path, method, body });
     if (path.includes('/compte/commandes/') && method === 'POST' && authenticated) {
       if (path.endsWith('/recherche')) return route.fulfill({json:{expiresAt:expiry,orders:[pastOrder],nextCursor:null}});
@@ -257,11 +263,32 @@ describe('application client — navigation commune et cartes existantes', () =>
     const connect = page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }); await connect.waitFor();
     expect((await scanner.boundingBox())!.y).toBeLessThan((await connect.boundingBox())!.y);
     expect(await page.getByLabel('Numéro de mobile', { exact: true }).count()).toBe(0);
+    await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).waitFor();
+    expect(await connect.isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Utiliser mon code de secours', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Reprendre sur cet appareil', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).count()).toBe(0);
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
+  });
+
+  it('propose une nouvelle inscription quand SMS, inscription, accès et clé publique sont disponibles, sans envoi à l’ouverture', async () => {
+    capabilities = { available: true, accessAvailable: true, registrationAvailable: true };
+    await page.goto(origin);
+    const scanner = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scanner.waitFor();
+    const connect = page.getByRole('button', { name: 'Se connecter avec une clé d’accès', exact: true }); await connect.waitFor();
+    expect((await scanner.boundingBox())!.y).toBeLessThan((await connect.boundingBox())!.y);
+    expect(await page.getByLabel('Numéro de mobile', { exact: true }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).count()).toBe(1);
+    expect(await page.getByText('Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.', { exact: true }).count()).toBe(0);
     expect(calls.every(call => call.method === 'GET')).toBe(true);
     await page.getByRole('button', { name: 'Créer un compte protégé', exact: true }).click();
-    await page.getByRole('button', { name: 'Commencer mon inscription', exact: true }).waitFor();
+    const begin = page.getByRole('button', { name: 'Commencer mon inscription', exact: true }); await begin.waitFor();
+    expect(await begin.isEnabled()).toBe(true);
+    expect(await page.getByLabel('Numéro de mobile', { exact: true }).count()).toBe(0);
     expect(calls.every(call => call.method === 'GET')).toBe(true);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
   });
 
   it('affiche la carte déjà liée sans nouveau téléphone, adhésion ni scan et efface le DOM privé au retour', async () => {

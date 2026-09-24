@@ -38,6 +38,10 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   const started = verification && !terminal && phase !== 'completed';
   const access = state.record?.access;
   const accessActive = access && !['completed', 'closed', 'expired'].includes(access.phase);
+  // Preparation is shared with existing-key access and durable resumption.
+  // Gate only a new enrollment, not a verification/protection already started.
+  const canStartSignup = registrationAvailable && smsAvailable && Boolean(SITE_KEY);
+  const signupUnavailable = registrationAvailable && !canStartSignup;
   useEffect(() => { onActivity(Boolean(access ? accessActive : started) || state.busy); }, [onActivity, access, accessActive, started, state.busy]);
   useEffect(() => () => onActivity(false), [onActivity]);
   useEffect(() => { onBusyChange?.(state.busy); return () => onBusyChange?.(false); }, [state.busy, onBusyChange]);
@@ -67,8 +71,8 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   // A completed selector is not itself a signed-in session. Let the existing
   // account client own its offline/expired/logout state, without duplicating it.
   if (state.loading) return null;
-  if (access || (accessAvailable && !started && !signupSelected)) return <CustomerAccess state={state} flow={flow} available={accessAvailable}
-    {...(registrationAvailable && phase !== 'completed' && (!access || ['closed', 'expired'].includes(access.phase))
+  if (access || (accessAvailable && !started && !signupSelected)) return <CustomerAccess state={state} flow={flow} available={accessAvailable} signupUnavailable={signupUnavailable}
+    {...(canStartSignup && phase !== 'completed' && (!access || ['closed', 'expired'].includes(access.phase))
       ? { onSignup: () => { if (access) void flow?.begin(); else setSignupSelected(true); } } : {})} />;
   if (state.outcome === 'browser-expired') return <section aria-label="Inscription protégée" aria-busy={state.busy} className="sm-account-card space-y-4">
     <h3 ref={heading} tabIndex={-1} className="font-display text-xl font-extrabold outline-none">Reprendre votre accès</h3>
@@ -102,7 +106,8 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
       <p className="text-sm leading-6 text-mut">Vérifiez votre téléphone, puis protégez votre compte avec une clé d’accès et un code de secours. Votre compte ne sera activé qu’à la fin.</p>
       <p className="text-xs leading-5 text-mut">La clé est liée à ce site du restaurant. Un autre domaine ne partage pas automatiquement cet accès.</p>
       {!supported && <p role="status" className="text-sm leading-6 text-mut">Ce navigateur ne permet pas de protéger cet accès. Utilisez un navigateur récent. Aucun SMS n’a été envoyé.</p>}
-      {registrationAvailable ? <Tap className={primary} disabled={locked || !supported} onClick={() => void flow?.begin()}>Commencer mon inscription</Tap>
+      {signupUnavailable ? <p role="status" className="text-sm leading-6 text-mut">Les nouvelles inscriptions sont temporairement indisponibles. Réessayez plus tard.</p>
+        : canStartSignup ? <Tap className={primary} disabled={locked || !supported} onClick={() => void flow?.begin()}>Commencer mon inscription</Tap>
         : <p className="text-sm text-mut">Les nouvelles inscriptions sont fermées pour le moment.</p>}
       {accessAvailable && <Tap className={secondary + ' w-full'} disabled={locked} onClick={() => setSignupSelected(false)}>J’ai déjà un compte</Tap>}
       {!state.record && !state.storageError && <div className="border-t border-ink/10 pt-3">
