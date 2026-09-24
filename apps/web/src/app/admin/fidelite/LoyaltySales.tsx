@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { LoyaltySaleSettlementListSchema, LoyaltySaleSettlementSchema, type LoyaltySaleSettlement } from '@sm/contracts';
+import { LoyaltySaleSettlementListV2Schema, LoyaltySaleSettlementV2Schema, LoyaltySaleSettlementSchema, type LoyaltySaleSettlementV2 as LoyaltySaleSettlement } from '@sm/contracts';
 import { closeSupersededLoyaltySaleResolutionIntent, completeLoyaltySaleResolutionIntent, prepareLoyaltySaleResolutionIntent, readLoyaltySaleResolutionIntent, type LoyaltySaleResolutionLocalIntent } from '@sm/client-core';
 import { api, getToken } from '@/lib/api';
 import { Btn, Field, Input, Modal, Panel } from '@/components/ui';
@@ -21,8 +21,10 @@ const REASON: Record<NonNullable<LoyaltySaleSettlement['reason']>, string> = {
   financial_regression: 'Les remboursements observés ne concordent plus avec le journal. Une vérification est nécessaire.',
   financial_proof_too_large: 'Le détail financier dépasse la taille vérifiable automatiquement. Une vérification est nécessaire.',
   financial_proof_conflict: 'Le paiement, la remise ou la répartition doit être vérifié avant tout mouvement.',
+  cancelled_before_handoff: 'Commande annulée avant remise : aucun gain de fidélité n’a été enregistré.',
 };
-const label = (view: LoyaltySaleSettlement) => view.state === 'recorded' ? 'À jour' : view.state === 'waiting' ? 'En attente' : 'À vérifier';
+const label = (view: LoyaltySaleSettlement) => view.state === 'not_earned' ? 'Sans gain — commande annulée'
+  : view.state === 'recorded' ? 'À jour' : view.state === 'waiting' ? 'En attente' : 'À vérifier';
 const problem = (cause: unknown) => cause instanceof Error ? cause.message : 'La lecture des ventes fidélité est indisponible.';
 
 export function LoyaltySales() {
@@ -33,7 +35,7 @@ export function LoyaltySales() {
   function current() { if (alive.current && getToken() !== scope.current) { setItems([]); setSelected(null); setRefundOrder(null); } if (!alive.current || !scope.current || getToken() !== scope.current) throw new Error('Votre session a changé. Rechargez cette page.'); }
   async function load(more = false) {
     if (working.current) return; working.current = true; setBusy(true); setError(null);
-    try { current(); const view = LoyaltySaleSettlementListSchema.parse(await loyaltyApi.sales(more ? cursor : null)); current();
+    try { current(); const view = LoyaltySaleSettlementListV2Schema.parse(await loyaltyApi.sales(more ? cursor : null)); current();
       setItems(previous => more ? [...previous.filter(item => !view.items.some(next => next.orderId === item.orderId)), ...view.items] : view.items); setCursor(view.nextCursor); setReady(true);
     } catch (cause) { if (alive.current) setError(problem(cause)); }
     finally { working.current = false; if (alive.current) setBusy(false); }
@@ -75,7 +77,7 @@ export function LoyaltySales() {
 }
 function SaleAmounts({ view }: { view: LoyaltySaleSettlement }) {
   return <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-    <div><dt className="text-mut">Gain initial</dt><dd className="font-semibold">{view.initialUnits ?? 'À confirmer'}</dd></div>
+    <div><dt className="text-mut">Gain initial</dt><dd className="font-semibold">{view.initialUnits ?? (view.state === 'not_earned' ? 'Aucun gain enregistré' : 'À confirmer')}</dd></div>
     <div><dt className="text-mut">Unités retirées</dt><dd className="font-semibold">{view.reversedUnits}</dd></div>
     <div><dt className="text-mut">Conservées par décision</dt><dd className="font-semibold">{view.waivedUnits}</dd></div>
     <div><dt className="text-mut">Retrait à traiter</dt><dd className="font-semibold">{view.dueUnits}</dd></div>
@@ -90,13 +92,13 @@ function Resolution({ initial, onClose, onUpdated }: { initial: LoyaltySaleSettl
   async function read() {
     current();
     const local = session.current ? await readLoyaltySaleResolutionIntent(session.current.store, session.current.ownerId, initial.orderId) : null; current();
-    const next = LoyaltySaleSettlementSchema.parse(await loyaltyApi.sale(initial.orderId, local?.state === 'pending' ? local.intent.request.operationId : undefined)); current();
+    const next = LoyaltySaleSettlementV2Schema.parse(await loyaltyApi.sale(initial.orderId, local?.state === 'pending' ? local.intent.request.operationId : undefined)); current();
     if (next.orderId !== initial.orderId) throw new Error('Dossier reçu incohérent');
     let pending: LoyaltySaleResolutionLocalIntent | null = null;
     if (session.current) {
       setBlocked(local!.state === 'blocked'); pending = local?.state === 'pending' ? local.intent : null;
       if (pending && next.resolutions.some(receipt => receipt.request.operationId === pending!.request.operationId)) {
-        await completeLoyaltySaleResolutionIntent(session.current.store, pending, next); current(); pending = null;
+        await completeLoyaltySaleResolutionIntent(session.current.store, pending, LoyaltySaleSettlementSchema.parse(next)); current(); pending = null;
         setNotice('Votre décision est enregistrée. Le dossier indique la situation actuelle.');
       }
     }
@@ -152,7 +154,7 @@ function Resolution({ initial, onClose, onUpdated }: { initial: LoyaltySaleSettl
         <Btn variant="ghost" disabled={busy} onClick={() => void perform(async () => {
           if (!session.current || !intent) return; const saved = intent, fresh = await read(); current();
           if (fresh.resolutions.some(receipt => receipt.request.operationId === saved.request.operationId)) return;
-          await closeSupersededLoyaltySaleResolutionIntent(session.current.store, saved, fresh); current(); setIntent(null); setReason(''); setPassword('');
+          await closeSupersededLoyaltySaleResolutionIntent(session.current.store, saved, LoyaltySaleSettlementSchema.parse(fresh)); current(); setIntent(null); setReason(''); setPassword('');
         })}>Fermer cette décision périmée</Btn>
       </div>}
       {view.resolutions.length > 0 && <section aria-label="Décisions enregistrées" className="space-y-2"><h3 className="font-semibold">Décisions enregistrées</h3>{view.resolutions.map(receipt => <article key={receipt.request.operationId} className="rounded-ctrl border border-line2 p-3 text-sm"><strong>{receipt.request.decision === 'waive_current' ? 'Unités dues conservées par décision' : 'Retrait réexaminé'}</strong><p>{receipt.request.reason}</p><p className="text-mut">{new Date(receipt.recordedAt).toLocaleString('fr-FR')}</p></article>)}</section>}

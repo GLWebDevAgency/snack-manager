@@ -8,6 +8,7 @@ import postcss from 'postcss';
 import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page, type Request as BrowserRequest } from 'playwright';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest';
+import type { CustomerOrderSummary } from '@sm/contracts';
 import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
 // Real Entry/Sheet/account hook, identity journal, private reader and brand CSS.
@@ -63,12 +64,14 @@ function notificationOutcome(failure: Failure, wire: Wire | undefined, observed:
     && !same(proof.before, proof.after) && same(proof.after, proof.current)
     && proof.alert === identityAlert && proof.visibleOrders === 0 ? 'identity-rejected' : null;
 }
-const rows = Array.from({ length: 10 }, (_, index) => ({ _id: (1000 - index).toString(16).padStart(24, '0'), number: 120 - index,
+const baseRows: CustomerOrderSummary[] = Array.from({ length: 10 }, (_, index) => ({ _id: (1000 - index).toString(16).padStart(24, '0'), number: 120 - index,
   createdAt: '2026-09-09T12:00:00.000Z', status: index === 9 ? 'delivered' : 'ready', type: index % 2 ? 'pickup' : 'delivery',
   pickupSlot: '2026-09-09T18:00:00.000Z', totalCents: 1490,
   payment: { method: 'counter', status: index === 0 ? 'pending' : 'paid', refundedCents: 0, pendingRefundCents: 0 } }));
+let rows = structuredClone(baseRows);
 function detail(order: typeof rows[number]) {
-  return { ...order, totals: { subtotal: 1290, deliveryFee: 200, discount: null, total: 1490 },
+  return { ...order, totals: { subtotal: 1290, deliveryFee: 200,
+    discount: order.totalCents === 0 ? { amount: 1490, reason: 'Récompense fidélité' } : null, total: order.totalCents },
     lines: [{ name: 'Menu burger du Comptoir', variantName: 'Classique', qty: 1, unitPrice: 1290, lineTotal: 1290,
       options: [{ name: 'Sauce maison', priceDelta: 0 }], removed: ['Oignons'], note: null }], note: 'Serviettes, merci.',
     statusHistory: [{ status: 'new', at: order.createdAt }, { status: 'ready', at: '2026-09-09T12:10:00.000Z' }],
@@ -135,6 +138,7 @@ beforeAll(async () => {
   if (process.env.QA_CUSTOMER_ORDERS_CAPTURE === '1') { evidence = await mkdtemp(join(tmpdir(), 'sm-customer-orders-')); process.stdout.write(`Customer orders captures: ${evidence}\n`); }
 }, 30_000);
 beforeEach(async () => {
+  rows = structuredClone(baseRows);
   faults = []; calls = []; expiry = Date.now() + 60_000; hold = false; release = null; responseStatus = 200;
   inflight = new Set(); failed = []; fixtureSerial = 0; marks = []; wires = new Map(); uiVerified = new Set(); identityRefusals = new Map(); expectedFailures = new Set(); transportFault = 'none'; distinctRefreshes = false; invalidCapabilities = false; invalidHeldList = false;
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
@@ -309,6 +313,33 @@ async function journalSelection(): Promise<Selection> {
   });
 }
 describe('private orders — actual UI/client, read-only local HTTP fixture', () => {
+  it.each([
+    { name: 'cancelled zero total', totalCents: 0, status: 'paid', refundedCents: 0, pendingRefundCents: 0, label: 'Rien à régler' },
+    { name: 'positive paid total', totalCents: 1490, status: 'paid', refundedCents: 0, pendingRefundCents: 0, label: 'Paiement confirmé' },
+    { name: 'zero total awaiting confirmation', totalCents: 0, status: 'pending', refundedCents: 0, pendingRefundCents: 0, label: 'À vérifier auprès du restaurant' },
+    { name: 'refunded payment', totalCents: 1490, status: 'refunded', refundedCents: 1490, pendingRefundCents: 0, label: 'Paiement remboursé' },
+    { name: 'partial refund', totalCents: 1490, status: 'paid', refundedCents: 50, pendingRefundCents: 0, label: 'Paiement confirmé' },
+    { name: 'zero total with a recorded refund', totalCents: 0, status: 'paid', refundedCents: 50, pendingRefundCents: 0, label: 'Paiement confirmé' },
+    { name: 'zero total with a pending refund', totalCents: 0, status: 'paid', refundedCents: 0, pendingRefundCents: 50, label: 'Paiement confirmé' },
+  ] as const)('preserves payment meaning in list and detail: $name', async scenario => {
+    rows[0] = { ...rows[0]!, status: 'cancelled', totalCents: scenario.totalCents,
+      payment: { method: 'online', status: scenario.status, refundedCents: scenario.refundedCents, pendingRefundCents: scenario.pendingRefundCents } };
+    await openOrders();
+    const item = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Voir la commande n° 120', exact: true }) });
+    const assertPayment = async (scope: ReturnType<Page['locator']>) => {
+      expect(await scope.getByText(scenario.label, { exact: true }).count()).toBe(1);
+      expect(await scope.getByText('Rien à régler', { exact: true }).count()).toBe(scenario.label === 'Rien à régler' ? 1 : 0);
+      expect(await scope.getByText('Paiement confirmé', { exact: true }).count()).toBe(scenario.label === 'Paiement confirmé' ? 1 : 0);
+      expect(await scope.getByText('Commande annulée', { exact: true }).count()).toBe(1);
+      expect(await scope.getByText(/^Remboursé :/).count()).toBe(scenario.refundedCents > 0 ? 1 : 0);
+      expect(await scope.getByText(/^Remboursement en cours :/).count()).toBe(scenario.pendingRefundCents > 0 ? 1 : 0);
+    };
+    await assertPayment(item);
+    await item.getByRole('button', { name: 'Voir la commande n° 120', exact: true }).click();
+    await page.getByText('1 × Menu burger du Comptoir · Classique', { exact: true }).waitFor();
+    await assertPayment(page.getByRole('region', { name: 'Commandes de votre compte', exact: true }));
+    await markUI(paths.detail, calls.at(-1)?.responseId);
+  });
   it('distinguishes the complete CI response refused for identity change from an accepted UI response', () => {
     // CI34301302155: exact list wire3,200,2263bytes,EOF+JSON,ERR_ABORTED.
     // These observations establish neither Chromium causality nor CDP ordering.

@@ -15,6 +15,10 @@ const id = 'a'.repeat(24), tenantId = 'b'.repeat(24), sub = 'c'.repeat(24);
 const token = (subject = sub) => `fixture.${Buffer.from(JSON.stringify({ tenantId, sub: subject, kind: 'user', role: 'owner', exp: 2_000_000_000 })).toString('base64url')}.fixture`;
 const ownerId = `${tenantId}:user:${sub}`;
 const order = { _id: id, number: 42, payment: { method: 'online', status: 'paid', stripePaymentIntentId: 'pi_fixture' } };
+const detailOrder = { ...order, clientId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', channel: 'online', type: 'pickup',
+  lines: [], totals: { subtotal: 150, discount: null, total: 150 }, status: 'ready', statusHistory: [],
+  pickup: { slot: '2030-09-24T12:00:00.000Z', customerName: 'Recette locale', customerPhone: null }, note: null,
+  createdAt: '2030-09-24T11:30:00.000Z', updatedAt: '2030-09-24T11:30:00.000Z' };
 const base = `/api/orders/${id}/refunds`;
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string, captures: string;
 let journal: OrderRefundJournal, posts: { path: string; body: Record<string, unknown> }[], reads: string[], faults: string[];
@@ -32,9 +36,13 @@ beforeAll(async () => {
   const root = fileURLToPath(new URL('.', import.meta.url));
   const cssPath = fileURLToPath(new URL('../../globals.css', import.meta.url));
   const [bundle, css] = await Promise.all([
-    build({ stdin: { contents: `import React,{useState}from'react';import{createRoot}from'react-dom/client';import{RefundModal}from'./RefundModal';
-      function Fixture(){const[open,setOpen]=useState(false);return <main><h1>Commandes</h1><button onClick={()=>setOpen(true)}>Ouvrir remboursements</button>{open&&<RefundModal order={${JSON.stringify(order)}} onClose={()=>setOpen(false)} onRefunded={()=>setOpen(false)}/>}</main>}
-      createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);`, loader: 'tsx', resolveDir: root, sourcefile: 'refund-ui-fixture.tsx' },
+    build({ stdin: { contents: `import React,{useState}from'react';import{createRoot}from'react-dom/client';import{ToastProvider}from'@/components/ui';import{RefundModal}from'./RefundModal';import{OrderDrawer}from'./OrderDrawer';import{CancelModal}from'./CancelModal';
+      const query=new URLSearchParams(location.search),kind=query.get('detail');const detail=${JSON.stringify(detailOrder)};
+      if(kind==='free'||kind==='pending'){detail.totals={subtotal:150,discount:{amount:150,reason:'Récompense recette'},total:0};detail.payment={method:'online',status:kind==='free'?'paid':'pending',stripePaymentIntentId:null};}
+      function Fixture(){const[open,setOpen]=useState(false);const[cancelling,setCancelling]=useState(false);
+        if(kind)return <main><h1>Commandes</h1><OrderDrawer order={detail} onClose={()=>{}} onPrint={()=>{}} onCancel={()=>setCancelling(true)} onRefund={()=>{}}/><CancelModal order={cancelling?detail:null} owner={query.get('owner')==='1'} onClose={()=>setCancelling(false)} onCancelled={()=>setCancelling(false)}/></main>;
+        return <main><h1>Commandes</h1><button onClick={()=>setOpen(true)}>Ouvrir remboursements</button>{open&&<RefundModal order={${JSON.stringify(order)}} onClose={()=>setOpen(false)} onRefunded={()=>setOpen(false)}/>}</main>}
+      createRoot(document.getElementById('root')).render(<React.StrictMode><ToastProvider><Fixture/></ToastProvider></React.StrictMode>);`, loader: 'tsx', resolveDir: root, sourcefile: 'refund-ui-fixture.tsx' },
       bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', outdir: '/virtual-refund-ui',
       alias: { '@': fileURLToPath(new URL('../../../', import.meta.url)) },
       define: { 'process.env': '{}', 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_API_URL': '"/api"' } }),
@@ -47,7 +55,7 @@ beforeAll(async () => {
     if (path === '/app.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text); return; }
     if (path === '/style.css') { response.setHeader('Content-Type', 'text/css'); response.end(css.css); return; }
     if (path === '/favicon.ico') { response.writeHead(204).end(); return; }
-    if (path === '/admin/orders') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/app.js"></script></html>'); return; }
+    if (new URL(path, origin).pathname === '/admin/orders') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/app.js"></script></html>'); return; }
     if (!accountFor(request)) { json({ message: 'Accès refusé' }, 401); return; }
     if (request.method === 'GET') {
       reads.push(path);
@@ -126,6 +134,40 @@ async function settled(target = page) { await expect.poll(() => target.getByRole
 
 // True Modal, api, shared CAS/Web Locks and browser persistence; only provider HTTP is a loopback fixture.
 describe('durable refund modal', () => {
+  it.each([false, true])('does not invent a bank payment for a free order and preserves cancellation authentication (owner=%s)', async owner => {
+    await page.goto(origin + `/admin/orders?detail=free&owner=${owner ? '1' : '0'}`);
+    await page.getByText('Rien à régler', { exact: true }).waitFor();
+    expect(await page.getByText('Payée en ligne', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Rembourser', exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Annuler la commande', exact: true }).click();
+    await page.getByRole('note').filter({ hasText: 'Cette commande est offerte. Aucun paiement n’est à rembourser.' }).waitFor();
+    expect(await page.getByText('Le paiement a déjà été encaissé.', { exact: false }).count()).toBe(0);
+    const confirm = page.getByRole('button', { name: "Confirmer l'annulation", exact: true });
+    expect(await confirm.isDisabled()).toBe(true);
+    await page.getByLabel("Raison de l'annulation", { exact: true }).fill('Client absent');
+    expect(await confirm.isDisabled()).toBe(true);
+    await page.getByLabel(owner ? 'Votre mot de passe' : 'PIN staff', { exact: true }).fill(owner ? 'local-password-fixture' : '1234');
+    expect(await confirm.isEnabled()).toBe(true);
+    expect(posts).toEqual([]); expect(reads).toEqual([]);
+  });
+  it('keeps the collected-payment warning and refund action for a positive paid order', async () => {
+    await page.goto(origin + '/admin/orders?detail=paid');
+    await page.getByText('Payée en ligne', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Rembourser', exact: true }).isVisible()).toBe(true);
+    expect(await page.getByText('Rien à régler', { exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Annuler la commande', exact: true }).click();
+    await page.getByRole('note').filter({ hasText: 'Le paiement a déjà été encaissé.' }).waitFor();
+    expect(await page.getByText('Cette commande est offerte.', { exact: false }).count()).toBe(0);
+    expect(posts).toEqual([]); expect(reads).toEqual([]);
+  });
+  it('does not present a zero total awaiting settlement as a confirmed free order', async () => {
+    await page.goto(origin + '/admin/orders?detail=pending');
+    await page.getByText('À encaisser', { exact: true }).waitFor();
+    expect(await page.getByText('Rien à régler', { exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Annuler la commande', exact: true }).click();
+    expect(await page.getByRole('note').count()).toBe(0);
+    expect(posts).toEqual([]); expect(reads).toEqual([]);
+  });
   it('contains all actions at 320px and keeps the footer reachable', async () => {
     await page.setViewportSize({ width: 320, height: 568 });
     journal.operations = [operation({ state: 'known', providerStatus: 'pending', canResume: false })];

@@ -273,7 +273,10 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
     await page.getByRole('radio', { name: /Récompense recette/ }).check();
     await expect.poll(() => Boolean(heldRewardQuote)).toBe(true);
     await checkout('counter', false);
+    expect(await page.getByText('Cette nouvelle commande sera rattachée à votre compte.', { exact: true }).isVisible()).toBe(true);
     await page.getByRole('checkbox', { name: 'Commander en invité', exact: true }).check();
+    expect(await page.getByText('Cette nouvelle commande ne sera pas rattachée à votre compte et ne créditera pas sa fidélité. Votre accès au compte est conservé.', { exact: true }).isVisible()).toBe(true);
+    expect(await page.getByText('Cette nouvelle commande sera rattachée à votre compte.', { exact: true }).count()).toBe(0);
     await expect.poll(() => calls.filter(call => call.path.endsWith('/orders/quote') && !call.body.reward).length).toBeGreaterThanOrEqual(1);
     json(heldRewardQuote!.res, heldRewardQuote!.value); heldRewardQuote = null;
     expect(await page.getByText('30 points disponibles', { exact: true }).count()).toBe(0);
@@ -328,7 +331,11 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
     await page.getByText('Votre compte ne peut pas être confirmé.', { exact: false }).waitFor();
     expect(posts()).toHaveLength(0);
     const choice = page.getByRole('checkbox', { name: 'Commander en invité', exact: true });
-    expect(await choice.isChecked()).toBe(false); await choice.check();
+    expect(await choice.isChecked()).toBe(false);
+    expect(await page.getByText('Votre compte doit être confirmé pour rattacher cette commande.', { exact: false }).isVisible()).toBe(true);
+    expect(await page.getByText('Cette nouvelle commande sera rattachée à votre compte.', { exact: true }).count()).toBe(0);
+    await choice.check();
+    expect(await page.getByText('Cette nouvelle commande ne sera pas rattachée à votre compte', { exact: false }).isVisible()).toBe(true);
     for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -468,7 +475,23 @@ describe('Checkout compte — vraie admission navigateur, sans fournisseur', () 
   });
 
   it('pins account C01 and sends only the private route for counter checkout', async () => {
-    await checkout();
+    await activate(page.getByRole('button', { name: /^Choisir le retrait/ }));
+    await activate(page.getByRole('button', { name: /^Continuer · retrait/ }));
+    await expect.poll(() => page.getByLabel('Téléphone', { exact: true }).inputValue()).toBe('+33600000001');
+    expect(await page.getByText('Vérifiez vos coordonnées pour cette commande.', { exact: false }).isVisible()).toBe(true);
+    expect(await page.getByText('Pas de compte à créer.', { exact: false }).count()).toBe(0);
+    const choice = page.getByRole('checkbox', { name: 'Commander en invité', exact: true });
+    expect(await choice.isChecked()).toBe(false);
+    expect(await page.getByText('Cette nouvelle commande sera rattachée à votre compte.', { exact: true }).isVisible()).toBe(true);
+    await choice.check();
+    expect(await page.getByText('Cette nouvelle commande ne sera pas rattachée à votre compte', { exact: false }).isVisible()).toBe(true);
+    await choice.uncheck();
+    expect(await page.getByText('Cette nouvelle commande sera rattachée à votre compte.', { exact: true }).isVisible()).toBe(true);
+    expect(await page.getByText('Cette nouvelle commande ne sera pas rattachée à votre compte', { exact: false }).count()).toBe(0);
+    expect(posts()).toHaveLength(0);
+    expect(await page.evaluate(() => window.checkoutAccountFixture.accountStatus)).toBe('authenticated');
+    await activate(page.getByRole('radio', { name: /Payer au comptoir/ }));
+    await activate(page.getByRole('button', { name: /^Confirmer la commande/ }));
     await expect.poll(() => posts().length).toBe(1);
     expect(posts()[0]!.path).toBe('/r/recette/compte/commandes');
     expect(posts()[0]!.headers['x-sm-customer-operation-id']).toBe('20000000-0000-4000-8000-000000000002');

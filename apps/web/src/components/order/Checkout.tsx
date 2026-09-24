@@ -1074,7 +1074,11 @@ export function Checkout({
                   if (!requestInFlightRef.current) { setExplicitGuest(event.target.checked); setError(null); }
                 }} className="h-5 w-5 accent-accent" />Commander en invité
               </label>
-              <p className="mt-1 text-xs leading-5 text-mut">Cette nouvelle commande ne sera pas rattachée à votre compte et ne créditera pas sa fidélité. Votre accès au compte est conservé.</p>
+              <p className="mt-1 text-xs leading-5 text-mut">{explicitGuest
+                ? "Cette nouvelle commande ne sera pas rattachée à votre compte et ne créditera pas sa fidélité. Votre accès au compte est conservé."
+                : recovery.accountStatus === "authenticated" && recovery.currentCheckoutAccess()
+                  ? "Cette nouvelle commande sera rattachée à votre compte."
+                  : "Votre compte doit être confirmé pour rattacher cette commande. Vous pouvez aussi choisir de commander en invité."}</p>
             </section>}
             <PayStep
               cart={cart}
@@ -1690,7 +1694,7 @@ function CustomerStep({
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[14px] leading-relaxed text-mut">
-        Pas de compte à créer. {tenantName} a besoin de savoir à qui remettre
+        Vérifiez vos coordonnées pour cette commande. {tenantName} a besoin de savoir à qui remettre
         la commande et de pouvoir vous joindre en cas de besoin.
       </p>
 

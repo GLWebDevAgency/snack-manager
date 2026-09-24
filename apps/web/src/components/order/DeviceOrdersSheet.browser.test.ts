@@ -86,13 +86,18 @@ beforeEach(async () => {
 });
 afterEach(async () => { waiting.forEach(({ res }) => res.destroy()); await context?.close(); expect(faults).toEqual([]); });
 afterAll(async () => { await browser?.close(); if (server) await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }); });
-const seed = (number = 1, active = false, tenant = "recette", delivery = false) => page.evaluate(async ({ number, active, tenant, delivery, id }) => {
+const seed = (number = 1, active = false, tenant = "recette", delivery = false, state: "received" | "prepared" | "uncertain" = "received") => page.evaluate(async ({ number, active, tenant, delivery, id, state }) => {
   const journal = window.deviceOrdersFixture.journal;
   const payload: Journal.CheckoutBusinessPayload = { lines: [{ productId: "d".repeat(24), options: [], removed: [], qty: 1 }], payment: { method: "online" }, pickup: { slot: "2030-09-07T12:00:00.000Z", customerName: "Recette locale", customerPhone: "0000000000" }, ...(delivery ? { fulfillment: "delivery" as const, delivery: { address: { line1: "1 rue de Test", postalCode: "27910", city: "Ville Test", country: "FR" as const } } } : {}) };
   const result = await journal.acquireCheckoutAttempt(tenant, { payload, cartFingerprint: "a".repeat(64) });
+  if (state !== "received") {
+    if (!active) throw new Error("A pending fixture must remain active");
+    if (state === "uncertain") await journal.markCheckoutAttemptUncertain(tenant, result.attempt.clientId);
+    return;
+  }
   await journal.recordCheckoutReceipt(tenant, result.attempt.clientId, { orderId: id, trackingToken: `tracking-${number}`, number, type: delivery ? "delivery" : "pickup", status: "delivered", payment: { method: "online", status: "paid" } });
   if (!active) await journal.archiveCheckoutAttempt(tenant, result.attempt.clientId);
-}, { number, active, tenant, delivery, id: orderId(number) });
+}, { number, active, tenant, delivery, id: orderId(number), state });
 const open = async () => { await page.getByRole("button", { name: "Mes commandes sur cet appareil", exact: true }).click(); await page.getByRole("dialog", { name: "Mes commandes", exact: true }).waitFor(); };
 const row = (n: number) => page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: `Commande n° ${n}`, exact: true }) });
 const idle = () => page.getByRole("button", { name: "Actualiser les états", exact: true }).waitFor();
@@ -211,18 +216,29 @@ describe("Mes commandes sur cet appareil — rendu et IndexedDB natifs", () => {
     await open(); await page.getByRole("alert").filter({ hasText: "ne peuvent pas être relus" }).waitFor(); expect(requests).toEqual([]);
     expect(await page.getByText("Aucune commande enregistrée ici").count()).toBe(0);
   });
-  it("raccorde le vrai Storefront indépendamment du panier et laisse la reprise disponible", async () => {
+  it.each(["received", "prepared", "uncertain"] as const)("raccorde le vrai Storefront indépendamment du panier et laisse la reprise %s disponible", async state => {
     await page.goto(origin + "/storefront"); await page.getByRole("tab", { name: "Commandes", exact: true }).waitFor();
     await page.getByRole("region", { name: "Boissons", exact: true }).getByRole("button", { name: /Canette recette/ }).click();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("sm.cart.recette"))).toContain("Canette recette");
     const before = await page.evaluate(() => localStorage.getItem("sm.cart.recette"));
-    await seed(1, true); states.set(orderId(1), response(1));
+    await seed(1, true, "recette", false, state);
+    states.set(orderId(1), response(1, { status: "delivered", payment: { method: "online", status: "refunded" } }));
+    const attempt = await page.evaluate(() => window.deviceOrdersFixture.journal.readCheckoutAttempt("recette"));
     await page.getByRole("tab", { name: "Commandes", exact: true }).click(); await idle();
     expect(await page.getByRole("dialog").count()).toBe(0);
     await page.getByRole("region", { name: "Mes commandes", exact: true }).waitFor();
     await page.getByRole("tab", { name: "Carte", exact: true }).click();
     expect(await page.evaluate(() => localStorage.getItem("sm.cart.recette"))).toBe(before);
-    await page.getByRole("button", { name: /Ma commande en cours/ }).waitFor();
+    const cta = page.getByRole("button", { name: state === "received" ? "Suivre ma commande" : "Retrouver ma commande", exact: true });
+    await cta.waitFor();
+    expect(await page.getByRole("button", { name: "Ma commande en cours", exact: true }).count()).toBe(0);
+    const readsBefore = [...requests];
+    await cta.click();
+    await page.getByRole("heading", { name: state === "received" ? "Votre commande est enregistrée" : "Vérifions votre commande", exact: true }).waitFor();
+    if (state === "received") expect(await page.getByRole("link", { name: "Suivre ma commande", exact: true }).getAttribute("href")).toContain(`/t/${orderId(1)}`);
+    expect(await page.evaluate(() => window.deviceOrdersFixture.journal.readCheckoutAttempt("recette"))).toEqual(attempt);
+    expect(await page.evaluate(() => localStorage.getItem("sm.cart.recette"))).toBe(before);
+    expect(requests).toEqual(readsBefore);
   });
   it("classe uniquement une réponse corrélée et valide : annulation, remboursement et absence de paiement", async () => {
     const result = await page.evaluate(({ id }) => {

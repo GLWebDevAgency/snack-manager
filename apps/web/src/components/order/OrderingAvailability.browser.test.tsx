@@ -123,7 +123,8 @@ describe('Storefront live availability',()=>{
  // Complete the held read with the paused state. A second focus immediately
  // after json() can be coalesced before the browser has consumed that response.
  answer={...snapshot,ordering:{paused:true,message:'Cuisine en pause.'}};json(held,answer);await expect.poll(()=>header().textContent()).toBe('Commande en pause');
- await visibility('hidden');await visibility('visible');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
+ await visibility('hidden');await expect.poll(()=>header().textContent()).toBe('Disponibilités à vérifier');
+ await visibility('visible');await expect.poll(()=>header().textContent()).toBe('Commande en pause');
  expect(await page.getByLabel('Carte de recette').inputValue()).toBe('Champ conservé');
  expect(await page.evaluate(()=>({...window.availabilityFixture}))).toEqual(initial);expect(initial.mounts).toBe(1);expect(initial.unmounts).toBe(0);
  expect(await page.getByText('Commande en ligne suspendue',{exact:true}).count()).toBe(0);expect(writes).toHaveLength(2);
